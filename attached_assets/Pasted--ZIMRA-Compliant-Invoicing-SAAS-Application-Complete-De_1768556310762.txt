@@ -1,0 +1,1355 @@
+# ZIMRA-Compliant Invoicing SAAS Application - Complete Development Prompt
+
+## Project Overview
+Create a complete multi-tenant SAAS invoicing application for Zimbabwe businesses that is fully compliant with ZIMRA (Zimbabwe Revenue Authority) regulations. The application must integrate with the FDMS (Fiscal Data Management System) API and generate QR code-enabled fiscal invoices and quotations.
+
+## IMPORTANT: Use Official ZIMRA FDMS API
+**API Documentation:** https://fdmsapitest.zimra.co.zw/swagger/index.html
+- All FDMS integrations MUST follow the exact specifications from this official Swagger documentation
+- Review all endpoints, request/response schemas, and authentication methods from the API docs
+- Implement error handling based on the official error codes and messages
+
+## Tech Stack Requirements
+- **Frontend**: Next.js 14+ (App Router), React 18+, TypeScript
+- **Styling**: Tailwind CSS with shadcn/ui components
+- **Backend**: Next.js API Routes (serverless functions)
+- **Database**: Supabase (PostgreSQL) with Prisma ORM
+- **Authentication**: Supabase Auth with email/password and social login (Google)
+- **File Storage**: Supabase Storage for logos and documents
+- **QR Code Generation**: qrcode.react library
+- **PDF Generation**: @react-pdf/renderer or jsPDF
+- **Email Service**: Resend or SendGrid for transactional emails
+- **Payment Processing**: Stripe for subscription management
+- **State Management**: React Context API and React Query (TanStack Query)
+- **Form Handling**: React Hook Form with Zod validation
+- **Date Handling**: date-fns
+- **Animations**: Framer Motion for landing page
+- **Icons**: Lucide React
+- **Deployment**: Optimized for Replit deployment
+
+## Database Schema (Prisma)
+
+```prisma
+// User and Authentication
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String
+  name          String?
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  accounts      Account[]
+  sessions      Session[]
+  companies     CompanyUser[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Multi-tenant Company Management
+model Company {
+  id                String        @id @default(cuid())
+  name              String
+  tradingName       String?
+  address           String
+  city              String
+  country           String        @default("Zimbabwe")
+  phone             String
+  email             String
+  website           String?
+  logoUrl           String?
+  
+  // ZIMRA Compliance Fields
+  tin               String        @unique
+  vatNumber         String?
+  bpNumber          String?       // Business Partner Number
+  fdmsDeviceId      String?
+  fdmsApiKey        String?       @db.Text
+  fdmsCertificate   String?       @db.Text
+  fiscalDayOpen     Boolean       @default(false)
+  lastFiscalSync    DateTime?
+  
+  // Subscription
+  subscriptionTier  String        @default("free") // free, basic, professional, enterprise
+  subscriptionStatus String       @default("trial") // trial, active, cancelled, suspended
+  tripeCustomerId   String?       @unique
+  stripeSubscriptionId String?    @unique
+  trialEndsAt       DateTime?
+  subscriptionEndsAt DateTime?
+  
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  
+  users             CompanyUser[]
+  customers         Customer[]
+  products          Product[]
+  services          Service[]
+  invoices          Invoice[]
+  quotations        Quotation[]
+  taxConfiguration  TaxConfiguration?
+  companySettings   CompanySettings?
+}
+
+model CompanyUser {
+  id        String   @id @default(cuid())
+  userId    String
+  companyId String
+  role      String   @default("member") // owner, admin, member, accountant
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, companyId])
+}
+
+// Customer Management
+model Customer {
+  id              String    @id @default(cuid())
+  companyId       String
+  
+  name            String
+  email           String?
+  phone           String?
+  mobile          String?
+  address         String?
+  city            String?
+  country         String    @default("Zimbabwe")
+  
+  // ZIMRA Fields
+  tin             String?
+  vatNumber       String?
+  bpNumber        String?
+  customerType    String    @default("individual") // individual, business
+  
+  notes           String?   @db.Text
+  isActive        Boolean   @default(true)
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invoices        Invoice[]
+  quotations      Quotation[]
+  
+  @@index([companyId])
+}
+
+// Products and Services
+model Product {
+  id              String    @id @default(cuid())
+  companyId       String
+  
+  name            String
+  description     String?   @db.Text
+  sku             String?
+  barcode         String?
+  hsCode          String?   // Harmonized System Code (required for customs/tax)
+  
+  price           Decimal   @db.Decimal(10, 2)
+  cost            Decimal?  @db.Decimal(10, 2)
+  
+  // Tax Configuration
+  taxable         Boolean   @default(true)
+  taxRate         Decimal?  @db.Decimal(5, 2)
+  
+  // Stock Management (optional)
+  trackInventory  Boolean   @default(false)
+  currentStock    Int?      @default(0)
+  lowStockAlert   Int?
+  
+  category        String?
+  isActive        Boolean   @default(true)
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invoiceItems    InvoiceItem[]
+  quotationItems  QuotationItem[]
+  
+  @@index([companyId])
+  @@index([sku])
+  @@index([hsCode])
+}
+
+model Service {
+  id              String    @id @default(cuid())
+  companyId       String
+  
+  name            String
+  description     String?   @db.Text
+  serviceCode     String?
+  
+  rate            Decimal   @db.Decimal(10, 2)
+  unit            String    @default("hour") // hour, day, project, fixed
+  
+  // Tax Configuration
+  taxable         Boolean   @default(true)
+  taxRate         Decimal?  @db.Decimal(5, 2)
+  
+  category        String?
+  isActive        Boolean   @default(true)
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invoiceItems    InvoiceItem[]
+  quotationItems  QuotationItem[]
+  
+  @@index([companyId])
+}
+
+// Quotation Management
+model Quotation {
+  id                String    @id @default(cuid())
+  companyId         String
+  customerId        String
+  
+  // Quotation Numbering
+  quotationNumber   String
+  quotationPrefix   String?   @default("QUO")
+  quotationSequence Int
+  
+  // Dates
+  issueDate         DateTime  @default(now())
+  validUntil        DateTime
+  
+  // Amounts
+  subtotal          Decimal   @db.Decimal(10, 2)
+  taxAmount         Decimal   @db.Decimal(10, 2)
+  discountAmount    Decimal   @db.Decimal(10, 2) @default(0)
+  total             Decimal   @db.Decimal(10, 2)
+  
+  // Status
+  status            String    @default("draft") // draft, sent, accepted, declined, expired, converted
+  
+  // Additional Info
+  notes             String?   @db.Text
+  terms             String?   @db.Text
+  footer            String?   @db.Text
+  
+  // Conversion tracking
+  convertedToInvoice Boolean  @default(false)
+  invoiceId         String?
+  
+  // Metadata
+  currency          String    @default("USD")
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  company           Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer          Customer  @relation(fields: [customerId], references: [id])
+  items             QuotationItem[]
+  
+  @@unique([companyId, quotationNumber])
+  @@index([companyId])
+  @@index([customerId])
+  @@index([status])
+}
+
+model QuotationItem {
+  id              String    @id @default(cuid())
+  quotationId     String
+  
+  itemType        String    // product, service, custom
+  productId       String?
+  serviceId       String?
+  
+  description     String
+  quantity        Decimal   @db.Decimal(10, 2)
+  unitPrice       Decimal   @db.Decimal(10, 2)
+  
+  // Tax
+  taxRate         Decimal   @db.Decimal(5, 2)
+  taxAmount       Decimal   @db.Decimal(10, 2)
+  
+  discount        Decimal   @db.Decimal(10, 2) @default(0)
+  lineTotal       Decimal   @db.Decimal(10, 2)
+  
+  sortOrder       Int       @default(0)
+  
+  quotation       Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  product         Product?  @relation(fields: [productId], references: [id])
+  service         Service?  @relation(fields: [serviceId], references: [id])
+  
+  @@index([quotationId])
+}
+
+// Invoice Management
+model Invoice {
+  id                String    @id @default(cuid())
+  companyId         String
+  customerId        String
+  
+  // Invoice Numbering
+  invoiceNumber     String
+  invoicePrefix     String?   @default("INV")
+  invoiceSequence   Int
+  
+  // Dates
+  issueDate         DateTime  @default(now())
+  dueDate           DateTime
+  
+  // ZIMRA Fiscal Information
+  fiscalCode        String?   @unique
+  fiscalDayNumber   Int?
+  fiscalReceiptNumber String?
+  qrCodeData        String?   @db.Text
+  qrCodeUrl         String?
+  deviceId          String?
+  
+  // Amounts
+  subtotal          Decimal   @db.Decimal(10, 2)
+  taxAmount         Decimal   @db.Decimal(10, 2)
+  discountAmount    Decimal   @db.Decimal(10, 2) @default(0)
+  total             Decimal   @db.Decimal(10, 2)
+  
+  // Status
+  status            String    @default("draft") // draft, issued, sent, paid, overdue, cancelled, voided
+  paymentStatus     String    @default("unpaid") // unpaid, partial, paid
+  amountPaid        Decimal   @db.Decimal(10, 2) @default(0)
+  
+  // Additional Info
+  notes             String?   @db.Text
+  terms             String?   @db.Text
+  footer            String?   @db.Text
+  
+  // FDMS Sync
+  syncedWithFDMS    Boolean   @default(false)
+  fdmsSyncDate      DateTime?
+  fdmsResponse      Json?
+  
+  // Metadata
+  currency          String    @default("USD")
+  exchangeRate      Decimal?  @db.Decimal(10, 4)
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  company           Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer          Customer  @relation(fields: [customerId], references: [id])
+  items             InvoiceItem[]
+  payments          Payment[]
+  auditLog          InvoiceAuditLog[]
+  
+  @@unique([companyId, invoiceNumber])
+  @@index([companyId])
+  @@index([customerId])
+  @@index([status])
+  @@index([fiscalCode])
+}
+
+model InvoiceItem {
+  id              String    @id @default(cuid())
+  invoiceId       String
+  
+  itemType        String    // product, service, custom
+  productId       String?
+  serviceId       String?
+  
+  description     String
+  quantity        Decimal   @db.Decimal(10, 2)
+  unitPrice       Decimal   @db.Decimal(10, 2)
+  
+  // Tax
+  taxRate         Decimal   @db.Decimal(5, 2)
+  taxAmount       Decimal   @db.Decimal(10, 2)
+  
+  discount        Decimal   @db.Decimal(10, 2) @default(0)
+  lineTotal       Decimal   @db.Decimal(10, 2)
+  
+  sortOrder       Int       @default(0)
+  
+  invoice         Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  product         Product?  @relation(fields: [productId], references: [id])
+  service         Service?  @relation(fields: [serviceId], references: [id])
+  
+  @@index([invoiceId])
+}
+
+// Payment Tracking
+model Payment {
+  id              String    @id @default(cuid())
+  invoiceId       String
+  
+  amount          Decimal   @db.Decimal(10, 2)
+  paymentDate     DateTime  @default(now())
+  paymentMethod   String    // cash, bank_transfer, mobile_money, card, other
+  reference       String?
+  notes           String?   @db.Text
+  
+  createdAt       DateTime  @default(now())
+  
+  invoice         Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  
+  @@index([invoiceId])
+}
+
+// Audit Trail
+model InvoiceAuditLog {
+  id              String    @id @default(cuid())
+  invoiceId       String
+  
+  action          String    // created, updated, sent, paid, cancelled, voided, synced_fdms
+  description     String    @db.Text
+  userId          String?
+  metadata        Json?
+  
+  createdAt       DateTime  @default(now())
+  
+  invoice         Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  
+  @@index([invoiceId])
+  @@index([createdAt])
+}
+
+// Tax Configuration
+model TaxConfiguration {
+  id              String    @id @default(cuid())
+  companyId       String    @unique
+  
+  // VAT Settings
+  vatEnabled      Boolean   @default(true)
+  vatRate         Decimal   @db.Decimal(5, 2) @default(15)
+  vatNumber       String?
+  
+  // Tax Categories
+  standardRate    Decimal   @db.Decimal(5, 2) @default(15)
+  reducedRate     Decimal?  @db.Decimal(5, 2)
+  zeroRate        Boolean   @default(false)
+  
+  // ZIMRA Settings
+  taxPeriod       String    @default("monthly") // monthly, quarterly
+  nextReturnDate  DateTime?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+// Company Settings
+model CompanySettings {
+  id                    String    @id @default(cuid())
+  companyId             String    @unique
+  
+  // Invoice Settings
+  invoicePrefix         String    @default("INV")
+  invoiceStartNumber    Int       @default(1)
+  invoiceTermsDays      Int       @default(30)
+  defaultTerms          String?   @db.Text
+  defaultFooter         String?   @db.Text
+  
+  // Branding
+  primaryColor          String    @default("#3b82f6")
+  secondaryColor        String    @default("#1e40af")
+  
+  // Notifications
+  sendInvoiceEmail      Boolean   @default(true)
+  sendPaymentReminders  Boolean   @default(true)
+  reminderDaysBefore    Int       @default(3)
+  
+  // FDMS Settings
+  autoSyncFDMS          Boolean   @default(true)
+  requireFDMSForIssue   Boolean   @default(true)
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  
+  company               Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+```
+
+## Application Structure
+
+```
+/app
+  /page.tsx (Beautiful marketing landing page)
+  /(auth)
+    /login
+    /register
+    /verify-email
+    /forgot-password
+    /reset-password
+  /(onboarding)
+    /welcome
+    /company-setup
+    /tax-setup
+    /fdms-setup
+    /complete
+  /(dashboard)
+    /dashboard
+    /quotations
+      /new
+      /[id]
+      /[id]/edit
+      /[id]/preview
+      /[id]/convert
+    /invoices
+      /new
+      /[id]
+      /[id]/edit
+      /[id]/preview
+    /customers
+      /new
+      /[id]
+    /products
+      /new
+      /[id]
+    /services
+      /new
+      /[id]
+    /reports
+      /sales
+      /tax
+      /customers
+      /products
+      /quotations
+    /settings
+      /company
+      /tax
+      /fdms
+      /users
+      /billing
+      /preferences
+  /api
+    /auth (Supabase Auth)
+    /quotations
+      /route.ts
+      /[id]
+        /route.ts
+        /send
+        /pdf
+        /convert-to-invoice
+    /invoices
+      /route.ts
+      /[id]
+        /route.ts
+        /send
+        /pdf
+        /fdms-sync
+    /customers
+    /products
+    /services
+    /reports
+    /settings
+    /fdms
+      /config
+      /open-receipt
+      /get-receipt
+      /submit-receipt
+      /verify-receipt
+    /webhooks
+      /stripe
+
+/components
+  /ui (shadcn components)
+  /landing
+    /Hero.tsx
+    /Features.tsx
+    /HowItWorks.tsx
+    /Pricing.tsx
+    /Testimonials.tsx
+    /FAQ.tsx
+    /CTA.tsx
+    /Footer.tsx
+  /auth
+    /LoginForm.tsx
+    /RegisterForm.tsx
+  /onboarding
+    /WelcomeStep.tsx
+    /CompanySetupStep.tsx
+    /TaxSetupStep.tsx
+    /FDMSSetupStep.tsx
+  /quotations
+    /QuotationList.tsx
+    /QuotationForm.tsx
+    /QuotationPreview.tsx
+    /QuotationPDF.tsx
+    /ConvertToInvoiceButton.tsx
+  /invoices
+    /InvoiceList.tsx
+    /InvoiceForm.tsx
+    /InvoicePreview.tsx
+    /InvoicePDF.tsx
+    /QRCodeDisplay.tsx
+  /customers
+    /CustomerList.tsx
+    /CustomerForm.tsx
+  /products
+    /ProductList.tsx
+    /ProductForm.tsx
+    /HSCodeSelector.tsx
+  /reports
+    /SalesChart.tsx
+    /TaxReport.tsx
+    /RevenueChart.tsx
+    /QuotationConversionRate.tsx
+  /layout
+    /Sidebar.tsx
+    /Header.tsx
+    /CompanySwitcher.tsx
+
+/lib
+  /supabase
+    /client.ts
+    /server.ts
+  /auth.ts
+  /db.ts (Prisma client)
+  /fdms
+    /client.ts (FDMS API integration based on official docs)
+    /types.ts (TypeScript interfaces from Swagger)
+    /config.ts
+    /receipts.ts
+  /qrcode.ts
+  /pdf.ts
+  /email.ts
+  /stripe.ts
+  /utils.ts
+  /validations.ts (Zod schemas)
+
+/prisma
+  /schema.prisma
+  /migrations
+```
+
+## Core Features to Implement
+
+### 0. Beautiful Marketing Landing Page
+
+Create a stunning, modern landing page that converts visitors into customers. The landing page should be separate from the dashboard and accessible at the root URL (/).
+
+**Landing Page Sections:**
+
+1. **Hero Section**
+   - Eye-catching headline: "ZIMRA-Compliant Invoicing Made Simple"
+   - Subheadline: "Create professional invoices, sync with FDMS, and get paid faster"
+   - Two CTA buttons: "Start Free Trial" and "Watch Demo"
+   - Hero image/illustration showing the app interface
+   - Animated trust badges: "ZIMRA Approved", "Secure", "Cloud-Based"
+   - Animated background gradient or particles effect using Framer Motion
+
+2. **Social Proof Bar**
+   - Scrolling ticker showing: "Join 500+ Zimbabwean businesses", logos of client companies
+   - Key metrics: "10,000+ invoices processed", "99.9% FDMS success rate"
+
+3. **Features Section**
+   - Grid layout (3 columns on desktop)
+   - Each feature with icon, title, and description:
+     - **FDMS Integration**: "Automatic sync with ZIMRA's fiscal system"
+     - **QR Code Invoices**: "Generate compliant invoices with verification QR codes"
+     - **Smart Quotations**: "Create quotes and convert to invoices instantly"
+     - **Tax Compliance**: "Automatic VAT calculations and tax reporting"
+     - **Multi-Currency**: "Support for USD, ZWL, and more"
+     - **Beautiful PDFs**: "Professional branded invoices your clients will love"
+     - **Real-time Reports**: "Track revenue, taxes, and customer insights"
+     - **Team Collaboration**: "Invite your accountant and team members"
+   - Animated cards that hover/lift on mouse over
+   - Use lucide-react icons for each feature
+
+4. **How It Works Section**
+   - 3-4 step process with illustrations:
+     1. **Sign Up & Setup**: "Create account in 2 minutes, add your company details"
+     2. **Create Invoice**: "Add customers, products, and generate invoices"
+     3. **FDMS Sync**: "Automatic sync with ZIMRA for compliance"
+     4. **Get Paid**: "Email invoices and track payments"
+   - Timeline or step connector animation
+   - Screenshots of the actual app interface
+
+5. **ZIMRA Compliance Section**
+   - Dedicated section highlighting compliance features
+   - Checklist with green checkmarks:
+     - ✓ FDMS API Integration
+     - ✓ Fiscal Receipt Generation
+     - ✓ QR Code Verification
+     - ✓ Audit Trail Logging
+     - ✓ Tax Return Reports
+   - Screenshot of QR code invoice
+   - Trust badge: "Built according to ZIMRA regulations"
+
+6. **Pricing Section**
+   - 4 pricing cards (Free, Basic, Professional, Enterprise)
+   - Toggle between Monthly/Yearly (with "Save 20%" badge on yearly)
+   - Each card shows:
+     - Price with currency
+     - Invoice limits
+     - Feature list with checkmarks
+     - CTA button ("Start Free", "Get Started", "Contact Sales")
+   - Highlight the most popular plan
+   - Money-back guarantee badge
+   - Animated on scroll
+
+7. **Testimonials Section**
+   - 3-6 testimonials from (fictional) satisfied customers
+   - Each testimonial card:
+     - Quote text
+     - Customer name and company
+     - Profile photo (use placeholder images)
+     - 5-star rating
+   - Carousel or grid layout
+   - "Verified Customer" badges
+
+8. **FAQ Section**
+   - Accordion component with common questions:
+     - "What is FDMS and why do I need it?"
+     - "How do I get FDMS credentials?"
+     - "Can I use this with my existing accounting software?"
+     - "What happens if FDMS is down?"
+     - "Is my data secure?"
+     - "Can I cancel anytime?"
+     - "Do you offer training?"
+   - Expandable/collapsible with smooth animations
+
+9. **Final CTA Section**
+   - Full-width colored background
+   - Compelling headline: "Ready to simplify your invoicing?"
+   - Subtext: "Join hundreds of Zimbabwean businesses. Start free, no credit card required."
+   - Large CTA button: "Start Your Free Trial"
+   - Small print: "14-day trial • No credit card needed • Cancel anytime"
+
+10. **Footer**
+    - Company info and logo
+    - Links columns:
+      - Product (Features, Pricing, FAQ)
+      - Company (About, Blog, Contact)
+      - Legal (Terms, Privacy, Compliance)
+      - Support (Help Center, API Docs, Status)
+    - Social media icons
+    - Copyright notice
+    - "Made with ❤️ in Zimbabwe" badge
+
+**Design Requirements for Landing Page:**
+
+- **Animations**: Use Framer Motion for:
+  - Fade in on scroll animations
+  - Stagger children animations for feature grids
+  - Smooth page transitions
+  - Hover effects on cards and buttons
+  - Number counters for statistics
+  - Parallax effects on hero section
+
+- **Color Scheme**: 
+  - Primary: Modern blue (#3b82f6)
+  - Secondary: Purple accent (#8b5cf6)
+  - Background: Clean white with subtle gradients
+  - Text: Dark gray (#1f2937) for readability
+
+- **Typography**:
+  - Headings: Bold, modern sans-serif (Inter or similar)
+  - Body: Clean, readable sans-serif
+  - Size hierarchy: Large headlines (48-72px), clear sections
+
+- **Responsive Design**:
+  - Mobile-first approach
+  - Hamburger menu on mobile
+  - Stacked cards on mobile, grid on desktop
+  - Touch-friendly buttons (min 44x44px)
+
+- **Performance**:
+  - Lazy load images below the fold
+  - Optimize all images (Next.js Image component)
+  - Code split by section
+  - Prefetch critical resources
+
+- **SEO**:
+  - Semantic HTML
+  - Meta tags for social sharing
+  - Structured data (JSON-LD)
+  - Alt text on all images
+  - Fast loading (< 3s)
+
+### 1. Authentication & User Management
+- Email/password registration with email verification
+- Google OAuth integration
+- Password reset functionality
+- Role-based access control (Owner, Admin, Member, Accountant)
+- Multi-tenant architecture (users can belong to multiple companies)
+- Session management with NextAuth.js
+
+### 2. Onboarding Flow (CRITICAL)
+Create a multi-step onboarding wizard that guides new users through:
+
+**Step 1: Welcome & Account Creation**
+- User registration form
+- Email verification
+- Accept terms of service and privacy policy
+
+**Step 2: Company Information**
+- Company name and trading name
+- Physical address (street, city, country)
+- Contact information (phone, email, website)
+- Logo upload
+- TIN (Tax Identification Number) - required
+- VAT Number (if registered)
+- BP Number (Business Partner Number)
+
+**Step 3: Tax Configuration**
+- Enable/disable VAT
+- Set VAT rate (default 15% for Zimbabwe)
+- Configure tax categories
+- Set tax period (monthly/quarterly)
+- Default invoice terms and payment days
+
+**Step 4: FDMS Integration Setup**
+- FDMS Device ID input
+- FDMS API Key (encrypted storage)
+- Certificate upload for fiscal signing
+- Test connection to FDMS API
+- Instructions on how to obtain FDMS credentials from ZIMRA
+- Option to skip and configure later
+
+**Step 5: Invoice Preferences**
+- Invoice number prefix
+- Starting invoice number
+- Default payment terms
+- Default invoice footer text
+- Currency selection (USD, ZWL, multi-currency)
+
+**Step 6: Subscription Plan Selection**
+- Display pricing tiers:
+  - **Free**: 10 invoices/month, 1 user, basic features
+  - **Basic** ($15/month): 100 invoices/month, 3 users, email support
+  - **Professional** ($35/month): Unlimited invoices, 10 users, priority support, advanced reports
+  - **Enterprise** ($75/month): Unlimited everything, API access, dedicated support
+- 14-day free trial for all paid plans
+- Stripe payment integration
+
+**Step 7: Quick Start Tutorial**
+- Add first customer
+- Create first product/service
+- Generate test invoice
+- Dashboard tour
+
+### 3. Invoice Management
+
+**Invoice Creation:**
+- Multi-step invoice form:
+  - Select customer (with quick-add option)
+  - Add line items (products/services)
+  - Support for custom line items
+  - Quantity, unit price, tax rate per line
+  - Line item discounts
+  - Overall invoice discount
+  - Add notes and terms
+  - Set due date
+- Real-time calculation of subtotal, tax, and total
+- Save as draft or issue immediately
+- Duplicate existing invoices
+- Recurring invoice templates
+
+**Invoice Display:**
+- Professional invoice preview matching Zimbabwe standards
+- Company logo and branding
+- Clear display of TIN, VAT number
+- Itemized breakdown with tax
+- QR code for verification
+- Fiscal code from FDMS
+- Payment instructions
+- Terms and conditions footer
+
+**Invoice Actions:**
+- Download as PDF
+- Send via email (with customizable template)
+- Mark as sent/paid
+- Record partial payments
+- Void/cancel invoices
+- Credit notes
+- Payment reminders
+- WhatsApp sharing (optional)
+
+**Invoice Statuses:**
+- Draft
+- Issued (synced with FDMS)
+- Sent (emailed to customer)
+- Viewed (customer opened email)
+- Paid
+- Partially paid
+- Overdue
+- Cancelled
+- Voided
+
+### 4. FDMS API Integration
+
+**Critical FDMS Functions:**
+
+```typescript
+// /lib/fdms.ts
+
+interface FDMSConfig {
+  deviceId: string;
+  apiKey: string;
+  certificate?: string;
+  baseUrl: string; // ZIMRA FDMS API endpoint
+}
+
+interface FDMSInvoiceData {
+  invoiceNumber: string;
+  issueDate: string;
+  customerTIN?: string;
+  customerName: string;
+  items: Array<{
+    description: string;
+    quantity: number;
+    unitPrice: number;
+    taxRate: number;
+    taxAmount: number;
+    total: number;
+  }>;
+  subtotal: number;
+  totalTax: number;
+  total: number;
+  currency: string;
+}
+
+interface FDMSResponse {
+  success: boolean;
+  fiscalCode?: string;
+  fiscalDayNumber?: number;
+  fiscalReceiptNumber?: string;
+  qrCodeData?: string;
+  timestamp?: string;
+  errorCode?: string;
+  errorMessage?: string;
+}
+
+class FDMSService {
+  // Open fiscal day (required before issuing invoices)
+  async openFiscalDay(config: FDMSConfig): Promise<FDMSResponse>
+  
+  // Close fiscal day (end of business day)
+  async closeFiscalDay(config: FDMSConfig): Promise<FDMSResponse>
+  
+  // Submit invoice to FDMS
+  async submitInvoice(
+    config: FDMSConfig,
+    invoiceData: FDMSInvoiceData
+  ): Promise<FDMSResponse>
+  
+  // Verify fiscal code
+  async verifyFiscalCode(
+    config: FDMSConfig,
+    fiscalCode: string
+  ): Promise<FDMSResponse>
+  
+  // Get device status
+  async getDeviceStatus(config: FDMSConfig): Promise<FDMSResponse>
+  
+  // Cancel/void invoice in FDMS
+  async voidInvoice(
+    config: FDMSConfig,
+    fiscalCode: string,
+    reason: string
+  ): Promise<FDMSResponse>
+}
+```
+
+**FDMS Integration Requirements:**
+- Automatic submission to FDMS when invoice is issued
+- Retry logic for failed submissions
+- Queue system for offline invoice creation (sync when online)
+- FDMS day management (open/close)
+- Error handling with user-friendly messages
+- Fiscal code storage and verification
+- Compliance validation before submission
+- Audit trail of all FDMS communications
+
+### 5. QR Code Generation
+
+**QR Code Content (Zimbabwe Standard):**
+```json
+{
+  "invoiceNumber": "INV-00001",
+  "fiscalCode": "FC1234567890",
+  "companyTIN": "12345678",
+  "issueDate": "2026-01-16",
+  "total": "115.00",
+  "currency": "USD",
+  "verificationUrl": "https://verify.zimra.co.zw/..."
+}
+```
+
+- Generate QR code for each issued invoice
+- QR code must contain fiscal code from FDMS
+- Display on invoice PDF and preview
+- Scannable for verification
+- Link to ZIMRA verification portal
+
+### 6. Customer Management
+
+**Customer Features:**
+- Add/edit/delete customers
+- Customer information:
+  - Name (individual/business)
+  - Email, phone, mobile
+  - Billing address
+  - TIN (for businesses)
+  - VAT registration number
+  - BP number
+  - Notes
+- Customer type (individual/business)
+- Customer status (active/inactive)
+- View customer invoice history
+- Outstanding balance tracking
+- Customer statements
+- Export customer list
+- Import customers from CSV
+
+### 7. Products & Services Management
+
+**Products:**
+- Name, description, SKU, barcode
+- Pricing (cost price and selling price)
+- Tax configuration per product
+- Category/grouping
+- Optional inventory tracking
+  - Current stock levels
+  - Low stock alerts
+  - Stock movements log
+- Product images
+- Active/inactive status
+- Bulk import from CSV
+
+**Services:**
+- Service name and description
+- Service code
+- Hourly/daily/project rates
+- Billable unit (hour, day, project, fixed)
+- Tax configuration
+- Category
+- Active/inactive status
+
+### 8. Reporting & Analytics
+
+**Sales Reports:**
+- Revenue over time (daily, weekly, monthly, yearly)
+- Invoice status breakdown
+- Outstanding invoices
+- Overdue invoices
+- Payment collection rate
+- Average invoice value
+- Top customers by revenue
+
+**Tax Reports:**
+- VAT summary report
+- Tax collected by period
+- Tax liability calculations
+- ZIMRA-compliant tax reports
+- Downloadable tax returns
+- Period-over-period comparisons
+
+**Customer Reports:**
+- Customer sales ranking
+- Customer payment behavior
+- New vs returning customers
+- Customer lifetime value
+
+**Product/Service Reports:**
+- Best-selling products/services
+- Revenue by product/service
+- Inventory reports (if enabled)
+- Profit margins
+
+**Export Options:**
+- PDF export for all reports
+- Excel/CSV export
+- Date range filtering
+- Custom report builder
+
+### 9. Settings & Configuration
+
+**Company Settings:**
+- Edit company information
+- Upload/change logo
+- Update contact details
+- Manage ZIMRA registration details
+- Branding (colors, fonts)
+
+**Tax Settings:**
+- VAT enable/disable
+- Tax rates configuration
+- Tax categories
+- Tax period
+- Next return due date
+
+**FDMS Settings:**
+- Device ID and API key management
+- Certificate upload
+- Connection testing
+- Sync preferences
+- Auto-sync enable/disable
+
+**User Management:**
+- Invite team members
+- Role assignment
+- Remove users
+- Permissions matrix:
+  - Owner: Full access
+  - Admin: All except billing
+  - Member: Create/edit invoices, customers, products
+  - Accountant: View all, reports, cannot modify
+
+**Billing & Subscription:**
+- View current plan
+- Upgrade/downgrade subscription
+- Payment method management
+- Billing history
+- Invoice usage tracking
+- Cancel subscription
+
+**Invoice Preferences:**
+- Default terms and conditions
+- Default payment terms (days)
+- Invoice numbering format
+- Email templates
+- PDF layout customization
+- Footer text
+
+**Notification Settings:**
+- Email notifications (invoice sent, payment received)
+- Payment reminder schedule
+- Overdue alerts
+- FDMS sync notifications
+
+### 10. Email System
+
+**Transactional Emails:**
+- Welcome email with onboarding checklist
+- Email verification
+- Password reset
+- Invoice sent to customer (with PDF attachment)
+- Payment received confirmation
+- Payment reminder (3 days before due)
+- Overdue notice
+- Team member invitation
+- Subscription renewal reminder
+
+**Email Templates:**
+- Customizable email templates
+- Company branding in emails
+- Merge fields (customer name, invoice number, etc.)
+- HTML and plain text versions
+
+### 11. PDF Generation
+
+**Invoice PDF Requirements:**
+- Professional layout
+- Company logo and branding
+- All company details (name, address, TIN, VAT)
+- Customer details
+- Invoice number and dates
+- Itemized list with tax breakdown
+- Subtotal, tax, total
+- QR code
+- Fiscal code
+- Payment terms
+- Footer notes
+- Page numbering for multi-page invoices
+- Watermark for draft invoices
+
+### 12. Subscription & Billing (Stripe)
+
+**Subscription Tiers:**
+```typescript
+const PLANS = {
+  FREE: {
+    name: 'Free',
+    price: 0,
+    invoiceLimit: 10,
+    users: 1,
+    features: [
+      'Up to 10 invoices per month',
+      'Basic reporting',
+      'Email support'
+    ]
+  },
+  BASIC: {
+    name: 'Basic',
+    price: 15,
+    invoiceLimit: 100,
+    users: 3,
+    features: [
+      'Up to 100 invoices per month',
+      'Advanced reporting',
+      'Email support',
+      'Custom branding'
+    ]
+  },
+  PROFESSIONAL: {
+    name: 'Professional',
+    price: 35,
+    invoiceLimit: -1, // unlimited
+    users: 10,
+    features: [
+      'Unlimited invoices',
+      'Advanced analytics',
+      'Priority support',
+      'Multi-currency',
+      'Inventory tracking'
+    ]
+  },
+  ENTERPRISE: {
+    name: 'Enterprise',
+    price: 75,
+    invoiceLimit: -1,
+    users: -1, // unlimited
+    features: [
+      'Everything in Professional',
+      'API access',
+      'Dedicated account manager',
+      'Custom integrations',
+      'White-label options'
+    ]
+  }
+};
+```
+
+**Billing Features:**
+- Stripe Checkout integration
+- Subscription management
+- Usage-based billing tracking
+- Auto-renewal
+- Prorated upgrades/downgrades
+- Trial period management (14 days)
+- Payment failure handling
+- Dunning emails
+- Subscription analytics
+
+### 13. Security & Compliance
+
+**Security Measures:**
+- Password hashing (bcrypt)
+- JWT token authentication
+- CSRF protection
+- SQL injection prevention (Prisma)
+- XSS protection
+- Rate limiting on API endpoints
+- Encrypted storage for sensitive data (FDMS credentials)
+- HTTPS enforcement
+- Secure headers
+
+**ZIMRA Compliance:**
+- All invoices must have fiscal codes
+- Prevent editing issued invoices
+- Audit trail of all changes
+- Sequential invoice numbering
+- Tax calculations following ZIMRA rules
+- FDMS sync before marking as issued
+- Proper void/cancellation procedure
+
+**Data Privacy:**
+- GDPR-compliant data handling
+- Customer data encryption
+- Regular backups
+- Data export functionality
+- Account deletion option
+
+### 14. UI/UX Requirements
+
+**Design System:**
+- Use shadcn/ui components throughout
+- Consistent color scheme (customizable per company)
+- Responsive design (mobile, tablet, desktop)
+- Dark mode support
+- Accessibility (WCAG 2.1 AA compliance)
+- Loading states and skeletons
+- Toast notifications for user feedback
+- Confirmation modals for destructive actions
+
+**Navigation:**
+- Collapsible sidebar
+- Top header with company switcher
+- Breadcrumb navigation
+- Search functionality (global search for invoices, customers)
+- Keyboard shortcuts (Cmd/Ctrl + K for search)
+
+**Dashboard:**
+- Key metrics cards:
+  - Total revenue (current month)
+  - Outstanding invoices
+  - Overdue invoices
+  - This month vs last month
+- Revenue chart (last 12 months)
+- Recent invoices list
+- Quick actions (Create Invoice, Add Customer)
+- Upcoming due invoices
+- FDMS sync status
+
+### 15. Performance Optimization
+
+- Server-side rendering for SEO
+- API route caching
+- Database query optimization (indexes)
+- Lazy loading for large lists
+- Pagination for all list views
+- Image optimization (Next.js Image)
+- Code splitting
+- Prefetching for navigation
+
+### 16. Error Handling
+
+- Global error boundary
+- API error responses with clear messages
+- Form validation with Zod
+- Network error handling
+- FDMS error translation (user-friendly)
+- Retry mechanisms for failed operations
+- Error logging (consider Sentry integration)
+
+### 17. Testing Requirements
+
+- Unit tests for utility functions
+- Integration tests for API routes
+- E2E tests for critical flows:
+  - User registration and onboarding
+  - Invoice creation and FDMS sync
+  - Payment recording
+- FDMS mock server for testing
+
+## Environment Variables
+
+```env
+# Database
+DATABASE_URL="postgresql://..."
+
+# NextAuth
+NEXTAUTH_URL="http://localhost:3000"
+NEXTAUTH_SECRET="your-secret-key"
+
+# Google OAuth (optional)
+GOOGLE_CLIENT_ID="..."
+GOOGLE_CLIENT_SECRET="..."
+
+# Email (Resend)
+RESEND_API_KEY="..."
+
+# File Upload (Uploadthing)
+UPLOADT

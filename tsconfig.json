@@ -3,6 +3,7 @@
     "client/src/**/*",
     "shared/**/*",
     "server/**/*",
+    "api/**/*",
     "scripts/**/*"
   ],
   "exclude": [

@@ -61,35 +61,44 @@ app.use((req, res, next) => {
   next();
 });
 
-// Setup application
-setupSwagger(app);
-await registerRoutes(httpServer, app);
+// Use an async function to initialize the app and routes
+// This avoids top-level await which is not supported in the CJS build format
+async function initializeApp() {
+  // Setup application
+  setupSwagger(app);
+  await registerRoutes(httpServer, app);
 
-app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-  const status = err.status || err.statusCode || 500;
-  const message = err.message || "Internal Server Error";
+  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+    const status = err.status || err.statusCode || 500;
+    const message = err.message || "Internal Server Error";
 
-  res.status(status).json({ message });
-  // Don't throw here to avoid crashing the process in production (like Vercel)
-  if (process.env.NODE_ENV !== "production") {
-    console.error(err);
-  }
-});
-
-// Setup static files
-if (process.env.NODE_ENV === "production") {
-  serveStatic(app);
-} else {
-  const { setupVite } = await import("./vite");
-  await setupVite(httpServer, app);
-}
-
-// Start server if not on Vercel
-if (!process.env.VERCEL) {
-  const port = parseInt(process.env.PORT || "5000", 10);
-  httpServer.listen(port, "0.0.0.0", () => {
-    log(`serving on port ${port}`);
+    res.status(status).json({ message });
+    if (process.env.NODE_ENV !== "production") {
+      console.error(err);
+    }
   });
+
+  // Setup static files
+  if (process.env.NODE_ENV === "production") {
+    serveStatic(app);
+  } else {
+    const { setupVite } = await import("./vite");
+    await setupVite(httpServer, app);
+  }
+
+  // Start server if not on Vercel
+  if (!process.env.VERCEL) {
+    const port = parseInt(process.env.PORT || "5000", 10);
+    httpServer.listen(port, "0.0.0.0", () => {
+      log(`serving on port ${port}`);
+    });
+  }
 }
+
+// Start initialization
+initializeApp().catch((err) => {
+  console.error("Failed to initialize app:", err);
+  process.exit(1);
+});
 
 export { app, httpServer };

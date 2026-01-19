@@ -1,0 +1,90 @@
+// ZIMRA Environment Switching Endpoint
+// Add this after the company update endpoint in routes.ts (after line 74)
+
+// Switch ZIMRA Environment (Test/Production)
+app.post("/api/companies/:id/zimra/environment", requireAuth, async(req, res) =\u003e {
+    try {
+        const companyId = Number(req.params.id);
+        const { environment } = req.body;
+
+        // Validate environment value
+        if(!environment || !['test', 'production'].includes(environment)) {
+    return res.status(400).json({
+        message: "Invalid environment. Must be 'test' or 'production'"
+    });
+}
+
+const company = await storage.getCompany(companyId);
+if (!company) {
+    return res.status(404).json({ message: "Company not found" });
+}
+
+// Safety check: Don't allow switching if fiscal day is open
+if (company.fiscalDayOpen) {
+    return res.status(400).json({
+        message: "Cannot switch environment while fiscal day is open",
+        suggestion: "Close the current fiscal day before switching environments",
+        currentEnvironment: company.zimraEnvironment,
+        fiscalDayNo: company.currentFiscalDayNo
+    });
+}
+
+// Warning if switching to production
+if (environment === 'production' && company.zimraEnvironment !== 'production') {
+    console.warn(`[ZIMRA] Company ${companyId} switching to PRODUCTION environment`);
+}
+
+// Update environment
+const updated = await storage.updateCompany(companyId, {
+    zimraEnvironment: environment
+});
+
+console.log(`[ZIMRA] Company ${companyId} environment changed: ${company.zimraEnvironment} → ${environment}`);
+
+res.json({
+    success: true,
+    message: `ZIMRA environment switched to ${environment}`,
+    previousEnvironment: company.zimraEnvironment,
+    currentEnvironment: environment,
+    baseUrl: environment === 'production'
+        ? 'https://fdmsapi.zimra.co.zw'
+        : 'https://fdmsapitest.zimra.co.zw',
+    warning: environment === 'production'
+        ? 'You are now using the PRODUCTION ZIMRA environment. All transactions will be real and reported to ZIMRA.'
+        : null
+});
+
+  } catch (err: any) {
+    console.error("Switch Environment Error:", err);
+    res.status(500).json({ message: "Failed to switch environment: " + err.message });
+}
+});
+
+// Get current ZIMRA environment status
+app.get("/api/companies/:id/zimra/environment", requireAuth, async(req, res) =\u003e {
+    try {
+        const companyId = Number(req.params.id);
+        const company = await storage.getCompany(companyId);
+
+        if(!company) {
+            return res.status(404).json({ message: "Company not found" });
+        }
+
+    const environment = company.zimraEnvironment || 'test';
+
+        res.json({
+            environment,
+            baseUrl: environment === 'production'
+                ? 'https://fdmsapi.zimra.co.zw'
+                : 'https://fdmsapitest.zimra.co.zw',
+            isProduction: environment === 'production',
+            canSwitch: !company.fiscalDayOpen,
+            fiscalDayOpen: company.fiscalDayOpen,
+            currentFiscalDayNo: company.currentFiscalDayNo
+        });
+
+    } catch(err: any) {
+        console.error("Get Environment Error:", err);
+        res.status(500).json({ message: "Failed to get environment: " + err.message });
+    }
+});

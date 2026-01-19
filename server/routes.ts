@@ -12,6 +12,7 @@ import { setupAuth } from "./auth";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import { ZimraDevice, type ReceiptData, ZimraApiError, getZimraBaseUrl } from "./zimra";
+import { supabaseAdmin } from "./supabase";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -38,25 +39,9 @@ export async function registerRoutes(
     }
   });
 
-  // Logo Upload Configuration
-  app.use("/uploads", express.static(path.resolve(__dirname, "..", "uploads")));
-
-  const uploadDir = path.resolve(__dirname, "..", "uploads", "logos");
-  if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
-  }
-
-  const logoStorageConfig = multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, uploadDir),
-    filename: (req, file, cb) => {
-      const companyId = req.params.id;
-      const ext = path.extname(file.originalname);
-      cb(null, `company-${companyId}-logo-${Date.now()}${ext}`);
-    }
-  });
-
+  // Logo Upload Configuration (Supabase Storage)
   const logoUpload = multer({
-    storage: logoStorageConfig,
+    storage: multer.memoryStorage(),
     limits: { fileSize: 2 * 1024 * 1024 }, // 2MB limit
     fileFilter: (_req, file, cb) => {
       const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
@@ -75,10 +60,32 @@ export async function registerRoutes(
         return res.status(400).json({ message: "No file uploaded" });
       }
 
-      const logoUrl = `/uploads/logos/${req.file.filename}`;
-      await storage.updateCompany(companyId, { logoUrl });
+      if (!supabaseAdmin) {
+        throw new Error("Supabase Admin client not configured");
+      }
 
-      res.json({ message: "Logo uploaded successfully", logoUrl });
+      const file = req.file;
+      const fileExt = path.extname(file.originalname);
+      const fileName = `company-${companyId}-logo-${Date.now()}${fileExt}`;
+      const filePath = `logos/${fileName}`;
+
+      // Upload to Supabase Storage
+      const { data, error } = await supabaseAdmin.storage
+        .from('logos')
+        .upload(filePath, file.buffer, {
+          contentType: file.mimetype,
+          upsert: true
+        });
+
+      if (error) throw error;
+
+      // Get Public URL
+      const { data: { publicUrl } } = supabaseAdmin.storage
+        .from('logos')
+        .getPublicUrl(filePath);
+
+      await storage.updateCompany(companyId, { logoUrl: publicUrl });
+      res.json({ message: "Logo uploaded successfully", logoUrl: publicUrl });
     } catch (err: any) {
       console.error("Logo Upload Error:", err);
       res.status(500).json({ message: err.message || "Failed to upload logo" });
@@ -1153,22 +1160,13 @@ export async function registerRoutes(
     fs.mkdirSync(uploadsDir, { recursive: true });
   }
 
-  // Multer config
-  const mainStorageConfig = multer.diskStorage({
-    destination: function (req, file, cb) {
-      cb(null, uploadsDir);
-    },
-    filename: function (req, file, cb) {
-      const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-      cb(null, uniqueSuffix + path.extname(file.originalname));
-    },
-  });
-  const mainUpload = multer({ storage: mainStorageConfig });
+  // Multer config for generic uploads (Supabase)
+  const mainUpload = multer({ storage: multer.memoryStorage() });
 
   // Upload Route
   app.post("/api/upload", (req, res, next) => {
     // Wrapper to handle multer errors
-    mainUpload.single("file")(req, res, (err) => {
+    mainUpload.single("file")(req, res, async (err) => {
       if (err instanceof multer.MulterError) {
         console.error("Multer Error:", err);
         return res.status(400).json({ message: "File upload error: " + err.message });
@@ -1181,9 +1179,34 @@ export async function registerRoutes(
       if (!req.file) {
         return res.status(400).json({ message: "No file uploaded. key 'file' missing?" });
       }
-      const fileUrl = `/uploads/${req.file.filename}`;
-      console.log("File uploaded successfully:", fileUrl);
-      res.json({ url: fileUrl });
+
+      try {
+        if (!supabaseAdmin) throw new Error("Supabase Admin client not configured");
+
+        const file = req.file;
+        const fileExt = path.extname(file.originalname);
+        const fileName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${fileExt}`;
+        const filePath = `general/${fileName}`;
+
+        const { data, error } = await supabaseAdmin.storage
+          .from('uploads')
+          .upload(filePath, file.buffer, {
+            contentType: file.mimetype,
+            upsert: true
+          });
+
+        if (error) throw error;
+
+        const { data: { publicUrl } } = supabaseAdmin.storage
+          .from('uploads')
+          .getPublicUrl(filePath);
+
+        console.log("File uploaded successfully to Supabase:", publicUrl);
+        res.json({ url: publicUrl });
+      } catch (uploadErr: any) {
+        console.error("Supabase General Upload Error:", uploadErr);
+        res.status(500).json({ message: "Failed to upload file to storage" });
+      }
     });
   });
 

@@ -333,7 +333,7 @@ export default function CreateInvoicePage() {
                           currencySymbol: currentSymbol
                         }}
                         company={{
-                          ...selectedCompany,
+                          ...company,
                           bankName,
                           accountName,
                           accountNumber,

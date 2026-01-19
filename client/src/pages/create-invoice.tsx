@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Plus, Trash2, Loader2, ArrowLeft, Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -79,14 +79,14 @@ export default function CreateInvoicePage() {
 
   // Effect to load defaults from company
   useEffect(() => {
-    if (selectedCompany) {
-      setBankName(selectedCompany.bankName || "");
-      setAccountName(selectedCompany.accountName || "");
-      setAccountNumber(selectedCompany.accountNumber || "");
-      setBranchCode(selectedCompany.branchCode || "");
-      setTaxInclusive(selectedCompany.vatEnabled ?? false);
+    if (company) {
+      setBankName(company.bankName || "");
+      setAccountName(company.accountName || "");
+      setAccountNumber(company.accountNumber || "");
+      setBranchCode(company.branchCode || "");
+      setTaxInclusive(company.vatEnabled ?? false);
     }
-  }, [selectedCompany]);
+  }, [company]);
 
   // Currency State
   const [currencyCode, setCurrencyCode] = useState("USD");

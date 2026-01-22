@@ -409,7 +409,7 @@ export default function OnboardingPage() {
                                                 render={({ field }) => (
                                                     <FormItem>
                                                         <FormLabel>Base Currency</FormLabel>
-                                                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                                        <Select onValueChange={field.onChange} defaultValue={field.value || undefined}>
                                                             <FormControl>
                                                                 <SelectTrigger>
                                                                     <SelectValue placeholder="Select Currency" />
@@ -506,7 +506,7 @@ export default function OnboardingPage() {
                                                 render={({ field }) => (
                                                     <FormItem>
                                                         <FormLabel>VAT Number</FormLabel>
-                                                        <FormControl><Input placeholder="123456789" {...field} /></FormControl>
+                                                        <FormControl><Input placeholder="123456789" {...field} value={field.value || ""} /></FormControl>
                                                         <FormDescription>Required for fiscalization.</FormDescription>
                                                         <FormMessage />
                                                     </FormItem>

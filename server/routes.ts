@@ -11,10 +11,18 @@ import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { api } from "@shared/routes";
 import { z } from "zod";
-import { ZimraDevice, type ReceiptData, ZimraApiError, getZimraBaseUrl } from "./zimra";
+import { ZimraDevice, type ReceiptData, ZimraApiError, getZimraBaseUrl, type ZimraConfigResponse, type ZimraTax } from "./zimra";
 import { sendInvoiceEmail } from './email';
 import { supabaseAdmin } from "./supabase";
 import { parse } from "csv-parse/sync";
+import { logAction } from "./audit";
+import {
+  insertQuotationSchema,
+  insertQuotationItemSchema,
+  insertRecurringInvoiceSchema,
+  type InsertQuotation,
+  type InsertRecurringInvoice
+} from "@shared/schema";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -158,7 +166,7 @@ export async function registerRoutes(
       }
 
       // Update Company Logo URL in DB
-      await storage.updateCompanyLogo(companyId, publicUrl);
+      await storage.updateCompany(companyId, { logoUrl: publicUrl });
 
       res.json({ url: publicUrl });
     } catch (error: any) {
@@ -324,17 +332,7 @@ export async function registerRoutes(
     try {
       if (!req.file) return res.status(400).json({ message: "No CSV file uploaded" });
 
-      const companyId = req.user.companyId;
-      // Note: req.user.companyId might need validation or fetch depending on auth setup.
-      // Assuming setupAuth attaches user with companyId or we use query params.
-      // Based on previous code, let's use the query param if passed, or default to user's company?
-      // Actually, best practice is to pass companyId in query or infer from context.
-      // Let's assume standard auth context has companyId via session or verify it.
-      // For now, let's safely assume we get company_id from body or session.
-      // Seeing existing routes: `const companyId = Number(req.params.id);` for logo.
-      // Let's expect `companyId` in body or query for safety.
-
-      const targetCompanyId = parseInt(req.body.companyId) || (req.user as any).companyId;
+      const targetCompanyId = parseInt(req.body.companyId) || (req as any).user?.companyId;
       if (!targetCompanyId) return res.status(400).json({ message: "Target Company ID required" });
 
       const fileContent = req.file.buffer.toString("utf-8");
@@ -372,18 +370,18 @@ export async function registerRoutes(
           const vatHeader = findHeader(row, ['VAT Number', 'VAT NO', 'VAT']);
           const typeHeader = findHeader(row, ['Type', 'Customer Type', 'Client Type']);
 
-          const name = nameHeader ? row[nameHeader] : null;
+          const name = nameHeader ? (row as any)[nameHeader] : null;
           if (!name) throw new Error("Missing 'Name' column");
 
           const customerData = {
             companyId: targetCompanyId,
             name: name,
-            email: emailHeader ? row[emailHeader] : undefined,
-            phone: phoneHeader ? row[phoneHeader] : undefined,
-            address: addressHeader ? row[addressHeader] : undefined,
-            tin: tinHeader ? row[tinHeader] : undefined,
-            vatNumber: vatHeader ? row[vatHeader] : undefined,
-            customerType: typeHeader ? (row[typeHeader] || 'individual').toLowerCase() : 'individual',
+            email: emailHeader ? (row as any)[emailHeader] : undefined,
+            phone: phoneHeader ? (row as any)[phoneHeader] : undefined,
+            address: addressHeader ? (row as any)[addressHeader] : undefined,
+            tin: tinHeader ? (row as any)[tinHeader] : undefined,
+            vatNumber: vatHeader ? (row as any)[vatHeader] : undefined,
+            customerType: typeHeader ? ((row as any)[typeHeader] || 'individual').toLowerCase() : 'individual',
             isActive: true
           };
 
@@ -460,23 +458,23 @@ export async function registerRoutes(
           const stockHeader = findHeader(row, ['Stock', 'Quantity', 'Qty', 'Inventory']);
           const hsHeader = findHeader(row, ['HS Code', 'HSCode', 'Harmonized Code']);
 
-          const name = nameHeader ? row[nameHeader] : null;
+          const name = nameHeader ? (row as any)[nameHeader] : null;
           if (!name) throw new Error("Missing 'Name' column");
 
-          const typeValue = typeHeader ? row[typeHeader].toLowerCase() : 'good';
+          const typeValue = typeHeader ? (row as any)[typeHeader].toLowerCase() : 'good';
           const type = typeValue.includes('service') ? 'service' : 'good';
 
           const productData = {
             companyId: targetCompanyId,
             name: name,
-            description: descHeader ? row[descHeader] : "",
-            sku: skuHeader ? row[skuHeader] : `IMP-${Date.now()}-${index}`,
-            price: priceHeader ? cleanNum(row[priceHeader]).toString() : "0.00",
-            taxRate: taxHeader ? cleanNum(row[taxHeader]).toString() : "15.00",
+            description: descHeader ? (row as any)[descHeader] : "",
+            sku: skuHeader ? (row as any)[skuHeader] : `IMP-${Date.now()}-${index}`,
+            price: priceHeader ? cleanNum((row as any)[priceHeader]).toString() : "0.00",
+            taxRate: taxHeader ? cleanNum((row as any)[taxHeader]).toString() : "15.00",
             productType: type,
-            hsCode: hsHeader ? row[hsHeader] : "0000.00.00",
+            hsCode: hsHeader ? (row as any)[hsHeader] : "0000.00.00",
             isActive: true,
-            stockLevel: stockHeader ? cleanNum(row[stockHeader]).toString() : "0.00",
+            stockLevel: stockHeader ? cleanNum((row as any)[stockHeader]).toString() : "0.00",
             isTracked: !!stockHeader && type === 'good'
           };
 
@@ -1617,7 +1615,7 @@ export async function registerRoutes(
 
         // Try to find matching tax ID from ZIMRA configuration
         if (zimraConfig?.applicableTaxes) {
-          const matchingTax = zimraConfig.applicableTaxes.find(t =>
+          const matchingTax = zimraConfig.applicableTaxes.find((t: ZimraTax) =>
             t.taxPercent !== undefined && Math.abs(t.taxPercent - taxPercent) < 0.01
           );
           if (matchingTax) taxID = matchingTax.taxID;
@@ -1844,12 +1842,9 @@ export async function registerRoutes(
 
       // Create new invoice as Credit Note
       // Invoice number will be auto-generated by storage.createInvoice using getNextInvoiceNumber
-      const cnNumber = "AUTO";
-
       const cn = await storage.createInvoice({
         companyId: originalInvoice.companyId,
         customerId: originalInvoice.customerId,
-        invoiceNumber: cnNumber,
         issueDate: new Date(),
         dueDate: new Date(), // Due immediately?
         subtotal: originalInvoice.subtotal, // Default to full reversal
@@ -1888,12 +1883,9 @@ export async function registerRoutes(
       }
 
       // Create new invoice as Debit Note
-      const dnNumber = "AUTO";
-
       const dn = await storage.createInvoice({
         companyId: originalInvoice.companyId,
         customerId: originalInvoice.customerId,
-        invoiceNumber: dnNumber,
         issueDate: new Date(),
         dueDate: new Date(),
         subtotal: originalInvoice.subtotal,

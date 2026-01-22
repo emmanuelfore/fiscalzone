@@ -1,18 +1,17 @@
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogDescription, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogTrigger 
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { insertCompanySchema } from "@shared/schema";
-import { type InsertCompany } from "@shared/routes";
+import { insertCompanySchema, type InsertCompany } from "@shared/schema";
 import { useCreateCompany } from "@/hooks/use-companies";
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
@@ -58,7 +57,7 @@ export function CreateCompanyDialog({ children }: { children: React.ReactNode })
               <Input id="name" {...form.register("name")} placeholder="Acme Corp Pvt Ltd" />
               {form.formState.errors.name && <p className="text-red-500 text-xs">{form.formState.errors.name.message}</p>}
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="tradingName">Trading Name (Optional)</Label>
               <Input id="tradingName" {...form.register("tradingName")} placeholder="Acme" />
@@ -107,7 +106,7 @@ export function CreateCompanyDialog({ children }: { children: React.ReactNode })
               <Label htmlFor="bpNumber">BP Number</Label>
               <Input id="bpNumber" {...form.register("bpNumber")} placeholder="2000012345" />
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="fdmsDeviceId">Fiscal Device ID</Label>
               <Input id="fdmsDeviceId" {...form.register("fdmsDeviceId")} placeholder="FD00123" />

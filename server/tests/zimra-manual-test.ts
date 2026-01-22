@@ -117,7 +117,7 @@ async function runTests() {
             const body = req.data;
             // The body structure is { receipt: { ... } }
             assert.ok(body.receipt, "Body should have receipt object");
-            assert.equal(body.receipt.receiptType, "FISCALINVOICE");
+            assert.equal(body.receipt.receiptType, "FiscalInvoice");
             assert.equal(body.receipt.receiptGlobalNo, 500);
             assert.ok(body.receipt.receiptDeviceSignature, "Signature should be present");
 
@@ -132,7 +132,7 @@ async function runTests() {
     });
 
     const receiptData: ReceiptData = {
-        receiptType: 'FISCALINVOICE',
+        receiptType: 'FiscalInvoice',
         receiptCurrency: 'USD',
         receiptCounter: 1,
         receiptGlobalNo: 500,
@@ -152,7 +152,7 @@ async function runTests() {
             }
         ],
         receiptTaxes: [],
-        receiptPayments: [{ paymentType: 'CASH', paymentAmount: 10 }],
+        receiptPayments: [{ moneyTypeCode: 'CASH', paymentAmount: 10 }],
         receiptTotal: 10,
         receiptLinesTaxInclusive: true
     };

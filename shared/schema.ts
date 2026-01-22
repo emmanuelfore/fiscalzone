@@ -283,10 +283,17 @@ export const insertProductSchema = createInsertSchema(products).omit({ id: true,
 export const insertInvoiceSchema = createInsertSchema(invoices).omit({
   id: true,
   createdAt: true,
-  fiscalCode: true,
-  fiscalSignature: true,
-  qrCodeData: true,
-  syncedWithFdms: true
+}).extend({
+  invoiceNumber: z.string().optional(),
+  fiscalDayNo: z.number().int().optional(),
+  fiscalCode: z.string().optional(),
+  fiscalSignature: z.string().optional(),
+  qrCodeData: z.string().optional(),
+  syncedWithFdms: z.boolean().optional(),
+  fdmsStatus: z.string().optional(),
+  submissionId: z.string().optional(),
+  receiptCounter: z.number().int().optional(),
+  receiptGlobalNo: z.number().int().optional(),
 });
 // When creating an invoice, the invoiceId foreign key is added after the invoice record is created.
 export const insertInvoiceItemSchema = createInsertSchema(invoiceItems).omit({ id: true, invoiceId: true });
@@ -404,7 +411,12 @@ export const quotationItemsRelations = relations(quotationItems, ({ one }) => ({
   product: one(products, { fields: [quotationItems.productId], references: [products.id] }),
 }));
 
-export const insertQuotationSchema = createInsertSchema(quotations).omit({ id: true, createdAt: true });
+export const insertQuotationSchema = createInsertSchema(quotations).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  quotationNumber: z.string().optional(),
+});
 export const insertQuotationItemSchema = createInsertSchema(quotationItems).omit({ id: true, quotationId: true });
 
 export type Quotation = typeof quotations.$inferSelect;

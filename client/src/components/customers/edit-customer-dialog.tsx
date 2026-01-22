@@ -117,7 +117,7 @@ export function EditCustomerDialog({ customer, trigger }: Props) {
                                         <FormLabel>Type</FormLabel>
                                         <Select
                                             onValueChange={field.onChange}
-                                            defaultValue={field.value}
+                                            defaultValue={field.value || undefined}
                                         >
                                             <FormControl>
                                                 <SelectTrigger>
@@ -266,7 +266,7 @@ export function EditCustomerDialog({ customer, trigger }: Props) {
                                     </div>
                                     <FormControl>
                                         <Switch
-                                            checked={field.value}
+                                            checked={field.value ?? true}
                                             onCheckedChange={field.onChange}
                                         />
                                     </FormControl>

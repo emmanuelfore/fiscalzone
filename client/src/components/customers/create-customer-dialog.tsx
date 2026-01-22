@@ -111,7 +111,7 @@ export function CreateCustomerDialog({ companyId }: { companyId: number }) {
                                         <FormLabel>Type</FormLabel>
                                         <Select
                                             onValueChange={field.onChange}
-                                            defaultValue={field.value}
+                                            defaultValue={field.value || undefined}
                                         >
                                             <FormControl>
                                                 <SelectTrigger>

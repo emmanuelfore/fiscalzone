@@ -5,7 +5,7 @@ dotenv.config();
 
 const { Client } = pg;
 
-async function testConfig(name, config) {
+async function testConfig(name: string, config: any) {
     console.log(`\n--- Testing ${name} ---`);
     const client = new Client({
         connectionString: process.env.SUPABASE_DB_URL,
@@ -18,7 +18,7 @@ async function testConfig(name, config) {
         console.log(`✅ Success with ${name}`);
         await client.end();
         return true;
-    } catch (err) {
+    } catch (err: any) {
         console.log(`❌ Failed with ${name}: ${err.message}`);
         try { await client.end(); } catch { }
         return false;

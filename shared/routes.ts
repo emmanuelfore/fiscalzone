@@ -164,7 +164,7 @@ export const api = {
       method: 'POST' as const,
       path: '/api/companies/:companyId/invoices',
       input: insertInvoiceSchema.omit({ companyId: true }).extend({
-        items: z.array(insertInvoiceItemSchema.omit({ invoiceId: true })),
+        items: z.array(insertInvoiceItemSchema),
         exchangeRate: z.string().optional(), // Explicitly allow if not picked up
       }),
       responses: {
@@ -184,7 +184,7 @@ export const api = {
       method: 'PUT' as const,
       path: '/api/invoices/:id',
       input: insertInvoiceSchema.partial().extend({
-        items: z.array(insertInvoiceItemSchema.omit({ invoiceId: true })).optional(),
+        items: z.array(insertInvoiceItemSchema).optional(),
         exchangeRate: z.string().optional(),
       }),
       responses: {

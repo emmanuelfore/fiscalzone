@@ -1,10 +1,10 @@
 import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes.js";
-import { serveStatic } from "./static";
+import { serveStatic } from "./static.js";
 import { createServer } from "http";
-import { setupSwagger } from "./swagger";
-import { startRecurringInvoiceWorker } from "./jobs";
+import { setupSwagger } from "./swagger.js";
+import { startRecurringInvoiceWorker } from "./jobs.js";
 
 import cors from "cors";
 
@@ -89,7 +89,7 @@ async function initializeApp() {
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
   } else {
-    const { setupVite } = await import("./vite");
+    const { setupVite } = await import("./vite.js");
     await setupVite(httpServer, app);
   }
 

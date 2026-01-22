@@ -17,6 +17,8 @@ export function StatusBadge({
     pending: "bg-amber-100 text-amber-700 border-amber-200",
     overdue: "bg-rose-100 text-rose-700 border-rose-200",
     quote: "bg-indigo-100 text-indigo-700 border-indigo-200",
+    fiscalized: "bg-green-100 text-green-700 border-green-200",
+    "pending-sync": "bg-orange-100 text-orange-700 border-orange-200 animate-pulse",
   };
 
   const style = styles[status.toLowerCase()] || styles.draft;

@@ -5,16 +5,23 @@ import {
   type Customer, type Product, type Invoice, type InvoiceItem,
   type InsertCustomer, type InsertProduct, type CreateInvoiceRequest, type InsertInvoice,
   taxTypes, taxCategories, type TaxType, type TaxCategory, type InsertTaxCategory, type InsertTaxType,
-  currencies, type Currency, type InsertCurrency
+  currencies, type Currency, type InsertCurrency,
+  payments, type Payment, type InsertPayment,
+  auditLogs, type AuditLog, type InsertAuditLog,
+  recurringInvoices, type RecurringInvoice, type InsertRecurringInvoice,
+  quotations, quotationItems, type Quotation, type QuotationItem, type InsertQuotation, type InsertQuotationItem,
+  zimraLogs, type ZimraLog, type InsertZimraLog
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, lte } from "drizzle-orm";
+import { type FiscalDayCounter } from "./zimra";
 
 export interface IStorage {
   // User & Auth
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  updateUser(id: string, user: Partial<InsertUser>): Promise<User>;
 
   // Companies
   createCompany(company: InsertCompany, userId: string): Promise<Company>;
@@ -38,7 +45,7 @@ export interface IStorage {
   createInvoice(invoice: CreateInvoiceRequest): Promise<Invoice>;
   updateInvoice(id: number, data: Partial<InsertInvoice>): Promise<Invoice>;
   deleteInvoice(id: number): Promise<void>;
-  fiscalizeInvoice(id: number, fiscalData: { fiscalCode: string; qrCodeData: string; fiscalSignature?: string; fiscalDayNo?: number }): Promise<Invoice>;
+  fiscalizeInvoice(id: number, fiscalData: { fiscalCode: string; qrCodeData: string; fiscalSignature?: string; fiscalDayNo?: number; receiptCounter?: number; receiptGlobalNo?: number }): Promise<Invoice>;
 
   // Tax Config
   getTaxTypes(): Promise<TaxType[]>;
@@ -64,7 +71,52 @@ export interface IStorage {
   // Analytics
   getCompanyStats(companyId: number): Promise<{ totalRevenue: number; pendingAmount: number; invoicesCount: number; customersCount: number }>;
   getRevenueOverTime(companyId: number, days?: number): Promise<{ date: string; amount: number }[]>;
-  calculateFiscalCounters(companyId: number, fiscalDayNo: number): Promise<any[]>;
+  calculateFiscalCounters(companyId: number, fiscalDayNo: number): Promise<FiscalDayCounter[]>;
+
+  // Locking
+  lockInvoice(id: number, userId: string): Promise<boolean>;
+  unlockInvoice(id: number, userId: string): Promise<void>;
+
+  // Utils
+  getNextInvoiceNumber(companyId: number, prefix: string): Promise<string>;
+
+  // Payments
+  createPayment(payment: InsertPayment): Promise<Payment>;
+  getPayments(invoiceId: number): Promise<Payment[]>;
+  deletePayment(id: number): Promise<void>;
+
+  // Reports
+  getStatementData(customerId: number, startDate: Date, endDate: Date, currency?: string): Promise<{
+    customer: Customer;
+    openingBalance: number;
+    closingBalance: number;
+    transactions: any[];
+  }>;
+  getSalesReport(companyId: number, startDate: Date, endDate: Date): Promise<Invoice[]>;
+  getPaymentsReport(companyId: number, startDate: Date, endDate: Date): Promise<Payment[]>;
+
+  // Audit Logs
+  createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
+  getAuditLogs(companyId: number, limit?: number): Promise<AuditLog[]>;
+
+  // Recurring Invoices
+  getRecurringInvoices(companyId: number): Promise<RecurringInvoice[]>;
+  getDueRecurringInvoices(): Promise<RecurringInvoice[]>;
+  createRecurringInvoice(data: InsertRecurringInvoice): Promise<RecurringInvoice>;
+  updateRecurringInvoice(id: number, data: Partial<InsertRecurringInvoice>): Promise<RecurringInvoice>;
+  deleteRecurringInvoice(id: number): Promise<void>;
+
+  // Quotations
+  getQuotations(companyId: number): Promise<Quotation[]>;
+  getQuotation(id: number): Promise<(Quotation & { items: QuotationItem[]; customer?: Customer }) | undefined>;
+  createQuotation(data: InsertQuotation & { items: InsertQuotationItem[] }): Promise<Quotation>;
+  updateQuotation(id: number, data: Partial<InsertQuotation> & { items?: InsertQuotationItem[] }): Promise<Quotation>;
+  deleteQuotation(id: number): Promise<void>;
+  getNextQuotationNumber(companyId: number): Promise<string>;
+
+  // ZIMRA Logs
+  createZimraLog(log: InsertZimraLog): Promise<ZimraLog>;
+  getZimraLogs(invoiceId: number): Promise<ZimraLog[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -80,6 +132,15 @@ export class DatabaseStorage implements IStorage {
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const [user] = await db.insert(users).values(insertUser).returning();
+    return user;
+  }
+
+  async updateUser(id: string, updateUser: Partial<InsertUser>): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set(updateUser)
+      .where(eq(users.id, id))
+      .returning();
     return user;
   }
 
@@ -155,11 +216,24 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async getInvoice(id: number): Promise<(Invoice & { items: (InvoiceItem & { product?: Product })[]; customer?: Customer }) | undefined> {
+  async getInvoice(id: number): Promise<(Invoice & { items: (InvoiceItem & { product?: Product })[]; customer?: Customer; relatedInvoiceNumber?: string; relatedInvoiceDate?: Date | null }) | undefined> {
     const [invoice] = await db.select().from(invoices).where(eq(invoices.id, id));
     if (!invoice) return undefined;
 
     const [customer] = await db.select().from(customers).where(eq(customers.id, invoice.customerId));
+
+    // Fetch related invoice number and date if this is a credit/debit note
+    // ZIMRA Fields [26], [27], [28]
+    let relatedInvoiceNumber: string | undefined;
+    let relatedInvoiceDate: Date | null | undefined;
+    if (invoice.relatedInvoiceId) {
+      const [relatedInvoice] = await db.select({
+        invoiceNumber: invoices.invoiceNumber,
+        issueDate: invoices.issueDate
+      }).from(invoices).where(eq(invoices.id, invoice.relatedInvoiceId));
+      relatedInvoiceNumber = relatedInvoice?.invoiceNumber;
+      relatedInvoiceDate = relatedInvoice?.issueDate;
+    }
 
     const rows = await db
       .select({
@@ -175,8 +249,9 @@ export class DatabaseStorage implements IStorage {
       product: r.product || undefined
     }));
 
-    return { ...invoice, items, customer };
+    return { ...invoice, items, customer, relatedInvoiceNumber, relatedInvoiceDate };
   }
+
 
   async deleteInvoice(id: number): Promise<void> {
     await db.transaction(async (tx) => {
@@ -191,7 +266,8 @@ export class DatabaseStorage implements IStorage {
       const { items, ...invoiceData } = data;
       const [invoice] = await tx.insert(invoices).values({
         ...invoiceData,
-        invoiceNumber: `INV-${Date.now()}`, // Simple generation for now
+        ...invoiceData,
+        invoiceNumber: await this.getNextInvoiceNumber(invoiceData.companyId, invoiceData.transactionType === 'CreditNote' ? 'CN' : (invoiceData.transactionType === 'DebitNote' ? 'DN' : 'INV')),
         dueDate: new Date(invoiceData.dueDate), // Ensure Date object
       }).returning();
 
@@ -205,18 +281,93 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async updateInvoice(id: number, data: Partial<InsertInvoice>): Promise<Invoice> {
-    const [updated] = await db.update(invoices).set(data).where(eq(invoices.id, id)).returning();
-    return updated;
+  async updateInvoice(id: number, data: Partial<InsertInvoice> & { items?: any[] }): Promise<Invoice> {
+    return await db.transaction(async (tx) => {
+      // 1. Update invoice details
+      const { items, ...invoiceData } = data;
+      const [updated] = await tx
+        .update(invoices)
+        .set(invoiceData)
+        .where(eq(invoices.id, id))
+        .returning();
+
+      if (!updated) throw new Error("Invoice not found");
+
+      // 2. If items provided, replace them
+      if (data.items) {
+        // Delete existing items
+        await tx.delete(invoiceItems).where(eq(invoiceItems.invoiceId, id));
+
+        // Insert new items
+        await tx.insert(invoiceItems).values(
+          data.items.map(item => ({
+            ...item,
+            invoiceId: id
+          }))
+        );
+      }
+
+      return updated;
+    });
   }
 
-  async fiscalizeInvoice(id: number, fiscalData: { fiscalCode: string; qrCodeData: string; fiscalSignature?: string; fiscalDayNo?: number }): Promise<Invoice> {
+  async fiscalizeInvoice(id: number, fiscalData: {
+    fiscalCode: string;
+    qrCodeData: string;
+    fiscalSignature?: string;
+    fiscalDayNo?: number;
+    receiptCounter?: number;
+    receiptGlobalNo?: number;
+    syncedWithFdms?: boolean;
+    fdmsStatus?: string;
+  }): Promise<Invoice> {
+    const { syncedWithFdms = true, fdmsStatus = "issued", ...rest } = fiscalData;
     const [updated] = await db
       .update(invoices)
-      .set({ ...fiscalData, syncedWithFdms: true, status: "issued" })
+      .set({
+        ...rest,
+        syncedWithFdms,
+        fdmsStatus,
+        status: "issued"
+      })
       .where(eq(invoices.id, id))
       .returning();
     return updated;
+  }
+
+  async lockInvoice(id: number, userId: string): Promise<boolean> {
+    // Check if locked by someone else and lock is fresh (< 5 mins)
+    const [existing] = await db.select().from(invoices).where(eq(invoices.id, id));
+    if (!existing) return false;
+
+    if (existing.lockedBy && existing.lockedBy !== userId) {
+      const lockTime = new Date(existing.lockedAt!).getTime();
+      const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+      if (lockTime > fiveMinutesAgo) {
+        return false; // Still locked by someone else
+      }
+    }
+
+    // Acquire lock
+    const [locked] = await db
+      .update(invoices)
+      .set({ lockedBy: userId, lockedAt: new Date() })
+      .where(eq(invoices.id, id))
+      .returning();
+
+    return !!locked;
+  }
+
+  async unlockInvoice(id: number, userId: string): Promise<void> {
+    await db
+      .update(invoices)
+      .set({ lockedBy: null, lockedAt: null })
+      .where(
+        and(
+          eq(invoices.id, id),
+          eq(invoices.lockedBy, userId)
+        )
+      );
   }
 
   async updateCompany(id: number, data: Partial<InsertCompany>): Promise<Company> {
@@ -362,27 +513,32 @@ export class DatabaseStorage implements IStorage {
     const companyCustomers = await db.select().from(customers).where(eq(customers.companyId, companyId));
 
     const totalRevenue = companyInvoices
-      .filter(i => i.status === 'paid' || i.status === 'issued')
+      .filter(i => (i.status === 'paid' || i.status === 'issued') && i.transactionType !== 'CreditNote')
       .reduce((sum, inv) => {
-        const amount = Number(inv.total);
-        if (inv.transactionType === 'CreditNote') {
-          return sum - amount;
-        }
+        // Normalize to base (USD) using the exchange rate at the time of invoice
+        const amount = Number(inv.total) / Number(inv.exchangeRate || 1);
         return sum + amount;
       }, 0);
 
     const pendingAmount = companyInvoices
-      .filter(i => i.status === 'issued') // Issued but not Paid or Cancelled
+      .filter(i => i.status === 'issued' && i.transactionType !== 'CreditNote')
       .reduce((sum, inv) => {
-        const amount = Number(inv.total);
-        if (inv.transactionType === 'CreditNote') {
-          return sum - amount;
-        }
+        const amount = Number(inv.total) / Number(inv.exchangeRate || 1);
         return sum + amount;
       }, 0);
 
+    // Subtract Credit Notes if any (though usually CNs are separate, let's be safe)
+    const totalCNs = companyInvoices
+      .filter(i => (i.status === 'paid' || i.status === 'issued') && i.transactionType === 'CreditNote')
+      .reduce((sum, inv) => {
+        const amount = Number(inv.total) / Number(inv.exchangeRate || 1);
+        return sum + amount;
+      }, 0);
+
+    const finalRevenue = totalRevenue - totalCNs;
+
     return {
-      totalRevenue: Math.round(totalRevenue * 100) / 100,
+      totalRevenue: Math.round(finalRevenue * 100) / 100,
       pendingAmount: Math.round(pendingAmount * 100) / 100,
       invoicesCount: companyInvoices.filter(i => i.status !== 'cancelled' && i.status !== 'draft' && i.transactionType !== 'CreditNote').length,
       customersCount: companyCustomers.length
@@ -390,8 +546,6 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getRevenueOverTime(companyId: number, days: number = 30) {
-    // Simple aggregation. For production use SQL 'date_trunc'.
-    // Here we fetch all and aggregate in memory for compatibility/simplicity with current setup.
     const companyInvoices = await db.select().from(invoices).where(eq(invoices.companyId, companyId));
 
     const cutoff = new Date();
@@ -402,7 +556,8 @@ export class DatabaseStorage implements IStorage {
     companyInvoices.forEach(inv => {
       if ((inv.status === 'paid' || inv.status === 'issued') && inv.issueDate && new Date(inv.issueDate) >= cutoff) {
         const dateKey = new Date(inv.issueDate).toISOString().split('T')[0];
-        const amount = Number(inv.total);
+        // Normalize to base (USD)
+        const amount = Number(inv.total) / Number(inv.exchangeRate || 1);
         const current = dailyMap.get(dateKey) || 0;
 
         if (inv.transactionType === 'CreditNote') {
@@ -413,15 +568,14 @@ export class DatabaseStorage implements IStorage {
       }
     });
 
-    // Fill gaps? Optional. Let's return just days with data or formatted sorted array.
     const result = Array.from(dailyMap.entries())
-      .map(([date, amount]) => ({ date, amount }))
+      .map(([date, amount]) => ({ date, amount: Math.round(amount * 100) / 100 }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
     return result;
   }
 
-  async calculateFiscalCounters(companyId: number, fiscalDayNo: number): Promise<any[]> {
+  async calculateFiscalCounters(companyId: number, fiscalDayNo: number): Promise<FiscalDayCounter[]> {
     const dayInvoicesInfo = await db
       .select({
         invoice: invoices,
@@ -512,6 +666,326 @@ export class DatabaseStorage implements IStorage {
       ...c,
       fiscalCounterValue: Math.round(c.fiscalCounterValue * 100) / 100
     }));
+  }
+
+  async getNextInvoiceNumber(companyId: number, prefix: string = 'INV'): Promise<string> {
+    // We strictly use client-side filtering for simplicity and safety against mixed formats
+    // Get all invoice numbers for the company
+    const allInvoices = await db
+      .select({ invoiceNumber: invoices.invoiceNumber })
+      .from(invoices)
+      .where(eq(invoices.companyId, companyId));
+
+    // Filter and parse
+    const relevant = allInvoices
+      .filter(i => i.invoiceNumber.startsWith(`${prefix}-`))
+      .map(i => {
+        const parts = i.invoiceNumber.split('-');
+        // handle cases like INV-123, INV-001
+        const numPart = parts[1];
+        return numPart ? parseInt(numPart) : 0;
+      })
+      .filter(n => !isNaN(n))
+      .sort((a, b) => b - a);
+
+    const nextNum = relevant.length > 0 ? relevant[0] + 1 : 1;
+
+    // Pad with leading zeros, e.g., 001
+    return `${prefix}-${nextNum.toString().padStart(3, '0')}`;
+  }
+
+  // Payments
+  async createPayment(payment: InsertPayment): Promise<Payment> {
+    const [newPayment] = await db.insert(payments).values(payment).returning();
+    return newPayment;
+  }
+
+  async getPayments(invoiceId: number): Promise<Payment[]> {
+    return await db.select().from(payments).where(eq(payments.invoiceId, invoiceId)).orderBy(desc(payments.paymentDate));
+  }
+
+  async deletePayment(id: number): Promise<void> {
+    await db.delete(payments).where(eq(payments.id, id));
+  }
+
+  // Reports - Customer Statement
+  async getStatementData(customerId: number, startDate: Date, endDate: Date, currency?: string): Promise<{
+    customer: Customer;
+    openingBalance: number;
+    closingBalance: number;
+    transactions: any[];
+  }> {
+    const customer = (await db.select().from(customers).where(eq(customers.id, customerId)))[0];
+    if (!customer) throw new Error("Customer not found");
+
+    // Fetch all invoices (and CNs) for this customer
+    let userInvoicesQuery = db.select().from(invoices).where(eq(invoices.customerId, customerId));
+    const userInvoices = await userInvoicesQuery;
+
+    // Fetch all payments for these invoices
+    const invoiceIds = userInvoices.map(inv => inv.id);
+    let userPayments: Payment[] = [];
+    if (invoiceIds.length > 0) {
+      for (const inv of userInvoices) {
+        // Only include payments for the specified currency
+        if (currency && inv.currency !== currency) continue;
+
+        const invPayments = await db.select().from(payments).where(eq(payments.invoiceId, inv.id));
+        userPayments.push(...invPayments);
+      }
+    }
+
+    // Filter invoices by currency if provided
+    const filteredInvoices = currency
+      ? userInvoices.filter(inv => inv.currency === currency)
+      : userInvoices;
+
+    // Sort all transactions by date
+    // Normalize dates
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    // Calculate Opening Balance (Transactions < start)
+    let openingBalance = 0;
+
+    // Process Invoices/CNs
+    for (const inv of filteredInvoices) {
+      if (!inv.issueDate) continue; // Skip if no issue date
+      const date = new Date(inv.issueDate);
+      // Only issued/paid/fiscalized count towards balance? 
+      // Draft/Cancelled do not. 
+      if (['draft', 'cancelled'].includes(inv.status || '')) continue;
+
+      const amount = Number(inv.total);
+
+      if (date < start) {
+        if (inv.transactionType === 'CreditNote') {
+          openingBalance -= amount;
+        } else {
+          openingBalance += amount;
+        }
+      }
+    }
+
+    // Process Payments
+    for (const pay of userPayments) {
+      const date = new Date(pay.paymentDate);
+      if (date < start) {
+        openingBalance -= Number(pay.amount);
+      }
+    }
+
+    // Build Transaction List (start <= date <= end)
+    const transactions: any[] = [];
+
+    // 1. Invoices & CNs
+    for (const inv of filteredInvoices) {
+      if (!inv.issueDate) continue; // Skip if no issue date
+      const date = new Date(inv.issueDate);
+      if (['draft', 'cancelled'].includes(inv.status || '')) continue;
+
+      if (date >= start && date <= end) {
+        transactions.push({
+          date: date,
+          type: inv.transactionType === 'CreditNote' ? 'Credit Note' : 'Invoice',
+          reference: inv.invoiceNumber,
+          description: inv.transactionType === 'CreditNote' ? 'Credit Note Issued' : 'Invoice Issued',
+          debit: inv.transactionType !== 'CreditNote' ? Number(inv.total) : 0,
+          credit: inv.transactionType === 'CreditNote' ? Number(inv.total) : 0,
+          id: inv.id
+        });
+      }
+    }
+
+    // 2. Payments
+    for (const pay of userPayments) {
+      const date = new Date(pay.paymentDate);
+      if (date >= start && date <= end) {
+        transactions.push({
+          date: date,
+          type: 'Payment',
+          reference: pay.reference || 'PAYMENT',
+          description: `Payment for ${userInvoices.find(i => i.id === pay.invoiceId)?.invoiceNumber || 'Invoice'}`,
+          debit: 0,
+          credit: Number(pay.amount),
+          id: pay.id
+        });
+      }
+    }
+
+    // Sort by date
+    transactions.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+    // Calculate Running Balance
+    let runningBalance = openingBalance;
+    const finalTransactions = transactions.map(t => {
+      runningBalance += (t.debit - t.credit);
+      return { ...t, balance: runningBalance };
+    });
+
+    return {
+      customer,
+      openingBalance,
+      closingBalance: runningBalance,
+      transactions: finalTransactions
+    };
+  }
+
+  async getSalesReport(companyId: number, startDate: Date, endDate: Date): Promise<Invoice[]> {
+    const allInvoices = await this.getInvoices(companyId);
+    return allInvoices.filter(inv => {
+      if (!inv.issueDate) return false;
+      const date = new Date(inv.issueDate);
+      return date >= startDate && date <= endDate;
+    });
+  }
+
+  async getPaymentsReport(companyId: number, startDate: Date, endDate: Date): Promise<Payment[]> {
+    const results = await db
+      .select()
+      .from(payments)
+      .where(eq(payments.companyId, companyId))
+      .orderBy(desc(payments.paymentDate));
+
+    return results.filter(p => {
+      const date = new Date(p.paymentDate);
+      return date >= startDate && date <= endDate;
+    });
+  }
+
+  async createAuditLog(log: InsertAuditLog): Promise<AuditLog> {
+    const [auditLog] = await db.insert(auditLogs).values(log).returning();
+    return auditLog;
+  }
+
+  async getAuditLogs(companyId: number, limit: number = 50): Promise<AuditLog[]> {
+    return await db.select()
+      .from(auditLogs)
+      .where(eq(auditLogs.companyId, companyId))
+      .orderBy(desc(auditLogs.createdAt))
+      .limit(limit);
+  }
+
+  // Recurring Invoices
+  async getRecurringInvoices(companyId: number): Promise<RecurringInvoice[]> {
+    return await db.select().from(recurringInvoices).where(eq(recurringInvoices.companyId, companyId));
+  }
+
+  async getDueRecurringInvoices(): Promise<RecurringInvoice[]> {
+    const now = new Date();
+    return await db.select().from(recurringInvoices).where(
+      and(
+        eq(recurringInvoices.status, "active"),
+        lte(recurringInvoices.nextRunDate, now)
+      )
+    );
+  }
+
+  async createRecurringInvoice(data: InsertRecurringInvoice): Promise<RecurringInvoice> {
+    const [recurring] = await db.insert(recurringInvoices).values(data).returning();
+    return recurring;
+  }
+
+  async updateRecurringInvoice(id: number, data: Partial<InsertRecurringInvoice>): Promise<RecurringInvoice> {
+    const [updated] = await db.update(recurringInvoices).set(data).where(eq(recurringInvoices.id, id)).returning();
+    return updated;
+  }
+
+  async deleteRecurringInvoice(id: number): Promise<void> {
+    await db.delete(recurringInvoices).where(eq(recurringInvoices.id, id));
+  }
+
+  // Quotations
+  async getQuotations(companyId: number): Promise<Quotation[]> {
+    return await db.select().from(quotations).where(eq(quotations.companyId, companyId)).orderBy(desc(quotations.createdAt));
+  }
+
+  async getQuotation(id: number): Promise<(Quotation & { items: QuotationItem[]; customer?: Customer }) | undefined> {
+    const [quotation] = await db.select().from(quotations).where(eq(quotations.id, id));
+    if (!quotation) return undefined;
+
+    const [customer] = await db.select().from(customers).where(eq(customers.id, quotation.customerId));
+    const items = await db.select().from(quotationItems).where(eq(quotationItems.quotationId, id));
+
+    return { ...quotation, items, customer };
+  }
+
+  async createQuotation(data: InsertQuotation & { items: InsertQuotationItem[] }): Promise<Quotation> {
+    return await db.transaction(async (tx) => {
+      const { items, ...quotationData } = data;
+      const [quotation] = await tx.insert(quotations).values({
+        ...quotationData,
+        quotationNumber: await this.getNextQuotationNumber(quotationData.companyId),
+      }).returning();
+
+      if (items.length > 0) {
+        await tx.insert(quotationItems).values(
+          items.map(item => ({ ...item, quotationId: quotation.id }))
+        );
+      }
+
+      return quotation;
+    });
+  }
+
+  async updateQuotation(id: number, data: Partial<InsertQuotation> & { items?: InsertQuotationItem[] }): Promise<Quotation> {
+    return await db.transaction(async (tx) => {
+      const { items, ...quotationData } = data;
+      const [updated] = await tx
+        .update(quotations)
+        .set(quotationData)
+        .where(eq(quotations.id, id))
+        .returning();
+
+      if (!updated) throw new Error("Quotation not found");
+
+      if (items) {
+        await tx.delete(quotationItems).where(eq(quotationItems.quotationId, id));
+        if (items.length > 0) {
+          await tx.insert(quotationItems).values(
+            items.map(item => ({ ...item, quotationId: id }))
+          );
+        }
+      }
+
+      return updated;
+    });
+  }
+
+  async deleteQuotation(id: number): Promise<void> {
+    await db.transaction(async (tx) => {
+      await tx.delete(quotationItems).where(eq(quotationItems.quotationId, id));
+      await tx.delete(quotations).where(eq(quotations.id, id));
+    });
+  }
+
+  async getNextQuotationNumber(companyId: number): Promise<string> {
+    const allQuotes = await db
+      .select({ quotationNumber: quotations.quotationNumber })
+      .from(quotations)
+      .where(eq(quotations.companyId, companyId));
+
+    const relevant = allQuotes
+      .filter(q => q.quotationNumber.startsWith("QT-"))
+      .map(q => {
+        const parts = q.quotationNumber.split("-");
+        const numPart = parts[1];
+        return numPart ? parseInt(numPart) : 0;
+      })
+      .filter(n => !isNaN(n))
+      .sort((a, b) => b - a);
+
+    const nextNum = relevant.length > 0 ? relevant[0] + 1 : 1;
+    return `QT-${nextNum.toString().padStart(3, "0")}`;
+  }
+
+  async createZimraLog(log: InsertZimraLog): Promise<ZimraLog> {
+    const [newL] = await db.insert(zimraLogs).values(log).returning();
+    return newL;
+  }
+
+  async getZimraLogs(invoiceId: number): Promise<ZimraLog[]> {
+    return await db.select().from(zimraLogs).where(eq(zimraLogs.invoiceId, invoiceId)).orderBy(desc(zimraLogs.createdAt));
   }
 }
 

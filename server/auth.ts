@@ -98,4 +98,20 @@ export function setupAuth(app: Express) {
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
     res.json(req.user);
   });
+
+  app.patch("/api/user", (req: any, res, next) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    next();
+  }, async (req: any, res) => {
+    try {
+      const { name } = req.body;
+      if (!name) return res.status(400).json({ message: "Name cannot be empty" });
+
+      const updatedUser = await storage.updateUser(req.user!.id, { name });
+      res.json(updatedUser);
+    } catch (err: any) {
+      console.error("Update User Error:", err);
+      res.status(500).json({ message: "Failed to update profile", error: err.message });
+    }
+  });
 }

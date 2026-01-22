@@ -21,12 +21,24 @@ import {
   Building2,
   Fingerprint,
   Activity,
-  RefreshCw
+  RefreshCw,
+  ClipboardList
 } from "lucide-react";
-import { useMemo } from "react";
+import React, { useMemo } from "react";
 import { Link, useLocation } from "wouter";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { useDeviceStatus } from "@/hooks/use-device-status";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Clock } from "lucide-react";
+import { useCurrencies } from "@/hooks/use-currencies";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -60,19 +72,40 @@ export default function Dashboard() {
       return await res.json();
     },
     onSuccess: (data) => {
-      toast({
-        title: "Device Online",
-        description: `Ping successful. Next report in ${data.reportingFrequency}m.`,
-      });
+      setPingSuccess(true); // Set success state
       queryClient.invalidateQueries({ queryKey: ["companies"] });
     },
     onError: (err: Error) => {
+      setPingSuccess(false);
       toast({
         title: "Ping Failed",
         description: err.message,
         variant: "destructive",
       });
     }
+  });
+
+  // Track ping success locally for UI state
+  const [pingSuccess, setPingSuccess] = React.useState(false);
+  const isOnline = pingSuccess;
+
+  // Auto-Ping on Mount if Configured
+  React.useEffect(() => {
+    if (selectedCompany?.fdmsDeviceId) {
+      pingZimra();
+    }
+  }, [selectedCompany?.fdmsDeviceId]);
+
+  // Fetch Live Status on Mount (to get real fiscal day status)
+  const zimraStatusQuery = useQuery({
+    queryKey: ["zimraStatus", selectedCompany?.id],
+    queryFn: async () => {
+      if (!selectedCompany?.id || !selectedCompany.fdmsDeviceId) return null;
+      const res = await apiFetch(`/api/companies/${selectedCompany.id}/zimra/status`);
+      if (!res.ok) return null;
+      return await res.json();
+    },
+    enabled: !!selectedCompany?.id && !!selectedCompany.fdmsDeviceId
   });
 
   const { mutate: closeFiscalDay, isPending: isClosing } = useMutation({
@@ -93,6 +126,7 @@ export default function Dashboard() {
       });
       queryClient.invalidateQueries({ queryKey: ["companies"] });
       queryClient.invalidateQueries({ queryKey: ["stats", "summary", selectedCompany?.id] });
+      queryClient.invalidateQueries({ queryKey: ["zimraStatus", selectedCompany?.id] });
     },
     onError: (err: Error) => {
       toast({
@@ -103,13 +137,56 @@ export default function Dashboard() {
     }
   });
 
+  const { mutate: openFiscalDay, isPending: isOpening } = useMutation({
+    mutationFn: async () => {
+      if (!selectedCompany?.id) return;
+      const res = await apiFetch(`/api/companies/${selectedCompany.id}/zimra/day/open`, { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Failed to open fiscal day");
+      }
+      return await res.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Fiscal Day Opened",
+        description: `Successfully opened day ${data.fiscalDayNo}.`,
+        className: "bg-emerald-600 text-white"
+      });
+      queryClient.invalidateQueries({ queryKey: ["companies"] });
+      queryClient.invalidateQueries({ queryKey: ["zimraStatus", selectedCompany?.id] });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Opening Failed",
+        description: err.message,
+        variant: "destructive",
+      });
+    }
+  });
+
+  const { data: currencies } = useCurrencies(selectedCompany?.id || 0);
+  const [reportCurrencyCode, setReportCurrencyCode] = React.useState<string>("ZiG");
+
+  const consolidatedCurrency = currencies?.find(c => c.code === reportCurrencyCode) || currencies?.find(c => c.code === 'USD');
+  const consolidatedRate = Number(consolidatedCurrency?.exchangeRate || 1);
+  const consolidatedSymbol = consolidatedCurrency?.symbol || (reportCurrencyCode === 'USD' ? '$' : reportCurrencyCode);
+
   const stats = useMemo(() => {
     return {
-      total: summary?.totalRevenue || 0,
-      pending: summary?.pendingAmount || 0,
+      total: (summary?.totalRevenue || 0) * consolidatedRate,
+      pending: (summary?.pendingAmount || 0) * consolidatedRate,
       count: summary?.invoicesCount || 0
     };
-  }, [summary]);
+  }, [summary, consolidatedRate]);
+
+  // Fiscal Day Alert Logic
+  const { data: deviceStatus } = useDeviceStatus(selectedCompany?.id || 0);
+  const showTimeAlert = React.useMemo(() => {
+    if (!deviceStatus?.fiscalDayOpen) return false;
+    const hour = new Date().getHours();
+    return hour >= 17; // 5 PM
+  }, [deviceStatus]);
 
   const isConfigured = selectedCompany?.tin && selectedCompany.fdmsDeviceId;
 
@@ -129,6 +206,17 @@ export default function Dashboard() {
 
   return (
     <Layout>
+      {showTimeAlert && (
+        <div className="mb-4">
+          <Alert variant="destructive" className="bg-amber-50 border-amber-200 text-amber-800">
+            <Clock className="h-4 w-4" />
+            <AlertTitle>Fiscal Day is still Open</AlertTitle>
+            <AlertDescription>
+              It is past 5:00 PM. Please remember to <Link href="/zimra-settings" className="font-bold underline">Close the Fiscal Day</Link> to ensure compliance.
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
@@ -194,13 +282,26 @@ export default function Dashboard() {
         {/* Stats Cards */}
         <div className="col-span-1 lg:col-span-2 grid grid-cols-2 gap-4">
           <Card className="card-depth border-none flex flex-col justify-between">
-            <CardHeader className="pb-2">
+            <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
               <CardTitle className="text-sm font-medium text-slate-500">Total Revenue</CardTitle>
+              <Select value={reportCurrencyCode} onValueChange={setReportCurrencyCode}>
+                <SelectTrigger className="w-[80px] h-7 text-[10px] py-0 px-2">
+                  <SelectValue placeholder="Cur" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="USD">USD</SelectItem>
+                  {currencies?.filter(c => c.code !== 'USD').map(c => (
+                    <SelectItem key={c.id} value={c.code}>{c.code}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-display font-bold text-slate-900">${stats.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+              <div className="text-3xl font-display font-bold text-slate-900">
+                {consolidatedSymbol}{stats.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              </div>
               <div className="text-xs text-emerald-600 flex items-center mt-2 font-medium">
-                <TrendingUp className="w-3 h-3 mr-1" /> +12% vs last month
+                <TrendingUp className="w-3 h-3 mr-1" /> Consolidated in {reportCurrencyCode}
               </div>
             </CardContent>
           </Card>
@@ -209,7 +310,9 @@ export default function Dashboard() {
               <CardTitle className="text-sm font-medium text-slate-500">Pending Payments</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-display font-bold text-slate-900">${stats.pending.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+              <div className="text-3xl font-display font-bold text-slate-900">
+                {consolidatedSymbol}{stats.pending.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              </div>
               <div className="text-xs text-amber-600 mt-2 font-medium">
                 {((stats.pending / (stats.total || 1)) * 100).toFixed(0)}% of total revenue
               </div>
@@ -245,6 +348,16 @@ export default function Dashboard() {
             </Button>
             <Button
               variant="outline"
+              className="h-28 flex-col gap-3 bg-white card-depth border-none hover:border-amber-200 hover:bg-amber-50 group transition-all"
+              onClick={() => setLocation("/quotations/new")}
+            >
+              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 group-hover:bg-amber-600 group-hover:text-white transition-all shadow-sm group-hover:shadow-md">
+                <ClipboardList className="w-5 h-5" />
+              </div>
+              <span className="font-semibold text-slate-700">New Quote</span>
+            </Button>
+            <Button
+              variant="outline"
               className="h-28 flex-col gap-3 bg-white card-depth border-none hover:border-emerald-200 hover:bg-emerald-50 group transition-all"
               onClick={() => setLocation("/products")}
             >
@@ -266,7 +379,7 @@ export default function Dashboard() {
           </div>
 
           {/* FDMS Status Card */}
-          <Card className="card-depth border-none bg-slate-900 text-white overflow-hidden relative shadow-slate-900/20 shadow-2xl">
+          <Card className="border-none bg-slate-900 text-white rounded-xl overflow-hidden relative shadow-slate-900/20 shadow-2xl">
             <div className="absolute top-0 right-0 w-64 h-64 bg-violet-600/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
             <div className="absolute bottom-0 left-0 w-48 h-48 bg-emerald-600/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2 pointer-events-none" />
 
@@ -283,15 +396,18 @@ export default function Dashboard() {
                     </CardDescription>
                   </div>
                 </div>
-                {/* 
-                  NOTE: StatusBadge typically accepts 'status' prop. 
-                  If previous 'className' prop was removed from the component definition, 
-                  make sure to wrap it in a div if styling is needed, or fix StatusBadge component.
-                  Here we assume 'className' is valid or will be ignored harmlessly.
-                */}
-                <StatusBadge status="paid" className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 backdrop-blur-md px-3">
-                  Connected
-                </StatusBadge>
+                {/* Status Badge: Dependent on Ping Result */}
+                {zimraStatusQuery.isLoading || isPinging ? (
+                  <span className="bg-slate-500/20 text-slate-300 border border-slate-500/30 backdrop-blur-md px-3 py-0.5 rounded-full text-xs font-medium uppercase tracking-wide">
+                    Checking...
+                  </span>
+                ) : (
+                  <span
+                    className={`backdrop-blur-md px-3 py-0.5 rounded-full text-xs font-medium border uppercase tracking-wide ${isOnline ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" : "bg-red-500/20 text-red-400 border-red-500/30"}`}
+                  >
+                    {isOnline ? "Connected" : "Offline"}
+                  </span>
+                )}
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -300,8 +416,17 @@ export default function Dashboard() {
                   <div>
                     <div className="text-xs text-slate-400 mb-2 uppercase tracking-wider font-semibold">Fiscal Day</div>
                     <div className="flex items-center justify-between">
-                      <div className="text-2xl font-bold font-display tracking-tight text-white">{selectedCompany.fiscalDayOpen ? "OPEN" : "CLOSED"}</div>
-                      {selectedCompany.fiscalDayOpen && (
+                      {/* Prefer Live Status over Company Data */}
+                      <div className="text-2xl font-bold font-display tracking-tight text-white">
+                        {zimraStatusQuery.isLoading ? (
+                          <span className="text-sm text-slate-400">Loading...</span>
+                        ) : zimraStatusQuery.data ? (
+                          zimraStatusQuery.data.fiscalDayStatus === 'FiscalDayOpened' ? "OPEN" : "CLOSED"
+                        ) : (
+                          selectedCompany.fiscalDayOpen ? "OPEN" : "CLOSED"
+                        )}
+                      </div>
+                      {zimraStatusQuery.data?.fiscalDayStatus === 'FiscalDayOpened' || (!zimraStatusQuery.data && selectedCompany.fiscalDayOpen) ? (
                         <Button
                           size="sm"
                           variant="destructive"
@@ -316,10 +441,22 @@ export default function Dashboard() {
                           {isClosing ? <RefreshCw className="w-3 h-3 animate-spin mr-1" /> : null}
                           Close Day
                         </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          className="h-7 text-[10px] font-bold uppercase bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-900/40"
+                          onClick={() => openFiscalDay()}
+                          disabled={isOpening}
+                        >
+                          {isOpening ? <RefreshCw className="w-3 h-3 animate-spin mr-1" /> : null}
+                          Open Day
+                        </Button>
                       )}
                     </div>
                   </div>
-                  <div className="text-xs text-slate-500 mt-2">Status: {selectedCompany.lastFiscalDayStatus || (selectedCompany.fiscalDayOpen ? "Active" : "Closed")}</div>
+                  <div className="text-xs text-slate-500 mt-2">
+                    Status: {zimraStatusQuery.data?.fiscalDayStatus || selectedCompany.lastFiscalDayStatus || (selectedCompany.fiscalDayOpen ? "Active" : "Closed")}
+                  </div>
                 </div>
                 <div className="p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors">
                   <div className="flex items-center justify-between">
@@ -329,13 +466,14 @@ export default function Dashboard() {
                     </Button>
                   </div>
                   <div className="text-2xl font-bold font-display tracking-tight text-white flex items-center gap-2">
-                    {/* @ts-ignore - lastPing might not be in type yet */}
-                    {selectedCompany.lastPing ? new Date(selectedCompany.lastPing).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Offline'}
+                    {pingSuccess ? new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (isPinging ? '...' : (
+                      // Fallback to stored ping if available but show Offline if ping failed
+                      selectedCompany.lastPing ? 'Offline' : 'Offline'
+                    ))}
                   </div>
-                  <div className="text-xs text-emerald-400 mt-1 flex items-center gap-1">
-                    <Activity className="w-3 h-3" />
-                    {/* @ts-ignore */}
-                    {selectedCompany.lastPing ? 'Online' : 'No Signal'}
+                  <div className={`text-xs mt-1 flex items-center gap-1 ${isOnline ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {isOnline ? <Activity className="w-3 h-3" /> : <Wifi className="w-3 h-3" />}
+                    {isOnline ? 'Online' : 'No Signal'}
                   </div>
                 </div>
               </div>

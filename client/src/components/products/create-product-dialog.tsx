@@ -13,6 +13,7 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
 import {
     Form,
     FormControl,
@@ -39,6 +40,7 @@ export function CreateProductDialog({ companyId, defaultType = "good", triggerLa
     const [open, setOpen] = useState(false);
     const createProduct = useCreateProduct(companyId);
     const { taxCategories, taxTypes } = useTaxConfig();
+    const { toast } = useToast();
 
     const form = useForm<InsertProduct>({
         resolver: zodResolver(insertProductSchema),
@@ -68,10 +70,19 @@ export function CreateProductDialog({ companyId, defaultType = "good", triggerLa
         try {
             const { companyId: _, ...rest } = data;
             await createProduct.mutateAsync({ ...rest, productType: defaultType });
+            toast({
+                title: "Success",
+                description: `${defaultType === "service" ? "Service" : "Product"} created successfully.`,
+            });
             setOpen(false);
             form.reset({ ...form.getValues(), name: "", description: "", price: "0.00" });
-        } catch (error) {
+        } catch (error: any) {
             console.error("Failed to create product:", error);
+            toast({
+                title: "Creation Failed",
+                description: error.message || "An unexpected error occurred.",
+                variant: "destructive",
+            });
         }
     };
 

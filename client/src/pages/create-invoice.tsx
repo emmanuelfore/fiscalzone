@@ -1,9 +1,11 @@
 import { Layout } from "@/components/layout";
 import { useCustomers, useCreateCustomer } from "@/hooks/use-customers";
-import { useProducts } from "@/hooks/use-products";
-import { useCreateInvoice } from "@/hooks/use-invoices";
+import { useProducts, useCreateProduct } from "@/hooks/use-products";
+import { useCreateInvoice, useInvoice, useUpdateInvoice } from "@/hooks/use-invoices";
+import { useAuth } from "@/hooks/use-auth";
 import { useCurrencies } from "@/hooks/use-currencies";
 import { useCompany } from "@/hooks/use-companies";
+import { useTaxConfig } from "@/hooks/use-tax-config";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { Plus, Trash2, Loader2, ArrowLeft, Check, ChevronsUpDown } from "lucide-react";
+import { Plus, Trash2, Loader2, ArrowLeft, Check, ChevronsUpDown, ShieldCheck, Send, Lock, ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Command,
@@ -41,25 +43,124 @@ import {
 import { PDFViewer, PDFDownloadLink } from "@react-pdf/renderer";
 import { InvoicePDF } from "@/components/invoices/pdf-document";
 import { Eye, Download } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { motion, AnimatePresence } from "framer-motion";
 
 type LineItem = {
+  localId: string;
   productId: number | null;
   description: string;
   quantity: number;
   unitPrice: number;
   taxRate: number;
+  hsCode?: string;
 };
 
 export default function CreateInvoicePage() {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const companyId = parseInt(localStorage.getItem("selectedCompanyId") || "0");
+
+  // Check if we're editing an existing invoice
+  // wouter useLocation returns only path, so we use window.location.search
+  const searchParams = new URLSearchParams(window.location.search);
+  const editId = searchParams.get('edit');
+  const duplicateId = searchParams.get('duplicate');
+  const isEditing = !!editId;
+  const isDuplicating = !!duplicateId;
+
+  console.log("Location info:", { path: location, search: window.location.search, editId, duplicateId, isEditing });
+
   const { data: company } = useCompany(companyId);
   const { data: customers } = useCustomers(companyId);
   const { data: products } = useProducts(companyId);
   const { data: currencies } = useCurrencies(companyId);
+  // Fetch existing invoice if we are editing OR duplicating
+  const sourceId = editId || duplicateId;
+  const { data: existingInvoice } = useInvoice(sourceId ? parseInt(sourceId) : 0);
   const createInvoice = useCreateInvoice(companyId);
   const createCustomer = useCreateCustomer(companyId);
+  const { taxTypes } = useTaxConfig();
   const { toast } = useToast();
+  const updateInvoice = useUpdateInvoice();
+  const createProduct = useCreateProduct(companyId);
+  const { user } = useAuth();
+
+  const [isLockedByOther, setIsLockedByOther] = useState(false);
+  const [lockStatus, setLockStatus] = useState<string>("");
+
+  // Lock invoice on mount/edit (ONLY if editing, not if duplicating)
+  useEffect(() => {
+    if (!isEditing || !user || !editId) return;
+
+    const lockInvoice = async () => {
+      try {
+        const res = await fetch(`/api/invoices/${editId}/lock`, { method: "POST" });
+        if (res.status === 409) {
+          setIsLockedByOther(true);
+          setLockStatus("This invoice is currently being edited by another user.");
+          toast({
+            title: "Invoice Locked",
+            description: "This invoice is currently being edited by another user.",
+            variant: "destructive",
+          });
+        }
+      } catch (error) {
+        console.error("Lock error", error);
+      }
+    };
+
+    lockInvoice();
+
+    // Unlock on unmount
+    return () => {
+      if (!isLockedByOther) {
+        fetch(`/api/invoices/${editId}/unlock`, { method: "POST" }).catch(console.error);
+      }
+    };
+  }, [isEditing, user, editId, isLockedByOther]);
+
+  // Pre-fill form when editing or duplicating
+  useEffect(() => {
+    console.log("Form Population Effect:", { isEditing, isDuplicating, existingInvoice });
+    if (existingInvoice && (isEditing || isDuplicating)) {
+      console.log("Populating form with:", existingInvoice);
+      if (existingInvoice.customerId) setCustomerId(existingInvoice.customerId.toString());
+
+      // If duplicating, set date to today, otherwise keep original issue date
+      if (isDuplicating) {
+        setIssueDate(new Date().toISOString().split('T')[0]);
+        // Default due date to 14 days from now for duplicate? Or keep original offset? 
+        // Let's just keep original due date logic or default to +14 days if we wanted smartness.
+        // For now, let's just default to today + 14 days to be safe, or keep blank?
+        // Actually, let's set it to today + 30 days default if duplicating to avoid stale dates
+        const nextMonth = new Date();
+        nextMonth.setDate(nextMonth.getDate() + 30);
+        setDueDate(nextMonth.toISOString().split('T')[0]);
+      } else {
+        if (existingInvoice.issueDate) setIssueDate(new Date(existingInvoice.issueDate).toISOString().split('T')[0]);
+        if (existingInvoice.dueDate) setDueDate(new Date(existingInvoice.dueDate).toISOString().split('T')[0]);
+      }
+
+      setNotes(existingInvoice.notes || "");
+      setTaxInclusive(existingInvoice.taxInclusive || false);
+      setCurrencyCode(existingInvoice.currency || "USD");
+      setExchangeRate(existingInvoice.exchangeRate || "1.000000"); // Ensure we copy exchange rate too
+      setPaymentMethod(existingInvoice.paymentMethod || "CASH");
+
+      if (existingInvoice.items && existingInvoice.items.length > 0) {
+        console.log("Populating items:", existingInvoice.items);
+        setItems(existingInvoice.items.map(item => ({
+          localId: Math.random().toString(36).substring(2, 11),
+          productId: item.productId,
+          description: item.description || "",
+          quantity: Number(item.quantity),
+          unitPrice: Number(item.unitPrice),
+          taxRate: Number(item.taxRate),
+          hsCode: (item as any).product?.hsCode || undefined
+        })));
+      }
+    }
+  }, [existingInvoice, isEditing, isDuplicating]);
 
   // Form State
   const [customerId, setCustomerId] = useState<string>("");
@@ -68,8 +169,13 @@ export default function CreateInvoicePage() {
   const [notes, setNotes] = useState<string>("");
   const [taxInclusive, setTaxInclusive] = useState<boolean>(false);
   const [items, setItems] = useState<LineItem[]>([
-    { productId: null, description: "", quantity: 1, unitPrice: 0, taxRate: 15 }
+    { localId: Math.random().toString(36).substring(2, 11), productId: null, description: "", quantity: 1, unitPrice: 0, taxRate: 15 }
   ]);
+  const [isRestored, setIsRestored] = useState(false);
+
+  const clearAutoSave = () => {
+    localStorage.removeItem(`invoice_draft_${companyId}`);
+  };
 
   // Banking State (Defaults)
   const [bankName, setBankName] = useState("");
@@ -94,11 +200,21 @@ export default function CreateInvoicePage() {
   const [paymentMethod, setPaymentMethod] = useState("CASH");
 
   const handleCurrencyChange = (code: string) => {
+    const newCurrency = currencies?.find(c => c.code === code);
+    if (!newCurrency) return;
+
+    const oldRate = Number(exchangeRate);
+    const newRate = Number(newCurrency.exchangeRate);
+
+    // Update all item prices based on rate change
+    const scaledItems = items.map(item => ({
+      ...item,
+      unitPrice: (item.unitPrice / oldRate) * newRate
+    }));
+
+    setItems(scaledItems);
     setCurrencyCode(code);
-    const currency = currencies?.find(c => c.code === code);
-    if (currency) {
-      setExchangeRate(currency.exchangeRate);
-    }
+    setExchangeRate(newCurrency.exchangeRate);
   };
 
   const currentSymbol = currencies?.find(c => c.code === currencyCode)?.symbol || "$";
@@ -110,33 +226,100 @@ export default function CreateInvoicePage() {
   const [open, setOpen] = useState(false);
   const [openRowIndex, setOpenRowIndex] = useState<number | null>(null);
 
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [productSearch, setProductSearch] = useState<Record<string, string>>({});
+
+  // Auto-Save: Persist to localStorage (MOVED DOWN)
+  useEffect(() => {
+    if (isEditing || isDuplicating) return;
+
+    const timer = setTimeout(() => {
+      const draftState = {
+        customerId,
+        items,
+        notes,
+        currencyCode,
+        exchangeRate,
+        paymentMethod,
+        taxInclusive,
+        issueDate,
+        dueDate
+      };
+      localStorage.setItem(`invoice_draft_${companyId}`, JSON.stringify(draftState));
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [customerId, items, notes, currencyCode, exchangeRate, paymentMethod, taxInclusive, issueDate, dueDate, isEditing, isDuplicating, companyId]);
+
+  // Restore State on Mount (MOVED DOWN)
+  useEffect(() => {
+    if (isEditing || isDuplicating || isRestored) return;
+
+    const saved = localStorage.getItem(`invoice_draft_${companyId}`);
+    if (saved) {
+      try {
+        const state = JSON.parse(saved);
+        if (state.customerId) setCustomerId(state.customerId);
+        if (state.items) setItems(state.items);
+        if (state.notes) setNotes(state.notes);
+        if (state.currencyCode) setCurrencyCode(state.currencyCode);
+        if (state.exchangeRate) setExchangeRate(state.exchangeRate);
+        if (state.paymentMethod) setPaymentMethod(state.paymentMethod);
+        if (state.taxInclusive) setTaxInclusive(state.taxInclusive);
+        if (state.issueDate) setIssueDate(state.issueDate);
+        if (state.dueDate) setDueDate(state.dueDate);
+        setIsRestored(true);
+        toast({
+          title: "Draft Restored",
+          description: "We restored your last unsaved invoice.",
+        });
+      } catch (e) {
+        console.error("Failed to restore draft", e);
+      }
+    }
+  }, [companyId, isEditing, isDuplicating, isRestored, toast]);
+
   const handleAddItem = () => {
-    setItems([...items, { productId: null, description: "", quantity: 1, unitPrice: 0, taxRate: 15 }]);
+    setItems([...items, { localId: Math.random().toString(36).substring(2, 11), productId: null, description: "", quantity: 1, unitPrice: 0, taxRate: 15 }]);
   };
 
-  const handleRemoveItem = (index: number) => {
-    setItems(items.filter((_, i) => i !== index));
+  const handleRemoveItem = (localId: string) => {
+    setItems(items.filter(item => item.localId !== localId));
   };
 
-  const handleProductSelect = (index: number, productId: string) => {
+  const handleProductSelect = (localId: string, productId: string) => {
     const product = products?.find(p => p.id === parseInt(productId));
     if (product) {
-      const newItems = [...items];
-      newItems[index] = {
-        ...newItems[index],
-        productId: product.id,
-        description: product.name,
-        unitPrice: Number(product.price),
-        taxRate: Number(product.taxRate || 15)
-      };
-      setItems(newItems);
+      setItems(prev => prev.map(item => {
+        if (item.localId !== localId) return item;
+
+        // Determine tax rate: prefer master tax type if linked, otherwise fallback to product override
+        let taxRate = Number(product.taxRate ?? 15);
+        if ((product as any).taxTypeId && taxTypes.data) {
+          const found = taxTypes.data.find(t => t.id === (product as any).taxTypeId);
+          if (found) taxRate = Number(found.rate);
+        }
+
+        const rate = Number(exchangeRate);
+        const scaledPrice = Number(product.price) * rate;
+
+        return {
+          ...item,
+          productId: product.id,
+          description: product.name,
+          quantity: 1,
+          unitPrice: scaledPrice,
+          taxRate: taxRate,
+          hsCode: product.hsCode || "0000"
+        };
+      }));
     }
   };
 
-  const updateItem = (index: number, field: keyof LineItem, value: any) => {
-    const newItems = [...items];
-    newItems[index] = { ...newItems[index], [field]: value };
-    setItems(newItems);
+  const updateItem = (localId: string, field: keyof LineItem, value: any) => {
+    setItems(prev => prev.map(item =>
+      item.localId === localId ? { ...item, [field]: value } : item
+    ));
   };
 
   // Calculations
@@ -170,15 +353,44 @@ export default function CreateInvoicePage() {
 
   const { subtotal, taxAmount, total } = calculateTotals();
 
+  const calculateTaxBreakdown = () => {
+    const breakdown: Record<number, { net: number, tax: number }> = {};
+
+    items.forEach(item => {
+      const lineTotal = item.quantity * item.unitPrice;
+      const rate = Number(item.taxRate);
+
+      if (!breakdown[rate]) breakdown[rate] = { net: 0, tax: 0 };
+
+      if (taxInclusive) {
+        const taxPortion = lineTotal - (lineTotal / (1 + (rate / 100)));
+        breakdown[rate].net += (lineTotal - taxPortion);
+        breakdown[rate].tax += taxPortion;
+      } else {
+        const taxPortion = lineTotal * (rate / 100);
+        breakdown[rate].net += lineTotal;
+        breakdown[rate].tax += taxPortion;
+      }
+    });
+
+    return breakdown;
+  };
+
+  const taxBreakdown = calculateTaxBreakdown();
 
 
-  const handleSubmit = async () => {
+
+  const [loadingAction, setLoadingAction] = useState<'draft' | 'issue' | 'quote' | null>(null);
+
+  const handleSaveDraft = async () => {
+    setLoadingAction('draft');
     if (!customerId) {
       toast({
         title: "Validation Error",
         description: "Please select a customer.",
         variant: "destructive",
       });
+      setLoadingAction(null);
       return;
     }
 
@@ -188,46 +400,229 @@ export default function CreateInvoicePage() {
         description: "Please select a due date.",
         variant: "destructive",
       });
+      setLoadingAction(null);
       return;
     }
 
-    // Generate mock invoice number for now - backend might override
-    const invoiceNumber = `INV-${Date.now().toString().slice(-6)}`;
+    const invoiceNumber = isEditing && existingInvoice
+      ? existingInvoice.invoiceNumber
+      : `DRAFT-${Date.now().toString().slice(-6)}`;
+
+    // Common data payload
+    const invoiceData = {
+      companyId,
+      invoiceNumber,
+      customerId: parseInt(customerId),
+      issueDate: issueDate ? new Date(issueDate) : new Date(),
+      dueDate: new Date(dueDate),
+      notes,
+      currency: currencyCode,
+      exchangeRate: exchangeRate,
+      paymentMethod,
+      status: "draft",
+      subtotal: subtotal.toString(),
+      taxAmount: taxAmount.toString(),
+      total: total.toString(),
+      taxInclusive: taxInclusive,
+      items: items.map(item => {
+        const rawLineTotal = item.quantity * item.unitPrice;
+        return {
+          productId: item.productId,
+          description: item.description,
+          quantity: item.quantity.toString(),
+          unitPrice: item.unitPrice.toString(),
+          taxRate: item.taxRate.toString(),
+          lineTotal: rawLineTotal.toString()
+        };
+      })
+    };
 
     try {
-      await createInvoice.mutateAsync({
-        invoiceNumber,
-        customerId: parseInt(customerId),
-        dueDate: new Date(dueDate),
-        notes,
-        currency: currencyCode,
-        exchangeRate: exchangeRate,
-        paymentMethod,
-        status: "draft",
-        subtotal: subtotal.toString(),
-        taxAmount: taxAmount.toString(),
-        total: total.toString(),
-        taxInclusive: taxInclusive,
-        items: items.map(item => {
-          // Calculate line total sent to backend based on inclusive/exclusive
-          // Usually backend expects unitPrice and quantity, and calculates.
-          // We send what's on the line.
-          const rawLineTotal = item.quantity * item.unitPrice;
-          return {
-            productId: item.productId,
-            description: item.description,
-            quantity: item.quantity.toString(),
-            unitPrice: item.unitPrice.toString(),
-            taxRate: item.taxRate.toString(),
-            lineTotal: rawLineTotal.toString()
-          };
-        })
-      });
+      if (isEditing && editId) {
+        await updateInvoice.mutateAsync({
+          id: parseInt(editId),
+          data: invoiceData
+        });
+        toast({
+          title: "Draft Updated",
+          description: "Draft invoice updated successfully.",
+        });
+      } else {
+        await createInvoice.mutateAsync(invoiceData);
+        toast({
+          title: "Draft Saved",
+          description: "Invoice saved as draft successfully.",
+        });
+      }
       setLocation("/invoices");
+    } catch (error: any) {
       toast({
-        title: "Success",
-        description: "Invoice created successfully",
+        title: "Error",
+        description: error.message || "Failed to save draft",
+        variant: "destructive",
       });
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const handleSaveQuotation = async () => {
+    setLoadingAction('quote');
+    if (!customerId) {
+      toast({
+        title: "Validation Error",
+        description: "Please select a customer.",
+        variant: "destructive",
+      });
+      setLoadingAction(null);
+      return;
+    }
+
+    const invoiceNumber = isEditing && existingInvoice
+      ? existingInvoice.invoiceNumber
+      : `QT-${Date.now().toString().slice(-6)}`;
+
+    const invoiceData = {
+      companyId,
+      invoiceNumber,
+      customerId: parseInt(customerId),
+      issueDate: issueDate ? new Date(issueDate) : new Date(),
+      dueDate: dueDate ? new Date(dueDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // Default 30 days for quotes
+      notes,
+      currency: currencyCode,
+      exchangeRate: exchangeRate,
+      paymentMethod,
+      status: "quote",
+      subtotal: subtotal.toString(),
+      taxAmount: taxAmount.toString(),
+      total: total.toString(),
+      taxInclusive: taxInclusive,
+      items: items.map(item => {
+        const rawLineTotal = item.quantity * item.unitPrice;
+        return {
+          productId: item.productId,
+          description: item.description,
+          quantity: item.quantity.toString(),
+          unitPrice: item.unitPrice.toString(),
+          taxRate: item.taxRate.toString(),
+          lineTotal: rawLineTotal.toString()
+        };
+      })
+    };
+
+    try {
+      if (isEditing && editId) {
+        await updateInvoice.mutateAsync({
+          id: parseInt(editId),
+          data: invoiceData
+        });
+        toast({
+          title: "Quotation Updated",
+          description: "Quotation updated successfully.",
+        });
+      } else {
+        await createInvoice.mutateAsync(invoiceData);
+        toast({
+          title: "Quotation Saved",
+          description: "Quotation saved successfully.",
+        });
+      }
+      setLocation("/quotations");
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to save quotation",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const handleIssue = async () => {
+    setLoadingAction('issue');
+    if (!customerId) {
+      toast({
+        title: "Validation Error",
+        description: "Please select a customer.",
+        variant: "destructive",
+      });
+      setLoadingAction(null);
+      return;
+    }
+
+    if (items.length === 0) {
+      toast({
+        title: "Validation Error",
+        description: "Please add at least one item to the invoice.",
+        variant: "destructive",
+      });
+      setLoadingAction(null);
+      return;
+    }
+
+    if (!dueDate) {
+      toast({
+        title: "Validation Error",
+        description: "Please select a due date.",
+        variant: "destructive",
+      });
+      setLoadingAction(null);
+      return;
+    }
+
+
+    const invoiceNumber = isEditing && existingInvoice && existingInvoice.status === 'issued'
+      ? existingInvoice.invoiceNumber
+      : `INV-${Date.now().toString().slice(-6)}`;
+
+    // Common data payload
+    const invoiceData = {
+      companyId,
+      invoiceNumber,
+      customerId: parseInt(customerId),
+      issueDate: issueDate ? new Date(issueDate) : new Date(),
+      dueDate: new Date(dueDate),
+      notes,
+      currency: currencyCode,
+      exchangeRate: exchangeRate,
+      paymentMethod,
+      status: "issued",
+      subtotal: subtotal.toString(),
+      taxAmount: taxAmount.toString(),
+      total: total.toString(),
+      taxInclusive: taxInclusive,
+      items: items.map(item => {
+        const rawLineTotal = item.quantity * item.unitPrice;
+        return {
+          productId: item.productId,
+          description: item.description,
+          quantity: item.quantity.toString(),
+          unitPrice: item.unitPrice.toString(),
+          taxRate: item.taxRate.toString(),
+          lineTotal: rawLineTotal.toString()
+        };
+      })
+    };
+
+    try {
+      if (isEditing && editId) {
+        await updateInvoice.mutateAsync({
+          id: parseInt(editId),
+          data: invoiceData
+        });
+        toast({
+          title: "Invoice Updated & Issued",
+          description: "Invoice updated and issued successfully. You can now fiscalize it.",
+        });
+      } else {
+        await createInvoice.mutateAsync(invoiceData);
+        toast({
+          title: "Invoice Issued",
+          description: "Invoice issued successfully. You can now fiscalize it.",
+        });
+      }
+      setLocation("/invoices");
     } catch (error: any) {
       console.error(error);
       toast({
@@ -235,6 +630,8 @@ export default function CreateInvoicePage() {
         description: error.message || "Failed to create invoice",
         variant: "destructive",
       });
+    } finally {
+      setLoadingAction(null);
     }
   };
 
@@ -254,14 +651,60 @@ export default function CreateInvoicePage() {
 
   return (
     <Layout>
+      {isLockedByOther && (
+        <div className="bg-amber-50 border-l-4 border-amber-500 p-4 mb-4 rounded-r shadow-sm">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <Lock className="h-5 w-5 text-amber-500" aria-hidden="true" />
+            </div>
+            <div className="ml-3">
+              <p className="text-sm text-amber-700">
+                {lockStatus}
+                <span className="block mt-1 text-xs opacity-75">You can view this invoice but cannot make changes.</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mb-6 flex flex-col md:flex-row gap-4 items-center justify-between no-print">
         <div className="flex items-center gap-4">
           <Button variant="ghost" onClick={() => setLocation("/invoices")} className="pl-0 hover:pl-0 hover:bg-transparent text-slate-500 hover:text-slate-900">
             <ArrowLeft className="w-4 h-4 mr-2" /> Back
           </Button>
-          <h1 className="text-2xl font-bold text-slate-900">New Invoice</h1>
+          <h1 className="text-2xl font-bold text-slate-900">
+            {isEditing
+              ? (existingInvoice?.status === "quote" ? "Edit Quotation" : (existingInvoice?.transactionType === "CreditNote" ? "Edit Credit Note" : (existingInvoice?.transactionType === "DebitNote" ? "Edit Debit Note" : "Edit Invoice")))
+              : (searchParams.get('type') === 'quote' ? "New Quotation" : "New Invoice")
+            }
+          </h1>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={handleSaveDraft}
+            disabled={loadingAction !== null || isLockedByOther}
+          >
+            {loadingAction === 'draft' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ShieldCheck className="w-4 h-4 mr-2" />}
+            Save Draft
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleSaveQuotation}
+            disabled={loadingAction !== null || isLockedByOther}
+            className="hover:bg-slate-50"
+          >
+            {loadingAction === 'quote' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ClipboardList className="w-4 h-4 mr-2" />}
+            Save as Quotation
+          </Button>
+          <Button
+            onClick={handleIssue}
+            disabled={loadingAction !== null || isLockedByOther}
+            className="bg-primary hover:bg-primary/90 text-white"
+          >
+            {loadingAction === 'issue' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+            Issue Invoice
+          </Button>
           <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" className="gap-2">
@@ -284,7 +727,8 @@ export default function CreateInvoicePage() {
                         status: "draft",
                         items: items.map(item => ({
                           ...item,
-                          lineTotal: (item.quantity * item.unitPrice).toString()
+                          lineTotal: (item.quantity * item.unitPrice).toString(),
+                          product: { hsCode: item.hsCode }
                         })),
                         subtotal: subtotal.toString(),
                         taxAmount: taxAmount.toString(),
@@ -295,7 +739,7 @@ export default function CreateInvoicePage() {
                         currencySymbol: currentSymbol
                       }}
                       company={{
-                        ...selectedCompany,
+                        ...company,
                         bankName,
                         accountName,
                         accountNumber,
@@ -322,7 +766,8 @@ export default function CreateInvoicePage() {
                           status: "draft",
                           items: items.map(item => ({
                             ...item,
-                            lineTotal: (item.quantity * item.unitPrice).toString()
+                            lineTotal: (item.quantity * item.unitPrice).toString(),
+                            product: { hsCode: item.hsCode }
                           })),
                           subtotal: subtotal.toString(),
                           taxAmount: taxAmount.toString(),
@@ -357,25 +802,23 @@ export default function CreateInvoicePage() {
             </DialogContent>
           </Dialog>
 
-          <Button variant="outline" className="gap-2">
-            Save Draft
-          </Button>
-          <Button
-            className="gap-2 bg-primary hover:bg-primary/90"
-            onClick={handleSubmit}
-            disabled={createInvoice.isPending || !customerId}
-          >
-            {createInvoice.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Issue Invoice"}
-          </Button>
+
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-6xl mx-auto px-4">
         <Card className="bg-white shadow-lg border-slate-200 p-8 md:p-12 min-h-[1100px] text-sm">
           {/* Header Row */}
           <div className="flex justify-between items-start mb-12 border-b border-slate-100 pb-8">
             <div className="space-y-1">
-              <h2 className="text-3xl font-bold text-slate-900 tracking-tight uppercase">FISCAL TAX INVOICE</h2>
+              <h2 className="text-3xl font-bold text-slate-900 tracking-tight uppercase">
+                {searchParams.get('type') === 'quote' || existingInvoice?.status === 'quote'
+                  ? "OFFICIAL QUOTATION"
+                  : (existingInvoice?.fiscalCode
+                    ? (existingInvoice?.transactionType === "CreditNote" ? "FISCAL CREDIT NOTE" : (existingInvoice?.transactionType === "DebitNote" ? "FISCAL DEBIT NOTE" : "FISCAL TAX INVOICE"))
+                    : (existingInvoice?.transactionType === "CreditNote" ? "CREDIT NOTE" : (existingInvoice?.transactionType === "DebitNote" ? "DEBIT NOTE" : "TAX INVOICE")))
+                }
+              </h2>
               <p className="text-slate-500">Original Document</p>
             </div>
 
@@ -398,102 +841,117 @@ export default function CreateInvoicePage() {
                   Tax Inclusive
                 </Button>
               </div>
-              <Select defaultValue="standard">
-                <SelectTrigger className="w-[180px] h-8 text-xs">
-                  <SelectValue placeholder="Select Template" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="standard">Standard Invoice</SelectItem>
-                  <SelectItem value="modern" disabled>Modern (Pro)</SelectItem>
-                  <SelectItem value="minimal" disabled>Minimal (Pro)</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-12 mb-12">
-            {/* Seller Details */}
-            <div className="space-y-4">
-              <div className="font-semibold text-xs text-slate-400 uppercase tracking-wider">Seller</div>
-              <div>
-                <h3 className="text-xl font-bold text-slate-900">{company?.tradingName || company?.name || "Company Name"}</h3>
-                <div className="text-slate-600 space-y-1 mt-2">
-                  <p>TIN: <span className="font-mono text-slate-900">{company?.tin || "-"}</span></p>
-                  <p>VAT No: <span className="font-mono text-slate-900">{company?.vatNumber || "-"}</span></p>
-                  <p>{company?.address || "Address Line 1"}</p>
-                  <p>{company?.city}, {company?.country}</p>
-                  <p className="pt-1">{company?.email} | {company?.phone}</p>
+          {/* Invoice Details Header Row */}
+          <div className="bg-slate-50/50 rounded-xl p-6 border border-slate-100 mb-12">
+            <div className="flex flex-wrap items-start gap-x-12 gap-y-6">
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Invoice No</Label>
+                <div className="font-mono font-bold text-slate-700 bg-white/50 px-2 py-1 rounded border border-slate-100">
+                  {isEditing && existingInvoice ? existingInvoice.invoiceNumber : "[Auto-Generated]"}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Fiscal Day</Label>
+                <div className="font-mono font-bold text-slate-700 bg-white/50 px-2 py-1 rounded border border-slate-100">
+                  {isEditing && existingInvoice ? (existingInvoice.fiscalDayNo || "-") : "[Auto-Generated]"}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Date</Label>
+                <Input
+                  type="date"
+                  value={issueDate}
+                  onChange={(e) => setIssueDate(e.target.value)}
+                  className="h-9 py-0 px-3 w-40 bg-white border-slate-200"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Due Date</Label>
+                <Input
+                  type="date"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                  className="h-9 py-0 px-3 w-40 bg-white border-slate-200"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Currency</Label>
+                <Select value={currencyCode} onValueChange={handleCurrencyChange}>
+                  <SelectTrigger className="h-9 py-0 px-3 w-32 bg-white border-slate-200">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {currencies?.map(c => (
+                      <SelectItem key={c.id} value={c.code}>{c.code} ({c.symbol})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Payment Method</Label>
+                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                  <SelectTrigger className="h-9 py-0 px-3 w-44 bg-white border-slate-200">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="CASH">Cash</SelectItem>
+                    <SelectItem value="CARD">Card / Swipe</SelectItem>
+                    <SelectItem value="TRANSFER">Bank Transfer</SelectItem>
+                    <SelectItem value="ECOCASH">Ecocash / Mobile</SelectItem>
+                    <SelectItem value="OTHER">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Fiscal Device ID</Label>
+                <div className="text-slate-900 font-mono font-medium pt-1">
+                  {company?.fdmsDeviceId || "Not Registered"}
+                </div>
+                <div className="text-[9px] text-slate-400 leading-none">
+                  Verification code generated on submission
                 </div>
               </div>
             </div>
+          </div>
 
-            {/* Invoice Metadata */}
+          <div className="grid grid-cols-1 gap-12 mb-12">
+            {/* Seller Details */}
             <div className="space-y-4">
-              <div className="font-semibold text-xs text-slate-400 uppercase tracking-wider text-right">Invoice Details</div>
-              <div className="grid grid-cols-[1fr_1.5fr] gap-4 text-right">
-                <div className="text-slate-500 py-2">Invoice No:</div>
-                <div className="font-mono font-medium bg-slate-50 py-2 px-3 rounded text-slate-700">[Auto-Generated]</div>
-
-                <div className="text-slate-500 py-2">Fiscal Day:</div>
-                <div className="font-mono font-medium bg-slate-50 py-2 px-3 rounded text-slate-700">[Auto-Generated]</div>
-
-                <div className="text-slate-500 flex items-center justify-end">Date:</div>
-                <div>
-                  <Input
-                    type="date"
-                    value={issueDate}
-                    onChange={(e) => setIssueDate(e.target.value)}
-                    className="text-right h-9 border-slate-200"
-                    required
-                  />
+              <div className="font-semibold text-xs text-slate-400 uppercase tracking-wider">Seller</div>
+              <div className="flex flex-col md:flex-row gap-8 items-start">
+                {company?.logoUrl && (
+                  <div className="flex-shrink-0">
+                    <img
+                      src={company.logoUrl}
+                      alt="Company Logo"
+                      className="h-16 w-32 object-contain"
+                      onError={(e) => {
+                        console.error("Logo load error:", e);
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                  </div>
+                )}
+                <div className="space-y-1">
+                  <h3 className="text-xl font-bold text-slate-900">{company?.tradingName || company?.name || "Company Name"}</h3>
+                  <div className="text-slate-600 grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-1 mt-2 text-sm">
+                    <p>TIN: <span className="font-mono text-slate-900">{company?.tin || "-"}</span></p>
+                    <p>VAT No: <span className="font-mono text-slate-900">{company?.vatNumber || "-"}</span></p>
+                    <p>{company?.address || "Address Line 1"}, {company?.city}</p>
+                    <p>{company?.email} | {company?.phone}</p>
+                  </div>
                 </div>
-
-                <div className="text-slate-500 flex items-center justify-end">Due Date:</div>
-                <div>
-                  <Input
-                    type="date"
-                    value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
-                    className="text-right h-9 border-slate-200"
-                    required
-                  />
-                </div>
-
-                <div className="text-slate-500 flex items-center justify-end">Currency:</div>
-                <div className="flex justify-end">
-                  <Select value={currencyCode} onValueChange={handleCurrencyChange}>
-                    <SelectTrigger className="w-full text-right h-9 border-slate-200">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {currencies?.map(c => (
-                        <SelectItem key={c.id} value={c.code}>{c.code} ({c.symbol})</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="text-slate-500 flex items-center justify-end">Payment Method:</div>
-                <div className="flex justify-end">
-                  <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                    <SelectTrigger className="w-full text-right h-9 border-slate-200">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="CASH">Cash</SelectItem>
-                      <SelectItem value="CARD">Card / Swipe</SelectItem>
-                      <SelectItem value="TRANSFER">Bank Transfer</SelectItem>
-                      <SelectItem value="ECOCASH">Ecocash / Mobile</SelectItem>
-                      <SelectItem value="OTHER">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="text-slate-500 py-2">Fiscal Device ID:</div>
-                <div className="font-mono text-xs py-2">{company?.fdmsDeviceId || "Not Registered"}</div>
-              </div>
-              <div className="text-[10px] text-slate-400 text-right">
-                Verification code will be generated on submission
               </div>
             </div>
           </div>
@@ -520,9 +978,41 @@ export default function CreateInvoicePage() {
                       </PopoverTrigger>
                       <PopoverContent className="w-[300px] p-0" align="start">
                         <Command>
-                          <CommandInput placeholder="Search customer..." />
+                          <CommandInput
+                            placeholder="Search customer..."
+                            value={customerSearch}
+                            onValueChange={setCustomerSearch}
+                          />
                           <CommandList>
-                            <CommandEmpty>No customer found.</CommandEmpty>
+                            <CommandEmpty className="p-0">
+                              <div className="p-4 text-sm text-center text-slate-500">
+                                No customer found.
+                              </div>
+                              {customerSearch.trim() && (
+                                <div className="p-1 border-t">
+                                  <Button
+                                    variant="ghost"
+                                    className="w-full justify-start h-9 text-xs font-medium text-primary hover:text-primary hover:bg-primary/5"
+                                    onClick={async () => {
+                                      try {
+                                        const newC = await createCustomer.mutateAsync({
+                                          name: customerSearch,
+                                          customerType: "individual"
+                                        });
+                                        setCustomerId(newC.id.toString());
+                                        setCustomerSearch("");
+                                        setOpen(false);
+                                        toast({ title: "Customer Added", description: `${newC.name} has been created.` });
+                                      } catch (e) {
+                                        console.error(e);
+                                      }
+                                    }}
+                                  >
+                                    <Plus className="w-3 h-3 mr-2" /> Add "{customerSearch}" as new customer
+                                  </Button>
+                                </div>
+                              )}
+                            </CommandEmpty>
                             <CommandGroup>
                               {customers?.map((customer) => (
                                 <CommandItem
@@ -605,157 +1095,232 @@ export default function CreateInvoicePage() {
 
           <div className="mb-12">
             <div className="font-semibold text-xs text-slate-400 uppercase tracking-wider mb-4">Invoice Items</div>
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-slate-50/50 hover:bg-slate-50/50">
-                  <TableHead className="w-[120px]">Code</TableHead>
-                  <TableHead className="min-w-[200px]">Description</TableHead>
-                  <TableHead className="w-[80px]">Quantity</TableHead>
-                  <TableHead className="w-[100px]">Unit Price</TableHead>
-                  <TableHead className="w-[80px]">Tax (%)</TableHead>
-                  <TableHead className="w-[100px] text-right">Excl. Tax</TableHead>
-                  <TableHead className="w-[100px] text-right">VAT</TableHead>
-                  <TableHead className="w-[100px] text-right">Total</TableHead>
-                  <TableHead className="w-[50px]"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {items.map((item, index) => {
-                  const lineVal = item.quantity * item.unitPrice;
-                  let exclTax = 0;
-                  let vatAmt = 0;
-                  let totalAmt = 0;
+            <div className="border border-slate-200 rounded-lg overflow-hidden bg-white shadow-sm">
+              <Table>
+                <TableHeader className="bg-slate-50 border-b border-slate-100">
+                  <TableRow className="hover:bg-slate-50">
+                    <TableHead className="w-[240px] pl-4">Item (Search Name/Code)</TableHead>
+                    <TableHead className="min-w-[150px]">Description</TableHead>
+                    <TableHead className="w-[100px] text-center">Qty</TableHead>
+                    <TableHead className="w-[140px] text-right">Unit Price {taxInclusive ? '(Incl)' : '(Excl)'}</TableHead>
+                    <TableHead className="w-[80px] text-center">Tax %</TableHead>
+                    <TableHead className="w-[120px] text-right">Total (Incl)</TableHead>
+                    <TableHead className="w-[50px]"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <AnimatePresence mode="popLayout">
+                    {items.map((item, index) => {
+                      const lineVal = item.quantity * item.unitPrice;
+                      let vatAmt = 0;
+                      let totalAmt = 0;
 
-                  if (taxInclusive) {
-                    const taxFactor = 1 + (item.taxRate / 100);
-                    totalAmt = lineVal;
-                    const baseAmt = lineVal / taxFactor;
-                    vatAmt = lineVal - baseAmt;
-                    exclTax = baseAmt;
-                  } else {
-                    exclTax = lineVal;
-                    vatAmt = lineVal * (item.taxRate / 100);
-                    totalAmt = exclTax + vatAmt;
-                  }
+                      if (taxInclusive) {
+                        totalAmt = lineVal;
+                      } else {
+                        vatAmt = lineVal * (item.taxRate / 100);
+                        totalAmt = lineVal + vatAmt;
+                      }
 
-                  return (
-                    <TableRow key={index}>
-                      <TableCell className="align-top">
-                        <Popover
-                          open={openRowIndex === index}
-                          onOpenChange={(isOpen) => setOpenRowIndex(isOpen ? index : null)}
+                      return (
+                        <motion.tr
+                          key={item.localId}
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, x: -20 }}
+                          transition={{ duration: 0.2 }}
+                          className="group hover:bg-slate-50/30 transition-colors border-b border-slate-50"
                         >
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              role="combobox"
-                              className="w-[180px] bg-transparent border-transparent hover:border-slate-200 h-9 p-2 justify-between font-normal focus:ring-0"
+                          <TableCell className="align-middle pl-4 py-3">
+                            <Popover
+                              open={openRowIndex === index}
+                              onOpenChange={(isOpen) => setOpenRowIndex(isOpen ? index : null)}
                             >
-                              {item.productId
-                                ? products?.find((p) => p.id === item.productId)?.name || "Select Product"
-                                : "Select Product"}
-                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-[300px] p-0" align="start">
-                            <Command>
-                              <CommandInput placeholder="Search product..." />
-                              <CommandList>
-                                <CommandEmpty>No product found.</CommandEmpty>
-                                <CommandGroup>
-                                  {products?.map((product) => (
-                                    <CommandItem
-                                      key={product.id}
-                                      value={`${product.name} ${product.sku || ""}`}
-                                      onSelect={() => {
-                                        handleProductSelect(index, product.id.toString());
-                                        setOpenRowIndex(null);
-                                      }}
-                                    >
-                                      <Check
-                                        className={cn(
-                                          "mr-2 h-4 w-4",
-                                          item.productId === product.id ? "opacity-100" : "opacity-0"
-                                        )}
-                                      />
-                                      <div className="flex flex-col">
-                                        <span className="font-medium">{product.name}</span>
-                                        <div className="flex justify-between w-full text-xs text-muted-foreground">
-                                          <span>{product.sku}</span>
-                                          <span>${Number(product.price).toFixed(2)}</span>
-                                        </div>
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  role="combobox"
+                                  className={cn(
+                                    "w-full justify-between bg-white h-9 px-3 font-normal overflow-hidden",
+                                    !item.productId && "text-muted-foreground"
+                                  )}
+                                >
+                                  <div className="flex items-center gap-2 overflow-hidden">
+                                    {item.hsCode && (
+                                      <Badge variant="secondary" className="text-[9px] h-4 py-0 px-1 font-mono opacity-60">
+                                        {item.hsCode}
+                                      </Badge>
+                                    )}
+                                    <span className="truncate">
+                                      {item.productId
+                                        ? products?.find((p) => p.id === item.productId)?.name || "Select Item"
+                                        : "Select Item"}
+                                    </span>
+                                  </div>
+                                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-[300px] p-0" align="start">
+                                <Command>
+                                  <CommandInput
+                                    placeholder="Search items..."
+                                    value={productSearch[item.localId] || ""}
+                                    onValueChange={(val) => setProductSearch(prev => ({ ...prev, [item.localId]: val }))}
+                                  />
+                                  <CommandList>
+                                    <CommandEmpty className="p-0">
+                                      <div className="p-4 text-sm text-center text-slate-500">
+                                        No item found.
                                       </div>
-                                    </CommandItem>
-                                  ))}
-                                </CommandGroup>
-                              </CommandList>
-                            </Command>
-                          </PopoverContent>
-                        </Popover>
-                      </TableCell>
-                      <TableCell className="align-top">
-                        <Input
-                          placeholder="Description..."
-                          value={item.description}
-                          onChange={(e) => updateItem(index, 'description', e.target.value)}
-                          className="bg-transparent border-transparent hover:border-slate-200 h-9 p-2 focus-visible:ring-0 focus-visible:border-primary"
-                        />
-                      </TableCell>
-                      <TableCell className="align-top">
-                        <Input
-                          type="number"
-                          min="1"
-                          value={item.quantity}
-                          onChange={(e) => updateItem(index, 'quantity', parseFloat(e.target.value) || 0)}
-                          className="bg-transparent border-transparent hover:border-slate-200 h-9 p-2 focus-visible:ring-0 focus-visible:border-primary"
-                        />
-                      </TableCell>
-                      <TableCell className="align-top">
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={item.unitPrice}
-                          onChange={(e) => updateItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
-                          className="bg-transparent border-transparent hover:border-slate-200 h-9 p-2 focus-visible:ring-0 focus-visible:border-primary"
-                        />
-                      </TableCell>
-                      <TableCell className="align-top">
-                        <Input
-                          type="number"
-                          value={item.taxRate}
-                          onChange={(e) => updateItem(index, 'taxRate', parseFloat(e.target.value) || 0)}
-                          className="bg-transparent border-transparent hover:border-slate-200 h-9 p-2 text-right focus-visible:ring-0 focus-visible:border-primary"
-                        />
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-slate-600 align-middle">
-                        {exclTax.toFixed(2)}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-slate-600 align-middle">
-                        {vatAmt.toFixed(2)}
-                      </TableCell>
-                      <TableCell className="text-right font-bold font-mono align-middle">
-                        {totalAmt.toFixed(2)}
-                      </TableCell>
-                      <TableCell className="align-middle">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-slate-300 hover:text-red-500 hover:bg-red-50"
-                          onClick={() => handleRemoveItem(index)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-            <div className="mt-4">
-              <Button variant="ghost" onClick={handleAddItem} className="text-primary hover:text-primary hover:bg-primary/5 pl-2">
-                <Plus className="w-4 h-4 mr-2" /> Add Line Item
-              </Button>
+                                      {productSearch[item.localId]?.trim() && (
+                                        <div className="p-1 border-t">
+                                          <Button
+                                            variant="ghost"
+                                            className="w-full justify-start h-9 text-xs font-medium text-primary hover:text-primary hover:bg-primary/5"
+                                            onClick={async () => {
+                                              try {
+                                                const newP = await createProduct.mutateAsync({
+                                                  name: productSearch[item.localId],
+                                                  price: "0",
+                                                  taxRate: "15",
+                                                  productType: "good",
+                                                  sku: `AUTO-${Date.now().toString().slice(-4)}`
+                                                });
+                                                handleProductSelect(item.localId, newP.id.toString());
+                                                setProductSearch(prev => {
+                                                  const next = { ...prev };
+                                                  delete next[item.localId];
+                                                  return next;
+                                                });
+                                                setOpenRowIndex(null);
+                                                toast({ title: "Product Added", description: `${newP.name} has been created.` });
+                                              } catch (e) {
+                                                console.error(e);
+                                              }
+                                            }}
+                                          >
+                                            <Plus className="w-3 h-3 mr-2" /> Add "{productSearch[item.localId]}" as new product
+                                          </Button>
+                                        </div>
+                                      )}
+                                    </CommandEmpty>
+                                    <CommandGroup heading="Products">
+                                      {products?.filter(p => !p.productType || p.productType === 'good').map((product) => (
+                                        <CommandItem
+                                          key={product.id}
+                                          value={`product ${product.name} ${product.sku || ""}`}
+                                          onSelect={() => {
+                                            handleProductSelect(item.localId, product.id.toString());
+                                            setOpenRowIndex(null);
+                                          }}
+                                        >
+                                          <Check
+                                            className={cn(
+                                              "mr-2 h-4 w-4",
+                                              item.productId === product.id ? "opacity-100" : "opacity-0"
+                                            )}
+                                          />
+                                          <div className="flex flex-col flex-1">
+                                            <span className="font-medium text-sm">{product.name}</span>
+                                            <div className="flex justify-between w-full text-xs text-muted-foreground mt-0.5">
+                                              <span>{product.sku}</span>
+                                              <span className="font-mono">${Number(product.price).toFixed(2)}</span>
+                                            </div>
+                                          </div>
+                                        </CommandItem>
+                                      ))}
+                                    </CommandGroup>
+                                    <CommandGroup heading="Services">
+                                      {products?.filter(p => p.productType === 'service').map((service) => (
+                                        <CommandItem
+                                          key={service.id}
+                                          value={`service ${service.name} ${service.sku || ""}`}
+                                          onSelect={() => {
+                                            handleProductSelect(item.localId, service.id.toString());
+                                            setOpenRowIndex(null);
+                                          }}
+                                        >
+                                          <Check
+                                            className={cn(
+                                              "mr-2 h-4 w-4",
+                                              item.productId === service.id ? "opacity-100" : "opacity-0"
+                                            )}
+                                          />
+                                          <div className="flex flex-col flex-1">
+                                            <span className="font-medium text-sm">{service.name}</span>
+                                            <div className="flex justify-between w-full text-xs text-muted-foreground mt-0.5">
+                                              <span>{service.sku || 'Service'}</span>
+                                              <span className="font-mono">${Number(service.price).toFixed(2)}</span>
+                                            </div>
+                                          </div>
+                                        </CommandItem>
+                                      ))}
+                                    </CommandGroup>
+                                  </CommandList>
+                                </Command>
+                              </PopoverContent>
+                            </Popover>
+                          </TableCell>
+                          <TableCell className="align-middle py-3">
+                            <Input
+                              placeholder="Description..."
+                              value={item.description}
+                              onChange={(e) => updateItem(item.localId, 'description', e.target.value)}
+                              className="bg-transparent border-transparent hover:border-slate-200 focus:border-primary focus:bg-white h-9 px-2 text-sm transition-all"
+                            />
+                          </TableCell>
+                          <TableCell className="align-middle py-3">
+                            <Input
+                              type="number"
+                              min="1"
+                              value={item.quantity}
+                              onChange={(e) => updateItem(item.localId, 'quantity', parseFloat(e.target.value) || 0)}
+                              className="bg-transparent border-transparent hover:border-slate-200 focus:border-primary focus:bg-white h-9 px-2 text-center text-sm font-medium w-full transition-all"
+                            />
+                          </TableCell>
+                          <TableCell className="align-middle py-3">
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={Number(item.unitPrice)}
+                              onChange={(e) => updateItem(item.localId, 'unitPrice', parseFloat(e.target.value) || 0)}
+                              onBlur={(e) => {
+                                const val = parseFloat(e.target.value) || 0;
+                                updateItem(item.localId, 'unitPrice', parseFloat(val.toFixed(2)));
+                              }}
+                              className="bg-transparent border-transparent hover:border-slate-200 focus:border-primary focus:bg-white h-9 px-2 text-right text-sm font-mono w-full transition-all"
+                            />
+                          </TableCell>
+                          <TableCell className="align-middle text-center py-3">
+                            <div className="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
+                              {item.taxRate}%
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right font-bold font-mono text-slate-900 align-middle py-3 pr-4">
+                            {totalAmt.toFixed(2)}
+                          </TableCell>
+                          <TableCell className="align-middle py-3">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={() => handleRemoveItem(item.localId)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </TableCell>
+                        </motion.tr>
+                      );
+                    })}
+                  </AnimatePresence>
+                </TableBody>
+              </Table>
+              <div className="p-2 border-t border-slate-100 bg-slate-50/30">
+                <Button variant="ghost" size="sm" onClick={handleAddItem} className="text-primary hover:text-primary hover:bg-primary/5 w-full justify-start h-8">
+                  <Plus className="w-3.5 h-3.5 mr-2" /> Add Line Item
+                </Button>
+              </div>
             </div>
           </div>
 
@@ -791,8 +1356,16 @@ export default function CreateInvoicePage() {
                   <span>Subtotal</span>
                   <span className="font-mono">{currentSymbol}{subtotal.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-slate-600">
-                  <span>Tax</span>
+
+                {Object.entries(taxBreakdown).map(([rate, vals]) => (
+                  <div key={rate} className="flex justify-between text-[11px] text-slate-500 pl-4 border-l-2 border-slate-200">
+                    <span>VAT {rate}%</span>
+                    <span className="font-mono">{currentSymbol}{vals.tax.toFixed(2)}</span>
+                  </div>
+                ))}
+
+                <div className="flex justify-between text-slate-600 pt-1">
+                  <span>Total Tax</span>
                   <span className="font-mono">{currentSymbol}{taxAmount.toFixed(2)}</span>
                 </div>
                 <div className="border-t border-slate-200 pt-3 flex justify-between font-bold text-xl text-slate-900">

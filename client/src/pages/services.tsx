@@ -10,6 +10,15 @@ import { DeleteButton } from "@/components/delete-button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { CsvImportDialog } from "@/components/csv-import-dialog";
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 const ITEMS_PER_PAGE = 10;
@@ -19,18 +28,37 @@ export default function ServicesPage() {
     const { data: allItems, isLoading } = useProducts(companyId);
     const updateProduct = useUpdateProduct();
     const { taxTypes } = useTaxConfig();
+    const queryClient = useQueryClient();
     const [searchTerm, setSearchTerm] = useState("");
+    const [statusFilter, setStatusFilter] = useState("all");
+    const [taxFilter, setTaxFilter] = useState("all");
     const [currentPage, setCurrentPage] = useState(1);
 
     // Filter for services
     const services = allItems?.filter(item => item.productType === 'service');
 
     // Filter by search term
-    const filteredServices = services?.filter(s =>
-        s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (s.sku && s.sku.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (s.description && s.description.toLowerCase().includes(searchTerm.toLowerCase()))
-    );
+    // Filter logic
+    const filteredServices = services?.filter(s => {
+        // 1. Search Term
+        const matchesSearch =
+            s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (s.sku && s.sku.toLowerCase().includes(searchTerm.toLowerCase())) ||
+            (s.description && s.description.toLowerCase().includes(searchTerm.toLowerCase()));
+
+        // 2. Status Filter
+        const matchesStatus =
+            statusFilter === "all" ? true :
+                statusFilter === "active" ? s.isActive :
+                    statusFilter === "inactive" ? !s.isActive : true;
+
+        // 3. Tax Filter
+        const matchesTax =
+            taxFilter === "all" ? true :
+                parseFloat(s.taxRate || "0") === parseFloat(taxFilter);
+
+        return matchesSearch && matchesStatus && matchesTax;
+    });
 
     // Pagination logic
     const totalPages = Math.ceil((filteredServices?.length || 0) / ITEMS_PER_PAGE);
@@ -49,11 +77,20 @@ export default function ServicesPage() {
                     <h1 className="text-3xl font-display font-bold text-slate-900">Services</h1>
                     <p className="text-slate-500 mt-1">Manage service offerings</p>
                 </div>
-                <CreateProductDialog companyId={companyId} defaultType="service" triggerLabel="Add Service" />
+                <div className="flex gap-2">
+                    <CsvImportDialog
+                        type="service"
+                        companyId={companyId}
+                        onSuccess={() => {
+                            queryClient.invalidateQueries({ queryKey: ["products", companyId] });
+                        }}
+                    />
+                    <CreateProductDialog companyId={companyId} defaultType="service" triggerLabel="Add Service" />
+                </div>
             </div>
 
-            <div className="mb-6 max-w-sm">
-                <div className="relative">
+            <div className="flex flex-col md:flex-row gap-4 mb-6">
+                <div className="relative flex-1 max-w-sm">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input
                         placeholder="Search services..."
@@ -62,6 +99,48 @@ export default function ServicesPage() {
                         onChange={handleSearch}
                     />
                 </div>
+
+                <div className="flex gap-2 flex-wrap">
+                    <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setCurrentPage(1); }}>
+                        <SelectTrigger className="w-[130px] bg-white">
+                            <SelectValue placeholder="Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Status</SelectItem>
+                            <SelectItem value="active">Active</SelectItem>
+                            <SelectItem value="inactive">Inactive</SelectItem>
+                        </SelectContent>
+                    </Select>
+
+                    <Select value={taxFilter} onValueChange={(v) => { setTaxFilter(v); setCurrentPage(1); }}>
+                        <SelectTrigger className="w-[140px] bg-white">
+                            <SelectValue placeholder="Tax Class" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Taxes</SelectItem>
+                            {taxTypes.data?.map((t: any) => (
+                                <SelectItem key={t.id} value={t.rate.toString()}>
+                                    {t.name} ({t.rate}%)
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                {(searchTerm || statusFilter !== 'all' || taxFilter !== 'all') && (
+                    <Button
+                        variant="ghost"
+                        onClick={() => {
+                            setSearchTerm("");
+                            setStatusFilter("all");
+                            setTaxFilter("all");
+                            setCurrentPage(1);
+                        }}
+                        className="text-slate-500"
+                    >
+                        Reset
+                    </Button>
+                )}
             </div>
 
             <Card className="card-depth border-none overflow-hidden">

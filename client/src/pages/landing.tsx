@@ -19,7 +19,9 @@ import {
     Receipt,
     Server,
     Cloud,
-    Wifi
+    Wifi,
+    ChevronDown,
+    HelpCircle
 } from "lucide-react";
 import { useState } from "react";
 import { useLocation } from "wouter";
@@ -28,6 +30,7 @@ import { motion, useScroll, useTransform } from "framer-motion";
 export default function LandingPage() {
     const [, setLocation] = useLocation();
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
     const { scrollY } = useScroll();
     const y1 = useTransform(scrollY, [0, 500], [0, 200]);
     const y2 = useTransform(scrollY, [0, 500], [0, -100]);
@@ -400,6 +403,128 @@ export default function LandingPage() {
                             </motion.div>
                         ))}
                     </div>
+                </div>
+            </section>
+
+            {/* FAQ Section */}
+            <section id="faq" className="py-24 bg-white relative z-10 overflow-hidden">
+                {/* Background Decoration */}
+                <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-violet-500/10 to-cyan-500/10 rounded-full blur-3xl -z-10" />
+                <div className="absolute bottom-0 left-0 w-96 h-96 bg-gradient-to-tr from-fuchsia-500/10 to-orange-500/10 rounded-full blur-3xl -z-10" />
+
+                <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div className="text-center mb-16">
+                        <Badge variant="outline" className="mb-4 border-violet-200 text-violet-600 bg-violet-50">
+                            <HelpCircle className="w-3 h-3 mr-1" />
+                            FAQ
+                        </Badge>
+                        <h2 className="text-4xl font-display font-bold text-slate-900 mb-4">
+                            Frequently Asked <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-600 to-cyan-500">Questions</span>
+                        </h2>
+                        <p className="text-lg text-slate-600 max-w-2xl mx-auto">
+                            Everything you need to know about FiscZim and ZIMRA compliance.
+                        </p>
+                    </div>
+
+                    <div className="space-y-4">
+                        {[
+                            {
+                                question: "What is ZIMRA compliance and why do I need it?",
+                                answer: "ZIMRA (Zimbabwe Revenue Authority) compliance requires all businesses to fiscalize their invoices through approved systems. FiscZim ensures your invoices meet all ZIMRA requirements, including proper tax calculations, fiscal signatures, and QR codes for verification. Non-compliance can result in penalties and legal issues."
+                            },
+                            {
+                                question: "How does the FDMS integration work?",
+                                answer: "Our Fiscal Device Management System (FDMS) integration connects directly with ZIMRA's servers in real-time. Every invoice you create is automatically fiscalized, receives a unique fiscal signature, and is registered with ZIMRA. This happens seamlessly in the background, so you can focus on your business."
+                            },
+                            {
+                                question: "Can I try FiscZim before committing to a paid plan?",
+                                answer: "Absolutely! Our Starter plan is completely free and allows you to create up to 10 invoices per month. This is perfect for freelancers or small businesses just getting started. You can upgrade to Pro or Enterprise at any time as your business grows."
+                            },
+                            {
+                                question: "What happens to my data if I cancel my subscription?",
+                                answer: "Your data is always yours. If you cancel, you'll have 30 days to export all your invoices, customer data, and reports. We provide easy export options in multiple formats (PDF, Excel, CSV). After 30 days, data is securely deleted from our servers."
+                            },
+                            {
+                                question: "Is my financial data secure?",
+                                answer: "Security is our top priority. We use bank-level encryption (AES-256) for all data at rest and in transit. Our infrastructure is hosted on secure cloud servers with regular backups, DDoS protection, and 24/7 monitoring. We're also fully compliant with ZIMRA's security requirements."
+                            },
+                            {
+                                question: "Can I use FiscZim for multiple businesses?",
+                                answer: "Yes! Our Pro and Enterprise plans support multiple company profiles under one account. You can easily switch between businesses, and each company maintains its own invoices, customers, and reports. This is perfect for accountants or entrepreneurs managing multiple ventures."
+                            },
+                            {
+                                question: "Do you provide customer support?",
+                                answer: "We offer comprehensive support across all plans. Starter users get email support with 48-hour response times. Pro users receive priority email support with 24-hour responses. Enterprise customers get dedicated account managers, phone support, and guaranteed SLAs with same-day responses."
+                            },
+                            {
+                                question: "Can I customize my invoice templates?",
+                                answer: "Yes! FiscZim allows you to customize invoice templates with your company logo, brand colors, and custom fields. You can create multiple templates for different types of invoices or clients. All customizations maintain ZIMRA compliance automatically."
+                            }
+                        ].map((faq, index) => (
+                            <motion.div
+                                key={index}
+                                initial={{ opacity: 0, y: 20 }}
+                                whileInView={{ opacity: 1, y: 0 }}
+                                viewport={{ once: true }}
+                                transition={{ delay: index * 0.05 }}
+                                className="bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden hover:shadow-lg transition-shadow duration-300"
+                            >
+                                <button
+                                    onClick={() => setOpenFaqIndex(openFaqIndex === index ? null : index)}
+                                    className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-white transition-colors duration-200"
+                                >
+                                    <span className="font-semibold text-slate-900 pr-4 text-lg">
+                                        {faq.question}
+                                    </span>
+                                    <motion.div
+                                        animate={{ rotate: openFaqIndex === index ? 180 : 0 }}
+                                        transition={{ duration: 0.3 }}
+                                        className="flex-shrink-0"
+                                    >
+                                        <ChevronDown className={`w-5 h-5 ${openFaqIndex === index ? 'text-violet-600' : 'text-slate-400'}`} />
+                                    </motion.div>
+                                </button>
+                                <motion.div
+                                    initial={false}
+                                    animate={{
+                                        height: openFaqIndex === index ? "auto" : 0,
+                                        opacity: openFaqIndex === index ? 1 : 0
+                                    }}
+                                    transition={{ duration: 0.3, ease: "easeInOut" }}
+                                    className="overflow-hidden"
+                                >
+                                    <div className="px-6 pb-5 text-slate-600 leading-relaxed border-t border-slate-200 pt-4">
+                                        {faq.answer}
+                                    </div>
+                                </motion.div>
+                            </motion.div>
+                        ))}
+                    </div>
+
+                    {/* Still have questions CTA */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true }}
+                        className="mt-16 text-center p-8 rounded-3xl bg-gradient-to-br from-violet-50 to-cyan-50 border border-violet-100"
+                    >
+                        <h3 className="text-2xl font-bold text-slate-900 mb-3">
+                            Still have questions?
+                        </h3>
+                        <p className="text-slate-600 mb-6 max-w-md mx-auto">
+                            Our support team is here to help. Get in touch and we'll respond as soon as possible.
+                        </p>
+                        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                            <Button className="btn-gradient rounded-full px-6">
+                                <Globe className="w-4 h-4 mr-2" />
+                                Contact Support
+                            </Button>
+                            <Button variant="outline" className="rounded-full px-6 bg-white hover:bg-slate-50">
+                                <FileText className="w-4 h-4 mr-2" />
+                                View Documentation
+                            </Button>
+                        </div>
+                    </motion.div>
                 </div>
             </section>
 

@@ -23,6 +23,15 @@ export class ZimraApiError extends Error {
     }
 }
 
+export class ZimraOfflineError extends Error {
+    public endpoint: string;
+    constructor(message: string, endpoint: string) {
+        super(message);
+        this.name = 'ZimraOfflineError';
+        this.endpoint = endpoint;
+    }
+}
+
 // Base URLs
 const ZIMRA_TEST_URL = 'https://fdmsapitest.zimra.co.zw';
 const ZIMRA_PROD_URL = 'https://fdmsapi.zimra.co.zw';
@@ -68,12 +77,12 @@ export interface ReceiptTax {
 }
 
 export interface ReceiptPayment {
-    paymentType: 'CASH' | 'CARD' | 'OTHER';
+    moneyTypeCode: 'CASH' | 'CARD' | 'OTHER' | 'EFT' | 'MOBILE';
     paymentAmount: number;
 }
 
 export interface ReceiptData {
-    receiptType: 'FISCALINVOICE' | 'CREDITNOTE' | 'DEBITNOTE';
+    receiptType: 'FiscalInvoice' | 'CreditNote' | 'DebitNote';
     receiptCurrency: string;
     receiptCounter: number;
     receiptGlobalNo: number;
@@ -111,12 +120,16 @@ export interface TaxpayerInfo {
     deviceBranchContacts: TaxpayerContacts;
 }
 
+export interface ZimraLogger {
+    log(invoiceId: number, endpoint: string, request: any, response: any, statusCode?: number, errorMessage?: string): Promise<void>;
+}
+
 // ZIMRA API Response Types (based on FDMS Specification)
 
 export type DeviceOperatingMode = 'Online' | 'Offline';
 export type FiscalDayStatus = 'FiscalDayOpened' | 'FiscalDayClosed' | 'FiscalDayCloseFailed';
 export type FiscalDayReconciliationMode = 'Manual' | 'Automatic';
-export type ReceiptType = 'FISCALINVOICE' | 'CREDITNOTE' | 'DEBITNOTE';
+export type ReceiptType = 'FiscalInvoice' | 'CreditNote' | 'DebitNote';
 
 export interface ZimraTax {
     taxID: number;
@@ -197,8 +210,10 @@ export interface ZimraStatusResponse {
 export class ZimraDevice {
     private config: ZimraConfig;
     private axiosInstance: AxiosInstance;
+    private logger?: ZimraLogger;
+    private currentInvoiceId?: number;
 
-    constructor(config: ZimraConfig) {
+    constructor(config: ZimraConfig, logger?: ZimraLogger) {
         this.config = {
             baseUrl: ZIMRA_TEST_URL, // Default to test
             deviceModelName: 'Server',
@@ -231,19 +246,38 @@ export class ZimraDevice {
     // --- Core Utils ---
 
     private async wrapRequest<T>(endpoint: string, requestFn: () => Promise<any>): Promise<T> {
+        let requestPayload: any = null;
         try {
             const response = await requestFn();
+
+            if (this.logger && this.currentInvoiceId) {
+                // Safely extract request data
+                try {
+                    // Try to get data from the original request object if possible
+                    // But wrapRequest is generic. Let's rely on data passed to makeRequest.
+                } catch (e) { }
+            }
+
             return response.data;
         } catch (error: any) {
+            // Handle Network Errors / Timeouts
+            if (!error.response) {
+                console.warn(`ZIMRA Network Error [${endpoint}]: ${error.message}`);
+                throw new ZimraOfflineError(error.message, endpoint);
+            }
+
+            // Handle Server Errors (502, 503, 504 are usually ZIMRA gateway issues)
+            const statusCode = error.response.status;
+            if (statusCode >= 502 && statusCode <= 504) {
+                console.warn(`ZIMRA Server Down [${endpoint}]: Status ${statusCode}`);
+                throw new ZimraOfflineError(`Server unreachable (${statusCode})`, endpoint);
+            }
+
             let message = error.message;
-            let statusCode = error.response?.status || 500;
             let details = error.response?.data;
 
             if (error.response?.data) {
                 const d = error.response.data;
-                // ZIMRA often returns { "detail": "..." } or { "message": "..." }
-                // or specific fields like "FiscalDayStatus" if it's a logic error masked as 200 (though usually 400).
-                // Actually they use HTTP codes reasonbly well.
                 if (d.detail) message = d.detail;
                 else if (d.message) message = d.message;
                 else if (typeof d === 'string') message = d;
@@ -268,11 +302,17 @@ export class ZimraDevice {
         return sign.sign(this.config.privateKey, 'base64');
     }
 
-    private taxCalculator(saleAmount: number, taxRate: number): number {
+    private taxCalculator(saleAmount: number, taxRate: number, isInclusive: boolean = true): number {
         const rate = taxRate / 100;
-        // taxAmount = (((SUM(receiptLineTotal)) * taxPercent) / (1+taxPercent))
-        const taxAmount = (saleAmount * rate) / (1 + rate);
-        return Math.round(taxAmount * 100) / 100; // Round to 2 decimals
+        if (isInclusive) {
+            // taxAmount = (((SUM(receiptLineTotal)) * taxPercent) / (1+taxPercent))
+            const taxAmount = (saleAmount * rate) / (1 + rate);
+            return Math.round(taxAmount * 100) / 100; // Round to 2 decimals
+        } else {
+            // taxAmount = SUM(receiptLineTotal) * taxPercent
+            const taxAmount = saleAmount * rate;
+            return Math.round(taxAmount * 100) / 100;
+        }
     }
 
     // --- Public Methods ---
@@ -503,7 +543,7 @@ export class ZimraDevice {
                 // Wait, logic: `const taxPercent = ... : ""`
                 // Correct.
 
-                return `${c.fiscalCounterType.toUpperCase()}${c.fiscalCounterCurrency.toUpperCase()}${taxPercent}${moneyType}${Math.floor(c.fiscalCounterValue * 100)}`;
+                return `${c.fiscalCounterType.toUpperCase()}${c.fiscalCounterCurrency.toUpperCase()}${taxPercent}${moneyType}${Math.round(c.fiscalCounterValue * 100)}`;
             }).join("");
         }
 
@@ -527,7 +567,7 @@ export class ZimraDevice {
         return this.makeRequest('POST', 'CloseDay', payload);
     }
 
-    public async submitReceipt(receiptData: ReceiptData, previousReceiptHash: string | null = null) {
+    public async submitReceipt(receiptData: ReceiptData, previousReceiptHash: string | null = null, allowOffline = false) {
         // 1. Prepare/Fix Receipt Data (Calculate Taxes, etc.)
         const prepared = this.prepareReceipt(receiptData);
 
@@ -535,18 +575,15 @@ export class ZimraDevice {
         // Sort taxes for string construction
         const sortedTaxes = [...prepared.receiptTaxes].sort((a, b) => a.taxID - b.taxID);
         const concatenatedTaxes = sortedTaxes.map(t =>
-            `${t.taxPercent.toFixed(2)}${Math.floor(t.taxAmount * 100)}${Math.floor(t.salesAmountWithTax * 100)}`
+            `${t.taxPercent.toFixed(2)}${Math.round(t.taxAmount * 100)}${Math.round(t.salesAmountWithTax * 100)}`
         ).join('');
 
-        // String to sign construction
-        // deviceID + receiptType + receiptCurrency + receiptGlobalNo + receiptDate + receiptTotal*100 + concatenatedTaxes + (previousHash)
-
-        const deviceIdStr = parseInt(this.config.deviceId).toString(); // Ensure no padding if it's supposed to be int in string
-        const rType = prepared.receiptType.toUpperCase();
+        const deviceIdStr = parseInt(this.config.deviceId).toString();
+        const rType = prepared.receiptType;
         const rCurr = prepared.receiptCurrency.toUpperCase();
         const rGlobal = prepared.receiptGlobalNo;
-        const rDate = prepared.receiptDate; // Already formatted YYYY-MM-DDTHH:MM:SS
-        const rTotal = Math.floor(prepared.receiptTotal * 100);
+        const rDate = prepared.receiptDate;
+        const rTotal = Math.round(prepared.receiptTotal * 100);
 
         let stringToSign = `${deviceIdStr}${rType}${rCurr}${rGlobal}${rDate}${rTotal}${concatenatedTaxes}`;
         if (previousReceiptHash) {
@@ -558,8 +595,8 @@ export class ZimraDevice {
         const hash = this.getHash(stringToSign);
         const signature = this.signData(stringToSign);
 
-        // Add signature to payload
         const finalPayload = {
+            deviceID: parseInt(this.config.deviceId),
             receipt: {
                 ...prepared,
                 receiptDeviceSignature: {
@@ -569,8 +606,21 @@ export class ZimraDevice {
             }
         };
 
-        const response = await this.makeRequest('POST', 'SubmitReceipt', finalPayload);
-        return { response, signature, hash };
+        try {
+            const response = await this.makeRequest('POST', 'SubmitReceipt', finalPayload);
+            return { response, signature, hash, synced: true };
+        } catch (error) {
+            if (allowOffline && error instanceof ZimraOfflineError) {
+                console.info("Offline Fallback: Returning generated signatures for local record.");
+                return {
+                    response: null,
+                    signature,
+                    hash,
+                    synced: false
+                };
+            }
+            throw error;
+        }
     }
 
     // --- Internal Helpers ---
@@ -583,18 +633,29 @@ export class ZimraDevice {
         receipt.receiptLines = receipt.receiptLines.map((line) => {
             let taxID = line.taxID;
             // Auto-detect tax ID if not set correctly based on percent
+            const absTaxPercent = Math.abs(line.taxPercent);
             if (!taxID) {
-                if (line.taxPercent === 0) taxID = 2; // Zero rate
-                else if (line.taxPercent === 15) taxID = 3; // Standard
-                else if (line.taxPercent === 5) taxID = 1; // Deemed XML says 1? Python says 1 for 5%
+                if (absTaxPercent === 0) taxID = 2; // Zero rate
+                else if (absTaxPercent === 15) taxID = 3; // Standard
+                else if (absTaxPercent === 5) taxID = 1; // Deemed
                 else taxID = 3; // Default
+            }
+
+            let linePrice = line.receiptLinePrice;
+            let lineTotal = line.receiptLineQuantity * line.receiptLinePrice;
+
+            // ZIMRA Rule: CreditNote values must be negative
+            if (receipt.receiptType === 'CreditNote') {
+                if (linePrice > 0) linePrice = -linePrice;
+                if (lineTotal > 0) lineTotal = -lineTotal;
             }
 
             return {
                 ...line,
                 receiptLineType: 'Sale',
                 receiptLineHSCode: line.receiptLineHSCode || '04021099', // Default per Python
-                receiptLineTotal: line.receiptLineQuantity * line.receiptLinePrice,
+                receiptLinePrice: linePrice,
+                receiptLineTotal: lineTotal,
                 taxID,
                 taxPercent: line.taxPercent
             } as ReceiptLine;
@@ -615,10 +676,15 @@ export class ZimraDevice {
             }
             const taxEntry = taxMap.get(key)!;
             // Calculate tax for this line
-            const taxForLine = this.taxCalculator(line.receiptLineTotal, line.taxPercent);
+            const taxForLine = this.taxCalculator(line.receiptLineTotal, line.taxPercent, receipt.receiptLinesTaxInclusive);
 
             taxEntry.taxAmount += taxForLine;
-            taxEntry.salesAmountWithTax += line.receiptLineTotal;
+            // salesAmountWithTax is either the total (if inclusive) or net+tax (if exclusive)
+            if (receipt.receiptLinesTaxInclusive) {
+                taxEntry.salesAmountWithTax += line.receiptLineTotal;
+            } else {
+                taxEntry.salesAmountWithTax += (line.receiptLineTotal + taxForLine);
+            }
         });
 
         // Fix consolidated tax amounts to be strictly derived from the sum of sales if needed, 
@@ -632,7 +698,7 @@ export class ZimraDevice {
 
         receipt.receiptTaxes = Array.from(taxMap.values()).map(t => ({
             ...t,
-            taxAmount: this.taxCalculator(t.salesAmountWithTax, t.taxPercent),
+            taxAmount: this.taxCalculator(t.salesAmountWithTax, t.taxPercent, true),
             taxPercent: parseFloat(t.taxPercent.toFixed(2))
         }));
 
@@ -652,8 +718,7 @@ export class ZimraDevice {
                     receipt.receiptPayments[0].paymentAmount += diff;
                     receipt.receiptPayments[0].paymentAmount = Math.round(receipt.receiptPayments[0].paymentAmount * 100) / 100;
                 } else {
-                    // Should we error? Or force fix?
-                    // For robustness, let's force fix the main payment if it exists, or just overwrite if simple case
+                    // Force fix the main payment
                     console.warn(`Payment total mismatch: ${paymentTotal} vs ${receipt.receiptTotal}. Adjusting payment.`);
                     receipt.receiptPayments[0].paymentAmount += diff;
                     receipt.receiptPayments[0].paymentAmount = Math.round(receipt.receiptPayments[0].paymentAmount * 100) / 100;
@@ -662,12 +727,12 @@ export class ZimraDevice {
         } else {
             // If no payments provided, add a default CASH payment (safer than failing)
             receipt.receiptPayments = [{
-                paymentType: 'CASH',
+                moneyTypeCode: 'CASH',
                 paymentAmount: receipt.receiptTotal
             }];
         }
 
-        receipt.receiptLinesTaxInclusive = true;
+        // receipt.receiptLinesTaxInclusive = true; // REMOVED: Should respect input
 
         // Format Date
         // receipt.receiptDate must be YYYY-MM-DDTHH:MM:SS
@@ -678,13 +743,43 @@ export class ZimraDevice {
 
     private async makeRequest(method: 'GET' | 'POST', endpoint: string, data?: any) {
         const url = `/Device/v1/${this.config.deviceId}/${endpoint}`;
-        return this.wrapRequest(endpoint, () =>
-            this.axiosInstance.request({
-                method,
-                url,
-                data,
-            })
-        );
+
+        let responseData: any = null;
+        let statusCode: number | undefined;
+        let errorMessage: string | undefined;
+
+        try {
+            responseData = await this.wrapRequest(endpoint, () =>
+                this.axiosInstance.request({
+                    method,
+                    url,
+                    data,
+                })
+            );
+            statusCode = 200; // If wrapRequest didn't throw, it's 200/201
+            return responseData;
+        } catch (error: any) {
+            statusCode = error.statusCode || 500;
+            errorMessage = error.message;
+            responseData = error.details || { error: error.message };
+            throw error;
+        } finally {
+            if (this.logger && this.currentInvoiceId) {
+                // Log all requests related to an invoice
+                this.logger.log(
+                    this.currentInvoiceId,
+                    endpoint,
+                    data || {},
+                    responseData,
+                    statusCode,
+                    errorMessage
+                ).catch(err => console.error("Failed to save ZIMRA log:", err));
+            }
+        }
+    }
+
+    public setInvoiceId(id: number) {
+        this.currentInvoiceId = id;
     }
 
     // --- QR Code ---
@@ -694,8 +789,8 @@ export class ZimraDevice {
 
         try {
             const signatureBytes = Buffer.from(signature, 'base64');
-            const hexStr = signatureBytes.toString('hex');
-            const md5Hash = crypto.createHash('md5').update(Buffer.from(hexStr, 'hex')).digest('hex');
+            const hexStr = signatureBytes.toString('hex').toLowerCase(); // ZIMRA expects lowercase hex
+            const md5Hash = crypto.createHash('md5').update(hexStr).digest('hex').toLowerCase();
             const finalHash = md5Hash.substring(0, 16);
 
             // 2. Build String

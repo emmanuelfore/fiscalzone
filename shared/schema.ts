@@ -39,6 +39,7 @@ export const companies = pgTable("companies", {
   defaultPaymentTerms: text("default_payment_terms"),
   bankDetails: text("bank_details"),
   fdmsDeviceId: text("fdms_device_id"),
+  fdmsDeviceSerialNo: text("fdms_device_serial_no"), // ZIMRA Field [21] - Device Serial Number
   fdmsApiKey: text("fdms_api_key"),
   zimraPrivateKey: text("zimra_private_key"),
   zimraCertificate: text("zimra_certificate"),
@@ -46,17 +47,25 @@ export const companies = pgTable("companies", {
   fiscalDayOpen: boolean("fiscal_day_open").default(false),
   currentFiscalDayNo: integer("current_fiscal_day_no").default(0),
   lastFiscalDayStatus: text("last_fiscal_day_status"),
+
+  // Customization
+  invoiceTemplate: text("invoice_template").default("modern"),
+  primaryColor: text("primary_color").default("#4f46e5"),
+
   lastReceiptGlobalNo: integer("last_receipt_global_no").default(0),
   deviceReportingFrequency: integer("device_reporting_frequency").default(1440), // Default 24h/1440m just in case
   lastPing: timestamp("last_ping"),
   lastFiscalHash: text("last_fiscal_hash"), // To store previous receipt hash for chaining
   dailyReceiptCount: integer("daily_receipt_count").default(0), // To track RCPT011
+  branchName: text("branch_name"), // ZIMRA Field [5] - Branch name (if different from company name)
 
   // Banking Details
   bankName: text("bank_name"),
   accountNumber: text("account_number"),
   accountName: text("account_name"),
   branchCode: text("branch_code"),
+  vatRegistered: boolean("vat_registered").default(true),
+  emailSettings: jsonb("email_settings"),
 
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -99,6 +108,7 @@ export const customers = pgTable("customers", {
   customerType: text("customer_type").default("individual"), // individual, business
   notes: text("notes"),
   isActive: boolean("is_active").default(true),
+  currency: text("currency").default("USD"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -198,6 +208,10 @@ export const invoices = pgTable("invoices", {
   status: text("status").default("draft"), // draft, issued, paid, cancelled
   taxInclusive: boolean("tax_inclusive").default(false),
 
+  // Locking
+  lockedBy: uuid("locked_by").references(() => users.id),
+  lockedAt: timestamp("locked_at"),
+
   // ZIMRA Fiscal Fields
   fiscalCode: text("fiscal_code"),
   fiscalSignature: text("fiscal_signature"),
@@ -206,25 +220,23 @@ export const invoices = pgTable("invoices", {
   fdmsStatus: text("fdms_status").default("pending"),
   submissionId: text("submission_id"),
   fiscalDayNo: integer("fiscal_day_no"), // To track which fiscal day this invoice belongs to
+  receiptCounter: integer("receipt_counter"), // ZIMRA Field [17] - Daily receipt counter
+  receiptGlobalNo: integer("receipt_global_no"), // ZIMRA Field [18] - Global receipt number
 
   currency: text("currency").default("USD"),
   paymentMethod: text("payment_method").default("CASH"),
   exchangeRate: decimal("exchange_rate", { precision: 10, scale: 6 }).default("1.000000"),
 
-  // Transaction Type
   transactionType: text("transaction_type").default("FiscalInvoice"), // FiscalInvoice, CreditNote, DebitNote
   relatedInvoiceId: integer("related_invoice_id"), // Self-reference for CN/DN
 
   notes: text("notes"),
+  invoiceTemplate: text("invoice_template").default("modern"),
 
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const invoicesRelations = relations(invoices, ({ one, many }) => ({
-  company: one(companies, { fields: [invoices.companyId], references: [companies.id] }),
-  customer: one(customers, { fields: [invoices.customerId], references: [customers.id] }),
-  items: many(invoiceItems),
-}));
+
 
 // Invoice Items
 export const invoiceItems = pgTable("invoice_items", {
@@ -303,3 +315,168 @@ export type CreateInvoiceRequest = InsertInvoice & {
 export const insertCurrencySchema = createInsertSchema(currencies).omit({ id: true, lastUpdated: true });
 export type InsertCurrency = z.infer<typeof insertCurrencySchema>;
 export type Currency = typeof currencies.$inferSelect;
+
+
+// Payments
+export const payments = pgTable("payments", {
+  id: serial("id").primaryKey(),
+  companyId: integer("company_id").references(() => companies.id).notNull(),
+  invoiceId: integer("invoice_id").references(() => invoices.id).notNull(),
+
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  currency: text("currency").default("USD").notNull(),
+  exchangeRate: decimal("exchange_rate", { precision: 10, scale: 6 }).default("1.000000"),
+
+  paymentDate: timestamp("payment_date").defaultNow().notNull(),
+  paymentMethod: text("payment_method").notNull(), // Cash, Card, Transfer, Ecocash
+  reference: text("reference"), // Check No, Transaction ID
+
+  notes: text("notes"),
+
+  createdBy: uuid("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const paymentsRelations = relations(payments, ({ one }) => ({
+  invoice: one(invoices, { fields: [payments.invoiceId], references: [invoices.id] }),
+  company: one(companies, { fields: [payments.companyId], references: [companies.id] }),
+  user: one(users, { fields: [payments.createdBy], references: [users.id] }),
+}));
+
+// Also update Invoice relations to include payments
+export const invoicesRelations = relations(invoices, ({ one, many }) => ({
+  company: one(companies, { fields: [invoices.companyId], references: [companies.id] }),
+  customer: one(customers, { fields: [invoices.customerId], references: [customers.id] }),
+  items: many(invoiceItems),
+  payments: many(payments),
+}));
+
+
+export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true });
+export type InsertPayment = z.infer<typeof insertPaymentSchema>;
+export type Payment = typeof payments.$inferSelect;
+
+
+// Quotations
+export const quotations = pgTable("quotations", {
+  id: serial("id").primaryKey(),
+  companyId: integer("company_id").references(() => companies.id).notNull(),
+  customerId: integer("customer_id").references(() => customers.id).notNull(),
+
+  quotationNumber: text("quotation_number").notNull(),
+  issueDate: timestamp("issue_date").defaultNow(),
+  expiryDate: timestamp("expiry_date"),
+
+  // Amounts
+  subtotal: decimal("subtotal", { precision: 10, scale: 2 }).notNull(),
+  taxAmount: decimal("tax_amount", { precision: 10, scale: 2 }).notNull(),
+  total: decimal("total", { precision: 10, scale: 2 }).notNull(),
+
+  // Status & Settings
+  status: text("status").default("draft"), // draft, sent, accepted, declined, invoiced
+  taxInclusive: boolean("tax_inclusive").default(false),
+  currency: text("currency").default("USD"),
+  notes: text("notes"),
+  invoiceTemplate: text("invoice_template").default("modern"),
+
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const quotationItems = pgTable("quotation_items", {
+  id: serial("id").primaryKey(),
+  quotationId: integer("quotation_id").references(() => quotations.id).notNull(),
+  productId: integer("product_id").references(() => products.id),
+  description: text("description").notNull(),
+  quantity: decimal("quantity", { precision: 10, scale: 2 }).notNull(),
+  unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
+  taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).notNull(),
+  lineTotal: decimal("line_total", { precision: 10, scale: 2 }).notNull(),
+});
+
+export const quotationsRelations = relations(quotations, ({ one, many }) => ({
+  company: one(companies, { fields: [quotations.companyId], references: [companies.id] }),
+  customer: one(customers, { fields: [quotations.customerId], references: [customers.id] }),
+  items: many(quotationItems),
+}));
+
+export const quotationItemsRelations = relations(quotationItems, ({ one }) => ({
+  quotation: one(quotations, { fields: [quotationItems.quotationId], references: [quotations.id] }),
+  product: one(products, { fields: [quotationItems.productId], references: [products.id] }),
+}));
+
+export const insertQuotationSchema = createInsertSchema(quotations).omit({ id: true, createdAt: true });
+export const insertQuotationItemSchema = createInsertSchema(quotationItems).omit({ id: true, quotationId: true });
+
+export type Quotation = typeof quotations.$inferSelect;
+export type QuotationItem = typeof quotationItems.$inferSelect;
+export type InsertQuotation = z.infer<typeof insertQuotationSchema>;
+export type InsertQuotationItem = z.infer<typeof insertQuotationItemSchema>;
+
+// Recurring Invoices
+export const recurringInvoices = pgTable("recurring_invoices", {
+  id: serial("id").primaryKey(),
+  companyId: integer("company_id").references(() => companies.id).notNull(),
+  customerId: integer("customer_id").references(() => customers.id).notNull(),
+
+  // Template data
+  description: text("description"),
+  currency: text("currency").default("USD").notNull(),
+  taxInclusive: boolean("tax_inclusive").default(false),
+  items: jsonb("items").notNull(), // Array of items
+
+  // Schedule
+  frequency: text("frequency").notNull(), // weekly, monthly, quarterly, yearly
+  startDate: timestamp("start_date").defaultNow().notNull(),
+  endDate: timestamp("end_date"),
+  nextRunDate: timestamp("next_run_date").notNull(),
+  lastRunDate: timestamp("last_run_date"),
+
+  // Settings
+  status: text("status").default("active"), // active, paused, completed
+  autoSend: boolean("auto_send").default(false),
+  autoFiscalize: boolean("auto_fiscalize").default(false),
+
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const recurringInvoicesRelations = relations(recurringInvoices, ({ one }) => ({
+  company: one(companies, { fields: [recurringInvoices.companyId], references: [companies.id] }),
+  customer: one(customers, { fields: [recurringInvoices.customerId], references: [customers.id] }),
+}));
+
+export const insertRecurringInvoiceSchema = createInsertSchema(recurringInvoices).omit({ id: true, createdAt: true });
+export type InsertRecurringInvoice = z.infer<typeof insertRecurringInvoiceSchema>;
+export type RecurringInvoice = typeof recurringInvoices.$inferSelect;
+
+// SECURITY & AUDIT
+export const auditLogs = pgTable("audit_logs", {
+  id: serial("id").primaryKey(),
+  companyId: integer("company_id"),
+  userId: uuid("user_id"),
+  action: text("action").notNull(),
+  entityType: text("entity_type"),
+  entityId: text("entity_id"),
+  details: jsonb("details"),
+  ipAddress: text("ip_address"),
+  createdAt: timestamp("created_at").defaultNow().notNull()
+});
+
+export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: true, createdAt: true });
+export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
+export type AuditLog = typeof auditLogs.$inferSelect;
+
+// ZIMRA Logs
+export const zimraLogs = pgTable("zimra_logs", {
+  id: serial("id").primaryKey(),
+  invoiceId: integer("invoice_id").references(() => invoices.id).notNull(),
+  requestPayload: jsonb("request_payload").notNull(),
+  responsePayload: jsonb("response_payload").notNull(),
+  statusCode: integer("status_code"),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertZimraLogSchema = createInsertSchema(zimraLogs).omit({ id: true, createdAt: true });
+export type InsertZimraLog = z.infer<typeof insertZimraLogSchema>;
+export type ZimraLog = typeof zimraLogs.$inferSelect;
+

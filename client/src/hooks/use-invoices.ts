@@ -51,6 +51,41 @@ export function useCreateInvoice(companyId: number) {
   });
 }
 
+export function useUpdateInvoice() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: Partial<CreateInvoiceRequest> }) => {
+      const url = buildUrl(api.invoices.update.path, { id });
+      const res = await apiFetch(url, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to update invoice");
+      }
+      return api.invoices.update.responses[200].parse(await res.json());
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: [api.invoices.list.path] });
+      queryClient.invalidateQueries({ queryKey: [api.invoices.get.path, data.id] });
+      toast({
+        title: "Success",
+        description: "Invoice updated successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+}
+
 export function useFiscalizeInvoice() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -93,8 +128,155 @@ export function useDeleteInvoice() {
       const res = await apiFetch(url, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete invoice");
     },
+    // ... (useDeleteInvoice existing code)
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.invoices.list.path] });
+    },
+  });
+}
+
+export function useCreateCreditNote() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (invoiceId: number) => {
+      const res = await apiFetch(`/api/invoices/${invoiceId}/credit-note`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to create credit note");
+      }
+      return await res.json(); // Returns the new invoice object
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: [api.invoices.list.path] });
+      toast({
+        title: "Credit Note Created",
+        description: `Draft CN-${data.id} created successfully.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+}
+
+export function useCreateDebitNote() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (invoiceId: number) => {
+      const res = await apiFetch(`/api/invoices/${invoiceId}/debit-note`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to create debit note");
+      }
+      return await res.json(); // Returns the new invoice object
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: [api.invoices.list.path] });
+      toast({
+        title: "Debit Note Created",
+        description: `Draft DN-${data.id} created successfully.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+}
+
+export function useConvertQuotation() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiFetch(`/api/invoices/${id}/convert`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to convert quotation");
+      }
+      return await res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: [api.invoices.list.path] });
+      queryClient.invalidateQueries({ queryKey: [api.invoices.get.path, data.id] });
+      toast({
+        title: "Quotation Converted",
+        description: "Your quotation has been converted to a draft invoice.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Conversion Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+}
+
+export function usePayments(invoiceId: number) {
+  return useQuery({
+    queryKey: [api.payments.list.path, invoiceId],
+    queryFn: async () => {
+      const url = buildUrl(api.payments.list.path, { invoiceId });
+      const res = await apiFetch(url);
+      if (!res.ok) throw new Error("Failed to fetch payments");
+      return api.payments.list.responses[200].parse(await res.json());
+    },
+    enabled: !!invoiceId,
+  });
+}
+
+export function useAddPayment() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ invoiceId, data }: { invoiceId: number; data: any }) => {
+      const url = buildUrl(api.payments.create.path, { invoiceId });
+      const res = await apiFetch(url, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to add payment");
+      }
+      return api.payments.create.responses[201].parse(await res.json());
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: [api.payments.list.path, variables.invoiceId] });
+      queryClient.invalidateQueries({ queryKey: [api.invoices.get.path, variables.invoiceId] });
+      queryClient.invalidateQueries({ queryKey: [api.invoices.list.path] });
+      toast({
+        title: "Payment Recorded",
+        description: "Payment has been successfully recorded.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 }

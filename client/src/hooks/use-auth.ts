@@ -92,6 +92,30 @@ export function useAuth() {
     setLocation("/auth");
   };
 
+  const updatePassword = async (password: string) => {
+    const { error } = await supabase.auth.updateUser({
+      password
+    });
+    if (error) throw error;
+  };
+
+  const updateProfile = async (data: { name: string }) => {
+    const res = await apiFetch("/api/user", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.message || "Failed to update profile");
+    }
+
+    const updatedUser = await res.json();
+    queryClient.setQueryData(["/api/user"], updatedUser);
+    return updatedUser;
+  };
+
   return {
     user: userQuery.data,
     isLoading: isSupabaseLoading || userQuery.isLoading,
@@ -99,5 +123,7 @@ export function useAuth() {
     loginWithPassword,
     registerWithPassword,
     logout,
+    updatePassword,
+    updateProfile,
   };
 }

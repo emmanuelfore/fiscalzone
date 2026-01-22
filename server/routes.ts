@@ -12,7 +12,9 @@ import { setupAuth } from "./auth";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import { ZimraDevice, type ReceiptData, ZimraApiError, getZimraBaseUrl } from "./zimra";
+import { sendInvoiceEmail } from './email';
 import { supabaseAdmin } from "./supabase";
+import { parse } from "csv-parse/sync";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -20,12 +22,67 @@ export async function registerRoutes(
 ): Promise<Server> {
   setupAuth(app);
 
+  // CSV Upload Configuration
+  const csvUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+    fileFilter: (_req, file, cb) => {
+      if (file.mimetype === 'text/csv' || file.mimetype === 'application/vnd.ms-excel') {
+        cb(null, true);
+      } else {
+        cb(new Error("Invalid file type. Only CSV files are allowed."));
+      }
+    }
+  });
+
   // Middleware to check auth
   const requireAuth = (req: any, res: any, next: any) => {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: "Unauthorized" });
     }
     next();
+  };
+
+  const requireOwner = async (req: any, res: any, next: any) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    const companyId = parseInt(req.params.companyId || req.params.id || req.body.companyId);
+    if (!companyId) return next(); // Fallback if no company context
+
+    const users = await storage.getCompanyUsers(companyId);
+    const me = users.find(u => u.id === req.user.id);
+    if (!me || me.role !== 'owner') {
+      return res.status(403).json({ message: "Owner permission required" });
+    }
+    next();
+  };
+
+  const requireStaff = async (req: any, res: any, next: any) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    const companyId = parseInt(req.params.companyId || req.params.id || req.body.companyId);
+    if (!companyId) return next();
+
+    const users = await storage.getCompanyUsers(companyId);
+    const me = users.find(u => u.id === req.user.id);
+    if (!me || (me.role !== 'owner' && me.role !== 'staff' && me.role !== 'admin')) {
+      return res.status(403).json({ message: "Insufficient permissions" });
+    }
+    next();
+  };
+
+  const zimraLogger = {
+    log: async (invoiceId: number, endpoint: string, request: any, response: any, statusCode?: number, errorMessage?: string) => {
+      try {
+        await storage.createZimraLog({
+          invoiceId,
+          requestPayload: request,
+          responsePayload: response,
+          statusCode,
+          errorMessage
+        });
+      } catch (e) {
+        console.error("Critical: Failed to save ZIMRA log:", e);
+      }
+    }
   };
   // Health Check (Public)
   app.get("/api/health", async (_req, res) => {
@@ -53,6 +110,9 @@ export async function registerRoutes(
     }
   });
 
+  // Serve uploaded files locally if needed
+  app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
+
   app.post("/api/companies/:id/logo", requireAuth, logoUpload.single("logo"), async (req, res) => {
     try {
       const companyId = Number(req.params.id);
@@ -60,37 +120,392 @@ export async function registerRoutes(
         return res.status(400).json({ message: "No file uploaded" });
       }
 
-      if (!supabaseAdmin) {
-        throw new Error("Supabase Admin client not configured");
-      }
-
       const file = req.file;
       const fileExt = path.extname(file.originalname);
       const fileName = `company-${companyId}-logo-${Date.now()}${fileExt}`;
-      const filePath = `logos/${fileName}`;
+      let publicUrl = "";
 
-      // Upload to Supabase Storage
-      const { data, error } = await supabaseAdmin.storage
-        .from('logos')
-        .upload(filePath, file.buffer, {
-          contentType: file.mimetype,
-          upsert: true
-        });
+      if (supabaseAdmin) {
+        // Upload to Supabase Storage
+        const filePath = `logos/${fileName}`;
+        const { error } = await supabaseAdmin.storage
+          .from('logos')
+          .upload(filePath, file.buffer, {
+            contentType: file.mimetype,
+            upsert: true
+          });
 
-      if (error) throw error;
+        if (error) throw error;
 
-      // Get Public URL
-      const { data: { publicUrl } } = supabaseAdmin.storage
-        .from('logos')
-        .getPublicUrl(filePath);
+        const { data } = supabaseAdmin.storage
+          .from('logos')
+          .getPublicUrl(filePath);
 
-      await storage.updateCompany(companyId, { logoUrl: publicUrl });
-      res.json({ message: "Logo uploaded successfully", logoUrl: publicUrl });
-    } catch (err: any) {
-      console.error("Logo Upload Error:", err);
-      res.status(500).json({ message: err.message || "Failed to upload logo" });
+        publicUrl = data.publicUrl;
+      } else {
+        // Local File Storage Fallback
+        const uploadDir = path.join(__dirname, '..', 'uploads', 'logos');
+        if (!fs.existsSync(uploadDir)) {
+          fs.mkdirSync(uploadDir, { recursive: true });
+        }
+
+        const localPath = path.join(uploadDir, fileName);
+        await fs.promises.writeFile(localPath, file.buffer);
+
+        // Construct local URL
+        const protocol = req.protocol;
+        publicUrl = `${protocol}://${req.get('host')}/uploads/logos/${fileName}`;
+      }
+
+      // Update Company Logo URL in DB
+      await storage.updateCompanyLogo(companyId, publicUrl);
+
+      res.json({ url: publicUrl });
+    } catch (error: any) {
+      console.error("Logo Upload Error:", error);
+      res.status(500).json({ message: error.message || "Failed to upload logo" });
     }
   });
+
+  // --- CSV Import Endpoints ---
+
+  // --- Quotations ---
+  app.get("/api/companies/:companyId/quotations", requireAuth, async (req, res) => {
+    const companyId = parseInt(req.params.companyId);
+    try {
+      const results = await storage.getQuotations(companyId);
+      res.json(results);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/quotations/:id", requireAuth, async (req, res) => {
+    const id = parseInt(req.params.id);
+    try {
+      const result = await storage.getQuotation(id);
+      if (!result) return res.status(404).json({ message: "Quotation not found" });
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/quotations", requireAuth, async (req, res) => {
+    try {
+      const data = insertQuotationSchema.extend({ items: z.array(insertQuotationItemSchema) }).parse(req.body);
+      const result = await storage.createQuotation(data);
+      res.status(201).json(result);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors.map(e => e.message).join(", ") });
+      }
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/quotations/:id", requireAuth, async (req, res) => {
+    const id = parseInt(req.params.id);
+    try {
+      const data = insertQuotationSchema.extend({ items: z.array(insertQuotationItemSchema) }).partial().parse(req.body);
+      const result = await storage.updateQuotation(id, data);
+      res.json(result);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors.map(e => e.message).join(", ") });
+      }
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/quotations/:id", requireAuth, async (req, res) => {
+    const id = parseInt(req.params.id);
+    try {
+      await storage.deleteQuotation(id);
+      res.status(204).end();
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/quotations/:id/convert", requireAuth, async (req, res) => {
+    const id = parseInt(req.params.id);
+    try {
+      const quote = await storage.getQuotation(id);
+      if (!quote) return res.status(404).json({ message: "Quotation not found" });
+      if (quote.status === "invoiced") return res.status(400).json({ message: "Quotation already converted to invoice" });
+
+      // Convert Quote to Invoice Data
+      const invoiceData = {
+        companyId: quote.companyId,
+        customerId: quote.customerId,
+        issueDate: new Date(),
+        dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // Default 7 days
+        currency: quote.currency || "USD",
+        exchangeRate: "1.00", // Default
+        taxInclusive: quote.taxInclusive || false,
+        subtotal: quote.subtotal,
+        taxAmount: quote.taxAmount,
+        total: quote.total,
+        status: "draft",
+        transactionType: "FiscalInvoice",
+        notes: `Converted from Quotation ${quote.quotationNumber}. ${quote.notes || ""}`,
+        items: quote.items.map(item => ({
+          productId: item.productId,
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          taxRate: item.taxRate,
+          lineTotal: item.lineTotal
+        }))
+      };
+
+      const invoice = await storage.createInvoice(invoiceData as any);
+
+      // Update quote status
+      await storage.updateQuotation(id, { status: "invoiced" });
+
+      res.status(201).json(invoice);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // --- Recurring Invoices ---
+  app.get("/api/companies/:companyId/recurring-invoices", requireAuth, async (req, res) => {
+    const companyId = parseInt(req.params.companyId);
+    try {
+      const results = await storage.getRecurringInvoices(companyId);
+      res.json(results);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/recurring-invoices", requireAuth, async (req, res) => {
+    try {
+      const data = insertRecurringInvoiceSchema.parse(req.body);
+      const result = await storage.createRecurringInvoice(data);
+      res.status(201).json(result);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors.map(e => e.message).join(", ") });
+      }
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/recurring-invoices/:id", requireAuth, async (req, res) => {
+    const id = parseInt(req.params.id);
+    try {
+      const data = insertRecurringInvoiceSchema.partial().parse(req.body);
+      const result = await storage.updateRecurringInvoice(id, data);
+      res.json(result);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors.map(e => e.message).join(", ") });
+      }
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/recurring-invoices/:id", requireAuth, async (req, res) => {
+    const id = parseInt(req.params.id);
+    try {
+      await storage.deleteRecurringInvoice(id);
+      res.status(204).end();
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Import Customers
+  app.post("/api/import/customers", requireAuth, csvUpload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ message: "No CSV file uploaded" });
+
+      const companyId = req.user.companyId;
+      // Note: req.user.companyId might need validation or fetch depending on auth setup.
+      // Assuming setupAuth attaches user with companyId or we use query params.
+      // Based on previous code, let's use the query param if passed, or default to user's company?
+      // Actually, best practice is to pass companyId in query or infer from context.
+      // Let's assume standard auth context has companyId via session or verify it.
+      // For now, let's safely assume we get company_id from body or session.
+      // Seeing existing routes: `const companyId = Number(req.params.id);` for logo.
+      // Let's expect `companyId` in body or query for safety.
+
+      const targetCompanyId = parseInt(req.body.companyId) || (req.user as any).companyId;
+      if (!targetCompanyId) return res.status(400).json({ message: "Target Company ID required" });
+
+      const fileContent = req.file.buffer.toString("utf-8");
+      const records = parse(fileContent, {
+        columns: true,
+        skip_empty_lines: true,
+        trim: true,
+        relax_column_count: true
+      });
+
+      const results = {
+        success: 0,
+        failed: 0,
+        errors: [] as string[]
+      };
+
+
+      const findHeader = (row: any, options: string[]) => {
+        const keys = Object.keys(row);
+        for (const opt of options) {
+          const match = keys.find(k => k.toLowerCase().replace(/[\s_-]/g, '') === opt.toLowerCase().replace(/[\s_-]/g, ''));
+          if (match) return match;
+        }
+        return null;
+      };
+
+      for (const [index, row] of records.entries()) {
+        try {
+          // Expected Columns: Name, Email, Phone, Address, TIN, VAT Number
+          const nameHeader = findHeader(row, ['Name', 'Customer Name', 'Client Name', 'Business Name']);
+          const emailHeader = findHeader(row, ['Email', 'Email Address']);
+          const phoneHeader = findHeader(row, ['Phone', 'Telephone', 'Mobile', 'Phone Number']);
+          const addressHeader = findHeader(row, ['Address', 'Billing Address', 'Location']);
+          const tinHeader = findHeader(row, ['TIN', 'Tax ID', 'Tax Number']);
+          const vatHeader = findHeader(row, ['VAT Number', 'VAT NO', 'VAT']);
+          const typeHeader = findHeader(row, ['Type', 'Customer Type', 'Client Type']);
+
+          const name = nameHeader ? row[nameHeader] : null;
+          if (!name) throw new Error("Missing 'Name' column");
+
+          const customerData = {
+            companyId: targetCompanyId,
+            name: name,
+            email: emailHeader ? row[emailHeader] : undefined,
+            phone: phoneHeader ? row[phoneHeader] : undefined,
+            address: addressHeader ? row[addressHeader] : undefined,
+            tin: tinHeader ? row[tinHeader] : undefined,
+            vatNumber: vatHeader ? row[vatHeader] : undefined,
+            customerType: typeHeader ? (row[typeHeader] || 'individual').toLowerCase() : 'individual',
+            isActive: true
+          };
+
+          // Validate via Zod
+          const validated = api.customers.create.input.parse(customerData);
+
+          await storage.createCustomer({
+            ...validated,
+            companyId: targetCompanyId
+          });
+          results.success++;
+        } catch (err: any) {
+          results.failed++;
+          let msg = err.message;
+          if (err instanceof z.ZodError) {
+            msg = err.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
+          }
+          results.errors.push(`Row ${index + 2}: ${msg}`);
+        }
+      }
+
+      res.json({ message: "Import completed", ...results });
+
+    } catch (error: any) {
+      console.error("Import Customers Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Import Products
+  app.post("/api/import/products", requireAuth, csvUpload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ message: "No CSV file uploaded" });
+
+      const targetCompanyId = parseInt(req.body.companyId) || (req.user as any).companyId;
+      if (!targetCompanyId) return res.status(400).json({ message: "Target Company ID required" });
+
+      const fileContent = req.file.buffer.toString("utf-8");
+      const records = parse(fileContent, {
+        columns: true,
+        skip_empty_lines: true,
+        trim: true,
+        relax_column_count: true
+      });
+
+      const results = {
+        success: 0,
+        failed: 0,
+        errors: [] as string[]
+      };
+
+      const cleanNum = (val: any) => {
+        if (val === undefined || val === null || val === "") return 0;
+        return parseFloat(val.toString().replace(/[^0-9.]/g, '')) || 0;
+      };
+
+      const findHeader = (row: any, options: string[]) => {
+        const keys = Object.keys(row);
+        for (const opt of options) {
+          const match = keys.find(k => k.toLowerCase().replace(/[\s_-]/g, '') === opt.toLowerCase().replace(/[\s_-]/g, ''));
+          if (match) return match;
+        }
+        return null;
+      };
+
+      for (const [index, row] of records.entries()) {
+        try {
+          const nameHeader = findHeader(row, ['Name', 'Product Name', 'Item Name', 'Title']);
+          const descHeader = findHeader(row, ['Description', 'Notes', 'Details']);
+          const skuHeader = findHeader(row, ['Code', 'SKU', 'Item Code', 'ID']);
+          const priceHeader = findHeader(row, ['Price', 'Unit Price', 'Rate']);
+          const taxHeader = findHeader(row, ['Tax Rate', 'VAT', 'TaxPercent', 'Tax']);
+          const typeHeader = findHeader(row, ['Type', 'Product Type', 'Item Type']);
+          const stockHeader = findHeader(row, ['Stock', 'Quantity', 'Qty', 'Inventory']);
+          const hsHeader = findHeader(row, ['HS Code', 'HSCode', 'Harmonized Code']);
+
+          const name = nameHeader ? row[nameHeader] : null;
+          if (!name) throw new Error("Missing 'Name' column");
+
+          const typeValue = typeHeader ? row[typeHeader].toLowerCase() : 'good';
+          const type = typeValue.includes('service') ? 'service' : 'good';
+
+          const productData = {
+            companyId: targetCompanyId,
+            name: name,
+            description: descHeader ? row[descHeader] : "",
+            sku: skuHeader ? row[skuHeader] : `IMP-${Date.now()}-${index}`,
+            price: priceHeader ? cleanNum(row[priceHeader]).toString() : "0.00",
+            taxRate: taxHeader ? cleanNum(row[taxHeader]).toString() : "15.00",
+            productType: type,
+            hsCode: hsHeader ? row[hsHeader] : "0000.00.00",
+            isActive: true,
+            stockLevel: stockHeader ? cleanNum(row[stockHeader]).toString() : "0.00",
+            isTracked: !!stockHeader && type === 'good'
+          };
+
+          // Validate via Zod
+          const validated = api.products.create.input.parse(productData);
+
+          await storage.createProduct({
+            ...validated,
+            companyId: targetCompanyId
+          });
+          results.success++;
+        } catch (err: any) {
+          results.failed++;
+          let msg = err.message;
+          if (err instanceof z.ZodError) {
+            msg = err.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
+          }
+          results.errors.push(`Row ${index + 2}: ${msg}`);
+        }
+      }
+
+      res.json({ message: "Import completed", ...results });
+
+    } catch (error: any) {
+      console.error("Import Products Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
 
   // Company Routes
   app.get(api.companies.list.path, requireAuth, async (req, res) => {
@@ -189,6 +604,24 @@ export async function registerRoutes(
     }
   });
 
+
+  // Audit Logs
+  app.get("/api/companies/:id/audit-logs", requireAuth, async (req, res) => {
+    try {
+      const companyId = Number(req.params.id);
+      const limit = req.query.limit ? Number(req.query.limit) : 50;
+
+      // Verify user has access to company (owner/admin)
+      // For now, we assume requireAuth + company scoping is sufficient for MVP
+      // In production, add strict role check here
+
+      const logs = await storage.getAuditLogs(companyId, limit);
+      res.json(logs);
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to fetch audit logs" });
+    }
+  });
+
   // Get current ZIMRA environment status
   app.get("/api/companies/:id/zimra/environment", requireAuth, async (req, res) => {
     try {
@@ -241,9 +674,10 @@ export async function registerRoutes(
 
       const keys = await device.registerDevice();
 
-      // Save keys to DB
+      // Save keys and device info to DB
       await storage.updateCompany(companyId, {
         fdmsDeviceId: deviceId,
+        fdmsDeviceSerialNo: deviceSerialNo, // ZIMRA Field [21]
         fdmsApiKey: activationKey,
         zimraPrivateKey: keys.privateKey,
         zimraCertificate: keys.certificate
@@ -618,6 +1052,99 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/companies/:id/zimra/connectivity-test", requireAuth, async (req, res) => {
+    try {
+      const companyId = Number(req.params.id);
+      const company = await storage.getCompany(companyId);
+      if (!company || !company.fdmsDeviceId) {
+        return res.status(400).json({ message: "Company not registered with ZIMRA" });
+      }
+
+      const device = new ZimraDevice({
+        deviceId: company.fdmsDeviceId,
+        deviceSerialNo: "UNKNOWN",
+        activationKey: company.fdmsApiKey || "",
+        privateKey: company.zimraPrivateKey || "",
+        certificate: company.zimraCertificate || "",
+      });
+
+      const checks: any[] = [];
+      let overallStatus = "Online";
+
+      // 1. Ping Test
+      try {
+        const pingRes = await device.ping();
+        checks.push({
+          name: "Server Reachability",
+          status: "success",
+          message: `Ping successful (Frequency: ${pingRes.reportingFrequency}m)`
+        });
+      } catch (e: any) {
+        console.error("Connectivity Test - Ping Failed", e);
+        overallStatus = "Offline";
+        checks.push({
+          name: "Server Reachability",
+          status: "error",
+          message: e.message || "Failed to reach ZIMRA server"
+        });
+      }
+
+      // 2. Status Check
+      if (overallStatus !== "Offline") {
+        try {
+          const statusRes = await device.getStatus();
+          checks.push({
+            name: "Device Status",
+            status: "success",
+            message: `Status: ${statusRes.fiscalDayStatus}`
+          });
+
+          // Update DB with latest status while we are at it
+          await storage.updateCompany(companyId, {
+            currentFiscalDayNo: statusRes.lastFiscalDayNo,
+            lastFiscalDayStatus: statusRes.fiscalDayStatus,
+            fiscalDayOpen: statusRes.fiscalDayStatus === 'FiscalDayOpened'
+          });
+
+        } catch (e: any) {
+          console.error("Connectivity Test - Status Failed", e);
+          overallStatus = "Degraded";
+          checks.push({
+            name: "Device Status",
+            status: "error",
+            message: e.message || "Failed to retrieve device status"
+          });
+        }
+      }
+
+      // 3. Certificate Check (Local)
+      if (company.zimraCertificate) {
+        checks.push({
+          name: "Certificate",
+          status: "success",
+          message: "Valid certificate present"
+        });
+      } else {
+        overallStatus = "Offline";
+        checks.push({
+          name: "Certificate",
+          status: "error",
+          message: "No certificate found"
+        });
+      }
+
+      res.json({
+        overallStatus,
+        checks,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (err: any) {
+      console.error("Connectivity Test Error:", err);
+      res.status(500).json({ message: "Failed to run connectivity test: " + err.message });
+    }
+  });
+
   app.post("/api/companies/:id/zimra/day/open", requireAuth, async (req, res) => {
     try {
       const companyId = Number(req.params.id);
@@ -671,45 +1198,174 @@ export async function registerRoutes(
   });
 
   app.post("/api/companies/:id/zimra/day/close", requireAuth, async (req, res) => {
+    const companyId = Number(req.params.id);
+    const maxRetries = 3;
+    const retryDelay = 2000; // 2 seconds between retries
+
     try {
-      const companyId = Number(req.params.id);
       const company = await storage.getCompany(companyId);
       if (!company || !company.fdmsDeviceId) {
         return res.status(400).json({ message: "Company not registered with ZIMRA" });
       }
 
+      // Check if fiscal day is actually open
+      if (!company.fiscalDayOpen) {
+        return res.status(400).json({
+          message: "No fiscal day is currently open",
+          suggestion: "Open a fiscal day before attempting to close it"
+        });
+      }
+
       const device = new ZimraDevice({
         deviceId: company.fdmsDeviceId,
-        deviceSerialNo: "UNKNOWN",
+        deviceSerialNo: company.fdmsDeviceSerialNo || "UNKNOWN",
         activationKey: company.fdmsApiKey || "",
         privateKey: company.zimraPrivateKey || "",
         certificate: company.zimraCertificate || "",
+        baseUrl: 'https://fdmsapitest.zimra.co.zw' // TODO: Config
       });
+
+      const fiscalDayNo = company.currentFiscalDayNo || 0;
+      const receiptCounter = company.dailyReceiptCount || 0;
+
+      console.log(`[CloseDay] Starting closure for Fiscal Day ${fiscalDayNo}, Company ${companyId}`);
+      console.log(`[CloseDay] Receipt Counter: ${receiptCounter}`);
 
       // Calculate Counters from DB transactions for this day
-      const counters = await storage.calculateFiscalCounters(companyId, company.currentFiscalDayNo || 0);
+      const counters = await storage.calculateFiscalCounters(companyId, fiscalDayNo);
+      console.log(`[CloseDay] Calculated ${counters.length} fiscal counters`);
 
       const todayStr = new Date().toISOString().slice(0, 19);
-      const result = await device.closeDay(
-        company.currentFiscalDayNo || 0,
-        todayStr,
-        company.dailyReceiptCount || 0,
-        counters
-      ) as any;
 
-      // Update company state
+      // Retry mechanism for fiscal day closure
+      let lastError: any = null;
+      let result: any = null;
+
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          console.log(`[CloseDay] Attempt ${attempt}/${maxRetries} to close fiscal day ${fiscalDayNo}`);
+
+          result = await device.closeDay(
+            fiscalDayNo,
+            todayStr,
+            receiptCounter,
+            counters
+          );
+
+          // Success! Break out of retry loop
+          console.log(`[CloseDay] ✓ Successfully closed fiscal day ${fiscalDayNo} on attempt ${attempt}`);
+          lastError = null;
+          break;
+
+        } catch (err: any) {
+          lastError = err;
+          console.error(`[CloseDay] ✗ Attempt ${attempt}/${maxRetries} failed:`, {
+            error: err.message,
+            statusCode: err.statusCode,
+            endpoint: err.endpoint,
+            details: err.details
+          });
+
+          // If this is not the last attempt, wait before retrying
+          if (attempt < maxRetries) {
+            console.log(`[CloseDay] Waiting ${retryDelay}ms before retry...`);
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+          }
+        }
+      }
+
+      // If all retries failed, handle the error
+      if (lastError) {
+        console.error(`[CloseDay] ✗ All ${maxRetries} attempts failed for fiscal day ${fiscalDayNo}`);
+
+        // Update company state to reflect failed closure
+        await storage.updateCompany(companyId, {
+          lastFiscalDayStatus: 'FiscalDayCloseFailed'
+        });
+
+        // Provide detailed error response with recovery instructions
+        const errorResponse: any = {
+          message: "Failed to close fiscal day after multiple attempts",
+          fiscalDayNo,
+          attempts: maxRetries,
+          lastError: lastError.message,
+          recovery: {
+            options: [
+              "Review and correct the fiscal counters data",
+              "Verify all receipts for the day are properly recorded",
+              "Try closing the day again via this endpoint",
+              "If issue persists, manually close via ZIMRA Public Portal",
+              "Contact ZIMRA support if manual closure is also failing"
+            ],
+            manualClosureUrl: "https://portal.zimra.co.zw"
+          }
+        };
+
+        if (lastError instanceof ZimraApiError) {
+          errorResponse.statusCode = lastError.statusCode;
+          errorResponse.endpoint = lastError.endpoint;
+          errorResponse.details = lastError.details;
+
+          // Check if ZIMRA returned specific error code
+          if (lastError.details?.fiscalDayClosingErrorCode) {
+            errorResponse.zimraErrorCode = lastError.details.fiscalDayClosingErrorCode;
+          }
+        }
+
+        return res.status(errorResponse.statusCode || 500).json(errorResponse);
+      }
+
+      // Success! Update company state
+      console.log(`[CloseDay] Updating company state after successful closure`);
+
       await storage.updateCompany(companyId, {
         fiscalDayOpen: false,
-        lastFiscalDayStatus: 'FiscalDayClosed'
+        lastFiscalDayStatus: 'FiscalDayClosed',
+        dailyReceiptCount: 0 // Explicitly reset on success too
       });
 
-      res.json(result);
+      // Log successful closure
+      console.log(`[CloseDay] ✓ Fiscal Day ${fiscalDayNo} closed successfully`, {
+        companyId,
+        fiscalDayNo,
+        receiptCounter,
+        countersCount: counters.length,
+        timestamp: new Date().toISOString()
+      });
+
+      res.json({
+        success: true,
+        message: `Fiscal day ${fiscalDayNo} closed successfully`,
+        fiscalDayNo,
+        receiptCounter,
+        countersSubmitted: counters.length,
+        result
+      });
+
     } catch (err: any) {
-      console.error("Close Day Error:", err);
-      if (err instanceof ZimraApiError) {
-        return res.status(err.statusCode).json({ message: err.message, details: err.details });
+      console.error("[CloseDay] Unexpected error:", err);
+
+      // Try to update status even if there's an unexpected error
+      try {
+        await storage.updateCompany(companyId, {
+          lastFiscalDayStatus: 'FiscalDayCloseFailed'
+        });
+      } catch (updateErr) {
+        console.error("[CloseDay] Failed to update company status:", updateErr);
       }
-      res.status(500).json({ message: "Failed to close fiscal day: " + err.message });
+
+      if (err instanceof ZimraApiError) {
+        return res.status(err.statusCode).json({
+          message: err.message,
+          details: err.details,
+          endpoint: err.endpoint
+        });
+      }
+
+      res.status(500).json({
+        message: "Failed to close fiscal day: " + err.message,
+        error: err.toString()
+      });
     }
   });
 
@@ -835,9 +1491,16 @@ export async function registerRoutes(
     res.json(invoices);
   });
 
-  app.post(api.invoices.create.path, requireAuth, async (req, res) => {
+  app.post(api.invoices.create.path, requireStaff, async (req, res) => {
     try {
-      const input = api.invoices.create.input.parse(req.body);
+      // Preprocess dates: convert ISO strings to Date objects
+      const body = {
+        ...req.body,
+        issueDate: req.body.issueDate ? new Date(req.body.issueDate) : undefined,
+        dueDate: req.body.dueDate ? new Date(req.body.dueDate) : undefined,
+      };
+
+      const input = api.invoices.create.input.parse(body);
       const invoice = await storage.createInvoice({
         ...input,
         items: input.items as any,
@@ -858,8 +1521,31 @@ export async function registerRoutes(
     res.json(invoice);
   });
 
+  app.put(api.invoices.update.path, requireStaff, async (req, res) => {
+    try {
+      // Preprocess dates
+      const body = {
+        ...req.body,
+        issueDate: req.body.issueDate ? new Date(req.body.issueDate) : undefined,
+        dueDate: req.body.dueDate ? new Date(req.body.dueDate) : undefined,
+      };
+
+      const input = api.invoices.update.input.parse(body);
+      const invoice = await storage.updateInvoice(Number(req.params.id), {
+        ...input,
+        items: input.items as any
+      });
+      res.json(invoice);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
   // Fiscalize invoice using ZIMRA Fiscal Device Gateway
-  app.post(api.invoices.fiscalize.path, requireAuth, async (req, res) => {
+  app.post(api.invoices.fiscalize.path, requireStaff, async (req, res) => {
     try {
       const invoiceId = Number(req.params.id);
       // Retrieve full invoice with line items
@@ -873,15 +1559,18 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Company has not registered a ZIMRA device" });
       }
 
-      // Initialize Device
+      // Initialize Device with Logger
       const device = new ZimraDevice({
         deviceId: company.fdmsDeviceId,
-        deviceSerialNo: "UNKNOWN",
+        deviceSerialNo: company.fdmsDeviceSerialNo || "UNKNOWN",
         activationKey: company.fdmsApiKey || "",
         privateKey: company.zimraPrivateKey,
         certificate: company.zimraCertificate,
-        baseUrl: 'https://fdmsapitest.zimra.co.zw' // TODO: Make configurable
-      });
+        baseUrl: company.zimraEnvironment === 'production' ? 'https://fdmsapi.zimra.co.zw' : 'https://fdmsapitest.zimra.co.zw'
+      }, zimraLogger);
+
+      // Set invoice ID for logging
+      device.setInvoiceId(invoiceId);
 
       // 1. AUTO-OPEN DAY CHECK
       try {
@@ -913,50 +1602,72 @@ export async function registerRoutes(
         return res.status(500).json({ message: `Failed to auto-open fiscal day: ${e.message}` });
       }
 
-      // Map Invoice to ReceiptData
-      // Map Invoice to ReceiptData
-      const receiptLines = invoice.items.map((item, index) => ({
-        receiptLineType: 'Sale',
-        receiptLineNo: index + 1,
-        receiptLineHSCode: item.product?.hsCode || '04021099', // Default if missing
-        receiptLineName: item.description,
-        receiptLinePrice: parseFloat(item.unitPrice as any),
-        receiptLineQuantity: parseFloat(item.quantity as any),
-        receiptLineTotal: parseFloat(item.lineTotal as any),
-        taxPercent: parseFloat(item.taxRate as any),
-        taxID: 0 // Will be auto-calculated by device class
-      }));
+      // 1. Get ZIMRA Config for correct Tax IDs
+      let zimraConfig: ZimraConfigResponse | undefined;
+      try {
+        zimraConfig = await device.getConfig();
+      } catch (e) {
+        console.warn("Failed to fetch ZIMRA config, falling back to defaults for tax mapping");
+      }
 
-      let paymentType: 'CASH' | 'CARD' | 'OTHER' = 'OTHER';
+      // Map Invoice to ReceiptData
+      const receiptLines = invoice.items.map((item, index) => {
+        const taxPercent = parseFloat(item.taxRate as any);
+        let taxID = 0;
+
+        // Try to find matching tax ID from ZIMRA configuration
+        if (zimraConfig?.applicableTaxes) {
+          const matchingTax = zimraConfig.applicableTaxes.find(t =>
+            t.taxPercent !== undefined && Math.abs(t.taxPercent - taxPercent) < 0.01
+          );
+          if (matchingTax) taxID = matchingTax.taxID;
+        }
+
+        // Fallback or auto-detect in device class if still 0
+        return {
+          receiptLineType: 'Sale',
+          receiptLineNo: index + 1,
+          receiptLineHSCode: item.product?.hsCode || '04021099',
+          receiptLineName: item.description,
+          receiptLinePrice: parseFloat(Number(item.unitPrice).toFixed(2)),
+          receiptLineQuantity: parseFloat(Number(item.quantity).toFixed(2)),
+          receiptLineTotal: parseFloat(Number(item.lineTotal).toFixed(2)),
+          taxPercent: taxPercent,
+          taxID: taxID
+        };
+      });
+
+      let moneyTypeCode: 'CASH' | 'CARD' | 'OTHER' | 'EFT' | 'MOBILE' = 'CASH';
       const method = invoice.paymentMethod?.toUpperCase() || 'CASH';
-      if (['CASH'].includes(method)) paymentType = 'CASH';
-      else if (['CARD', 'SWIPE', 'ECOCASH'].includes(method)) paymentType = 'CARD';
-      else paymentType = 'OTHER';
+      if (['CASH'].includes(method)) moneyTypeCode = 'CASH';
+      else if (['CARD', 'SWIPE', 'POS'].includes(method)) moneyTypeCode = 'CARD';
+      else if (['MOBILE', 'ECOCASH', 'ONE_MONEY', 'TELE_CASH'].includes(method)) moneyTypeCode = 'MOBILE';
+      else if (['EFT', 'RTGS', 'TRANSFER', 'ZIPIT'].includes(method)) moneyTypeCode = 'EFT';
+      else moneyTypeCode = 'OTHER';
 
+      const totalAmount = parseFloat(Number(invoice.total).toFixed(2));
       const payments = [{
-        paymentType,
-        paymentAmount: parseFloat(invoice.total as any)
+        moneyTypeCode,
+        paymentAmount: totalAmount
       }];
 
       let buyerData = undefined;
       let creditDebitNote = undefined;
       const transactionType = invoice.transactionType || "FiscalInvoice";
-      let receiptType: any = "FISCALINVOICE";
+      let receiptType: any = "FiscalInvoice";
 
-      if (transactionType === "CreditNote") receiptType = "CREDITNOTE";
-      if (transactionType === "DebitNote") receiptType = "DEBITNOTE";
+      if (transactionType === "CreditNote") receiptType = "CreditNote";
+      if (transactionType === "DebitNote") receiptType = "DebitNote";
 
       // If CN/DN, we need original invoice details
-      if (receiptType !== "FISCALINVOICE" && invoice.relatedInvoiceId) {
+      if (receiptType !== "FiscalInvoice" && invoice.relatedInvoiceId) {
         const original = await storage.getInvoice(invoice.relatedInvoiceId);
         if (original && original.fiscalCode) {
-          // We need details like receiptID (global No?), deviceID
-          // Assuming receiptGlobalNo is invoice.id or tracking field
+          // Spec 4.7: creditDebitNote: deviceID, receiptGlobalNo, fiscalDayNo
           creditDebitNote = {
-            receiptID: original.id, // Or original receipt global no
             deviceID: parseInt(company.fdmsDeviceId),
-            receiptGlobalNo: original.id,
-            fiscalDayNo: company.currentFiscalDayNo || 1
+            receiptGlobalNo: original.receiptGlobalNo || original.id,
+            fiscalDayNo: original.fiscalDayNo || 1
           };
         }
       }
@@ -980,8 +1691,8 @@ export async function registerRoutes(
         }
       } : undefined;
 
-      const nextGlobalNo = (company.lastReceiptGlobalNo || 0) + 1;
-      const nextReceiptCounter = (company.dailyReceiptCount || 0) + 1; // Assuming reset happens on OpenDay
+      const nextGlobalNo = invoice.receiptGlobalNo || ((company.lastReceiptGlobalNo || 0) + 1);
+      const nextReceiptCounter = invoice.receiptCounter || ((company.dailyReceiptCount || 0) + 1);
 
       const receiptData: ReceiptData = {
         receiptType: receiptType,
@@ -989,18 +1700,23 @@ export async function registerRoutes(
         receiptCounter: nextReceiptCounter,
         receiptGlobalNo: nextGlobalNo,
         invoiceNo: invoice.invoiceNumber,
-        receiptDate: new Date(invoice.issueDate || new Date()).toISOString().split('.')[0],
+        receiptDate: new Date().toISOString().split('.')[0],
         receiptLines: receiptLines as any,
         receiptTaxes: [],
         receiptPayments: payments as any,
-        receiptTotal: parseFloat(invoice.total as any),
+        receiptTotal: totalAmount,
         receiptLinesTaxInclusive: invoice.taxInclusive || false,
         buyerData: buyerData,
-        creditDebitNote: creditDebitNote
+        creditDebitNote: creditDebitNote,
+        receiptNotes: invoice.notes || (receiptType !== 'FiscalInvoice' ? 'Credit Note reversal' : undefined)
       };
 
-      // Submit with previous hash for chaining
-      const result = await device.submitReceipt(receiptData, company.lastFiscalHash || null);
+      console.log(`[Fiscalize] Prepared Receipt Data for Invoice ${invoiceId}:`, JSON.stringify(receiptData, null, 2));
+
+      // Submit with previous hash for chaining (allow offline fallback)
+      const result = await device.submitReceipt(receiptData, company.lastFiscalHash || null, true);
+
+      console.log(`[Fiscalize] Result for Invoice ${invoiceId}:`, JSON.stringify(result, null, 2));
 
       // Generate QR Code
       const qrCode = device.generateQrCode(result.signature, receiptData.receiptGlobalNo, receiptData.receiptDate);
@@ -1009,15 +1725,22 @@ export async function registerRoutes(
         fiscalCode: result.hash,
         fiscalSignature: result.signature,
         qrCodeData: qrCode,
-        fiscalDayNo: company.currentFiscalDayNo ?? undefined
+        fiscalDayNo: company.currentFiscalDayNo ?? undefined,
+        receiptCounter: nextReceiptCounter,
+        receiptGlobalNo: nextGlobalNo,
+        syncedWithFdms: result.synced,
+        fdmsStatus: result.synced ? 'issued' : 'pending'
       });
 
-      // Update Company Counters and Hash
-      await storage.updateCompany(company.id, {
-        lastReceiptGlobalNo: nextGlobalNo,
-        dailyReceiptCount: nextReceiptCounter,
-        lastFiscalHash: result.hash
-      });
+      // Update Company Counters and Hash ONLY for new fiscalizations (even if offline)
+      // If re-syncing, we don't touch company totals to avoid mess-ups
+      if (!invoice.receiptGlobalNo) {
+        await storage.updateCompany(company.id, {
+          lastReceiptGlobalNo: nextGlobalNo,
+          dailyReceiptCount: nextReceiptCounter,
+          lastFiscalHash: result.hash
+        });
+      }
 
       res.json(updatedInvoice);
     } catch (err: any) {
@@ -1086,40 +1809,13 @@ export async function registerRoutes(
       }
 
       // Generate new Invoice Number
-      // In a real app this should be sequential checking DB
-      const invoiceNumber = `INV-${Date.now().toString().slice(-6)}`;
+      const invoiceNumber = await storage.getNextInvoiceNumber(invoice.companyId, 'INV');
 
       // Update the invoice
-      // note: we update the status to 'draft' so it enters the normal flow
-      // we also reset fiscal fields just in case
-      const updated = await storage.fiscalizeInvoice(id, {
-        fiscalCode: "",
-        qrCodeData: "",
-        fiscalSignature: "",
-        fiscalDayNo: undefined
-      }); // Using fiscalize is wrong here as it sets status to 'issued' and syncedWithFdms=true usually?
-
-      // Let's use a cleaner update method directly on storage if 'fiscalizeInvoice' has specific side effects.
-      // Checking storage.ts 'fiscalizeInvoice' sets syncedWithFdms: true, status: "issued". We don't want that yet.
-      // We want status: "draft".
-
-      // Since we don't have a specific `updateInvoice` that isn't `fiscalize`, we might need to rely on direct schema update or add `updateInvoice` to storage if not present.
-      // Ah, we don't have a generic `storage.updateInvoice` exposed in `IStorage` interface in the previous snippets, 
-      // but `routes.ts` doesn't show one being used? 
-      // Wait, `createInvoice` exists. `deleteInvoice` exists. `fiscalizeInvoice` exists.
-      // `updateInvoice` does NOT seem to exist in the `IStorage` interface shown in previous `view_file` calls of `storage.ts`.
-      // Let's check if we can add it or if I missed it.
-      // Actually, I can just use `db.update` pattern if I was inside storage, but here I am in routes.
-      // I should add `updateInvoice` to `storage.ts` first.
-
-      // FOR NOW, let's assume I will add `updateInvoice` to storage in the next step.
-      // I will write the route assuming `storage.updateInvoice(id, data)` exists.
-
       const converted = await storage.updateInvoice(id, {
         status: "draft",
         invoiceNumber: invoiceNumber,
         issueDate: new Date(),
-        // We might want to keep the original due date or reset it? Let's keep it.
         fiscalCode: null,
         fiscalSignature: null,
         qrCodeData: null,
@@ -1130,6 +1826,154 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error(err);
       res.status(500).json({ message: "Failed to convert quotation" });
+    }
+  });
+
+  // Create Credit Note
+  app.post("/api/invoices/:id/credit-note", requireAuth, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const originalInvoice = await storage.getInvoice(id);
+
+      if (!originalInvoice) return res.status(404).json({ message: "Invoice not found" });
+      if (originalInvoice.status !== "issued" && originalInvoice.status !== "paid") {
+        // Should we allow CN on non-fiscalized? Probably not necessary, just edit/delete.
+        // But for consistency let's require it to be issued/fiscalized to warrant a credit note.
+        return res.status(400).json({ message: "Credit notes can only be created for issued invoices." });
+      }
+
+      // Create new invoice as Credit Note
+      // Invoice number will be auto-generated by storage.createInvoice using getNextInvoiceNumber
+      const cnNumber = "AUTO";
+
+      const cn = await storage.createInvoice({
+        companyId: originalInvoice.companyId,
+        customerId: originalInvoice.customerId,
+        invoiceNumber: cnNumber,
+        issueDate: new Date(),
+        dueDate: new Date(), // Due immediately?
+        subtotal: originalInvoice.subtotal, // Default to full reversal
+        taxAmount: originalInvoice.taxAmount,
+        total: originalInvoice.total,
+        status: "draft",
+        taxInclusive: originalInvoice.taxInclusive,
+        transactionType: "CreditNote",
+        relatedInvoiceId: originalInvoice.id,
+        items: originalInvoice.items.map(item => ({
+          productId: item.productId,
+          description: item.description,
+          quantity: item.quantity, // Positive quantity, logic handles it as credit
+          unitPrice: item.unitPrice,
+          taxRate: item.taxRate,
+          lineTotal: item.lineTotal
+        }))
+      });
+
+      res.status(201).json(cn);
+    } catch (err: any) {
+      console.error("Create Credit Note Error:", err);
+      res.status(500).json({ message: "Failed to create credit note" });
+    }
+  });
+
+  // Create Debit Note
+  app.post("/api/invoices/:id/debit-note", requireAuth, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const originalInvoice = await storage.getInvoice(id);
+
+      if (!originalInvoice) return res.status(404).json({ message: "Invoice not found" });
+      if (originalInvoice.status !== "issued" && originalInvoice.status !== "paid") {
+        return res.status(400).json({ message: "Debit notes can only be created for issued invoices." });
+      }
+
+      // Create new invoice as Debit Note
+      const dnNumber = "AUTO";
+
+      const dn = await storage.createInvoice({
+        companyId: originalInvoice.companyId,
+        customerId: originalInvoice.customerId,
+        invoiceNumber: dnNumber,
+        issueDate: new Date(),
+        dueDate: new Date(),
+        subtotal: originalInvoice.subtotal,
+        taxAmount: originalInvoice.taxAmount,
+        total: originalInvoice.total,
+        status: "draft",
+        taxInclusive: originalInvoice.taxInclusive,
+        transactionType: "DebitNote",
+        relatedInvoiceId: originalInvoice.id,
+        items: originalInvoice.items.map(item => ({
+          productId: item.productId,
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          taxRate: item.taxRate,
+          lineTotal: item.lineTotal
+        }))
+      });
+
+      res.status(201).json(dn);
+    } catch (err: any) {
+      console.error("Create Debit Note Error:", err);
+      res.status(500).json({ message: "Failed to create debit note" });
+    }
+  });
+
+
+  // Email Invoice
+  app.post("/api/invoices/:id/email", requireAuth, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const invoice = await storage.getInvoice(id);
+      if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+
+      const { email, pdfBase64 } = req.body;
+      if (!email || !pdfBase64) return res.status(400).json({ message: "Email and PDF content are required" });
+
+      // Convert Base64 (data:application/pdf;base64,...) to Buffer
+      const matches = pdfBase64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+      if (!matches || matches.length !== 3) {
+        return res.status(400).json({ message: "Invalid PDF base64 string" });
+      }
+      const pdfBuffer = Buffer.from(matches[2], 'base64');
+
+      // Get Company Settings for API Key
+      const company = await storage.getCompany(invoice.companyId);
+      const emailSettings = company?.emailSettings as any; // Cast jsonb to any or specific interface
+
+      await sendInvoiceEmail(email, invoice.invoiceNumber, pdfBuffer, emailSettings);
+
+      res.json({ message: "Email sent successfully" });
+    } catch (err: any) {
+      console.error("Email Invoice Error:", err);
+      res.status(500).json({ message: "Failed to send email: " + err.message });
+    }
+  });
+
+  // Invoice Locking
+  app.post("/api/invoices/:id/lock", requireAuth, async (req, res) => {
+    try {
+      if (!req.user) return res.sendStatus(401);
+
+      const success = await storage.lockInvoice(Number(req.params.id), req.user.id);
+      if (!success) {
+        return res.status(409).json({ message: "Invoice is currently being edited by another user." });
+      }
+      res.sendStatus(200);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to lock invoice" });
+    }
+  });
+
+  app.post("/api/invoices/:id/unlock", requireAuth, async (req, res) => {
+    try {
+      if (!req.user) return res.sendStatus(401);
+
+      await storage.unlockInvoice(Number(req.params.id), req.user.id);
+      res.sendStatus(200);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to unlock invoice" });
     }
   });
 
@@ -1145,6 +1989,17 @@ export async function registerRoutes(
       }
 
       await storage.deleteInvoice(Number(req.params.id));
+
+      // LOG ACTION
+      await logAction(
+        invoice.companyId,
+        (req as any).user.id,
+        "INVOICE_DELETE",
+        "invoice",
+        String(invoice.id),
+        { invoiceNumber: invoice.invoiceNumber }
+      );
+
       res.status(204).end();
     } catch (err) {
       console.error(err);
@@ -1153,12 +2008,139 @@ export async function registerRoutes(
   });
 
 
+  // Payments
+  app.get("/api/invoices/:invoiceId/payments", requireAuth, async (req, res) => {
+    try {
+      const payments = await storage.getPayments(Number(req.params.invoiceId));
+      res.json(payments);
+    } catch (err: any) {
+      console.error(err);
+      res.status(500).json({ message: "Failed to fetch payments" });
+    }
+  });
+
+  app.post("/api/invoices/:invoiceId/payments", requireAuth, async (req, res) => {
+    try {
+      const invoiceId = Number(req.params.invoiceId);
+      const invoice = await storage.getInvoice(invoiceId);
+      if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+
+      // Validate input
+      const input = api.payments.create.input.parse(req.body);
+
+      // Create Payment
+      const paymentData = {
+        ...input,
+        invoiceId,
+        companyId: invoice.companyId,
+        createdBy: (req as any).user.id,
+        // Ensure exchangeRate is string/decimal as per schema
+        exchangeRate: input.exchangeRate ? String(input.exchangeRate) : "1.000000",
+        // Ensure amount is string/decimal
+        amount: String(input.amount)
+      };
+
+      const payment = await storage.createPayment(paymentData as any);
+
+      // Check if invoice is fully paid
+      const allPayments = await storage.getPayments(invoiceId);
+      const totalPaid = allPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+
+      // If fully paid, update status
+      // We only update if it's currently 'issued' or 'partially_paid' (if exists)
+      // Note: We don't revert 'paid' status here if overpaid, but we definitely set it if reached.
+      if (totalPaid >= Number(invoice.total) && invoice.status !== 'paid') {
+        await storage.updateInvoice(invoiceId, { status: "paid" });
+      }
+
+      res.status(201).json(payment);
+    } catch (err: any) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      console.error("Create Payment Error:", err);
+      res.status(500).json({ message: "Failed to create payment" });
+    }
+  });
+
+  app.delete("/api/payments/:id", requireAuth, async (req, res) => {
+    try {
+      await storage.deletePayment(Number(req.params.id));
+      res.status(204).end();
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ message: "Failed to delete payment" });
+    }
+  });
+
+
+
   // Create Uploads Dir
   const uploadsDir = path.join(process.cwd(), "uploads");
   if (!fs.existsSync(uploadsDir)) {
     console.log("Creating uploads directory at:", uploadsDir);
     fs.mkdirSync(uploadsDir, { recursive: true });
   }
+
+  // Customer Statement Route
+  app.get("/api/customers/:id/statement", requireAuth, async (req, res) => {
+    try {
+      const customerId = Number(req.params.id);
+      const { startDate, endDate, currency } = req.query;
+
+      if (!startDate || !endDate) {
+        return res.status(400).json({ message: "startDate and endDate are required" });
+      }
+
+      const start = new Date(startDate as string);
+      const end = new Date(endDate as string);
+
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        return res.status(400).json({ message: "Invalid date format" });
+      }
+
+      const data = await storage.getStatementData(customerId, start, end, currency as string);
+      res.json(data);
+    } catch (err: any) {
+      console.error("Statement Error:", err);
+      res.status(500).json({ message: err.message || "Failed to generate statement" });
+    }
+  });
+
+  // Sales Report
+  app.get("/api/companies/:id/reports/sales", requireAuth, async (req, res) => {
+    try {
+      const companyId = Number(req.params.id);
+      const { startDate, endDate } = req.query;
+      if (!startDate || !endDate) return res.status(400).json({ message: "Dates required" });
+
+      const start = new Date(startDate as string);
+      const end = new Date(endDate as string);
+
+      const data = await storage.getSalesReport(companyId, start, end);
+      res.json(data);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Payments Report
+  app.get("/api/companies/:id/reports/payments", requireAuth, async (req, res) => {
+    try {
+      const companyId = Number(req.params.id);
+      const { startDate, endDate } = req.query;
+      if (!startDate || !endDate) return res.status(400).json({ message: "Dates required" });
+
+      const start = new Date(startDate as string);
+      const end = new Date(endDate as string);
+
+      const data = await storage.getPaymentsReport(companyId, start, end);
+      res.json(data);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
 
   // Multer config for generic uploads (Supabase)
   const mainUpload = multer({ storage: multer.memoryStorage() });
@@ -1186,10 +2168,10 @@ export async function registerRoutes(
         const file = req.file;
         const fileExt = path.extname(file.originalname);
         const fileName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${fileExt}`;
-        const filePath = `general/${fileName}`;
+        const filePath = `logos/${fileName}`;
 
         const { data, error } = await supabaseAdmin.storage
-          .from('uploads')
+          .from('logos')
           .upload(filePath, file.buffer, {
             contentType: file.mimetype,
             upsert: true
@@ -1198,7 +2180,7 @@ export async function registerRoutes(
         if (error) throw error;
 
         const { data: { publicUrl } } = supabaseAdmin.storage
-          .from('uploads')
+          .from('logos')
           .getPublicUrl(filePath);
 
         console.log("File uploaded successfully to Supabase:", publicUrl);

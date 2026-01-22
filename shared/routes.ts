@@ -17,7 +17,9 @@ import {
   insertTaxCategorySchema,
   insertTaxTypeSchema,
   currencies,
-  insertCurrencySchema
+  insertCurrencySchema,
+  payments,
+  insertPaymentSchema
 } from './schema';
 
 export const errorSchemas = {
@@ -178,6 +180,18 @@ export const api = {
         404: errorSchemas.notFound,
       }
     },
+    update: {
+      method: 'PUT' as const,
+      path: '/api/invoices/:id',
+      input: insertInvoiceSchema.partial().extend({
+        items: z.array(insertInvoiceItemSchema.omit({ invoiceId: true })).optional(),
+        exchangeRate: z.string().optional(),
+      }),
+      responses: {
+        200: z.custom<typeof invoices.$inferSelect>(),
+        404: errorSchemas.notFound,
+      }
+    },
     fiscalize: {
       method: 'POST' as const,
       path: '/api/invoices/:id/fiscalize',
@@ -263,6 +277,31 @@ export const api = {
     delete: {
       method: 'DELETE' as const,
       path: '/api/currencies/:id',
+      responses: {
+        204: z.void(),
+        404: errorSchemas.notFound,
+      }
+    }
+  },
+  payments: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/invoices/:invoiceId/payments',
+      responses: {
+        200: z.array(z.custom<typeof payments.$inferSelect>()),
+      }
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/invoices/:invoiceId/payments',
+      input: insertPaymentSchema.omit({ invoiceId: true, companyId: true, createdBy: true }),
+      responses: {
+        201: z.custom<typeof payments.$inferSelect>(),
+      }
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/payments/:id',
       responses: {
         204: z.void(),
         404: errorSchemas.notFound,

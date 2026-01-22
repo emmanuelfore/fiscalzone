@@ -1,0 +1,30 @@
+{
+  "version": "0.2.2",
+  "defaults": {},
+  "configurations": [
+    {
+      "name": "Run npm dev (launch & attach)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "npm",
+      "args": [ "run", "dev" ],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "NODE_OPTIONS": "--inspect=9229"
+      },
+      "console": "integratedTerminal",
+      "stopOnEntry": false,
+      "autoAttachChildProcesses": true
+    },
+    {
+      "name": "Attach to Node (9229)",
+      "type": "node",
+      "request": "attach",
+      "address": "localhost",
+      "port": 9229,
+      "restart": true,
+      "localRoot": "${workspaceFolder}",
+      "remoteRoot": null
+    }
+  ]
+}

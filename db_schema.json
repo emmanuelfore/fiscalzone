@@ -1,0 +1,466 @@
+{
+  "companies": [
+    {
+      "column_name": "id",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "name",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "trading_name",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "address",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "city",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "country",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "phone",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "email",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "website",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "logo_url",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "tin",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "vat_number",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "bp_number",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "fdms_device_id",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "fdms_api_key",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "fiscal_day_open",
+      "data_type": "boolean",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "created_at",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "vat_enabled",
+      "data_type": "boolean",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "default_payment_terms",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "bank_details",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "currency",
+      "data_type": "text",
+      "is_nullable": "YES"
+    }
+  ],
+  "company_users": [
+    {
+      "column_name": "id",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "user_id",
+      "data_type": "uuid",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "company_id",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "role",
+      "data_type": "text",
+      "is_nullable": "YES"
+    }
+  ],
+  "invoice_items": [
+    {
+      "column_name": "id",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "invoice_id",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "product_id",
+      "data_type": "integer",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "description",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "quantity",
+      "data_type": "numeric",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "unit_price",
+      "data_type": "numeric",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "tax_rate",
+      "data_type": "numeric",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "line_total",
+      "data_type": "numeric",
+      "is_nullable": "NO"
+    }
+  ],
+  "invoices": [
+    {
+      "column_name": "id",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "company_id",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "customer_id",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "invoice_number",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "issue_date",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "due_date",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "subtotal",
+      "data_type": "numeric",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "tax_amount",
+      "data_type": "numeric",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "total",
+      "data_type": "numeric",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "fiscal_code",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "fiscal_signature",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "qr_code_data",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "synced_with_fdms",
+      "data_type": "boolean",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "currency",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "notes",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "created_at",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "fdms_status",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "submission_id",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "tax_inclusive",
+      "data_type": "boolean",
+      "is_nullable": "YES"
+    }
+  ],
+  "products": [
+    {
+      "column_name": "id",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "company_id",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "name",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "description",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "sku",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "hs_code",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "price",
+      "data_type": "numeric",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "tax_rate",
+      "data_type": "numeric",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "is_active",
+      "data_type": "boolean",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "created_at",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "barcode",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "category",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "cost_price",
+      "data_type": "numeric",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "is_tracked",
+      "data_type": "boolean",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "stock_level",
+      "data_type": "numeric",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "low_stock_threshold",
+      "data_type": "numeric",
+      "is_nullable": "YES"
+    }
+  ],
+  "users": [
+    {
+      "column_name": "id",
+      "data_type": "uuid",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "email",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "password",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "name",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "created_at",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "YES"
+    }
+  ],
+  "customers": [
+    {
+      "column_name": "id",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "company_id",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "name",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "email",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "phone",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "address",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "city",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "country",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "tin",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "vat_number",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "customer_type",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "created_at",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "mobile",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "billing_address",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "bp_number",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "notes",
+      "data_type": "text",
+      "is_nullable": "YES"
+    }
+  ]
+}

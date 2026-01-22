@@ -13,6 +13,7 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
 import {
     Form,
     FormControl,
@@ -44,6 +45,7 @@ export function EditProductDialog({ product, trigger }: Props) {
     const [open, setOpen] = useState(false);
     const updateProduct = useUpdateProduct();
     const { taxCategories, taxTypes } = useTaxConfig();
+    const { toast } = useToast();
 
     const isService = product.productType === "service";
 
@@ -75,9 +77,18 @@ export function EditProductDialog({ product, trigger }: Props) {
     const onSubmit = async (data: InsertProduct) => {
         try {
             await updateProduct.mutateAsync({ id: product.id, data });
+            toast({
+                title: "Success",
+                description: `${isService ? "Service" : "Product"} updated successfully.`,
+            });
             setOpen(false);
-        } catch (error) {
+        } catch (error: any) {
             console.error("Failed to update product:", error);
+            toast({
+                title: "Update Failed",
+                description: error.message || "An unexpected error occurred.",
+                variant: "destructive",
+            });
         }
     };
 

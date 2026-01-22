@@ -12,14 +12,21 @@ import InvoicesPage from "@/pages/invoices";
 import CreateInvoicePage from "@/pages/create-invoice";
 import InvoiceDetailsPage from "@/pages/invoice-details";
 import CustomersPage from "@/pages/customers";
+import CustomerDetailsPage from "@/pages/customer-details";
 import ProductsPage from "@/pages/products";
 import ServicesPage from "@/pages/services";
 import TaxConfigPage from "@/pages/tax-config";
 import SettingsPage from "@/pages/settings";
 import ZimraSettingsPage from "@/pages/zimra-settings";
+import FdmsTestPage from "@/pages/fdms-test";
 import CurrencySettingsPage from "@/pages/currency-settings";
 import TeamSettingsPage from "@/pages/team-settings";
 import ReportsPage from "@/pages/reports";
+import UserProfilePage from "@/pages/user-profile";
+import AuditLogsPage from "@/pages/audit-logs";
+import QuotationsPage from "@/pages/quotations";
+import CreateQuotationPage from "@/pages/create-quotation";
+import RecurringInvoicesPage from "@/pages/recurring-invoices";
 import { useAuth } from "@/hooks/use-auth";
 import { useCompanies } from "@/hooks/use-companies";
 import { Loader2 } from "lucide-react";
@@ -87,6 +94,9 @@ function Router() {
       <Route path="/customers">
         {() => <ProtectedRoute component={CustomersPage} />}
       </Route>
+      <Route path="/customers/:id">
+        {() => <ProtectedRoute component={CustomerDetailsPage} />}
+      </Route>
       <Route path="/products">
         {() => <ProtectedRoute component={ProductsPage} />}
       </Route>
@@ -108,8 +118,23 @@ function Router() {
       <Route path="/reports">
         {() => <ProtectedRoute component={ReportsPage} />}
       </Route>
+      <Route path="/profile">
+        {() => <ProtectedRoute component={UserProfilePage} />}
+      </Route>
       <Route path="/zimra-settings">
         {() => <ProtectedRoute component={ZimraSettingsPage} />}
+      </Route>
+      <Route path="/fdms-test">
+        {() => <ProtectedRoute component={FdmsTestPage} />}
+      </Route>
+      <Route path="/quotations">
+        {() => <ProtectedRoute component={QuotationsPage} />}
+      </Route>
+      <Route path="/quotations/new">
+        {() => <ProtectedRoute component={CreateQuotationPage} />}
+      </Route>
+      <Route path="/recurring">
+        {() => <ProtectedRoute component={RecurringInvoicesPage} />}
       </Route>
 
       <Route component={NotFound} />

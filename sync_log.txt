@@ -1,0 +1,38 @@
+🔍 Starting comprehensive schema synchronization...
+
+
+Checking table: companies
+⏭️  invoice_template already exists
+⏭️  branch_name already exists
+⏭️  vat_registered already exists
+⏭️  email_settings already exists
+⏭️  bank_name already exists
+⏭️  account_number already exists
+⏭️  account_name already exists
+⏭️  branch_code already exists
+
+Checking table: invoices
+⏭️  tax_inclusive already exists
+⏭️  locked_by already exists
+⏭️  locked_at already exists
+⏭️  exchange_rate already exists
+⏭️  transaction_type already exists
+⏭️  related_invoice_id already exists
+⏭️  notes already exists
+⏭️  invoice_template already exists
+
+Checking table: customers
+⏭️  is_active already exists
+⏭️  currency already exists
+
+Checking table: products
+⏭️  product_type already exists
+⏭️  tax_category_id already exists
+
+Checking table: quotations
+⚠️ Table quotations does not exist in DB.
+
+Checking table: recurring_invoices
+⚠️ Table recurring_invoices does not exist in DB.
+
+✨ Schema sync completed. Total columns added: 0

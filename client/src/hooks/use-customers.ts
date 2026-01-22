@@ -56,3 +56,23 @@ export function useUpdateCustomer() {
     },
   });
 }
+
+export function useCustomerStatement(customerId: number, startDate: Date, endDate: Date, currency?: string) {
+  return useQuery({
+    queryKey: [`/api/customers/${customerId}/statement`, startDate.toISOString(), endDate.toISOString(), currency],
+    queryFn: async () => {
+      const startStr = startDate.toISOString();
+      const endStr = endDate.toISOString();
+      let url = `/api/customers/${customerId}/statement?startDate=${startStr}&endDate=${endStr}`;
+      if (currency) url += `&currency=${currency}`;
+
+      const res = await apiFetch(url);
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Failed to fetch statement");
+      }
+      return await res.json();
+    },
+    enabled: !!customerId,
+  });
+}

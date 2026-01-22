@@ -4,8 +4,14 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { setupSwagger } from "./swagger";
+import { startRecurringInvoiceWorker } from "./jobs";
+
+import cors from "cors";
+
+// ... imports
 
 const app = express();
+app.use(cors()); // Allow all origins for dev simplicity // Allow all origins for dev simplicity
 const httpServer = createServer(app);
 
 declare module "http" {
@@ -16,6 +22,7 @@ declare module "http" {
 
 app.use(
   express.json({
+    limit: "10mb",
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
@@ -93,6 +100,9 @@ async function initializeApp() {
       log(`serving on port ${port}`);
     });
   }
+
+  // Start recurring invoice worker
+  // startRecurringInvoiceWorker();
 }
 
 // Start initialization

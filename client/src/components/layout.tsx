@@ -17,7 +17,9 @@ import {
   Coins,
   Server,
   UserCog,
-  BarChart3
+  BarChart3,
+  Activity,
+  RefreshCw
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -25,13 +27,31 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useState, useEffect } from "react";
 import { CreateCompanyDialog } from "./create-company-dialog";
+import { cn } from "@/lib/utils";
+import { DeviceStatusWidget } from "./device-status-widget";
+
+type NavItem = {
+  icon: any;
+  label: string;
+  href?: string;
+  children?: {
+    icon: any;
+    label: string;
+    href: string;
+  }[];
+};
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const { user, logout } = useAuth();
   const { data: companies } = useCompanies();
   const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
@@ -43,7 +63,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
       if (stored && companies.find(c => c.id === parseInt(stored))) {
         setSelectedCompanyId(parseInt(stored));
       } else {
-        setSelectedCompanyId(companies[0].id);
+        const firstCompanyId = companies[0].id;
+        setSelectedCompanyId(firstCompanyId);
+        localStorage.setItem("selectedCompanyId", firstCompanyId.toString());
+        // Reload to ensure all components get the correct company ID
+        window.location.reload();
       }
     }
   }, [companies, selectedCompanyId]);
@@ -57,19 +81,52 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const selectedCompany = companies?.find(c => c.id === selectedCompanyId);
 
-  const navItems = [
+  const navItems: NavItem[] = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
-    // { icon: ClipboardList, label: "Quotations", href: "/quotations" },
-    { icon: FileText, label: "Invoices", href: "/invoices" },
-    { icon: Users, label: "Customers", href: "/customers" },
-    { icon: Package, label: "Products", href: "/products" },
-    { icon: Briefcase, label: "Services", href: "/services" },
-    { icon: BarChart3, label: "Reports", href: "/reports" },
-    { icon: Coins, label: "Currencies", href: "/currencies" },
-    { icon: Calculator, label: "Tax Config", href: "/tax-config" },
-    { icon: Server, label: "ZIMRA Device", href: "/zimra-settings" },
-    { icon: UserCog, label: "Team", href: "/team-settings" },
-    { icon: Settings, label: "Settings", href: "/settings" },
+    {
+      icon: Briefcase,
+      label: "Sales & Billing",
+      children: [
+        { icon: FileText, label: "Invoices", href: "/invoices" },
+        { icon: ClipboardList, label: "Quotations", href: "/quotations" },
+        { icon: RefreshCw, label: "Recurring Invoices", href: "/recurring" },
+        { icon: Users, label: "Customers", href: "/customers" },
+        { icon: FileText, label: "Customer Statements", href: "/reports?tab=statements" },
+      ]
+    },
+    {
+      icon: Package,
+      label: "Inventory",
+      children: [
+        { icon: Package, label: "Products", href: "/products" },
+        { icon: Briefcase, label: "Services", href: "/services" },
+      ]
+    },
+    {
+      icon: Building2,
+      label: "Finance",
+      children: [
+        { icon: BarChart3, label: "Reports", href: "/reports" },
+        { icon: Coins, label: "Currencies", href: "/currencies" },
+        { icon: Calculator, label: "Tax Config", href: "/tax-config" },
+      ]
+    },
+    {
+      icon: Server,
+      label: "Compliance",
+      children: [
+        { icon: Server, label: "ZIMRA Device", href: "/zimra-settings" },
+        { icon: Activity, label: "FDMS Test", href: "/fdms-test" },
+      ]
+    },
+    {
+      icon: Settings,
+      label: "Administration",
+      children: [
+        { icon: UserCog, label: "Team", href: "/team-settings" },
+        { icon: Settings, label: "Settings", href: "/settings" },
+      ]
+    }
   ];
 
   if (!user) return null;
@@ -110,19 +167,76 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
         <nav className="flex-1 p-4 space-y-1">
           {navItems.map((item) => {
-            const isActive = location + window.location.search === item.href || (location === item.href && !item.href.includes("?"));
+            if (item.children) {
+              const isActiveGroup = item.children.some(child =>
+                location + window.location.search === child.href || (location === child.href && !child.href.includes("?"))
+              );
+
+              const [isOpen, setIsOpen] = useState(isActiveGroup);
+
+              // Keep open if a child is active
+              useEffect(() => {
+                if (isActiveGroup) setIsOpen(true);
+              }, [isActiveGroup]);
+
+              return (
+                <Collapsible
+                  key={item.label}
+                  open={isOpen}
+                  onOpenChange={setIsOpen}
+                  className="space-y-1"
+                >
+                  <CollapsibleTrigger asChild>
+                    <div
+                      className={cn(
+                        "flex items-center justify-between w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+                        isActiveGroup && "text-slate-900 font-semibold"
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <item.icon className={cn("w-5 h-5", isActiveGroup ? "text-primary" : "text-slate-400")} />
+                        {item.label}
+                      </div>
+                      <ChevronDown
+                        className={cn("w-4 h-4 text-slate-400 transition-transform duration-200", isOpen && "transform rotate-180")}
+                      />
+                    </div>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="space-y-1">
+                    {item.children.map((child) => {
+                      const isChildActive = location + window.location.search === child.href || (location === child.href && !child.href.includes("?"));
+                      return (
+                        <Link key={child.label} href={child.href}>
+                          <div
+                            className={cn(
+                              "flex items-center gap-3 pl-11 pr-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer",
+                              isChildActive
+                                ? "bg-primary/10 text-primary shadow-sm"
+                                : "text-slate-500 hover:text-slate-900 hover:bg-slate-50"
+                            )}
+                          >
+                            <span className="truncate">{child.label}</span>
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </CollapsibleContent>
+                </Collapsible>
+              );
+            }
+
+            const isActive = location + window.location.search === item.href || (location === item.href && !item.href?.includes("?"));
             return (
-              <Link key={item.label} href={item.href}>
+              <Link key={item.label} href={item.href!}>
                 <div
-                  className={`
-                    flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer
-                    ${isActive
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer",
+                    isActive
                       ? "bg-primary/10 text-primary shadow-sm"
                       : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                    }
-                  `}
+                  )}
                 >
-                  <item.icon className={`w-5 h-5 ${isActive ? "text-primary" : "text-slate-400"}`} />
+                  <item.icon className={cn("w-5 h-5", isActive ? "text-primary" : "text-slate-400")} />
                   {item.label}
                 </div>
               </Link>
@@ -131,38 +245,64 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="p-4 border-t border-slate-100">
-          <div className="flex items-center gap-3 px-3 py-2 mb-2">
-            <Avatar className="w-8 h-8">
-              <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">
-                {user.email?.substring(0, 2).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-slate-900 truncate">
-                {user.name || "User"}
-              </p>
-              <p className="text-xs text-slate-500 truncate">
-                {user.email}
-              </p>
-            </div>
-          </div>
-          <Button
-            variant="ghost"
-            className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
-            onClick={() => logout()}
-          >
-            <LogOut className="w-4 h-4 mr-2" />
-            Sign Out
-          </Button>
+          {/* Footer removed - moved to top header */}
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 ml-64 min-h-screen">
-        <div className="p-8 max-w-7xl mx-auto">
+      {/* Main Content Wrapper */}
+      <div className="flex-1 ml-64 flex flex-col min-h-screen">
+
+        {/* Top Header */}
+        <header className="h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40 px-8 flex items-center justify-end gap-3">
+          {selectedCompanyId && <DeviceStatusWidget companyId={selectedCompanyId} />}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="h-10 w-10 rounded-full p-0 border border-slate-200 hover:bg-slate-100 transition-colors">
+                <Avatar className="h-9 w-9">
+                  <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">
+                    {user.name?.substring(0, 2).toUpperCase() || "US"}
+                  </AvatarFallback>
+                </Avatar>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56 bg-white">
+              <div className="flex items-center justify-start gap-2 p-2">
+                <div className="flex flex-col space-y-1 leading-none">
+                  {user.name && <p className="font-medium">{user.name}</p>}
+                  {user.email && (
+                    <p className="w-[200px] truncate text-xs text-muted-foreground">
+                      {user.email}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="h-px bg-slate-100 my-1" />
+              <DropdownMenuItem onClick={() => setLocation("/dashboard")}>
+                <LayoutDashboard className="mr-2 h-4 w-4" />
+                <span>Dashboard</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setLocation("/settings")}>
+                <UserCog className="mr-2 h-4 w-4" />
+                <span>Account Settings</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setLocation("/profile")}>
+                <UserCog className="mr-2 h-4 w-4" />
+                <span>My Profile</span>
+              </DropdownMenuItem>
+              <div className="h-px bg-slate-100 my-1" />
+              <DropdownMenuItem className="text-red-600 focus:text-red-600 focus:bg-red-50" onClick={() => logout()}>
+                <LogOut className="mr-2 h-4 w-4" />
+                <span>Log out</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </header>
+
+        {/* Page Content */}
+        <main className="flex-1 p-8 max-w-7xl mx-auto w-full">
           {children}
-        </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

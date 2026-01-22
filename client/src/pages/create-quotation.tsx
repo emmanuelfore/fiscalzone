@@ -261,88 +261,87 @@ export default function CreateQuotationPage() {
                                 <Input type="date" value={expiryDate} onChange={e => setExpiryDate(e.target.value)} />
                             </div>
                         </div>
-                    </div>
 
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-[40%]">Description</TableHead>
-                                <TableHead>Qty</TableHead>
-                                <TableHead>Price</TableHead>
-                                <TableHead>Tax%</TableHead>
-                                <TableHead className="text-right">Total</TableHead>
-                                <TableHead className="w-[50px]"></TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {items.map((item, index) => (
-                                <TableRow key={item.localId}>
-                                    <TableCell>
-                                        <Input value={item.description} onChange={e => updateItem(item.localId, "description", e.target.value)} placeholder="Item description..." />
-                                    </TableCell>
-                                    <TableCell>
-                                        <Input type="number" value={item.quantity} onChange={e => updateItem(item.localId, "quantity", parseFloat(e.target.value))} />
-                                    </TableCell>
-                                    <TableCell>
-                                        <Input type="number" value={item.unitPrice} onChange={e => updateItem(item.localId, "unitPrice", parseFloat(e.target.value))} />
-                                    </TableCell>
-                                    <TableCell>
-                                        <Input type="number" value={item.taxRate} onChange={e => updateItem(item.localId, "taxRate", parseFloat(e.target.value))} />
-                                    </TableCell>
-                                    <TableCell className="text-right font-medium">
-                                        {(item.quantity * item.unitPrice).toFixed(2)}
-                                    </TableCell>
-                                    <TableCell>
-                                        <Button variant="ghost" size="icon" onClick={() => items.length > 1 && setItems(items.filter(i => i.localId !== item.localId))}>
-                                            <Trash2 className="w-4 h-4 text-red-500" />
-                                        </Button>
-                                    </TableCell>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead className="w-[40%]">Description</TableHead>
+                                    <TableHead>Qty</TableHead>
+                                    <TableHead>Price</TableHead>
+                                    <TableHead>Tax%</TableHead>
+                                    <TableHead className="text-right">Total</TableHead>
+                                    <TableHead className="w-[50px]"></TableHead>
                                 </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                    <Button variant="outline" size="sm" onClick={handleAddItem}>
-                        <Plus className="w-4 h-4 mr-2" /> Add Item
-                    </Button>
-                </CardContent>
-            </Card>
-
-            <div className="space-y-6">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Summary</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="flex justify-between text-sm">
-                            <span className="text-slate-500">Subtotal</span>
-                            <span>{currencyCode} {subtotal.toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                            <span className="text-slate-500">Tax</span>
-                            <span>{currencyCode} {taxAmount.toFixed(2)}</span>
-                        </div>
-                        <div className="pt-4 border-t flex justify-between font-bold text-lg">
-                            <span>Total</span>
-                            <span className="text-primary">{currencyCode} {total.toFixed(2)}</span>
-                        </div>
-
-                        <div className="flex items-center gap-2 pt-4">
-                            <input type="checkbox" id="taxInc" checked={taxInclusive} onChange={e => setTaxInclusive(e.target.checked)} />
-                            <Label htmlFor="taxInc" className="text-xs cursor-pointer">Prices are tax inclusive</Label>
-                        </div>
+                            </TableHeader>
+                            <TableBody>
+                                {items.map((item, index) => (
+                                    <TableRow key={item.localId}>
+                                        <TableCell>
+                                            <Input value={item.description} onChange={e => updateItem(item.localId, "description", e.target.value)} placeholder="Item description..." />
+                                        </TableCell>
+                                        <TableCell>
+                                            <Input type="number" value={item.quantity} onChange={e => updateItem(item.localId, "quantity", parseFloat(e.target.value))} />
+                                        </TableCell>
+                                        <TableCell>
+                                            <Input type="number" value={item.unitPrice} onChange={e => updateItem(item.localId, "unitPrice", parseFloat(e.target.value))} />
+                                        </TableCell>
+                                        <TableCell>
+                                            <Input type="number" value={item.taxRate} onChange={e => updateItem(item.localId, "taxRate", parseFloat(e.target.value))} />
+                                        </TableCell>
+                                        <TableCell className="text-right font-medium">
+                                            {(item.quantity * item.unitPrice).toFixed(2)}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Button variant="ghost" size="icon" onClick={() => items.length > 1 && setItems(items.filter(i => i.localId !== item.localId))}>
+                                                <Trash2 className="w-4 h-4 text-red-500" />
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                        <Button variant="outline" size="sm" onClick={handleAddItem}>
+                            <Plus className="w-4 h-4 mr-2" /> Add Item
+                        </Button>
                     </CardContent>
                 </Card>
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Notes</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Terms, conditions, or payment info..." rows={5} />
-                    </CardContent>
-                </Card>
+                <div className="space-y-6">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Summary</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="flex justify-between text-sm">
+                                <span className="text-slate-500">Subtotal</span>
+                                <span>{currencyCode} {subtotal.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                                <span className="text-slate-500">Tax</span>
+                                <span>{currencyCode} {taxAmount.toFixed(2)}</span>
+                            </div>
+                            <div className="pt-4 border-t flex justify-between font-bold text-lg">
+                                <span>Total</span>
+                                <span className="text-primary">{currencyCode} {total.toFixed(2)}</span>
+                            </div>
+
+                            <div className="flex items-center gap-2 pt-4">
+                                <input type="checkbox" id="taxInc" checked={taxInclusive} onChange={e => setTaxInclusive(e.target.checked)} />
+                                <Label htmlFor="taxInc" className="text-xs cursor-pointer">Prices are tax inclusive</Label>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Notes</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Terms, conditions, or payment info..." rows={5} />
+                        </CardContent>
+                    </Card>
+                </div>
             </div>
-        </div>
         </Layout >
     );
 }

@@ -76,8 +76,6 @@ export default function SettingsPage() {
         branchCode: currentCompany.branchCode || "",
         currency: currentCompany.currency || "USD",
         branchName: currentCompany.branchName || "",
-        currency: currentCompany.currency || "USD",
-        branchName: currentCompany.branchName || "",
         emailSettings: currentCompany.emailSettings || {
           provider: 'resend',
           apiKey: '',
@@ -292,8 +290,6 @@ export default function SettingsPage() {
             </div>
           </div>
         </TabsContent>
-
-        {/* FINANCE TAB */}
 
         {/* FINANCE TAB */}
         <TabsContent value="finance" className="space-y-6">

@@ -7,6 +7,10 @@
             "destination": "/index.ts"
         },
         {
+            "source": "/api-docs(.*)",
+            "destination": "/index.ts"
+        },
+        {
             "source": "/(.*)",
             "destination": "/index.html"
         }

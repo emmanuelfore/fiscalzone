@@ -45,7 +45,9 @@ export async function registerRoutes(
 
   // Middleware to check auth
   const requireAuth = (req: any, res: any, next: any) => {
-    if (!req.isAuthenticated()) {
+    const isAuth = req.isAuthenticated();
+    console.log(`[requireAuth] Path: ${req.path}, isAuthenticated: ${isAuth}, user: ${req.user?.id}`);
+    if (!isAuth) {
       return res.status(401).json({ message: "Unauthorized" });
     }
     next();
@@ -53,11 +55,22 @@ export async function registerRoutes(
 
   const requireOwner = async (req: any, res: any, next: any) => {
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
-    const companyId = parseInt(req.params.companyId || req.params.id || req.body.companyId);
-    if (!companyId) return next(); // Fallback if no company context
+    // Resolve companyId strictly
+    let companyId = parseInt(req.params.companyId);
+    if (!companyId && req.params.id && req.path.startsWith('/api/companies/')) {
+      companyId = parseInt(req.params.id);
+    }
+    if (!companyId && req.body.companyId) {
+      companyId = parseInt(req.body.companyId);
+    }
+
+    if (!companyId) return next();
 
     const users = await storage.getCompanyUsers(companyId);
     const me = users.find(u => u.id === req.user.id);
+
+
+
     if (!me || me.role !== 'owner') {
       return res.status(403).json({ message: "Owner permission required" });
     }
@@ -66,32 +79,63 @@ export async function registerRoutes(
 
   const requireStaff = async (req: any, res: any, next: any) => {
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
-    const companyId = parseInt(req.params.companyId || req.params.id || req.body.companyId);
+
+    // Resolve companyId strictly
+    let companyId = parseInt(req.params.companyId);
+    if (!companyId && req.params.id && req.path.startsWith('/api/companies/')) {
+      companyId = parseInt(req.params.id);
+    }
+    if (!companyId && req.body.companyId) {
+      companyId = parseInt(req.body.companyId);
+    }
+
     if (!companyId) return next();
 
     const users = await storage.getCompanyUsers(companyId);
     const me = users.find(u => u.id === req.user.id);
+
     if (!me || (me.role !== 'owner' && me.role !== 'staff' && me.role !== 'admin')) {
       return res.status(403).json({ message: "Insufficient permissions" });
     }
     next();
   };
 
-  const zimraLogger = {
-    log: async (invoiceId: number, endpoint: string, request: any, response: any, statusCode?: number, errorMessage?: string) => {
+  const getZimraLogger = (companyId: number) => ({
+    log: async (invoiceId: number | null, endpoint: string, request: any, response: any, statusCode?: number, errorMessage?: string) => {
+      console.log(`[ZIMRA LOGGER] Attempting to log for Company ${companyId}, Endpoint: ${endpoint}`);
       try {
         await storage.createZimraLog({
-          invoiceId,
+          companyId,
+          invoiceId: invoiceId || undefined,
+          endpoint,
           requestPayload: request,
           responsePayload: response,
           statusCode,
           errorMessage
         });
-      } catch (e) {
-        console.error("Critical: Failed to save ZIMRA log:", e);
+      } catch (e: any) {
+        console.error("Critical: Failed to save ZIMRA log:", e.message);
+        if (e.code) console.error("SQL Error Code:", e.code);
+        console.error("Failed Payload:", { companyId, invoiceId, endpoint, statusCode });
       }
     }
-  };
+  });
+
+
+
+  // TEMPORARY DEBUG ENDPOINT
+  app.get("/api/debug/logs", async (_req, res) => {
+    try {
+      const { db } = await import("./db");
+      const { zimraLogs } = await import("@shared/schema");
+
+      const logs = await db.select().from(zimraLogs).limit(20);
+      res.json({ count: logs.length, logs });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // Health Check (Public)
   app.get("/api/health", async (_req, res) => {
     try {
@@ -620,6 +664,19 @@ export async function registerRoutes(
     }
   });
 
+  // ZIMRA Transaction Logs (TEMP: Auth disabled for debugging)
+  app.get("/api/companies/:id/zimra/logs", async (req, res) => {
+    try {
+      const companyId = Number(req.params.id);
+      const limit = req.query.limit ? Number(req.query.limit) : 100;
+      const logs = await storage.getCompanyZimraLogs(companyId, limit);
+      res.json(logs);
+    } catch (err: any) {
+      console.error("Get ZIMRA Logs Error:", err);
+      res.status(500).json({ message: "Failed to fetch ZIMRA logs" });
+    }
+  });
+
   // Get current ZIMRA environment status
   app.get("/api/companies/:id/zimra/environment", requireAuth, async (req, res) => {
     try {
@@ -668,7 +725,7 @@ export async function registerRoutes(
         deviceSerialNo,
         activationKey,
         baseUrl: 'https://fdmsapitest.zimra.co.zw' // Default to test for now
-      });
+      }, getZimraLogger(companyId));
 
       const keys = await device.registerDevice();
 
@@ -707,7 +764,7 @@ export async function registerRoutes(
         deviceSerialNo,
         activationKey,
         baseUrl: 'https://fdmsapitest.zimra.co.zw' // Default to test
-      });
+      }, getZimraLogger(companyId));
 
       const taxpayerInfo = await device.verifyTaxpayerInformation();
       res.json(taxpayerInfo);
@@ -734,7 +791,7 @@ export async function registerRoutes(
         activationKey: company.fdmsApiKey || "",
         privateKey: company.zimraPrivateKey || "",
         certificate: company.zimraCertificate || "",
-      });
+      }, getZimraLogger(companyId));
 
       const keys = await device.issueCertificate();
 
@@ -773,7 +830,7 @@ export async function registerRoutes(
         deviceId: company.fdmsDeviceId || "0",
         deviceSerialNo: "UNKNOWN",
         activationKey: "",
-      });
+      }, getZimraLogger(companyId));
 
       const certs = await device.getServerCertificate(thumbprint);
       res.json(certs);
@@ -937,7 +994,7 @@ export async function registerRoutes(
         activationKey: company.fdmsApiKey || "",
         privateKey: company.zimraPrivateKey,
         certificate: company.zimraCertificate || "",
-      });
+      }, getZimraLogger(companyId));
 
       const status = await device.getStatus();
 
@@ -974,7 +1031,7 @@ export async function registerRoutes(
         privateKey: company.zimraPrivateKey || undefined,
         certificate: company.zimraCertificate || undefined,
         baseUrl: 'https://fdmsapitest.zimra.co.zw' // TODO: Config
-      });
+      }, getZimraLogger(companyId));
 
       // Get Config from ZIMRA
       const config = await device.getConfig();
@@ -1029,7 +1086,7 @@ export async function registerRoutes(
         activationKey: company.fdmsApiKey || "",
         privateKey: company.zimraPrivateKey || "",
         certificate: company.zimraCertificate || "",
-      });
+      }, getZimraLogger(companyId));
 
       const response = await device.ping();
 
@@ -1064,7 +1121,7 @@ export async function registerRoutes(
         activationKey: company.fdmsApiKey || "",
         privateKey: company.zimraPrivateKey || "",
         certificate: company.zimraCertificate || "",
-      });
+      }, getZimraLogger(companyId));
 
       const checks: any[] = [];
       let overallStatus = "Online";
@@ -1158,7 +1215,7 @@ export async function registerRoutes(
         activationKey: company.fdmsApiKey || "",
         privateKey: company.zimraPrivateKey || "",
         certificate: company.zimraCertificate || "",
-      });
+      }, getZimraLogger(companyId));
 
       // Check current status first
       const status = await device.getStatus() as any;
@@ -1221,7 +1278,7 @@ export async function registerRoutes(
         privateKey: company.zimraPrivateKey || "",
         certificate: company.zimraCertificate || "",
         baseUrl: 'https://fdmsapitest.zimra.co.zw' // TODO: Config
-      });
+      }, getZimraLogger(companyId));
 
       const fiscalDayNo = company.currentFiscalDayNo || 0;
       const receiptCounter = company.dailyReceiptCount || 0;
@@ -1543,13 +1600,21 @@ export async function registerRoutes(
   });
 
   // Fiscalize invoice using ZIMRA Fiscal Device Gateway
-  app.post(api.invoices.fiscalize.path, requireStaff, async (req, res) => {
+  // Fiscalize invoice using ZIMRA Fiscal Device Gateway
+  app.post(api.invoices.fiscalize.path, requireAuth, async (req, res) => {
     try {
       const invoiceId = Number(req.params.id);
       // Retrieve full invoice with line items
       const invoice = await storage.getInvoice(invoiceId);
       if (!invoice) {
         return res.status(404).json({ message: "Invoice not found" });
+      }
+
+      // Check permissions: User must belong to the company
+      const users = await storage.getCompanyUsers(invoice.companyId);
+      const isMember = users.some(u => u.id === req.user.id);
+      if (!isMember) {
+        return res.status(403).json({ message: "You do not have permission to fiscalize for this company" });
       }
 
       const company = await storage.getCompany(invoice.companyId);
@@ -1565,7 +1630,7 @@ export async function registerRoutes(
         privateKey: company.zimraPrivateKey,
         certificate: company.zimraCertificate,
         baseUrl: company.zimraEnvironment === 'production' ? 'https://fdmsapi.zimra.co.zw' : 'https://fdmsapitest.zimra.co.zw'
-      }, zimraLogger);
+      }, getZimraLogger(company.id));
 
       // Set invoice ID for logging
       device.setInvoiceId(invoiceId);

@@ -128,6 +128,198 @@ const options: swaggerJsdoc.Options = {
                     },
                 },
             },
+            '/companies/{id}/zimra/open-day': {
+                post: {
+                    summary: 'Open Fiscal Day',
+                    description: 'Opens a new fiscal day on the ZIMRA device. Required before any fiscalization can occur.',
+                    tags: ['ZIMRA'],
+                    security: [{ cookieAuth: [] }],
+                    parameters: [
+                        {
+                            in: 'path',
+                            name: 'id',
+                            required: true,
+                            schema: { type: 'integer' },
+                            description: 'Company ID',
+                        },
+                    ],
+                    responses: {
+                        200: {
+                            description: 'Fiscal day opened successfully',
+                            content: {
+                                'application/json': {
+                                    schema: {
+                                        type: 'object',
+                                        properties: {
+                                            fiscalDayNo: { type: 'integer' },
+                                            fiscalDayOpened: { type: 'string', format: 'date-time' },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                        400: { description: 'Company not registered or fiscal day already open' },
+                        500: { description: 'Failed to open fiscal day' },
+                    },
+                },
+            },
+            '/companies/{id}/zimra/close-day': {
+                post: {
+                    summary: 'Close Fiscal Day',
+                    description: 'Closes the current fiscal day on the ZIMRA device. Submits fiscal counters and generates signatures.',
+                    tags: ['ZIMRA'],
+                    security: [{ cookieAuth: [] }],
+                    parameters: [
+                        {
+                            in: 'path',
+                            name: 'id',
+                            required: true,
+                            schema: { type: 'integer' },
+                            description: 'Company ID',
+                        },
+                    ],
+                    responses: {
+                        200: {
+                            description: 'Fiscal day closed successfully',
+                            content: {
+                                'application/json': {
+                                    schema: {
+                                        type: 'object',
+                                        properties: {
+                                            fiscalDayNo: { type: 'integer' },
+                                            fiscalDayClosed: { type: 'string', format: 'date-time' },
+                                            fiscalDayServerSignature: { type: 'object' },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                        400: { description: 'No open fiscal day or validation failed' },
+                        500: { description: 'Failed to close fiscal day' },
+                    },
+                },
+            },
+            '/companies/{id}/zimra/ping': {
+                post: {
+                    summary: 'Ping ZIMRA Device',
+                    description: 'Sends a ping request to the ZIMRA FDMS to check connectivity and get reporting frequency.',
+                    tags: ['ZIMRA'],
+                    security: [{ cookieAuth: [] }],
+                    parameters: [
+                        {
+                            in: 'path',
+                            name: 'id',
+                            required: true,
+                            schema: { type: 'integer' },
+                            description: 'Company ID',
+                        },
+                    ],
+                    responses: {
+                        200: {
+                            description: 'Ping successful',
+                            content: {
+                                'application/json': {
+                                    schema: {
+                                        type: 'object',
+                                        properties: {
+                                            reportingFrequency: { type: 'integer', description: 'Minutes between pings' },
+                                            operationID: { type: 'string' },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                        400: { description: 'Company not registered' },
+                        500: { description: 'Ping failed' },
+                    },
+                },
+            },
+            '/companies/{id}/zimra/status': {
+                get: {
+                    summary: 'Get ZIMRA Device Status',
+                    description: 'Retrieves the current status of the ZIMRA device including fiscal day status and counters.',
+                    tags: ['ZIMRA'],
+                    security: [{ cookieAuth: [] }],
+                    parameters: [
+                        {
+                            in: 'path',
+                            name: 'id',
+                            required: true,
+                            schema: { type: 'integer' },
+                            description: 'Company ID',
+                        },
+                    ],
+                    responses: {
+                        200: {
+                            description: 'Status retrieved successfully',
+                            content: {
+                                'application/json': {
+                                    schema: {
+                                        type: 'object',
+                                        properties: {
+                                            fiscalDayStatus: { type: 'string', example: 'FiscalDayOpened' },
+                                            lastReceiptGlobalNo: { type: 'integer' },
+                                            lastFiscalDayNo: { type: 'integer' },
+                                            fiscalDayClosingErrorCode: { type: 'string', nullable: true },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                        400: { description: 'Company not registered' },
+                        500: { description: 'Failed to get status' },
+                    },
+                },
+            },
+            '/companies/{id}/zimra/logs': {
+                get: {
+                    summary: 'Get ZIMRA Transaction Logs',
+                    description: 'Retrieves transaction logs of all ZIMRA API interactions for a company.',
+                    tags: ['ZIMRA'],
+                    security: [{ cookieAuth: [] }],
+                    parameters: [
+                        {
+                            in: 'path',
+                            name: 'id',
+                            required: true,
+                            schema: { type: 'integer' },
+                            description: 'Company ID',
+                        },
+                        {
+                            in: 'query',
+                            name: 'limit',
+                            schema: { type: 'integer', default: 100 },
+                            description: 'Maximum number of logs to return',
+                        },
+                    ],
+                    responses: {
+                        200: {
+                            description: 'Logs retrieved successfully',
+                            content: {
+                                'application/json': {
+                                    schema: {
+                                        type: 'array',
+                                        items: {
+                                            type: 'object',
+                                            properties: {
+                                                id: { type: 'integer' },
+                                                companyId: { type: 'integer' },
+                                                endpoint: { type: 'string' },
+                                                requestPayload: { type: 'object' },
+                                                responsePayload: { type: 'object' },
+                                                statusCode: { type: 'integer' },
+                                                errorMessage: { type: 'string', nullable: true },
+                                                createdAt: { type: 'string', format: 'date-time' },
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                        500: { description: 'Failed to fetch logs' },
+                    },
+                },
+            },
         },
     },
     apis: ['./server/routes.ts'], // Path to the API docs

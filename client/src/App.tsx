@@ -27,6 +27,7 @@ import AuditLogsPage from "@/pages/audit-logs";
 import QuotationsPage from "@/pages/quotations";
 import CreateQuotationPage from "@/pages/create-quotation";
 import RecurringInvoicesPage from "@/pages/recurring-invoices";
+import ZimraLogsPage from "@/pages/zimra-logs";
 import { useAuth } from "@/hooks/use-auth";
 import { useCompanies } from "@/hooks/use-companies";
 import { Loader2 } from "lucide-react";
@@ -123,6 +124,9 @@ function Router() {
       </Route>
       <Route path="/zimra-settings">
         {() => <ProtectedRoute component={ZimraSettingsPage} />}
+      </Route>
+      <Route path="/zimra-logs">
+        {() => <ProtectedRoute component={ZimraLogsPage} />}
       </Route>
       <Route path="/fdms-test">
         {() => <ProtectedRoute component={FdmsTestPage} />}

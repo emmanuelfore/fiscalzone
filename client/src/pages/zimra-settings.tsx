@@ -33,9 +33,17 @@ export default function ZimraSettingsPage() {
 
   return (
     <Layout>
-      <div className="mb-8">
-        <h1 className="text-3xl font-display font-bold text-slate-900">ZIMRA Device</h1>
-        <p className="text-slate-500 mt-1">Manage your fiscal device configuration</p>
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-display font-bold text-slate-900">ZIMRA Device</h1>
+          <p className="text-slate-500 mt-1">Manage your fiscal device configuration</p>
+        </div>
+        <Link href="/zimra-logs">
+          <Button variant="outline">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            View Transaction Logs
+          </Button>
+        </Link>
       </div>
 
       <div className="max-w-3xl">

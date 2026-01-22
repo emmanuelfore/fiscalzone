@@ -301,7 +301,7 @@ export default function Dashboard() {
                 {consolidatedSymbol}{stats.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </div>
               <div className="text-xs text-emerald-600 flex items-center mt-2 font-medium">
-                <TrendingUp className="w-3 h-3 mr-1" /> Consolidated in {reportCurrencyCode}
+                <TrendingUp className="w-3 h-3 mr-1" /> Converted from USD
               </div>
             </CardContent>
           </Card>

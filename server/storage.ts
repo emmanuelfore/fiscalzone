@@ -117,6 +117,7 @@ export interface IStorage {
   // ZIMRA Logs
   createZimraLog(log: InsertZimraLog): Promise<ZimraLog>;
   getZimraLogs(invoiceId: number): Promise<ZimraLog[]>;
+  getCompanyZimraLogs(companyId: number, limit?: number): Promise<ZimraLog[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -986,6 +987,14 @@ export class DatabaseStorage implements IStorage {
 
   async getZimraLogs(invoiceId: number): Promise<ZimraLog[]> {
     return await db.select().from(zimraLogs).where(eq(zimraLogs.invoiceId, invoiceId)).orderBy(desc(zimraLogs.createdAt));
+  }
+
+  async getCompanyZimraLogs(companyId: number, limit: number = 100): Promise<ZimraLog[]> {
+    return await db.select()
+      .from(zimraLogs)
+      .where(eq(zimraLogs.companyId, companyId))
+      .orderBy(desc(zimraLogs.createdAt))
+      .limit(limit);
   }
 }
 

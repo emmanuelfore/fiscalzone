@@ -152,7 +152,7 @@ export default function ReportsPage() {
                     </TabsList>
 
                     {/* Global Controls */}
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-2">
                             <span className="text-sm text-slate-500 font-medium">Consolidate in:</span>
                             <Select value={consolidatedCode} onValueChange={setConsolidatedCode}>

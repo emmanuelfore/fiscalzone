@@ -1,0 +1,80 @@
+1: 51: 04 PM [express
+] GET /api/companies/3/zimra/status 200 in 2545ms : : {
+    "fiscalDayStatus": "FiscalDayCloseFailed",
+    "lastReceiptGlobalNo": 9,
+    "lastFiscalDayNo": 1,
+    "fiscalDayClosingErrorCode": "BadCertificateSignature",
+    "operationID": "0HNIPJ5QDV8LO:00000001"
+}
+1: 52: 07 PM [express
+] GET /api/companies/3/zimra/status 200 in 2728ms : : {
+    "fiscalDayStatus": "FiscalDayCloseFailed",
+    "lastReceiptGlobalNo": 9,
+    "lastFiscalDayNo": 1,
+    "fiscalDayClosingErrorCode": "BadCertificateSignature",
+    "operationID": "0HNIPJ5QDV8T7:00000001"
+}
+1: 53: 10 PM [express
+] GET /api/companies/3/zimra/status 200 in 2627ms : : {
+    "fiscalDayStatus": "FiscalDayCloseFailed",
+    "lastReceiptGlobalNo": 9,
+    "lastFiscalDayNo": 1,
+    "fiscalDayClosingErrorCode": "BadCertificateSignature",
+    "operationID": "0HNIPJ5QDV94I:00000001"
+}
+1: 54: 13 PM [express
+] GET /api/companies/3/zimra/status 200 in 2951ms : : {
+    "fiscalDayStatus": "FiscalDayCloseFailed",
+    "lastReceiptGlobalNo": 9,
+    "lastFiscalDayNo": 1,
+    "fiscalDayClosingErrorCode": "BadCertificateSignature",
+    "operationID": "0HNIPJ5QDV99S:00000001"
+}
+1: 55: 17 PM [express
+] GET /api/user 304 in 2707ms : : {
+    "id": "ec7dd2ab-e231-435b-861e-ad3630fc19c8",
+    "email": "dynabalsolutions@gmail.com",
+    "password": "",
+    "name": "Takomborerwa Chapeta",
+    "createdAt": "2026-01-19T09:21:10.617Z"
+}
+1: 55: 17 PM [express
+] GET /api/companies/3/zimra/status 200 in 3470ms : : {
+    "fiscalDayStatus": "FiscalDayCloseFailed",
+    "lastReceiptGlobalNo": 9,
+    "lastFiscalDayNo": 1,
+    "fiscalDayClosingErrorCode": "BadCertificateSignature",
+    "operationID": "0HNIPJ5QDV9PP:00000001"
+}
+1: 55: 18 PM [express
+] GET /api/user 304 in 488ms : : {
+    "id": "ec7dd2ab-e231-435b-861e-ad3630fc19c8",
+    "email": "dynabalsolutions@gmail.com",
+    "password": "",
+    "name": "Takomborerwa Chapeta",
+    "createdAt": "2026-01-19T09:21:10.617Z"
+}
+1: 55: 18 PM [express
+] GET /api/user 304 in 504ms : : {
+    "id": "ec7dd2ab-e231-435b-861e-ad3630fc19c8",
+    "email": "dynabalsolutions@gmail.com",
+    "password": "",
+    "name": "Takomborerwa Chapeta",
+    "createdAt": "2026-01-19T09:21:10.617Z"
+}
+1: 55: 19 PM [express
+] GET /api/user 304 in 497ms : : {
+    "id": "ec7dd2ab-e231-435b-861e-ad3630fc19c8",
+    "email": "dynabalsolutions@gmail.com",
+    "password": "",
+    "name": "Takomborerwa Chapeta",
+    "createdAt": "2026-01-19T09:21:10.617Z"
+}
+1: 56: 23 PM [express
+] GET /api/companies/3/zimra/status 200 in 5126ms : : {
+    "fiscalDayStatus": "FiscalDayCloseFailed",
+    "lastReceiptGlobalNo": 9,
+    "lastFiscalDayNo": 1,
+    "fiscalDayClosingErrorCode": "BadCertificateSignature",
+    "operationID": "0HNIPJ5QDVA43:00000001"
+}

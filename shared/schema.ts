@@ -480,7 +480,9 @@ export type AuditLog = typeof auditLogs.$inferSelect;
 // ZIMRA Logs
 export const zimraLogs = pgTable("zimra_logs", {
   id: serial("id").primaryKey(),
-  invoiceId: integer("invoice_id").references(() => invoices.id).notNull(),
+  companyId: integer("company_id").references(() => companies.id), // Link to company for general logs
+  invoiceId: integer("invoice_id").references(() => invoices.id), // Nullable for general requests
+  endpoint: text("endpoint"), // Captured endpoint URL
   requestPayload: jsonb("request_payload").notNull(),
   responsePayload: jsonb("response_payload").notNull(),
   statusCode: integer("status_code"),

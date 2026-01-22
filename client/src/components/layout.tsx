@@ -116,6 +116,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       label: "Compliance",
       children: [
         { icon: Server, label: "ZIMRA Device", href: "/zimra-settings" },
+        { icon: ClipboardList, label: "Transaction Logs", href: "/zimra-logs" },
         { icon: Activity, label: "FDMS Test", href: "/fdms-test" },
       ]
     },

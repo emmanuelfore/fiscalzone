@@ -667,6 +667,44 @@ export default function CreateInvoicePage() {
         </div>
       )}
 
+      {/* Banking Details Banner */}
+      {company && (company.bankName || company.accountNumber) && (
+        <div className="mb-6 bg-slate-50 border border-slate-200 rounded-lg p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-emerald-100 rounded-full text-emerald-600 mt-1">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-900 text-sm">Banking Details</h3>
+              <p className="text-xs text-slate-500 mt-1">These details will appear on the invoice.</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-1 mt-2 text-sm text-slate-700">
+                <div>
+                  <span className="text-xs text-slate-400 block">Bank</span>
+                  {company.bankName || "-"}
+                </div>
+                <div>
+                  <span className="text-xs text-slate-400 block">Account Name</span>
+                  {company.accountName || "-"}
+                </div>
+                <div>
+                  <span className="text-xs text-slate-400 block">Account Number</span>
+                  {company.accountNumber || "-"}
+                </div>
+                {company.branchCode && (
+                  <div>
+                    <span className="text-xs text-slate-400 block">Branch Code</span>
+                    {company.branchCode}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => setLocation("/settings?tab=finance")} className="shrink-0 h-8 text-xs">
+            Edit Details
+          </Button>
+        </div>
+      )}
+
       <div className="mb-6 flex flex-col md:flex-row gap-4 items-center justify-between no-print">
         <div className="flex items-center gap-4">
           <Button variant="ghost" onClick={() => setLocation("/invoices")} className="pl-0 hover:pl-0 hover:bg-transparent text-slate-500 hover:text-slate-900">

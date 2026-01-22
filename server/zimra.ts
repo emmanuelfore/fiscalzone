@@ -121,7 +121,7 @@ export interface TaxpayerInfo {
 }
 
 export interface ZimraLogger {
-    log(invoiceId: number, endpoint: string, request: any, response: any, statusCode?: number, errorMessage?: string): Promise<void>;
+    log(invoiceId: number | null, endpoint: string, request: any, response: any, statusCode?: number, errorMessage?: string): Promise<void>;
 }
 
 // ZIMRA API Response Types (based on FDMS Specification)
@@ -241,6 +241,8 @@ export class ZimraDevice {
                 DeviceModelVersion: this.config.deviceModelVersion,
             },
         });
+
+        this.logger = logger;
     }
 
     // --- Core Utils ---
@@ -489,20 +491,21 @@ export class ZimraDevice {
                 }
 
                 // 3. Sort by TaxID or MoneyType (Ascending)
-                // Use TaxID if available, else MoneyType
                 const getThirdKey = (obj: any) => {
                     if (obj.fiscalCounterTaxID !== undefined && obj.fiscalCounterTaxID !== null) {
                         return obj.fiscalCounterTaxID;
                     }
+                    if (obj.fiscalCounterTaxPercent !== undefined && obj.fiscalCounterTaxPercent !== null) {
+                        return obj.fiscalCounterTaxPercent;
+                    }
                     if (obj.fiscalCounterMoneyType !== undefined && obj.fiscalCounterMoneyType !== null) {
-                        // MoneyType can be string or int. If mapped to string, compare strings?
-                        // Spec: "fiscalCounterMoneyType (in ascending order)"
-                        // If it's a string enum (CASH/CARD), standard string compare.
-                        // If int enum, int compare.
-                        // Our mapping uses strings like "CASH".
+                        // Map numeric money type to string for comparison
+                        if (typeof obj.fiscalCounterMoneyType === 'number') {
+                            return obj.fiscalCounterMoneyType === 0 ? 'CASH' : 'CARD';
+                        }
                         return obj.fiscalCounterMoneyType;
                     }
-                    return 0; // Default
+                    return 0;
                 };
 
                 const k3a = getThirdKey(a);
@@ -514,44 +517,49 @@ export class ZimraDevice {
                 if (typeof k3a === 'string' && typeof k3b === 'string') {
                     return k3a.localeCompare(k3b);
                 }
-                // Mixed types (shouldn't happen for same counter type) -> Treat as string
                 return String(k3a).localeCompare(String(k3b));
             });
 
             concatenatedCounters = sortedCounters.map((c: any) => {
                 if (parseFloat(c.fiscalCounterValue) === 0) return "";
-                const taxPercent = c.fiscalCounterTaxPercent != null ? c.fiscalCounterTaxPercent.toFixed(2) : "";
-                let moneyType = "";
-                if (typeof c.fiscalCounterMoneyType === 'string') {
-                    moneyType = c.fiscalCounterMoneyType;
-                } else if (c.fiscalCounterMoneyType != null) {
-                    moneyType = moneyTypeMapping[c.fiscalCounterMoneyType] || "";
+
+                // Format tax percent according to ZIMRA spec
+                let taxPercent = "";
+                if (c.fiscalCounterTaxPercent !== undefined && c.fiscalCounterTaxPercent !== null) {
+                    taxPercent = c.fiscalCounterTaxPercent.toFixed(2);
                 }
 
-                // For BalanceByMoneyType, we append the money type.
-                // For Tax counters, we append nothing extra for the 4th slot?
-                // Spec: fiscalCounterType || fiscalCounterCurrency || fiscalCounterTaxPercent or fiscalCounterMoneyType || fiscalCounterValue
-                // It says "or".
-                // If SaleByTax: Type + Currency + TaxPercent + Value
-                // If BalanceByMoneyType: Type + Currency + MoneyType + Value
+                // Format money type
+                let moneyType = "";
+                if (c.fiscalCounterMoneyType !== undefined && c.fiscalCounterMoneyType !== null) {
+                    if (typeof c.fiscalCounterMoneyType === 'string') {
+                        moneyType = c.fiscalCounterMoneyType.toUpperCase();
+                    } else {
+                        moneyType = moneyTypeMapping[c.fiscalCounterMoneyType] || "";
+                    }
+                }
 
-                // My logic below:
-                // `${c.fiscalCounterType.toUpperCase()}${c.fiscalCounterCurrency.toUpperCase()}${taxPercent}${moneyType}${Math.floor(c.fiscalCounterValue * 100)}`
+                // Convert value to cents (integer)
+                const valueInCents = Math.round(c.fiscalCounterValue * 100);
 
-                // If taxPercent is present (SaleByTax), moneyType is empty. result: Type+Curr+Tax+""+Val. Correct.
-                // If moneyType is present (Balance), taxPercent is empty?
-                // Wait, logic: `const taxPercent = ... : ""`
-                // Correct.
-
-                return `${c.fiscalCounterType.toUpperCase()}${c.fiscalCounterCurrency.toUpperCase()}${taxPercent}${moneyType}${Math.round(c.fiscalCounterValue * 100)}`;
+                return `${c.fiscalCounterType.toUpperCase()}${c.fiscalCounterCurrency.toUpperCase()}${taxPercent}${moneyType}${valueInCents}`;
             }).join("");
         }
 
         const stringToSign = `${deviceId}${fiscalDayNo}${fiscalDayDate}${concatenatedCounters}`;
-        console.log('CloseDay String to Sign:', stringToSign);
+        console.log('=== CloseDay Signature Debug ===');
+        console.log('Device ID:', deviceId);
+        console.log('Fiscal Day No:', fiscalDayNo);
+        console.log('Fiscal Day Date:', fiscalDayDate);
+        console.log('Concatenated Counters:', concatenatedCounters);
+        console.log('Full String to Sign:', stringToSign);
 
         const hash = this.getHash(stringToSign);
         const signature = this.signData(stringToSign);
+
+        console.log('Generated Hash (base64):', hash);
+        console.log('Generated Signature (base64):', signature.substring(0, 50) + '...');
+        console.log('================================');
 
         const payload = {
             deviceID: deviceId,
@@ -764,10 +772,11 @@ export class ZimraDevice {
             responseData = error.details || { error: error.message };
             throw error;
         } finally {
-            if (this.logger && this.currentInvoiceId) {
-                // Log all requests related to an invoice
+            console.log(`[ZIMRA makeRequest] Finally block - endpoint: ${endpoint}, logger exists: ${!!this.logger}`);
+            if (this.logger) {
+                // Log all requests, even if not invoice-related
                 this.logger.log(
-                    this.currentInvoiceId,
+                    this.currentInvoiceId || null,
                     endpoint,
                     data || {},
                     responseData,

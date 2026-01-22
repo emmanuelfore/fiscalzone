@@ -1612,7 +1612,7 @@ export async function registerRoutes(
 
       // Check permissions: User must belong to the company
       const users = await storage.getCompanyUsers(invoice.companyId);
-      const isMember = users.some(u => u.id === req.user.id);
+      const isMember = users.some(u => u.id === req.user?.id);
       if (!isMember) {
         return res.status(403).json({ message: "You do not have permission to fiscalize for this company" });
       }

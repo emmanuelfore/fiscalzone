@@ -111,4 +111,6 @@ initializeApp().catch((err) => {
   process.exit(1);
 });
 
+// Export for Vercel
+export default app;
 export { app, httpServer };

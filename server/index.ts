@@ -111,7 +111,7 @@ export default app;
 
 // Start initialization if not imported as a module (e.g. by Vercel)
 // or always initialize routes if we're on Vercel (since it's a serverless entry point)
-if (process.env.VERCEL || process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js')) {
+if (process.env.VERCEL || process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js') || process.argv[1]?.endsWith('index.cjs')) {
   initializeApp().catch((err) => {
     console.error("Failed to initialize app:", err);
     process.exit(1);

@@ -10,7 +10,8 @@ import {
   auditLogs, type AuditLog, type InsertAuditLog,
   recurringInvoices, type RecurringInvoice, type InsertRecurringInvoice,
   quotations, quotationItems, type Quotation, type QuotationItem, type InsertQuotation, type InsertQuotationItem,
-  zimraLogs, type ZimraLog, type InsertZimraLog
+  zimraLogs, type ZimraLog, type InsertZimraLog,
+  validationErrors, type ValidationError, type InsertValidationError
 } from "../shared/schema.js";
 import { db } from "./db.js";
 import { eq, and, desc, lte } from "drizzle-orm";
@@ -41,11 +42,12 @@ export interface IStorage {
 
   // Invoices
   getInvoices(companyId: number): Promise<Invoice[]>;
-  getInvoice(id: number): Promise<(Invoice & { items: (InvoiceItem & { product?: Product })[]; customer?: Customer }) | undefined>;
+  getInvoice(id: number): Promise<(Invoice & { items: (InvoiceItem & { product?: Product })[]; customer?: Customer; validationErrors?: any[] }) | undefined>;
   createInvoice(invoice: CreateInvoiceRequest): Promise<Invoice>;
   updateInvoice(id: number, data: Partial<InsertInvoice>): Promise<Invoice>;
   deleteInvoice(id: number): Promise<void>;
-  fiscalizeInvoice(id: number, fiscalData: { fiscalCode: string; qrCodeData: string; fiscalSignature?: string; fiscalDayNo?: number; receiptCounter?: number; receiptGlobalNo?: number }): Promise<Invoice>;
+  fiscalizeInvoice(id: number, fiscalData: { fiscalCode: string; qrCodeData: string; fiscalSignature?: string; fiscalDayNo?: number; receiptCounter?: number; receiptGlobalNo?: number; syncedWithFdms?: boolean; fdmsStatus?: string; validationStatus?: string; lastValidationAttempt?: Date }): Promise<Invoice>;
+  createValidationErrors(errors: Array<{ invoiceId: number; errorCode: string; errorMessage: string; errorColor: string; requiresPreviousReceipt: boolean }>): Promise<void>;
 
   // Tax Config
   getTaxTypes(): Promise<TaxType[]>;
@@ -217,7 +219,7 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async getInvoice(id: number): Promise<(Invoice & { items: (InvoiceItem & { product?: Product })[]; customer?: Customer; relatedInvoiceNumber?: string; relatedInvoiceDate?: Date | null }) | undefined> {
+  async getInvoice(id: number): Promise<(Invoice & { items: (InvoiceItem & { product?: Product })[]; customer?: Customer; validationErrors?: any[]; relatedInvoiceNumber?: string; relatedInvoiceDate?: Date | null }) | undefined> {
     const [invoice] = await db.select().from(invoices).where(eq(invoices.id, id));
     if (!invoice) return undefined;
 
@@ -250,7 +252,14 @@ export class DatabaseStorage implements IStorage {
       product: r.product || undefined
     }));
 
-    return { ...invoice, items, customer, relatedInvoiceNumber, relatedInvoiceDate };
+    // Fetch validation errors if any
+    const validationErrorsRows = await db
+      .select()
+      .from(validationErrors)
+      .where(eq(validationErrors.invoiceId, id))
+      .orderBy(validationErrors.createdAt);
+
+    return { ...invoice, items, customer, validationErrors: validationErrorsRows, relatedInvoiceNumber, relatedInvoiceDate };
   }
 
 
@@ -321,19 +330,44 @@ export class DatabaseStorage implements IStorage {
     receiptGlobalNo?: number;
     syncedWithFdms?: boolean;
     fdmsStatus?: string;
+    validationStatus?: string;
+    lastValidationAttempt?: Date;
   }): Promise<Invoice> {
-    const { syncedWithFdms = true, fdmsStatus = "issued", ...rest } = fiscalData;
+    const { syncedWithFdms = true, fdmsStatus = "issued", validationStatus, lastValidationAttempt, ...rest } = fiscalData;
     const [updated] = await db
       .update(invoices)
       .set({
         ...rest,
         syncedWithFdms,
         fdmsStatus,
-        status: "issued"
+        validationStatus,
+        lastValidationAttempt,
+        status: syncedWithFdms && (!validationStatus || validationStatus === 'valid') ? "issued" : "draft"
       })
       .where(eq(invoices.id, id))
       .returning();
     return updated;
+  }
+
+  async createValidationErrors(errors: Array<{ invoiceId: number; errorCode: string; errorMessage: string; errorColor: string; requiresPreviousReceipt: boolean }>): Promise<void> {
+    if (errors.length === 0) return;
+
+    // Import validationErrors table
+    const { validationErrors } = await import("../shared/schema.js");
+
+    // Clear existing validation errors for this invoice
+    await db.delete(validationErrors).where(eq(validationErrors.invoiceId, errors[0].invoiceId));
+
+    // Insert new validation errors
+    await db.insert(validationErrors).values(
+      errors.map(error => ({
+        invoiceId: error.invoiceId,
+        errorCode: error.errorCode,
+        errorMessage: error.errorMessage,
+        errorColor: error.errorColor as any,
+        requiresPreviousReceipt: error.requiresPreviousReceipt
+      }))
+    );
   }
 
   async lockInvoice(id: number, userId: string): Promise<boolean> {
@@ -428,49 +462,37 @@ export class DatabaseStorage implements IStorage {
   }
   // Tax Sync
   async syncTaxTypes(zimraTaxes: any[]): Promise<TaxType[]> {
-    // ZIMRA taxes look like: { taxID: 1, taxPercent: 15.0, taxName: "Standard" } (Example)
-    // We want to map them to our taxTypes table.
-    // We will upsert based on 'zimraTaxId' or 'code' if we can determine it.
+    return await db.transaction(async (tx) => {
+      // Delete all existing tax types for a clean sync as requested
+      await tx.delete(taxTypes);
 
-    const results: TaxType[] = [];
+      const results: TaxType[] = [];
 
-    // ZIMRA standard IDs: 1 (Standard), 2 (Zero), 3 (Exempt/None)?
-    // From manual: 3=Standard(15%), 2=Zero(0%), 1=Exempt? No, strict mapping needed.
-    // Actually in ZIMRA `GetConfig`:
-    // "taxLevels": [ { "taxID": 1, "taxPercent": 15.0 }, ... ]
+      for (const zTax of zimraTaxes) {
+        if (!zTax.taxID) continue;
 
-    for (const zTax of zimraTaxes) {
-      if (!zTax.taxID) continue;
+        // Default to 0 if taxPercent is missing (e.g. for Exempt)
+        const percent = zTax.taxPercent !== undefined ? zTax.taxPercent : 0;
+        const taxRate = percent.toFixed(2);
+        const code = `VAT-${zTax.taxID}`; // Generate a code e.g. VAT-3
+        const taxName = zTax.taxName || `VAT ${percent}%`;
+        // Use ZIMRA validFrom or current date, formatted for SQL DATE (YYYY-MM-DD)
+        const effectiveFrom = (zTax.validFrom || new Date().toISOString()).split('T')[0];
 
-      const taxRate = zTax.taxPercent.toFixed(2);
-      const code = `VAT-${zTax.taxID}`; // Generate a code e.g. VAT-3
-
-      // Check if exists
-      const [existing] = await db.select().from(taxTypes).where(eq(taxTypes.code, code));
-
-      if (existing) {
-        // Update
-        const [updated] = await db.update(taxTypes).set({
-          rate: taxRate,
-          zimraTaxId: zTax.taxID.toString(),
-          name: `VAT ${zTax.taxPercent}%`,
-          effectiveFrom: new Date().toISOString() // Or keep original
-        }).where(eq(taxTypes.id, existing.id)).returning();
-        results.push(updated);
-      } else {
-        // Create
-        const [created] = await db.insert(taxTypes).values({
+        // Create new tax type
+        const [created] = await tx.insert(taxTypes).values({
           code: code,
-          name: `VAT ${zTax.taxPercent}%`,
+          name: taxName,
           rate: taxRate,
           description: `ZIMRA Tax Level ${zTax.taxID}`,
           zimraTaxId: zTax.taxID.toString(),
-          effectiveFrom: new Date().toISOString()
+          effectiveFrom: effectiveFrom
         }).returning();
+
         results.push(created);
       }
-    }
-    return results;
+      return results;
+    });
   }
 
   // User Management

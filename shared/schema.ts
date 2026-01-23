@@ -58,6 +58,7 @@ export const companies = pgTable("companies", {
   lastFiscalHash: text("last_fiscal_hash"), // To store previous receipt hash for chaining
   dailyReceiptCount: integer("daily_receipt_count").default(0), // To track RCPT011
   branchName: text("branch_name"), // ZIMRA Field [5] - Branch name (if different from company name)
+  qrUrl: text("qr_url"), // ZIMRA Field [48] - URL for QR validation
 
   // Banking Details
   bankName: text("bank_name"),
@@ -66,6 +67,7 @@ export const companies = pgTable("companies", {
   branchCode: text("branch_code"),
   vatRegistered: boolean("vat_registered").default(true),
   emailSettings: jsonb("email_settings"),
+  qrUrl: text("qr_url"),
 
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -189,6 +191,17 @@ export const productsRelations = relations(products, ({ one }) => ({
   company: one(companies, { fields: [products.companyId], references: [companies.id] }),
 }));
 
+// Validation Errors
+export const validationErrors = pgTable("validation_errors", {
+  id: serial("id").primaryKey(),
+  invoiceId: integer("invoice_id").references(() => invoices.id).notNull(),
+  errorCode: text("error_code").notNull(), // RCPT010, RCPT011, etc.
+  errorMessage: text("error_message").notNull(),
+  errorColor: text("error_color").notNull(), // Grey, Yellow, Red
+  requiresPreviousReceipt: boolean("requires_previous_receipt").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Invoices
 export const invoices = pgTable("invoices", {
   id: serial("id").primaryKey(),
@@ -217,11 +230,15 @@ export const invoices = pgTable("invoices", {
   fiscalSignature: text("fiscal_signature"),
   qrCodeData: text("qr_code_data"),
   syncedWithFdms: boolean("synced_with_fdms").default(false),
-  fdmsStatus: text("fdms_status").default("pending"),
+  fdmsStatus: text("fdms_status").default("pending"), // pending, issued, failed
   submissionId: text("submission_id"),
   fiscalDayNo: integer("fiscal_day_no"), // To track which fiscal day this invoice belongs to
   receiptCounter: integer("receipt_counter"), // ZIMRA Field [17] - Daily receipt counter
   receiptGlobalNo: integer("receipt_global_no"), // ZIMRA Field [18] - Global receipt number
+
+  // Validation Status
+  validationStatus: text("validation_status"), // valid, invalid, grey, null
+  lastValidationAttempt: timestamp("last_validation_attempt"),
 
   currency: text("currency").default("USD"),
   paymentMethod: text("payment_method").default("CASH"),
@@ -253,6 +270,10 @@ export const invoiceItems = pgTable("invoice_items", {
 export const invoiceItemsRelations = relations(invoiceItems, ({ one }) => ({
   invoice: one(invoices, { fields: [invoiceItems.invoiceId], references: [invoices.id] }),
   product: one(products, { fields: [invoiceItems.productId], references: [products.id] }),
+}));
+
+export const validationErrorsRelations = relations(validationErrors, ({ one }) => ({
+  invoice: one(invoices, { fields: [validationErrors.invoiceId], references: [invoices.id] }),
 }));
 
 // Currencies
@@ -294,6 +315,8 @@ export const insertInvoiceSchema = createInsertSchema(invoices).omit({
   submissionId: z.string().optional(),
   receiptCounter: z.number().int().optional(),
   receiptGlobalNo: z.number().int().optional(),
+  validationStatus: z.string().optional(),
+  lastValidationAttempt: z.date().optional(),
 });
 // When creating an invoice, the invoiceId foreign key is added after the invoice record is created.
 export const insertInvoiceItemSchema = createInsertSchema(invoiceItems).omit({ id: true, invoiceId: true });
@@ -356,12 +379,17 @@ export const invoicesRelations = relations(invoices, ({ one, many }) => ({
   customer: one(customers, { fields: [invoices.customerId], references: [customers.id] }),
   items: many(invoiceItems),
   payments: many(payments),
+  validationErrors: many(validationErrors),
 }));
 
 
 export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true });
 export type InsertPayment = z.infer<typeof insertPaymentSchema>;
 export type Payment = typeof payments.$inferSelect;
+
+export const insertValidationErrorSchema = createInsertSchema(validationErrors).omit({ id: true, createdAt: true });
+export type InsertValidationError = z.infer<typeof insertValidationErrorSchema>;
+export type ValidationError = typeof validationErrors.$inferSelect;
 
 
 // Quotations

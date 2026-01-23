@@ -131,6 +131,63 @@ export type FiscalDayStatus = 'FiscalDayOpened' | 'FiscalDayClosed' | 'FiscalDay
 export type FiscalDayReconciliationMode = 'Manual' | 'Automatic';
 export type ReceiptType = 'FiscalInvoice' | 'CreditNote' | 'DebitNote';
 
+export type ValidationErrorColor = 'Grey' | 'Yellow' | 'Red';
+
+export interface ValidationError {
+    errorCode: string;
+    errorMessage: string;
+    errorColor: ValidationErrorColor;
+    requiresPreviousReceipt: boolean;
+}
+
+export interface ReceiptValidationResult {
+    valid: boolean;
+    errors: ValidationError[];
+    receiptId?: string;
+    fiscalCode?: string;
+    signature?: string;
+}
+
+// ZIMRA Validation Error Codes Map
+export const ZIMRA_VALIDATION_ERRORS: Record<string, Omit<ValidationError, 'errorMessage'>> = {
+    'RCPT010': { errorCode: 'RCPT010', errorColor: 'Red', requiresPreviousReceipt: false },
+    'RCPT011': { errorCode: 'RCPT011', errorColor: 'Red', requiresPreviousReceipt: true },
+    'RCPT012': { errorCode: 'RCPT012', errorColor: 'Red', requiresPreviousReceipt: true },
+    'RCPT013': { errorCode: 'RCPT013', errorColor: 'Red', requiresPreviousReceipt: false },
+    'RCPT014': { errorCode: 'RCPT014', errorColor: 'Yellow', requiresPreviousReceipt: false },
+    'RCPT015': { errorCode: 'RCPT015', errorColor: 'Red', requiresPreviousReceipt: false },
+    'RCPT016': { errorCode: 'RCPT016', errorColor: 'Red', requiresPreviousReceipt: false },
+    'RCPT017': { errorCode: 'RCPT017', errorColor: 'Red', requiresPreviousReceipt: false },
+    'RCPT018': { errorCode: 'RCPT018', errorColor: 'Red', requiresPreviousReceipt: false },
+    'RCPT019': { errorCode: 'RCPT019', errorColor: 'Red', requiresPreviousReceipt: false },
+    'RCPT020': { errorCode: 'RCPT020', errorColor: 'Red', requiresPreviousReceipt: false },
+    'RCPT021': { errorCode: 'RCPT021', errorColor: 'Red', requiresPreviousReceipt: false },
+    'RCPT022': { errorCode: 'RCPT022', errorColor: 'Red', requiresPreviousReceipt: false },
+    'RCPT023': { errorCode: 'RCPT023', errorColor: 'Red', requiresPreviousReceipt: false },
+    'RCPT024': { errorCode: 'RCPT024', errorColor: 'Red', requiresPreviousReceipt: false },
+    'RCPT025': { errorCode: 'RCPT025', errorColor: 'Red', requiresPreviousReceipt: false },
+    'RCPT026': { errorCode: 'RCPT026', errorColor: 'Red', requiresPreviousReceipt: false },
+    'RCPT027': { errorCode: 'RCPT027', errorColor: 'Red', requiresPreviousReceipt: false },
+    'RCPT028': { errorCode: 'RCPT028', errorColor: 'Red', requiresPreviousReceipt: false },
+    'RCPT029': { errorCode: 'RCPT029', errorColor: 'Red', requiresPreviousReceipt: false },
+    'RCPT030': { errorCode: 'RCPT030', errorColor: 'Red', requiresPreviousReceipt: true },
+    'RCPT031': { errorCode: 'RCPT031', errorColor: 'Yellow', requiresPreviousReceipt: false },
+    'RCPT032': { errorCode: 'RCPT032', errorColor: 'Red', requiresPreviousReceipt: false },
+    'RCPT033': { errorCode: 'RCPT033', errorColor: 'Red', requiresPreviousReceipt: false },
+    'RCPT034': { errorCode: 'RCPT034', errorColor: 'Red', requiresPreviousReceipt: false },
+    'RCPT035': { errorCode: 'RCPT035', errorColor: 'Red', requiresPreviousReceipt: false },
+    'RCPT036': { errorCode: 'RCPT036', errorColor: 'Red', requiresPreviousReceipt: false },
+    'RCPT037': { errorCode: 'RCPT037', errorColor: 'Red', requiresPreviousReceipt: false },
+    'RCPT038': { errorCode: 'RCPT038', errorColor: 'Red', requiresPreviousReceipt: false },
+    'RCPT039': { errorCode: 'RCPT039', errorColor: 'Red', requiresPreviousReceipt: false },
+    'RCPT040': { errorCode: 'RCPT040', errorColor: 'Red', requiresPreviousReceipt: false },
+    'RCPT041': { errorCode: 'RCPT041', errorColor: 'Yellow', requiresPreviousReceipt: false },
+    'RCPT042': { errorCode: 'RCPT042', errorColor: 'Red', requiresPreviousReceipt: false },
+    'RCPT043': { errorCode: 'RCPT043', errorColor: 'Red', requiresPreviousReceipt: false },
+    'RCPT047': { errorCode: 'RCPT047', errorColor: 'Red', requiresPreviousReceipt: false },
+    'RCPT048': { errorCode: 'RCPT048', errorColor: 'Red', requiresPreviousReceipt: false },
+};
+
 export interface ZimraTax {
     taxID: number;
     taxPercent?: number; // Not returned for exempt
@@ -575,7 +632,13 @@ export class ZimraDevice {
         return this.makeRequest('POST', 'CloseDay', payload);
     }
 
-    public async submitReceipt(receiptData: ReceiptData, previousReceiptHash: string | null = null, allowOffline = false) {
+    public async submitReceipt(receiptData: ReceiptData, previousReceiptHash: string | null = null, allowOffline = false): Promise<{
+        response: any;
+        signature: string;
+        hash: string;
+        synced: boolean;
+        validationResult?: ReceiptValidationResult;
+    }> {
         // 1. Prepare/Fix Receipt Data (Calculate Taxes, etc.)
         const prepared = this.prepareReceipt(receiptData);
 
@@ -616,6 +679,19 @@ export class ZimraDevice {
 
         try {
             const response = await this.makeRequest('POST', 'SubmitReceipt', finalPayload);
+
+            // Check if the response contains validation errors
+            const validationResult = this.parseValidationResponse(response);
+            if (!validationResult.valid) {
+                return {
+                    response,
+                    signature,
+                    hash,
+                    synced: true,
+                    validationResult
+                };
+            }
+
             return { response, signature, hash, synced: true };
         } catch (error) {
             if (allowOffline && error instanceof ZimraOfflineError) {
@@ -749,12 +825,83 @@ export class ZimraDevice {
         return receipt;
     }
 
+    private parseValidationResponse(response: any): ReceiptValidationResult {
+        // Check if response contains validation errors
+        if (!response || typeof response !== 'object') {
+            return { valid: true, errors: [] };
+        }
+
+        // ZIMRA validation errors are typically in a specific format
+        // Based on the specification, validation errors come with error codes
+        const errors: ValidationError[] = [];
+
+        // Check for validation error codes in the response
+        if (response.validationErrors && Array.isArray(response.validationErrors)) {
+            for (const error of response.validationErrors) {
+                const errorCode = error.code || error.errorCode;
+                if (errorCode && ZIMRA_VALIDATION_ERRORS[errorCode]) {
+                    const errorInfo = ZIMRA_VALIDATION_ERRORS[errorCode];
+                    errors.push({
+                        errorCode,
+                        errorMessage: error.message || error.description || `Validation error ${errorCode}`,
+                        errorColor: errorInfo.errorColor,
+                        requiresPreviousReceipt: errorInfo.requiresPreviousReceipt
+                    });
+                }
+            }
+        }
+
+        // Check for specific error codes in response properties
+        if (response.errorCode && ZIMRA_VALIDATION_ERRORS[response.errorCode]) {
+            const errorInfo = ZIMRA_VALIDATION_ERRORS[response.errorCode];
+            errors.push({
+                errorCode: response.errorCode,
+                errorMessage: response.errorMessage || response.message || `Validation error ${response.errorCode}`,
+                errorColor: errorInfo.errorColor,
+                requiresPreviousReceipt: errorInfo.requiresPreviousReceipt
+            });
+        }
+
+        // If no errors found, consider it valid
+        return {
+            valid: errors.length === 0,
+            errors,
+            receiptId: response.receiptId || response.operationID,
+            fiscalCode: response.fiscalCode,
+            signature: response.signature
+        };
+    }
+
+    private getEndpointDescription(endpoint: string, data?: any): string {
+        if (endpoint === 'SubmitReceipt' && data?.receipt?.receiptType) {
+            const type = data.receipt.receiptType;
+            if (type === 'FiscalInvoice') return 'Invoice Submission';
+            if (type === 'CreditNote') return 'Credit Note Submission';
+            if (type === 'DebitNote') return 'Debit Note Submission';
+            return `Submit ${type}`;
+        }
+
+        const mapping: Record<string, string> = {
+            'OpenDay': 'Open Fiscal Day',
+            'CloseDay': 'Close Fiscal Day',
+            'GetStatus': 'Check Status',
+            'GetConfig': 'Sync Config',
+            'Ping': 'Ping Request',
+            'VerifyTaxpayerInformation': 'Verify Taxpayer',
+            'RegisterDevice': 'Device Registration',
+            'IssueCertificate': 'Certificate Issuance'
+        };
+
+        return mapping[endpoint] || endpoint;
+    }
+
     private async makeRequest(method: 'GET' | 'POST', endpoint: string, data?: any) {
         const url = `/Device/v1/${this.config.deviceId}/${endpoint}`;
 
         let responseData: any = null;
         let statusCode: number | undefined;
         let errorMessage: string | undefined;
+        const logEndpoint = this.getEndpointDescription(endpoint, data);
 
         try {
             responseData = await this.wrapRequest(endpoint, () =>
@@ -772,12 +919,12 @@ export class ZimraDevice {
             responseData = error.details || { error: error.message };
             throw error;
         } finally {
-            console.log(`[ZIMRA makeRequest] Finally block - endpoint: ${endpoint}, logger exists: ${!!this.logger}`);
-            if (this.logger) {
-                // Log all requests, even if not invoice-related
+            const allowedLogs = ['OpenDay', 'CloseDay', 'SubmitReceipt', 'GetConfig'];
+            if (this.logger && allowedLogs.includes(endpoint)) {
+                // Log only specific endpoints
                 this.logger.log(
                     this.currentInvoiceId || null,
-                    endpoint,
+                    logEndpoint,
                     data || {},
                     responseData,
                     statusCode,

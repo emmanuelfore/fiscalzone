@@ -1,4 +1,4 @@
-﻿
+
 import { Document, Page, Text, View, StyleSheet, Image, Font } from "@react-pdf/renderer";
 import { format } from "date-fns";
 
@@ -194,7 +194,7 @@ export const InvoicePDF = ({ invoice, company, customer, qrCodeUrl }: InvoicePDF
                     <View style={styles.verificationBlock}>
                         <Text style={styles.verificationLabel}>Verification Code</Text>
                         <Text style={styles.verificationCode}>{verificationCode}</Text>
-                        <Text style={styles.verificationUrl}>Verify at https://receipt.zimra.org</Text>
+                        <Text style={styles.verificationUrl}>Verify at {company?.qrUrl || "https://receipt.zimra.org"}</Text>
                     </View>
                 )}
 
@@ -233,6 +233,7 @@ export const InvoicePDF = ({ invoice, company, customer, qrCodeUrl }: InvoicePDF
                                     <Text style={{ marginTop: 4 }}>TIN: {customer.tin || "N/A"}</Text>
                                     <Text>VAT No: {customer.vatNumber || "N/A"}</Text>
                                     {customer.email && <Text>Email: {customer.email}</Text>}
+                                    {customer.phone && <Text>Phone: {customer.phone}</Text>}
                                 </>
                             ) : (
                                 <Text style={{ fontStyle: 'italic', color: '#94a3b8' }}>Walk-in Customer</Text>
@@ -247,14 +248,19 @@ export const InvoicePDF = ({ invoice, company, customer, qrCodeUrl }: InvoicePDF
                         <View style={{ width: '48%' }}>
                             <View style={styles.fiscalRow}>
                                 <Text style={styles.fiscalLabel}>Invoice No:</Text>
+                                <Text style={styles.fiscalValue}>
+                                    {invoice.receiptCounter !== null && invoice.receiptCounter !== undefined && 
+                                     invoice.receiptGlobalNo !== null && invoice.receiptGlobalNo !== undefined
+                                        ? `${invoice.receiptCounter}/${invoice.receiptGlobalNo}`
+                                        : invoice.invoiceNumber}
+                                </Text>
+                            </View>
+                            <View style={styles.fiscalRow}>
+                                <Text style={styles.fiscalLabel}>Customer Reference No:</Text>
                                 <Text style={styles.fiscalValue}>{invoice.invoiceNumber}</Text>
                             </View>
                             <View style={styles.fiscalRow}>
-                                <Text style={styles.fiscalLabel}>Global No:</Text>
-                                <Text style={styles.fiscalValue}>{invoice.id}</Text>
-                            </View>
-                            <View style={styles.fiscalRow}>
-                                <Text style={styles.fiscalLabel}>Fiscal Day:</Text>
+                                <Text style={styles.fiscalLabel}>Fiscal Day No:</Text>
                                 <Text style={styles.fiscalValue}>{invoice.fiscalDayNo || "N/A"}</Text>
                             </View>
                         </View>
@@ -266,6 +272,10 @@ export const InvoicePDF = ({ invoice, company, customer, qrCodeUrl }: InvoicePDF
                             <View style={styles.fiscalRow}>
                                 <Text style={styles.fiscalLabel}>Device ID:</Text>
                                 <Text style={styles.fiscalValue}>{company?.fdmsDeviceId || "N/A"}</Text>
+                            </View>
+                            <View style={styles.fiscalRow}>
+                                <Text style={styles.fiscalLabel}>Device Serial No:</Text>
+                                <Text style={styles.fiscalValue}>{company?.fdmsDeviceSerialNo || "N/A"}</Text>
                             </View>
                             <View style={styles.fiscalRow}>
                                 <Text style={styles.fiscalLabel}>Currency:</Text>
@@ -349,25 +359,36 @@ export const InvoicePDF = ({ invoice, company, customer, qrCodeUrl }: InvoicePDF
 
                 {/* Banking Details Section */}
                 {(company?.bankName || company?.accountNumber) && (
-                    <View style={{ marginTop: 20, padding: 10, backgroundColor: '#fdfdfd', borderLeftWidth: 2, borderLeftColor: '#8b5cf6' }}>
-                        <Text style={[styles.sectionTitle, { borderBottomWidth: 0, marginBottom: 4, color: '#8b5cf6' }]}>Banking Details</Text>
-                        <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-                            <View style={{ width: '50%', marginBottom: 4 }}>
-                                <Text style={{ fontSize: 7, color: '#94a3b8', textTransform: 'uppercase' }}>Bank</Text>
-                                <Text style={{ fontSize: 9, fontWeight: 700 }}>{company.bankName || "N/A"}</Text>
-                            </View>
-                            <View style={{ width: '50%', marginBottom: 4 }}>
-                                <Text style={{ fontSize: 7, color: '#94a3b8', textTransform: 'uppercase' }}>Account Name</Text>
-                                <Text style={{ fontSize: 9, fontWeight: 700 }}>{company.accountName || company.name}</Text>
-                            </View>
-                            <View style={{ width: '50%' }}>
-                                <Text style={{ fontSize: 7, color: '#94a3b8', textTransform: 'uppercase' }}>Account Number</Text>
-                                <Text style={{ fontSize: 9, fontWeight: 700, fontFamily: 'Courier' }}>{company.accountNumber || "N/A"}</Text>
-                            </View>
-                            <View style={{ width: '50%' }}>
-                                <Text style={{ fontSize: 7, color: '#94a3b8', textTransform: 'uppercase' }}>Branch Code</Text>
-                                <Text style={{ fontSize: 9, fontWeight: 700 }}>{company.branchCode || "N/A"}</Text>
-                            </View>
+                    <View style={{ marginTop: 20, padding: 12, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 4 }}>
+                        <Text style={[styles.sectionTitle, { borderBottomWidth: 0, marginBottom: 8, color: '#1e293b', fontSize: 10, textAlign: 'center' }]}>
+                            PAYMENT DETAILS
+                        </Text>
+                        <View style={{ marginBottom: 4 }}>
+                            <Text style={{ fontSize: 8, color: '#1e293b', marginBottom: 3 }}>
+                                <Text style={{ fontWeight: 700, color: '#64748b' }}>Bank Name: </Text>
+                                <Text style={{ fontWeight: 700 }}>{company.bankName || "Not Specified"}</Text>
+                            </Text>
+                            <Text style={{ fontSize: 8, color: '#1e293b', marginBottom: 3 }}>
+                                <Text style={{ fontWeight: 700, color: '#64748b' }}>Account Name: </Text>
+                                <Text style={{ fontWeight: 700 }}>{company.accountName || company.name}</Text>
+                            </Text>
+                            <Text style={{ fontSize: 8, color: '#1e293b', marginBottom: 3 }}>
+                                <Text style={{ fontWeight: 700, color: '#64748b' }}>Account Number: </Text>
+                                <Text style={{ fontFamily: 'Courier', fontWeight: 700, letterSpacing: 0.5 }}>
+                                    {company.accountNumber || "Not Specified"}
+                                </Text>
+                            </Text>
+                            {company.branchCode && (
+                                <Text style={{ fontSize: 8, color: '#1e293b' }}>
+                                    <Text style={{ fontWeight: 700, color: '#64748b' }}>Branch Code: </Text>
+                                    <Text style={{ fontWeight: 700 }}>{company.branchCode}</Text>
+                                </Text>
+                            )}
+                        </View>
+                        <View style={{ marginTop: 8, paddingTop: 6, borderTopWidth: 1, borderTopColor: '#e2e8f0' }}>
+                            <Text style={{ fontSize: 7, color: '#64748b', textAlign: 'center', fontStyle: 'italic' }}>
+                                Please ensure payment reference includes invoice number
+                            </Text>
                         </View>
                     </View>
                 )}

@@ -4,7 +4,6 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { createServer, type Server } from "http";
-import { fileURLToPath } from 'url';
 // Path resolution helper
 const rootDir = process.cwd();
 import { storage } from "./storage.js";
@@ -1026,7 +1025,7 @@ export async function registerRoutes(
 
       const device = new ZimraDevice({
         deviceId: company.fdmsDeviceId,
-        deviceSerialNo: "UNKNOWN",
+        deviceSerialNo: company.fdmsDeviceSerialNo || "UNKNOWN",
         activationKey: company.fdmsApiKey || "",
         privateKey: company.zimraPrivateKey || undefined,
         certificate: company.zimraCertificate || undefined,
@@ -1045,6 +1044,11 @@ export async function registerRoutes(
 
       // Sync with DB
       const syncedTaxes = await storage.syncTaxTypes(taxes);
+
+      // Update company with qrUrl from config
+      if (config.qrUrl) {
+        await storage.updateCompany(companyId, { qrUrl: config.qrUrl });
+      }
 
       res.json({
         message: "Configuration synced successfully",
@@ -1082,7 +1086,7 @@ export async function registerRoutes(
 
       const device = new ZimraDevice({
         deviceId: company.fdmsDeviceId,
-        deviceSerialNo: "UNKNOWN",
+        deviceSerialNo: company.fdmsDeviceSerialNo || "UNKNOWN",
         activationKey: company.fdmsApiKey || "",
         privateKey: company.zimraPrivateKey || "",
         certificate: company.zimraCertificate || "",
@@ -1117,7 +1121,7 @@ export async function registerRoutes(
 
       const device = new ZimraDevice({
         deviceId: company.fdmsDeviceId,
-        deviceSerialNo: "UNKNOWN",
+        deviceSerialNo: company.fdmsDeviceSerialNo || "UNKNOWN",
         activationKey: company.fdmsApiKey || "",
         privateKey: company.zimraPrivateKey || "",
         certificate: company.zimraCertificate || "",
@@ -1211,7 +1215,7 @@ export async function registerRoutes(
 
       const device = new ZimraDevice({
         deviceId: company.fdmsDeviceId,
-        deviceSerialNo: "UNKNOWN",
+        deviceSerialNo: company.fdmsDeviceSerialNo || "UNKNOWN",
         activationKey: company.fdmsApiKey || "",
         privateKey: company.zimraPrivateKey || "",
         certificate: company.zimraCertificate || "",
@@ -1781,8 +1785,35 @@ export async function registerRoutes(
 
       console.log(`[Fiscalize] Result for Invoice ${invoiceId}:`, JSON.stringify(result, null, 2));
 
-      // Generate QR Code
-      const qrCode = device.generateQrCode(result.signature, receiptData.receiptGlobalNo, receiptData.receiptDate);
+      // Handle validation errors
+      const validationResult = result.validationResult;
+      let validationStatus = 'valid';
+      let validationErrors: any[] = [];
+
+      if (validationResult && !validationResult.valid) {
+        validationStatus = validationResult.errors.some(e => e.errorColor === 'Red') ? 'invalid' :
+                          validationResult.errors.some(e => e.errorColor === 'Grey') ? 'grey' : 'invalid';
+
+        // Store validation errors
+        validationErrors = validationResult.errors.map(error => ({
+          invoiceId,
+          errorCode: error.errorCode,
+          errorMessage: error.errorMessage,
+          errorColor: error.errorColor,
+          requiresPreviousReceipt: error.requiresPreviousReceipt
+        }));
+
+        // Save validation errors to database
+        if (validationErrors.length > 0) {
+          await storage.createValidationErrors(validationErrors);
+        }
+      }
+
+      // Generate QR Code (only if successful and synced)
+      let qrCode = '';
+      if (result.synced && validationStatus === 'valid') {
+        qrCode = device.generateQrCode(result.signature, receiptData.receiptGlobalNo, receiptData.receiptDate);
+      }
 
       const updatedInvoice = await storage.fiscalizeInvoice(invoiceId, {
         fiscalCode: result.hash,
@@ -1792,12 +1823,13 @@ export async function registerRoutes(
         receiptCounter: nextReceiptCounter,
         receiptGlobalNo: nextGlobalNo,
         syncedWithFdms: result.synced,
-        fdmsStatus: result.synced ? 'issued' : 'pending'
+        fdmsStatus: result.synced ? 'issued' : 'pending',
+        validationStatus,
+        lastValidationAttempt: new Date()
       });
 
-      // Update Company Counters and Hash ONLY for new fiscalizations (even if offline)
-      // If re-syncing, we don't touch company totals to avoid mess-ups
-      if (!invoice.receiptGlobalNo) {
+      // Update Company Counters and Hash ONLY for successful fiscalizations
+      if (!invoice.receiptGlobalNo && result.synced && validationStatus === 'valid') {
         await storage.updateCompany(company.id, {
           lastReceiptGlobalNo: nextGlobalNo,
           dailyReceiptCount: nextReceiptCounter,
@@ -1805,7 +1837,13 @@ export async function registerRoutes(
         });
       }
 
-      res.json(updatedInvoice);
+      // Return invoice with validation errors if any
+      const response = {
+        ...updatedInvoice,
+        validationErrors: validationErrors.length > 0 ? validationErrors : undefined
+      };
+
+      res.json(response);
     } catch (err: any) {
       console.error(err);
       if (err instanceof ZimraApiError) {

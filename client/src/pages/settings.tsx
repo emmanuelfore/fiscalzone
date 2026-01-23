@@ -309,38 +309,42 @@ export default function SettingsPage() {
                 </CardTitle>
                 <CardDescription>Default payment info for invoices</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-1">
-                  <Label className="text-xs">Bank Name</Label>
+              <CardContent className="space-y-6">
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold text-slate-700">Bank Name</Label>
                   <Input
                     value={formData.bankName}
                     onChange={e => setFormData({ ...formData, bankName: e.target.value })}
                     placeholder="e.g. Stanbic, CBZ, Ecocash"
+                    className="h-10"
                   />
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Account Name</Label>
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold text-slate-700">Account Name</Label>
                   <Input
                     value={formData.accountName}
                     onChange={e => setFormData({ ...formData, accountName: e.target.value })}
                     placeholder="Beneficiary Name"
+                    className="h-10"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Account Number</Label>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold text-slate-700">Account Number</Label>
                     <Input
                       value={formData.accountNumber}
                       onChange={e => setFormData({ ...formData, accountNumber: e.target.value })}
                       placeholder="Account #"
+                      className="h-10"
                     />
                   </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Branch Code</Label>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold text-slate-700">Branch Code</Label>
                     <Input
                       value={formData.branchCode}
                       onChange={e => setFormData({ ...formData, branchCode: e.target.value })}
                       placeholder="Sort Code"
+                      className="h-10"
                     />
                   </div>
                 </div>

@@ -437,6 +437,18 @@ export default function CreateInvoicePage() {
       })
     };
 
+    // Credit Note / Debit Note Validation: Notes are mandatory
+    const isCnDn = existingInvoice?.transactionType === "CreditNote" || existingInvoice?.transactionType === "DebitNote";
+    if (isCnDn && !notes?.trim()) {
+      toast({
+        title: "Notes Required",
+        description: `Please provide a reason/notes for this ${existingInvoice?.transactionType === "CreditNote" ? "Credit Note" : "Debit Note"}.`,
+        variant: "destructive",
+      });
+      setLoadingAction(null);
+      return;
+    }
+
     try {
       if (isEditing && editId) {
         await updateInvoice.mutateAsync({
@@ -509,6 +521,18 @@ export default function CreateInvoicePage() {
         };
       })
     };
+
+    // Credit Note / Debit Note Validation: Notes are mandatory
+    const isCnDn = existingInvoice?.transactionType === "CreditNote" || existingInvoice?.transactionType === "DebitNote";
+    if (isCnDn && !notes?.trim()) {
+      toast({
+        title: "Notes Required",
+        description: `Please provide a reason/notes for this ${existingInvoice?.transactionType === "CreditNote" ? "Credit Note" : "Debit Note"}.`,
+        variant: "destructive",
+      });
+      setLoadingAction(null);
+      return;
+    }
 
     try {
       if (isEditing && editId) {
@@ -605,6 +629,18 @@ export default function CreateInvoicePage() {
       })
     };
 
+    // Credit Note / Debit Note Validation: Notes are mandatory
+    const isCnDn = existingInvoice?.transactionType === "CreditNote" || existingInvoice?.transactionType === "DebitNote";
+    if (isCnDn && !notes?.trim()) {
+      toast({
+        title: "Notes Required",
+        description: `Please provide a reason/notes for this ${existingInvoice?.transactionType === "CreditNote" ? "Credit Note" : "Debit Note"}.`,
+        variant: "destructive",
+      });
+      setLoadingAction(null);
+      return;
+    }
+
     try {
       if (isEditing && editId) {
         await updateInvoice.mutateAsync({
@@ -664,44 +700,6 @@ export default function CreateInvoicePage() {
               </p>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Banking Details Banner */}
-      {company && (company.bankName || company.accountNumber) && (
-        <div className="mb-6 bg-slate-50 border border-slate-200 rounded-lg p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <div className="p-2 bg-emerald-100 rounded-full text-emerald-600 mt-1">
-              <ShieldCheck className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-slate-900 text-sm">Banking Details</h3>
-              <p className="text-xs text-slate-500 mt-1">These details will appear on the invoice.</p>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-1 mt-2 text-sm text-slate-700">
-                <div>
-                  <span className="text-xs text-slate-400 block">Bank</span>
-                  {company.bankName || "-"}
-                </div>
-                <div>
-                  <span className="text-xs text-slate-400 block">Account Name</span>
-                  {company.accountName || "-"}
-                </div>
-                <div>
-                  <span className="text-xs text-slate-400 block">Account Number</span>
-                  {company.accountNumber || "-"}
-                </div>
-                {company.branchCode && (
-                  <div>
-                    <span className="text-xs text-slate-400 block">Branch Code</span>
-                    {company.branchCode}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-          <Button variant="outline" size="sm" onClick={() => setLocation("/settings?tab=finance")} className="shrink-0 h-8 text-xs">
-            Edit Details
-          </Button>
         </div>
       )}
 
@@ -1366,7 +1364,12 @@ export default function CreateInvoicePage() {
             {/* Left Column: Notes & Banking */}
             <div className="space-y-8">
               <div className="space-y-2">
-                <Label className="text-xs font-semibold uppercase text-slate-400">Notes</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold uppercase text-slate-400">Notes</Label>
+                  {(existingInvoice?.transactionType === "CreditNote" || existingInvoice?.transactionType === "DebitNote") && (
+                    <span className="text-[10px] font-bold text-red-500 uppercase tracking-tighter">Required for CN/DN</span>
+                  )}
+                </div>
                 <Textarea
                   placeholder="Invoice notes, terms and conditions, payment instructions, etc."
                   className="bg-slate-50 border-slate-200 min-h-[100px] resize-none text-sm"
@@ -1419,7 +1422,7 @@ export default function CreateInvoicePage() {
                 <div className="space-y-1">
                   <div className="text-xs font-semibold uppercase text-slate-400">Verification</div>
                   <div className="text-sm font-medium text-slate-700">Will be generated on submission</div>
-                  <div className="text-xs text-slate-500">Verify at <span className="text-primary underline">https://receipt.zimra.org/</span></div>
+                  <div className="text-xs text-slate-500">Verify at <span className="text-primary underline">{company?.qrUrl || "https://receipt.zimra.org/"}</span></div>
                 </div>
               </div>
 

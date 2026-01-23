@@ -18,6 +18,7 @@ import { apiFetch } from "@/lib/api";
 
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import { ValidationErrorsDisplay } from "@/components/invoices/validation-errors-display";
 
 export default function InvoiceDetailsPage() {
   const [, params] = useRoute("/invoices/:id");
@@ -346,6 +347,18 @@ export default function InvoiceDetailsPage() {
         </div>
       </div>
 
+      {/* Validation Errors Display */}
+      {invoice?.validationErrors && invoice.validationErrors.length > 0 && (
+        <div className="max-w-4xl mx-auto mb-6">
+          <ValidationErrorsDisplay
+            errors={invoice.validationErrors}
+            onResubmit={() => fiscalize.mutate(invoiceId)}
+            onEdit={() => setLocation(`/invoices/new?edit=${invoiceId}`)}
+            isResubmitting={fiscalize.isPending}
+          />
+        </div>
+      )}
+
       <div className="max-w-4xl mx-auto">
         <Card className="border-none shadow-xl bg-white overflow-hidden print:shadow-none print:border">
           <CardContent className="p-10 font-mono text-sm">
@@ -356,7 +369,7 @@ export default function InvoiceDetailsPage() {
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Verification Code</p>
                 <p className="font-bold text-lg tracking-wider font-mono text-emerald-600 mb-2">{verificationCode}</p>
                 <p className="text-xs text-slate-500">
-                  Verify at <a href="https://receipt.zimra.org" target="_blank" className="underline hover:text-emerald-600">https://receipt.zimra.org</a>
+                  Verify at <a href={company?.qrUrl || "https://receipt.zimra.org"} target="_blank" className="underline hover:text-emerald-600">{company?.qrUrl || "https://receipt.zimra.org"}</a>
                 </p>
               </div>
             )}
@@ -409,6 +422,7 @@ export default function InvoiceDetailsPage() {
                         <p><span className="font-semibold text-slate-400 w-24 inline-block">TIN:</span> {invoice.customer.tin || "N/A"}</p>
                         <p><span className="font-semibold text-slate-400 w-24 inline-block">VAT No:</span> {invoice.customer.vatNumber || "N/A"}</p>
                         {invoice.customer.email && <p><span className="font-semibold text-slate-400 w-24 inline-block">Email:</span> {invoice.customer.email}</p>}
+                        {invoice.customer.phone && <p><span className="font-semibold text-slate-400 w-24 inline-block">Phone:</span> {invoice.customer.phone}</p>}
                       </div>
                     </>
                   ) : <p className="italic text-slate-400">Walk-in Customer</p>}
@@ -423,7 +437,8 @@ export default function InvoiceDetailsPage() {
                   <div className="flex justify-between border-b border-slate-200 pb-1">
                     <span className="text-slate-500">{isCreditNote ? "Credit Note No:" : (isDebitNote ? "Debit Note No:" : "Invoice No:")}</span>
                     <span className="font-bold text-slate-900">
-                      {invoice.receiptCounter && invoice.receiptGlobalNo
+                      {invoice.receiptCounter !== null && invoice.receiptCounter !== undefined && 
+                       invoice.receiptGlobalNo !== null && invoice.receiptGlobalNo !== undefined
                         ? `${invoice.receiptCounter}/${invoice.receiptGlobalNo}`
                         : invoice.invoiceNumber}
                     </span>
@@ -433,11 +448,7 @@ export default function InvoiceDetailsPage() {
                     <span className="font-bold text-slate-900">{invoice.invoiceNumber}</span>
                   </div>
                   <div className="flex justify-between border-b border-slate-200 pb-1">
-                    <span className="text-slate-500">Global No:</span>
-                    <span className="font-bold text-slate-900">{invoice.receiptGlobalNo || invoice.id}</span>
-                  </div>
-                  <div className="flex justify-between border-b border-slate-200 pb-1">
-                    <span className="text-slate-500">Fiscal Day:</span>
+                    <span className="text-slate-500">Fiscal Day No:</span>
                     <span className="font-bold text-slate-900">{invoice.fiscalDayNo || "N/A"}</span>
                   </div>
                 </div>

@@ -1,5 +1,5 @@
-import { storage } from "./storage";
-import { type RecurringInvoice } from "@shared/schema";
+import { storage } from "./storage.js";
+import { type RecurringInvoice } from "../shared/schema.js";
 import { addDays, addWeeks, addMonths, addYears } from "date-fns";
 
 export async function processRecurringInvoices() {

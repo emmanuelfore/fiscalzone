@@ -5,24 +5,24 @@ import path from "path";
 import fs from "fs";
 import { createServer, type Server } from "http";
 import { fileURLToPath } from 'url';
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-import { storage } from "./storage";
-import { setupAuth } from "./auth";
-import { api } from "@shared/routes";
+// Path resolution helper
+const rootDir = process.cwd();
+import { storage } from "./storage.js";
+import { setupAuth } from "./auth.js";
+import { api } from "../shared/routes.js";
 import { z } from "zod";
-import { ZimraDevice, type ReceiptData, ZimraApiError, getZimraBaseUrl, type ZimraConfigResponse, type ZimraTax } from "./zimra";
-import { sendInvoiceEmail } from './email';
-import { supabaseAdmin } from "./supabase";
+import { ZimraDevice, type ReceiptData, ZimraApiError, getZimraBaseUrl, type ZimraConfigResponse, type ZimraTax } from "./zimra.js";
+import { sendInvoiceEmail } from './email.js';
+import { supabaseAdmin } from "./supabase.js";
 import { parse } from "csv-parse/sync";
-import { logAction } from "./audit";
+import { logAction } from "./audit.js";
 import {
   insertQuotationSchema,
   insertQuotationItemSchema,
   insertRecurringInvoiceSchema,
   type InsertQuotation,
   type InsertRecurringInvoice
-} from "@shared/schema";
+} from "../shared/schema.js";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -126,8 +126,8 @@ export async function registerRoutes(
   // TEMPORARY DEBUG ENDPOINT
   app.get("/api/debug/logs", async (_req, res) => {
     try {
-      const { db } = await import("./db");
-      const { zimraLogs } = await import("@shared/schema");
+      const { db } = await import("./db.js");
+      const { zimraLogs } = await import("../shared/schema.js");
 
       const logs = await db.select().from(zimraLogs).limit(20);
       res.json({ count: logs.length, logs });
@@ -139,7 +139,7 @@ export async function registerRoutes(
   // Health Check (Public)
   app.get("/api/health", async (_req, res) => {
     try {
-      const { pool } = await import("./db");
+      const { pool } = await import("./db.js");
       await pool.query("SELECT 1");
       res.json({ status: "ok", database: "connected" });
     } catch (err) {
@@ -163,7 +163,7 @@ export async function registerRoutes(
   });
 
   // Serve uploaded files locally if needed
-  app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
+  app.use('/uploads', express.static(path.join(rootDir, 'uploads')));
 
   app.post("/api/companies/:id/logo", requireAuth, logoUpload.single("logo"), async (req, res) => {
     try {
@@ -196,7 +196,7 @@ export async function registerRoutes(
         publicUrl = data.publicUrl;
       } else {
         // Local File Storage Fallback
-        const uploadDir = path.join(__dirname, '..', 'uploads', 'logos');
+        const uploadDir = path.join(rootDir, 'uploads', 'logos');
         if (!fs.existsSync(uploadDir)) {
           fs.mkdirSync(uploadDir, { recursive: true });
         }

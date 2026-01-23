@@ -20,7 +20,7 @@ import {
   insertCurrencySchema,
   payments,
   insertPaymentSchema
-} from './schema';
+} from './schema.js';
 
 export const errorSchemas = {
   validation: z.object({

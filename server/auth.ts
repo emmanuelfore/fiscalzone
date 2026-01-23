@@ -1,7 +1,7 @@
 import { Express, Request, Response, NextFunction } from "express";
-import { storage } from "./storage";
-import { User as DbUser } from "@shared/schema";
-import { supabaseServer } from "./supabase";
+import { storage } from "./storage.js";
+import { User as DbUser } from "../shared/schema.js";
+import { supabaseServer } from "./supabase.js";
 
 // Augment Express Request type
 declare global {

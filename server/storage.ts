@@ -11,10 +11,10 @@ import {
   recurringInvoices, type RecurringInvoice, type InsertRecurringInvoice,
   quotations, quotationItems, type Quotation, type QuotationItem, type InsertQuotation, type InsertQuotationItem,
   zimraLogs, type ZimraLog, type InsertZimraLog
-} from "@shared/schema";
-import { db } from "./db";
+} from "../shared/schema.js";
+import { db } from "./db.js";
 import { eq, and, desc, lte } from "drizzle-orm";
-import { type FiscalDayCounter } from "./zimra";
+import { type FiscalDayCounter } from "./zimra.js";
 
 export interface IStorage {
   // User & Auth

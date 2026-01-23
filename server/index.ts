@@ -93,8 +93,8 @@ async function initializeApp() {
     await setupVite(httpServer, app);
   }
 
-  // Start server if not on Vercel
-  if (!process.env.VERCEL) {
+  // Start server if not on Vercel or in development
+  if (!process.env.VERCEL || process.env.NODE_ENV === "development") {
     const port = parseInt(process.env.PORT || "5000", 10);
     httpServer.listen(port, "0.0.0.0", () => {
       log(`serving on port ${port}`);
@@ -105,12 +105,15 @@ async function initializeApp() {
   // startRecurringInvoiceWorker();
 }
 
-// Start initialization
-initializeApp().catch((err) => {
-  console.error("Failed to initialize app:", err);
-  process.exit(1);
-});
-
 // Export for Vercel
-export default app;
 export { app, httpServer };
+export default app;
+
+// Start initialization if not imported as a module (e.g. by Vercel)
+// or always initialize routes if we're on Vercel (since it's a serverless entry point)
+if (process.env.VERCEL || process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js')) {
+  initializeApp().catch((err) => {
+    console.error("Failed to initialize app:", err);
+    process.exit(1);
+  });
+}

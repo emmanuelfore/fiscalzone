@@ -299,6 +299,19 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </DropdownMenu>
         </header>
 
+        {/* Password Warning Banner */}
+        {user && user.passwordChanged === false && (
+          <div className="bg-amber-50 border-b border-amber-200 px-8 py-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-amber-800 text-sm">
+              <LogOut className="w-4 h-4" />
+              <span>You are using a <strong>default password</strong>. For security, please update your password in your profile.</span>
+            </div>
+            <Button variant="outline" size="sm" className="h-7 text-xs border-amber-300 text-amber-900 bg-white hover:bg-amber-100" onClick={() => setLocation("/profile")}>
+              Change Password
+            </Button>
+          </div>
+        )}
+
         {/* Page Content */}
         <main className="flex-1 p-8 max-w-7xl mx-auto w-full">
           {children}

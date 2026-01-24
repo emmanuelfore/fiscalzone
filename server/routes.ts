@@ -867,27 +867,55 @@ export async function registerRoutes(
     try {
       const companyId = Number(req.params.companyId);
       const userId = (req as any).user.id;
-      const { email, role } = req.body;
+      const { email, role, name, username, password } = req.body;
 
       if (!email) return res.status(400).json({ message: "Email is required" });
 
       // Permission check
-      const users = await storage.getCompanyUsers(companyId);
-      const me = users.find(u => u.id === userId);
+      const companyUsersList = await storage.getCompanyUsers(companyId);
+      const me = companyUsersList.find(u => u.id === userId);
       if (!me || (me.role !== 'owner' && me.role !== 'admin')) {
         return res.status(403).json({ message: "Insufficient permissions" });
       }
 
       // Check if user exists in system
-      const userToAdd = await storage.getUserByEmail(email);
+      let userToAdd = await storage.getUserByEmail(email);
+
       if (!userToAdd) {
-        // Option: Create a placeholder user or error. schema requires valid user_id foreign key.
-        // For simplicity: Limit to adding existing users for now.
-        return res.status(404).json({ message: "User not found. They must register first." });
+        // Create user in Supabase first
+        if (!supabaseAdmin) {
+          return res.status(500).json({ message: "Supabase Admin client not configured" });
+        }
+
+        const defaultPassword = password || "Zimra123!"; // Secure default or provided
+
+        const { data: { user: sbUser }, error: sbError } = await supabaseAdmin.auth.admin.createUser({
+          email,
+          password: defaultPassword,
+          email_confirm: true,
+          user_metadata: { name: name || email.split('@')[0], full_name: name }
+        });
+
+        if (sbError) {
+          console.error("Supabase Admin Create User Error:", sbError);
+          return res.status(400).json({ message: "Failed to create user in auth system: " + sbError.message });
+        }
+
+        if (!sbUser) return res.status(500).json({ message: "No user returned from Auth" });
+
+        // Create in our DB
+        userToAdd = await storage.createUser({
+          id: sbUser.id,
+          email: sbUser.email!,
+          name: name || sbUser.user_metadata?.name || "New User",
+          username: username || email.split('@')[0],
+          password: "", // Handled by Supabase
+          passwordChanged: false
+        });
       }
 
       // Check if already in company
-      if (users.find(u => u.id === userToAdd.id)) {
+      if (companyUsersList.find(u => u.id === userToAdd.id)) {
         return res.status(409).json({ message: "User already in company" });
       }
 
@@ -896,7 +924,38 @@ export async function registerRoutes(
 
     } catch (err: any) {
       console.error("Add User Error:", err);
-      res.status(500).json({ message: "Failed to add user" });
+      res.status(500).json({ message: "Failed to add user: " + err.message });
+    }
+  });
+
+  // 2.1 Change Password (Local & Supabase sync)
+  app.post("/api/user/password", requireAuth, async (req, res) => {
+    try {
+      const { newPassword } = req.body;
+      if (!newPassword) return res.status(400).json({ message: "New password is required" });
+      if (newPassword.length < 6) return res.status(400).json({ message: "Password must be at least 6 characters" });
+
+      const userId = (req as any).user.id;
+
+      // Update in Supabase
+      if (!supabaseAdmin) return res.status(500).json({ message: "Admin client not configured" });
+
+      const { error: sbError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+        password: newPassword
+      });
+
+      if (sbError) {
+        console.error("STpabase Update Password Error:", sbError);
+        return res.status(400).json({ message: "Failed to update password in auth system: " + sbError.message });
+      }
+
+      // Update local flag
+      await storage.updateUser(userId, { passwordChanged: true });
+
+      res.json({ message: "Password updated successfully" });
+    } catch (err: any) {
+      console.error("Change Password Error:", err);
+      res.status(500).json({ message: "Failed to update password" });
     }
   });
 
@@ -1043,7 +1102,7 @@ export async function registerRoutes(
       }
 
       // Sync with DB
-      const syncedTaxes = await storage.syncTaxTypes(taxes);
+      const syncedTaxes = await storage.syncTaxTypes(companyId, taxes);
 
       // Update company with qrUrl from config
       if (config.qrUrl) {
@@ -1243,7 +1302,8 @@ export async function registerRoutes(
         currentFiscalDayNo: result.fiscalDayNo || nextDayNo,
         fiscalDayOpen: true,
         lastFiscalDayStatus: 'FiscalDayOpened',
-        dailyReceiptCount: 0 // Reset daily counter
+        dailyReceiptCount: 0, // Reset daily counter
+        lastFiscalHash: null  // Clear hash chain for new day
       });
 
       res.json(result);
@@ -1294,7 +1354,7 @@ export async function registerRoutes(
       const counters = await storage.calculateFiscalCounters(companyId, fiscalDayNo);
       console.log(`[CloseDay] Calculated ${counters.length} fiscal counters`);
 
-      const todayStr = new Date().toISOString().slice(0, 19);
+      const todayStr = new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD local
 
       // Retry mechanism for fiscal day closure
       let lastError: any = null;
@@ -1486,61 +1546,76 @@ export async function registerRoutes(
 
   // Tax Routes
   app.get(api.tax.types.path, requireAuth, async (req, res) => {
-    const types = await storage.getTaxTypes();
+    const companyId = req.user!.companyId;
+    if (!companyId) return res.status(403).json({ message: "No company associated with user" });
+    const types = await storage.getTaxTypes(companyId);
     res.json(types);
   });
 
   app.post(api.tax.createType.path, requireAuth, async (req, res) => {
     try {
-      // Date parsing happens in Zod schema refinement if needed, but for now we expect string YYYY-MM-DD which postgres handles or we fix schema
+      const companyId = req.user!.companyId;
+      if (!companyId) return res.status(403).json({ message: "No company associated with user" });
+
       const input = api.tax.createType.input.parse(req.body);
-      const type = await storage.createTaxType(input);
+      const type = await storage.createTaxType({ ...input, companyId });
       res.status(201).json(type);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      res.status(500).json({ message: "Failed to create tax type" });
+      res.status(500).json({ message: "Failed to create tax type", error: err.message });
     }
   });
 
   app.patch(api.tax.updateType.path, requireAuth, async (req, res) => {
     try {
+      const companyId = req.user!.companyId;
+      if (!companyId) return res.status(403).json({ message: "No company associated with user" });
+
       const id = Number(req.params.id);
       const input = api.tax.updateType.input.parse(req.body);
-      const updated = await storage.updateTaxType(id, input);
+      const updated = await storage.updateTaxType(id, companyId, input);
       if (!updated) return res.status(404).json({ message: "Tax Type not found" });
       res.json(updated);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      res.status(500).json({ message: "Failed to update tax type" });
+      res.status(500).json({ message: "Failed to update tax type", error: err.message });
     }
   });
 
   app.get(api.tax.categories.path, requireAuth, async (req, res) => {
-    const categories = await storage.getTaxCategories();
+    const companyId = req.user!.companyId;
+    if (!companyId) return res.status(403).json({ message: "No company associated with user" });
+    const categories = await storage.getTaxCategories(companyId);
     res.json(categories);
   });
 
   app.post(api.tax.createCategory.path, requireAuth, async (req, res) => {
     try {
+      const companyId = req.user!.companyId;
+      if (!companyId) return res.status(403).json({ message: "No company associated with user" });
+
       const input = api.tax.createCategory.input.parse(req.body);
-      const category = await storage.createTaxCategory(input);
+      const category = await storage.createTaxCategory({ ...input, companyId });
       res.status(201).json(category);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      res.status(500).json({ message: "Failed to create tax category" });
+      res.status(500).json({ message: "Failed to create tax category", error: err.message });
     }
   });
 
   app.patch(api.tax.updateCategory.path, requireAuth, async (req, res) => {
     try {
+      const companyId = req.user!.companyId;
+      if (!companyId) return res.status(403).json({ message: "No company associated with user" });
+
       const id = Number(req.params.id);
       const input = api.tax.updateCategory.input.parse(req.body);
-      const updated = await storage.updateTaxCategory(id, input);
+      const updated = await storage.updateTaxCategory(id, companyId, input);
       if (!updated) return res.status(404).json({ message: "Category not found" });
       res.json(updated);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      res.status(500).json({ message: "Failed to update tax category" });
+      res.status(500).json({ message: "Failed to update tax category", error: err.message });
     }
   });
 
@@ -1604,7 +1679,6 @@ export async function registerRoutes(
   });
 
   // Fiscalize invoice using ZIMRA Fiscal Device Gateway
-  // Fiscalize invoice using ZIMRA Fiscal Device Gateway
   app.post(api.invoices.fiscalize.path, requireAuth, async (req, res) => {
     try {
       const invoiceId = Number(req.params.id);
@@ -1639,7 +1713,6 @@ export async function registerRoutes(
       // Set invoice ID for logging
       device.setInvoiceId(invoiceId);
 
-      // 1. AUTO-OPEN DAY CHECK
       try {
         const status = await device.getStatus() as any;
         if (status.fiscalDayStatus !== 'FiscalDayOpened') {
@@ -1651,7 +1724,9 @@ export async function registerRoutes(
           await storage.updateCompany(company.id, {
             currentFiscalDayNo: openResult.fiscalDayNo || nextDayNo,
             fiscalDayOpen: true,
-            lastFiscalDayStatus: 'FiscalDayOpened'
+            lastFiscalDayStatus: 'FiscalDayOpened',
+            dailyReceiptCount: 0,
+            lastFiscalHash: null
           });
           console.log(`Fiscal Day Opened: ${openResult.fiscalDayNo}`);
         } else {
@@ -1664,30 +1739,85 @@ export async function registerRoutes(
             });
           }
         }
+
+        // 2. SYNC COUNTERS FROM ZIMRA
+        const zimraGlobalNo = status.lastReceiptGlobalNo || 0;
+        let zimraDailyCount = 0;
+        if (status.fiscalDayDocumentQuantities) {
+          zimraDailyCount = status.fiscalDayDocumentQuantities.reduce((sum: number, dq: any) => sum + (dq.receiptQuantity || 0), 0);
+        }
+
+        console.log(`[Fiscalize] ZIMRA Status Sync - GlobalNo: ${zimraGlobalNo}, DailyCount: ${zimraDailyCount}`);
+
+        // Update company state if ZIMRA is ahead (or to ensure sync)
+        await storage.updateCompany(company.id, {
+          lastReceiptGlobalNo: Math.max(company.lastReceiptGlobalNo || 0, zimraGlobalNo),
+          dailyReceiptCount: Math.max(company.dailyReceiptCount || 0, zimraDailyCount),
+          fiscalDayOpen: true,
+          currentFiscalDayNo: status.lastFiscalDayNo
+        });
+
+        // Re-fetch company to get updated counters
+        const updatedCompany = await storage.getCompany(company.id);
+        if (updatedCompany) {
+          company.lastReceiptGlobalNo = updatedCompany.lastReceiptGlobalNo;
+          company.dailyReceiptCount = updatedCompany.dailyReceiptCount;
+          company.lastFiscalHash = updatedCompany.lastFiscalHash;
+        }
       } catch (e: any) {
-        console.error("Auto-Open Day Failed:", e.message);
-        return res.status(500).json({ message: `Failed to auto-open fiscal day: ${e.message}` });
+        console.error("ZIMRA Status/Sync Failed:", e.message);
+        return res.status(500).json({ message: `Failed to sync with ZIMRA: ${e.message}` });
       }
 
       // 1. Get ZIMRA Config for correct Tax IDs
       let zimraConfig: ZimraConfigResponse | undefined;
+      const dbTaxTypes = await storage.getTaxTypes(company.id);
+
       try {
         zimraConfig = await device.getConfig();
       } catch (e) {
-        console.warn("Failed to fetch ZIMRA config, falling back to defaults for tax mapping");
+        console.warn("Failed to fetch ZIMRA config, falling back to database for tax mapping");
       }
 
       // Map Invoice to ReceiptData
       const receiptLines = invoice.items.map((item, index) => {
-        const taxPercent = parseFloat(item.taxRate as any);
+        let taxPercent = parseFloat(item.taxRate as any);
+
+        // Force 0% tax if company is not VAT registered
+        if (!company.vatRegistered) {
+          taxPercent = 0;
+        }
+
         let taxID = 0;
+
 
         // Try to find matching tax ID from ZIMRA configuration
         if (zimraConfig?.applicableTaxes) {
           const matchingTax = zimraConfig.applicableTaxes.find((t: ZimraTax) =>
             t.taxPercent !== undefined && Math.abs(t.taxPercent - taxPercent) < 0.01
           );
-          if (matchingTax) taxID = matchingTax.taxID;
+          if (matchingTax) {
+            taxID = matchingTax.taxID;
+          }
+        }
+
+        // Secondary fallback: Look in database synced tax types
+        if (taxID === 0) {
+          const dbMatchingTax = dbTaxTypes.find(t => Math.abs(Number(t.rate) - taxPercent) < 0.01);
+          if (dbMatchingTax) {
+            taxID = dbMatchingTax.zimraTaxId ? parseInt(dbMatchingTax.zimraTaxId) : 0;
+          }
+        }
+
+        // Tertiary fallback for non-VAT if still 0
+        if (taxID === 0 && !company.vatRegistered) {
+          // Default to first tax with 0% or marked as exempt
+          const zeroTax = zimraConfig?.applicableTaxes?.find((t: ZimraTax) => t.taxPercent === 0 || t.taxName?.toLowerCase().includes('exempt')) ||
+            dbTaxTypes.find(t => Number(t.rate) === 0 || t.name?.toLowerCase().includes('exempt'));
+
+          if (zeroTax) {
+            taxID = (zeroTax as any).taxID || parseInt((zeroTax as any).zimraTaxId || "0");
+          }
         }
 
         // Fallback or auto-detect in device class if still 0
@@ -1700,7 +1830,7 @@ export async function registerRoutes(
           receiptLineQuantity: parseFloat(Number(item.quantity).toFixed(2)),
           receiptLineTotal: parseFloat(Number(item.lineTotal).toFixed(2)),
           taxPercent: taxPercent,
-          taxID: taxID
+          taxID: taxID,
         };
       });
 
@@ -1739,27 +1869,49 @@ export async function registerRoutes(
         }
       }
 
-      // Construct Buyer Data
-      buyerData = invoice.customer ? {
-        buyerRegisterName: invoice.customer.name,
-        buyerTradeName: invoice.customer.name,
-        vatNumber: invoice.customer.vatNumber || "",
-        buyerTIN: invoice.customer.tin || "",
-        buyerContacts: {
-          phoneNo: invoice.customer.phone || "",
-          email: invoice.customer.email || ""
-        },
-        buyerAddress: {
-          province: invoice.customer.city || "",
-          city: invoice.customer.city || "",
-          street: invoice.customer.address || "",
-          houseNo: "",
-          district: ""
-        }
-      } : undefined;
+      // Construct Buyer Data - Only include fields that have actual data
+      if (invoice.customer) {
+        buyerData = {
+          buyerRegisterName: invoice.customer.name,
+          buyerTradeName: invoice.customer.name,
+        };
 
-      const nextGlobalNo = invoice.receiptGlobalNo || ((company.lastReceiptGlobalNo || 0) + 1);
-      const nextReceiptCounter = invoice.receiptCounter || ((company.dailyReceiptCount || 0) + 1);
+        // Only include VAT number if it exists
+        if (invoice.customer.vatNumber && invoice.customer.vatNumber.trim()) {
+          buyerData.vatNumber = invoice.customer.vatNumber.trim();
+        }
+
+        // Only include TIN if it exists
+        if (invoice.customer.tin && invoice.customer.tin.trim()) {
+          buyerData.buyerTIN = invoice.customer.tin.trim();
+        }
+
+        // Only include contacts if at least one field has data
+        const hasPhone = invoice.customer.phone && invoice.customer.phone.trim();
+        const hasEmail = invoice.customer.email && invoice.customer.email.trim();
+
+        if (hasPhone || hasEmail) {
+          buyerData.buyerContacts = {};
+          if (hasPhone) buyerData.buyerContacts.phoneNo = invoice.customer.phone.trim();
+          if (hasEmail) buyerData.buyerContacts.email = invoice.customer.email.trim();
+        }
+
+        // Only include address if at least one field has data
+        const hasProvince = invoice.customer.city && invoice.customer.city.trim();
+        const hasCity = invoice.customer.city && invoice.customer.city.trim();
+        const hasStreet = invoice.customer.address && invoice.customer.address.trim();
+
+        if (hasProvince || hasCity || hasStreet) {
+          buyerData.buyerAddress = {};
+          if (hasProvince) buyerData.buyerAddress.province = invoice.customer.city.trim();
+          if (hasCity) buyerData.buyerAddress.city = invoice.customer.city.trim();
+          if (hasStreet) buyerData.buyerAddress.street = invoice.customer.address.trim();
+          // houseNo and district are optional and not used in our schema
+        }
+      }
+
+      const nextGlobalNo = (invoice.status === 'issued' ? invoice.receiptGlobalNo : null) || ((company.lastReceiptGlobalNo || 0) + 1);
+      const nextReceiptCounter = (invoice.status === 'issued' ? invoice.receiptCounter : null) || ((company.dailyReceiptCount || 0) + 1);
 
       const receiptData: ReceiptData = {
         receiptType: receiptType,
@@ -1767,7 +1919,7 @@ export async function registerRoutes(
         receiptCounter: nextReceiptCounter,
         receiptGlobalNo: nextGlobalNo,
         invoiceNo: invoice.invoiceNumber,
-        receiptDate: new Date().toISOString().split('.')[0],
+        receiptDate: new Date().toLocaleDateString('sv-SE') + 'T' + new Date().toLocaleTimeString('sv-SE'),
         receiptLines: receiptLines as any,
         receiptTaxes: [],
         receiptPayments: payments as any,
@@ -1780,8 +1932,9 @@ export async function registerRoutes(
 
       console.log(`[Fiscalize] Prepared Receipt Data for Invoice ${invoiceId}:`, JSON.stringify(receiptData, null, 2));
 
-      // Submit with previous hash for chaining (allow offline fallback)
-      const result = await device.submitReceipt(receiptData, company.lastFiscalHash || null, true);
+      // Submit with previous hash for chaining (first receipt of day has no previous hash)
+      const prevHash = (nextReceiptCounter === 1) ? null : (company.lastFiscalHash || null);
+      const result = await device.submitReceipt(receiptData, prevHash, true);
 
       console.log(`[Fiscalize] Result for Invoice ${invoiceId}:`, JSON.stringify(result, null, 2));
 
@@ -1792,7 +1945,7 @@ export async function registerRoutes(
 
       if (validationResult && !validationResult.valid) {
         validationStatus = validationResult.errors.some(e => e.errorColor === 'Red') ? 'invalid' :
-                          validationResult.errors.some(e => e.errorColor === 'Grey') ? 'grey' : 'invalid';
+          validationResult.errors.some(e => e.errorColor === 'Grey') ? 'grey' : 'invalid';
 
         // Store validation errors
         validationErrors = validationResult.errors.map(error => ({
@@ -2290,6 +2443,7 @@ export async function registerRoutes(
   return httpServer;
 }
 
+
 // Helper to seed database if empty
 async function seedDatabase() {
   const testUserEmail = "demo@zimra.com";
@@ -2300,3 +2454,4 @@ async function seedDatabase() {
     // Create seed logic here if needed
   }
 }
+

@@ -359,6 +359,29 @@ export default function InvoiceDetailsPage() {
         </div>
       )}
 
+      {/* Debug: Show validation status if present */}
+      {invoice?.validationStatus && invoice.validationStatus !== 'valid' && (
+        <div className="max-w-4xl mx-auto mb-6">
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-yellow-800">
+                  Validation Status: {invoice.validationStatus}
+                </h3>
+                <div className="mt-2 text-sm text-yellow-700">
+                  <p>This invoice has validation issues that need to be addressed.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-4xl mx-auto">
         <Card className="border-none shadow-xl bg-white overflow-hidden print:shadow-none print:border">
           <CardContent className="p-10 font-mono text-sm">
@@ -398,11 +421,23 @@ export default function InvoiceDetailsPage() {
                       <p className="font-medium text-slate-800">{company.tradingName && company.tradingName !== company.name ? `(${company.tradingName})` : ""}</p>
                       <p>{company.address}</p>
                       <p>{company.city}, {company.country}</p>
-                      <div className="pt-2 space-y-1">
-                        <p><span className="font-semibold text-slate-400 w-24 inline-block">TIN:</span> {company.tin}</p>
-                        <p><span className="font-semibold text-slate-400 w-24 inline-block">VAT No:</span> {company.vatNumber || "N/A"}</p>
-                        <p><span className="font-semibold text-slate-400 w-24 inline-block">Email:</span> {company.email}</p>
-                        <p><span className="font-semibold text-slate-400 w-24 inline-block">Phone:</span> {company.phone}</p>
+                      <div className="pt-4 space-y-3">
+                        <div className="space-y-1">
+                          <p className="font-semibold text-slate-500 text-xs uppercase tracking-wide">TIN</p>
+                          <p className="font-bold text-slate-800">{company.tin}</p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="font-semibold text-slate-500 text-xs uppercase tracking-wide">VAT No</p>
+                          <p className="font-bold text-slate-800">{company.vatNumber || "N/A"}</p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="font-semibold text-slate-500 text-xs uppercase tracking-wide">Email</p>
+                          <p className="font-bold text-slate-800">{company.email}</p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="font-semibold text-slate-500 text-xs uppercase tracking-wide">Phone</p>
+                          <p className="font-bold text-slate-800">{company.phone}</p>
+                        </div>
                       </div>
                     </>
                   ) : <p className="text-red-500">Company Details Unavailable</p>}
@@ -418,11 +453,27 @@ export default function InvoiceDetailsPage() {
                       <p className="font-bold text-lg text-slate-800">{invoice.customer.name}</p>
                       <p>{invoice.customer.address || "No Address Provided"}</p>
                       <p>{invoice.customer.city} {invoice.customer.country}</p>
-                      <div className="pt-2 space-y-1">
-                        <p><span className="font-semibold text-slate-400 w-24 inline-block">TIN:</span> {invoice.customer.tin || "N/A"}</p>
-                        <p><span className="font-semibold text-slate-400 w-24 inline-block">VAT No:</span> {invoice.customer.vatNumber || "N/A"}</p>
-                        {invoice.customer.email && <p><span className="font-semibold text-slate-400 w-24 inline-block">Email:</span> {invoice.customer.email}</p>}
-                        {invoice.customer.phone && <p><span className="font-semibold text-slate-400 w-24 inline-block">Phone:</span> {invoice.customer.phone}</p>}
+                      <div className="pt-4 space-y-3">
+                        <div className="space-y-1">
+                          <p className="font-semibold text-slate-500 text-xs uppercase tracking-wide">TIN</p>
+                          <p className="font-bold text-slate-800">{invoice.customer.tin || "N/A"}</p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="font-semibold text-slate-500 text-xs uppercase tracking-wide">VAT No</p>
+                          <p className="font-bold text-slate-800">{invoice.customer.vatNumber || "N/A"}</p>
+                        </div>
+                        {invoice.customer.email && (
+                          <div className="space-y-1">
+                            <p className="font-semibold text-slate-500 text-xs uppercase tracking-wide">Email</p>
+                            <p className="font-bold text-slate-800">{invoice.customer.email}</p>
+                          </div>
+                        )}
+                        {invoice.customer.phone && (
+                          <div className="space-y-1">
+                            <p className="font-semibold text-slate-500 text-xs uppercase tracking-wide">Phone</p>
+                            <p className="font-bold text-slate-800">{invoice.customer.phone}</p>
+                          </div>
+                        )}
                       </div>
                     </>
                   ) : <p className="italic text-slate-400">Walk-in Customer</p>}
@@ -432,42 +483,44 @@ export default function InvoiceDetailsPage() {
 
             {/* 3. Header Info */}
             <div className="bg-slate-50 rounded-lg p-6 mb-10 border border-slate-100">
-              <div className="grid grid-cols-2 gap-y-4 gap-x-12">
-                <div className="space-y-2">
-                  <div className="flex justify-between border-b border-slate-200 pb-1">
-                    <span className="text-slate-500">{isCreditNote ? "Credit Note No:" : (isDebitNote ? "Debit Note No:" : "Invoice No:")}</span>
-                    <span className="font-bold text-slate-900">
-                      {invoice.receiptCounter !== null && invoice.receiptCounter !== undefined && 
+              <div className="grid grid-cols-2 gap-y-6 gap-x-12">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <p className="font-semibold text-slate-500 text-xs uppercase tracking-wide">
+                      {isCreditNote ? "Credit Note No" : (isDebitNote ? "Debit Note No" : "Invoice No")}
+                    </p>
+                    <p className="font-bold text-slate-900 text-lg">
+                      {invoice.receiptCounter !== null && invoice.receiptCounter !== undefined &&
                        invoice.receiptGlobalNo !== null && invoice.receiptGlobalNo !== undefined
                         ? `${invoice.receiptCounter}/${invoice.receiptGlobalNo}`
                         : invoice.invoiceNumber}
-                    </span>
+                    </p>
                   </div>
-                  <div className="flex justify-between border-b border-slate-200 pb-1">
-                    <span className="text-slate-500">Customer Reference No:</span>
-                    <span className="font-bold text-slate-900">{invoice.invoiceNumber}</span>
+                  <div className="space-y-2">
+                    <p className="font-semibold text-slate-500 text-xs uppercase tracking-wide">Customer Reference No</p>
+                    <p className="font-bold text-slate-900">{invoice.invoiceNumber}</p>
                   </div>
-                  <div className="flex justify-between border-b border-slate-200 pb-1">
-                    <span className="text-slate-500">Fiscal Day No:</span>
-                    <span className="font-bold text-slate-900">{invoice.fiscalDayNo || "N/A"}</span>
+                  <div className="space-y-2">
+                    <p className="font-semibold text-slate-500 text-xs uppercase tracking-wide">Fiscal Day No</p>
+                    <p className="font-bold text-slate-900">{invoice.fiscalDayNo || "N/A"}</p>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <div className="flex justify-between border-b border-slate-200 pb-1">
-                    <span className="text-slate-500">Date:</span>
-                    <span className="font-bold text-slate-900">{new Date(invoice.issueDate || new Date()).toLocaleString('en-GB')}</span>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <p className="font-semibold text-slate-500 text-xs uppercase tracking-wide">Date</p>
+                    <p className="font-bold text-slate-900">{new Date(invoice.issueDate || new Date()).toLocaleString('en-GB')}</p>
                   </div>
-                  <div className="flex justify-between border-b border-slate-200 pb-1">
-                    <span className="text-slate-500">Device ID:</span>
-                    <span className="font-bold text-slate-900">{company?.fdmsDeviceId || "N/A"}</span>
+                  <div className="space-y-2">
+                    <p className="font-semibold text-slate-500 text-xs uppercase tracking-wide">Device ID</p>
+                    <p className="font-bold text-slate-900">{company?.fdmsDeviceId || "N/A"}</p>
                   </div>
-                  <div className="flex justify-between border-b border-slate-200 pb-1">
-                    <span className="text-slate-500">Device Serial No:</span>
-                    <span className="font-bold text-slate-900">{company?.fdmsDeviceSerialNo || "N/A"}</span>
+                  <div className="space-y-2">
+                    <p className="font-semibold text-slate-500 text-xs uppercase tracking-wide">Device Serial No</p>
+                    <p className="font-bold text-slate-900">{company?.fdmsDeviceSerialNo || "N/A"}</p>
                   </div>
-                  <div className="flex justify-between border-b border-slate-200 pb-1">
-                    <span className="text-slate-500">Currency:</span>
-                    <span className="font-bold text-slate-900">{invoice.currency || "USD"}</span>
+                  <div className="space-y-2">
+                    <p className="font-semibold text-slate-500 text-xs uppercase tracking-wide">Currency</p>
+                    <p className="font-bold text-slate-900">{invoice.currency || "USD"}</p>
                   </div>
                 </div>
               </div>
@@ -509,8 +562,10 @@ export default function InvoiceDetailsPage() {
                   <th className="text-center py-3 font-bold text-slate-900 w-16">Qty</th>
                   <th className="text-right py-3 font-bold text-slate-900 w-24">Price {invoice.taxInclusive ? '(Incl)' : '(Excl)'}</th>
                   <th className="text-center py-3 font-bold text-slate-900 w-20">Tax %</th>
-                  <th className="text-right py-3 font-bold text-slate-900 w-24">VAT</th>
-                  <th className="text-right py-3 font-bold text-slate-900 w-32">Amount (Incl)</th>
+                  <th className="text-right py-3 font-bold text-slate-900 w-24">
+                    {invoice.taxInclusive ? 'VAT' : 'Amount (excl. tax)'}
+                  </th>
+                  <th className="text-right py-3 font-bold text-slate-900 w-32">Total Amount (incl. tax)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -540,6 +595,7 @@ export default function InvoiceDetailsPage() {
                       <td className="py-3 text-center text-slate-700">{item.quantity}</td>
                       <td className="py-3 text-right text-slate-700">{displayPrice.toFixed(2)}</td>
                       <td className="py-3 text-center text-slate-700 font-mono font-medium">{taxRate}%</td>
+                      {!invoice.taxInclusive && <td className="py-3 text-right text-slate-700">{lineTotal.toFixed(2)}</td>}
                       <td className="py-3 text-right text-slate-500 text-xs">{vatAmt.toFixed(2)}</td>
                       <td className="py-3 text-right font-bold text-slate-900">{displayTotal.toFixed(2)}</td>
                     </tr>
@@ -548,58 +604,9 @@ export default function InvoiceDetailsPage() {
               </tbody>
             </table>
 
-            <div className="flex flex-col sm:flex-row gap-8 mb-8">
-              <div className="flex-1">
-                <div className="space-y-1 bg-slate-50 p-4 rounded-lg border border-slate-100">
-                  <div className="flex justify-between text-[10px]">
-                    <span className="text-slate-400 uppercase tracking-widest font-bold">Total Items [39]:</span>
-                    <span className="font-bold text-slate-700">{invoice.items?.length || 0}</span>
-                  </div>
-                  <div className="flex justify-between text-[10px]">
-                    <span className="text-slate-400 uppercase tracking-widest font-bold">Currency [34]:</span>
-                    <span className="font-bold text-slate-700">{invoice.currency || "USD"}</span>
-                  </div>
-                  <div className="flex justify-between text-[10px]">
-                    <span className="text-slate-400 uppercase tracking-widest font-bold">Payment Method [37]:</span>
-                    <span className="font-bold text-slate-700">{invoice.paymentMethod || "CASH"}</span>
-                  </div>
-                </div>
-              </div>
-              <div className="flex-1" /> {/* Spacer */}
-            </div>
 
-            {/* 5. Totals & Tax Analysis */}
+            {/* 5. Totals & Tax Summary */}
             <div className="flex flex-col sm:flex-row gap-8 justify-end border-t-2 border-slate-900 pt-6">
-
-              {/* Tax Analysis (Left) */}
-              <div className="flex-1">
-                <h4 className="text-xs font-bold uppercase mb-2 text-slate-500">Tax Analysis</h4>
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-slate-200 text-slate-400">
-                      <th className="text-left py-1">Type</th>
-                      <th className="text-right py-1">Rate</th>
-                      <th className="text-right py-1">VAT Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {/* Simplified Tax Row for Demo - In real app, aggregate items by tax rate */}
-                    {/* We assume standard 15% for all for now, or fetch from summary */}
-                    {(() => {
-                      const rates = Array.from(new Set(invoice.items?.map((i: any) => Number(i.taxRate ?? 15))));
-                      const isMixed = rates.length > 1;
-                      const displayRate = isMixed ? "Mixed" : `${rates[0]}%`;
-                      return (
-                        <tr>
-                          <td className="py-1 text-slate-600">VAT {isMixed ? 'Mixed' : 'Standard'}</td>
-                          <td className="py-1 text-right text-slate-600 font-mono">{displayRate}</td>
-                          <td className="py-1 text-right text-slate-600 font-bold font-mono">{Number(invoice.taxAmount).toFixed(2)}</td>
-                        </tr>
-                      );
-                    })()}
-                  </tbody>
-                </table>
-              </div>
 
               {/* Tax Summary Section - ZIMRA Fields [40-44] */}
               {Object.keys(taxSummary).length > 0 && (
@@ -728,7 +735,7 @@ export default function InvoiceDetailsPage() {
                   {invoice.status === 'quote'
                     ? "OFFICIAL QUOTATION"
                     : (invoice.fiscalCode
-                      ? (isCreditNote ? "FISCAL CREDIT NOTE" : (isDebitNote ? "FISCAL DEBIT NOTE" : "FISCAL TAX INVOICE"))
+                      ? (isCreditNote ? "FISCAL CREDIT NOTE" : (isDebitNote ? "FISCAL DEBIT NOTE" : (company?.vatRegistered ? "FISCAL TAX INVOICE" : "FISCAL INVOICE")))
                       : (invoice.status === 'draft'
                         ? (isCreditNote ? "DRAFT CREDIT NOTE" : (isDebitNote ? "DRAFT DEBIT NOTE" : "DRAFT INVOICE"))
                         : (isCreditNote ? "PROFORMA CREDIT NOTE" : (isDebitNote ? "PROFORMA DEBIT NOTE" : "PROFORMA INVOICE"))))}

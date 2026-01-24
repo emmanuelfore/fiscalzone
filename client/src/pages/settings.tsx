@@ -70,6 +70,7 @@ export default function SettingsPage() {
         vatNumber: currentCompany.vatNumber || "",
         bpNumber: currentCompany.bpNumber || "",
         vatEnabled: currentCompany.vatEnabled ?? true,
+        vatRegistered: currentCompany.vatRegistered ?? true,
         bankName: currentCompany.bankName || "",
         accountName: currentCompany.accountName || "",
         accountNumber: currentCompany.accountNumber || "",
@@ -309,42 +310,42 @@ export default function SettingsPage() {
                 </CardTitle>
                 <CardDescription>Default payment info for invoices</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-2">
-                  <Label className="text-sm font-semibold text-slate-700">Bank Name</Label>
+              <CardContent className="space-y-8">
+                <div className="space-y-3">
+                  <Label className="text-base font-bold text-slate-800 block">Bank Name</Label>
                   <Input
                     value={formData.bankName}
                     onChange={e => setFormData({ ...formData, bankName: e.target.value })}
                     placeholder="e.g. Stanbic, CBZ, Ecocash"
-                    className="h-10"
+                    className="h-12 text-base"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-sm font-semibold text-slate-700">Account Name</Label>
+                <div className="space-y-3">
+                  <Label className="text-base font-bold text-slate-800 block">Account Name</Label>
                   <Input
                     value={formData.accountName}
                     onChange={e => setFormData({ ...formData, accountName: e.target.value })}
                     placeholder="Beneficiary Name"
-                    className="h-10"
+                    className="h-12 text-base"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-semibold text-slate-700">Account Number</Label>
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-3">
+                    <Label className="text-base font-bold text-slate-800 block">Account Number</Label>
                     <Input
                       value={formData.accountNumber}
                       onChange={e => setFormData({ ...formData, accountNumber: e.target.value })}
                       placeholder="Account #"
-                      className="h-10"
+                      className="h-12 text-base"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm font-semibold text-slate-700">Branch Code</Label>
+                  <div className="space-y-3">
+                    <Label className="text-base font-bold text-slate-800 block">Branch Code</Label>
                     <Input
                       value={formData.branchCode}
                       onChange={e => setFormData({ ...formData, branchCode: e.target.value })}
                       placeholder="Sort Code"
-                      className="h-10"
+                      className="h-12 text-base"
                     />
                   </div>
                 </div>
@@ -392,6 +393,15 @@ export default function SettingsPage() {
                     onCheckedChange={(checked) => setFormData({ ...formData, vatEnabled: checked === true })}
                   />
                   <label htmlFor="vatEnabled" className="text-sm font-medium">Apply VAT by default</label>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="vatRegistered"
+                    checked={formData.vatRegistered}
+                    onCheckedChange={(checked) => setFormData({ ...formData, vatRegistered: checked === true })}
+                  />
+                  <label htmlFor="vatRegistered" className="text-sm font-medium">Company is VAT registered</label>
                 </div>
 
                 <div className="pt-6 border-t border-slate-100 mt-6 flex items-center justify-between">

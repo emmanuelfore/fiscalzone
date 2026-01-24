@@ -340,7 +340,7 @@ export default function ReportsPage() {
                                                     </span>
                                                 </TableCell>
                                                 <TableCell className="text-right font-medium">
-                                                    {(inv.currency || "USD") === "USD" ? "$" : inv.currency} {Number(inv.total).toFixed(2)}
+                                                    {currencies?.find(c => c.code === (inv.currency || "USD"))?.symbol || (inv.currency === "USD" ? "$" : inv.currency)} {Number(inv.total).toFixed(2)}
                                                 </TableCell>
                                                 <TableCell className="text-right font-bold">
                                                     {consolidatedSymbol}{Number((Number(inv.total) / Number(inv.exchangeRate || 1)) * consolidatedRate).toFixed(2)}
@@ -384,7 +384,7 @@ export default function ReportsPage() {
                                                 <TableCell className="font-medium">{pay.reference || "-"}</TableCell>
                                                 <TableCell className="capitalize">{pay.method}</TableCell>
                                                 <TableCell className="text-right font-medium text-emerald-600">
-                                                    {(pay.currency || "USD") === "USD" ? "$" : pay.currency} {Number(pay.amount).toFixed(2)}
+                                                    {currencies?.find(c => c.code === (pay.currency || "USD"))?.symbol || (pay.currency === "USD" ? "$" : pay.currency)} {Number(pay.amount).toFixed(2)}
                                                 </TableCell>
                                                 <TableCell className="text-right font-bold text-emerald-700">
                                                     {consolidatedSymbol}{Number((Number(pay.amount) / Number(pay.exchangeRate || 1)) * consolidatedRate).toFixed(2)}

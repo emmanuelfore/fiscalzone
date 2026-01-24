@@ -67,6 +67,7 @@ export interface ReceiptLine {
     receiptLineTotal: number;
     taxPercent: number;
     taxID: number;
+    taxCode?: string;
 }
 
 export interface ReceiptTax {
@@ -74,6 +75,7 @@ export interface ReceiptTax {
     taxID: number;
     taxAmount: number;
     salesAmountWithTax: number;
+    taxCode?: string;
 }
 
 export interface ReceiptPayment {
@@ -149,47 +151,48 @@ export interface ReceiptValidationResult {
 }
 
 // ZIMRA Validation Error Codes Map
-export const ZIMRA_VALIDATION_ERRORS: Record<string, Omit<ValidationError, 'errorMessage'>> = {
-    'RCPT010': { errorCode: 'RCPT010', errorColor: 'Red', requiresPreviousReceipt: false },
-    'RCPT011': { errorCode: 'RCPT011', errorColor: 'Red', requiresPreviousReceipt: true },
-    'RCPT012': { errorCode: 'RCPT012', errorColor: 'Red', requiresPreviousReceipt: true },
-    'RCPT013': { errorCode: 'RCPT013', errorColor: 'Red', requiresPreviousReceipt: false },
-    'RCPT014': { errorCode: 'RCPT014', errorColor: 'Yellow', requiresPreviousReceipt: false },
-    'RCPT015': { errorCode: 'RCPT015', errorColor: 'Red', requiresPreviousReceipt: false },
-    'RCPT016': { errorCode: 'RCPT016', errorColor: 'Red', requiresPreviousReceipt: false },
-    'RCPT017': { errorCode: 'RCPT017', errorColor: 'Red', requiresPreviousReceipt: false },
-    'RCPT018': { errorCode: 'RCPT018', errorColor: 'Red', requiresPreviousReceipt: false },
-    'RCPT019': { errorCode: 'RCPT019', errorColor: 'Red', requiresPreviousReceipt: false },
-    'RCPT020': { errorCode: 'RCPT020', errorColor: 'Red', requiresPreviousReceipt: false },
-    'RCPT021': { errorCode: 'RCPT021', errorColor: 'Red', requiresPreviousReceipt: false },
-    'RCPT022': { errorCode: 'RCPT022', errorColor: 'Red', requiresPreviousReceipt: false },
-    'RCPT023': { errorCode: 'RCPT023', errorColor: 'Red', requiresPreviousReceipt: false },
-    'RCPT024': { errorCode: 'RCPT024', errorColor: 'Red', requiresPreviousReceipt: false },
-    'RCPT025': { errorCode: 'RCPT025', errorColor: 'Red', requiresPreviousReceipt: false },
-    'RCPT026': { errorCode: 'RCPT026', errorColor: 'Red', requiresPreviousReceipt: false },
-    'RCPT027': { errorCode: 'RCPT027', errorColor: 'Red', requiresPreviousReceipt: false },
-    'RCPT028': { errorCode: 'RCPT028', errorColor: 'Red', requiresPreviousReceipt: false },
-    'RCPT029': { errorCode: 'RCPT029', errorColor: 'Red', requiresPreviousReceipt: false },
-    'RCPT030': { errorCode: 'RCPT030', errorColor: 'Red', requiresPreviousReceipt: true },
-    'RCPT031': { errorCode: 'RCPT031', errorColor: 'Yellow', requiresPreviousReceipt: false },
-    'RCPT032': { errorCode: 'RCPT032', errorColor: 'Red', requiresPreviousReceipt: false },
-    'RCPT033': { errorCode: 'RCPT033', errorColor: 'Red', requiresPreviousReceipt: false },
-    'RCPT034': { errorCode: 'RCPT034', errorColor: 'Red', requiresPreviousReceipt: false },
-    'RCPT035': { errorCode: 'RCPT035', errorColor: 'Red', requiresPreviousReceipt: false },
-    'RCPT036': { errorCode: 'RCPT036', errorColor: 'Red', requiresPreviousReceipt: false },
-    'RCPT037': { errorCode: 'RCPT037', errorColor: 'Red', requiresPreviousReceipt: false },
-    'RCPT038': { errorCode: 'RCPT038', errorColor: 'Red', requiresPreviousReceipt: false },
-    'RCPT039': { errorCode: 'RCPT039', errorColor: 'Red', requiresPreviousReceipt: false },
-    'RCPT040': { errorCode: 'RCPT040', errorColor: 'Red', requiresPreviousReceipt: false },
-    'RCPT041': { errorCode: 'RCPT041', errorColor: 'Yellow', requiresPreviousReceipt: false },
-    'RCPT042': { errorCode: 'RCPT042', errorColor: 'Red', requiresPreviousReceipt: false },
-    'RCPT043': { errorCode: 'RCPT043', errorColor: 'Red', requiresPreviousReceipt: false },
-    'RCPT047': { errorCode: 'RCPT047', errorColor: 'Red', requiresPreviousReceipt: false },
-    'RCPT048': { errorCode: 'RCPT048', errorColor: 'Red', requiresPreviousReceipt: false },
+export const ZIMRA_VALIDATION_ERRORS: Record<string, Omit<ValidationError, 'errorMessage'> & { errorMessage: string }> = {
+    'RCPT010': { errorCode: 'RCPT010', errorColor: 'Red', requiresPreviousReceipt: false, errorMessage: 'Wrong currency code is used' },
+    'RCPT011': { errorCode: 'RCPT011', errorColor: 'Red', requiresPreviousReceipt: true, errorMessage: 'Receipt counter is not sequential' },
+    'RCPT012': { errorCode: 'RCPT012', errorColor: 'Red', requiresPreviousReceipt: true, errorMessage: 'Receipt global number is not sequential' },
+    'RCPT013': { errorCode: 'RCPT013', errorColor: 'Red', requiresPreviousReceipt: false, errorMessage: 'Invoice number is not unique' },
+    'RCPT014': { errorCode: 'RCPT014', errorColor: 'Yellow', requiresPreviousReceipt: false, errorMessage: 'Receipt date is earlier than fiscal day opening date' },
+    'RCPT015': { errorCode: 'RCPT015', errorColor: 'Red', requiresPreviousReceipt: false, errorMessage: 'Credited/debited invoice data is not provided' },
+    'RCPT016': { errorCode: 'RCPT016', errorColor: 'Red', requiresPreviousReceipt: false, errorMessage: 'No receipt lines provided' },
+    'RCPT017': { errorCode: 'RCPT017', errorColor: 'Red', requiresPreviousReceipt: false, errorMessage: 'Taxes information is not provided' },
+    'RCPT018': { errorCode: 'RCPT018', errorColor: 'Red', requiresPreviousReceipt: false, errorMessage: 'Payment information is not provided' },
+    'RCPT019': { errorCode: 'RCPT019', errorColor: 'Red', requiresPreviousReceipt: false, errorMessage: 'Invoice total amount is not equal to sum of all invoice lines' },
+    'RCPT020': { errorCode: 'RCPT020', errorColor: 'Red', requiresPreviousReceipt: false, errorMessage: 'Invoice signature is not valid' },
+    'RCPT021': { errorCode: 'RCPT021', errorColor: 'Red', requiresPreviousReceipt: false, errorMessage: 'VAT tax is used in invoice while taxpayer is not VAT taxpayer' },
+    'RCPT022': { errorCode: 'RCPT022', errorColor: 'Red', requiresPreviousReceipt: false, errorMessage: 'Invoice sales line price must be greater than 0 (less than 0 for Credit note), discount line price must be less than 0 for Invoice' },
+    'RCPT023': { errorCode: 'RCPT023', errorColor: 'Red', requiresPreviousReceipt: false, errorMessage: 'Invoice line quantity must be positive' },
+    'RCPT024': { errorCode: 'RCPT024', errorColor: 'Red', requiresPreviousReceipt: false, errorMessage: 'Invoice line total is not equal to unit price * quantity' },
+    'RCPT025': { errorCode: 'RCPT025', errorColor: 'Red', requiresPreviousReceipt: false, errorMessage: 'Invalid tax is used' },
+    'RCPT026': { errorCode: 'RCPT026', errorColor: 'Red', requiresPreviousReceipt: false, errorMessage: 'Incorrectly calculated tax amount' },
+    'RCPT027': { errorCode: 'RCPT027', errorColor: 'Red', requiresPreviousReceipt: false, errorMessage: 'Incorrectly calculated total sales amount (including tax)' },
+    'RCPT028': { errorCode: 'RCPT028', errorColor: 'Red', requiresPreviousReceipt: false, errorMessage: 'Payment amount must be greater than or equal 0 (less than or equal to 0 for Credit note)' },
+    'RCPT029': { errorCode: 'RCPT029', errorColor: 'Red', requiresPreviousReceipt: false, errorMessage: 'Credited/debited invoice information provided for regular invoice' },
+    'RCPT030': { errorCode: 'RCPT030', errorColor: 'Red', requiresPreviousReceipt: true, errorMessage: 'Invoice date is earlier than previously submitted receipt date' },
+    'RCPT031': { errorCode: 'RCPT031', errorColor: 'Yellow', requiresPreviousReceipt: false, errorMessage: 'Invoice is submitted with the future date' },
+    'RCPT032': { errorCode: 'RCPT032', errorColor: 'Red', requiresPreviousReceipt: false, errorMessage: 'Credit / debit note refers to non-existing invoice' },
+    'RCPT033': { errorCode: 'RCPT033', errorColor: 'Red', requiresPreviousReceipt: false, errorMessage: 'Credited/debited invoice is issued more than 12 months ago' },
+    'RCPT034': { errorCode: 'RCPT034', errorColor: 'Red', requiresPreviousReceipt: false, errorMessage: 'Note for credit/debit note is not provided' },
+    'RCPT035': { errorCode: 'RCPT035', errorColor: 'Red', requiresPreviousReceipt: false, errorMessage: 'Total credit note amount exceeds original invoice amount' },
+    'RCPT036': { errorCode: 'RCPT036', errorColor: 'Red', requiresPreviousReceipt: false, errorMessage: 'Credit/debit note uses other taxes than are used in the original invoice' },
+    'RCPT037': { errorCode: 'RCPT037', errorColor: 'Red', requiresPreviousReceipt: false, errorMessage: 'Invoice total amount is not equal to sum of all invoice lines and taxes applied' },
+    'RCPT038': { errorCode: 'RCPT038', errorColor: 'Red', requiresPreviousReceipt: false, errorMessage: 'Invoice total amount is not equal to sum of sales amount including tax in tax table' },
+    'RCPT039': { errorCode: 'RCPT039', errorColor: 'Red', requiresPreviousReceipt: false, errorMessage: 'Invoice total amount is not equal to sum of all payment amounts' },
+    'RCPT040': { errorCode: 'RCPT040', errorColor: 'Red', requiresPreviousReceipt: false, errorMessage: 'Invoice total amount must be greater than or equal to 0 (less than or equal to 0 for Credit note)' },
+    'RCPT041': { errorCode: 'RCPT041', errorColor: 'Yellow', requiresPreviousReceipt: false, errorMessage: 'Invoice is issued after fiscal day end' },
+    'RCPT042': { errorCode: 'RCPT042', errorColor: 'Red', requiresPreviousReceipt: false, errorMessage: 'Credit/debit note uses other currency than is used in the original invoice' },
+    'RCPT043': { errorCode: 'RCPT043', errorColor: 'Red', requiresPreviousReceipt: false, errorMessage: 'Mandatory buyer data fields are not provided' },
+    'RCPT047': { errorCode: 'RCPT047', errorColor: 'Red', requiresPreviousReceipt: false, errorMessage: 'HS code must be sent if taxpayer is a VAT payer' },
+    'RCPT048': { errorCode: 'RCPT048', errorColor: 'Red', requiresPreviousReceipt: false, errorMessage: 'HS code length must be 4 or 8 digits if taxpayer is not VAT payer, 4 or 8 digits if taxpayer is VAT payer and applied tax percent is bigger than 0, 8 digits if taxpayer is VAT payer and applied tax percent is equal to 0 or is empty' },
 };
 
 export interface ZimraTax {
     taxID: number;
+    taxCode?: string; // Some devices return this
     taxPercent?: number; // Not returned for exempt
     taxName: string;
     taxValidFrom: string; // Date
@@ -580,30 +583,34 @@ export class ZimraDevice {
             concatenatedCounters = sortedCounters.map((c: any) => {
                 if (parseFloat(c.fiscalCounterValue) === 0) return "";
 
-                // Format tax percent according to ZIMRA spec
-                let taxPercent = "";
-                if (c.fiscalCounterTaxPercent !== undefined && c.fiscalCounterTaxPercent !== null) {
-                    taxPercent = c.fiscalCounterTaxPercent.toFixed(2);
-                }
+                const type = c.fiscalCounterType.toUpperCase();
+                const currency = c.fiscalCounterCurrency.toUpperCase();
+                const valueInCents = Math.round(c.fiscalCounterValue * 100);
 
-                // Format money type
-                let moneyType = "";
-                if (c.fiscalCounterMoneyType !== undefined && c.fiscalCounterMoneyType !== null) {
-                    if (typeof c.fiscalCounterMoneyType === 'string') {
-                        moneyType = c.fiscalCounterMoneyType.toUpperCase();
-                    } else {
-                        moneyType = moneyTypeMapping[c.fiscalCounterMoneyType] || "";
+                let field3 = ""; // Either taxPercent or moneyType
+
+                if (type.includes('BYTAX')) {
+                    // "In case taxPercent is not an integer there should be dot between the integer and fractional part. 
+                    // In case of exempt which does not send tax percent value, empty value should be used in signature. 
+                    // In case taxPercent is an integer there should be value of tax percent, dot and two zeros sent."
+                    if (c.fiscalCounterTaxID !== 1 && c.fiscalCounterTaxPercent !== undefined && c.fiscalCounterTaxPercent !== null) {
+                        field3 = c.fiscalCounterTaxPercent.toFixed(2);
+                    }
+                } else if (type.includes('BYMONEYTYPE')) {
+                    if (c.fiscalCounterMoneyType !== undefined && c.fiscalCounterMoneyType !== null) {
+                        if (typeof c.fiscalCounterMoneyType === 'string') {
+                            field3 = c.fiscalCounterMoneyType.toUpperCase();
+                        } else {
+                            field3 = moneyTypeMapping[c.fiscalCounterMoneyType] || "";
+                        }
                     }
                 }
 
-                // Convert value to cents (integer)
-                const valueInCents = Math.round(c.fiscalCounterValue * 100);
-
-                return `${c.fiscalCounterType.toUpperCase()}${c.fiscalCounterCurrency.toUpperCase()}${taxPercent}${moneyType}${valueInCents}`;
+                return `${type}${currency}${field3}${valueInCents}`;
             }).join("");
         }
 
-        const stringToSign = `${deviceId}${fiscalDayNo}${fiscalDayDate}${concatenatedCounters}`;
+        const stringToSign = `${parseInt(this.config.deviceId)}${fiscalDayNo}${fiscalDayDate}${concatenatedCounters}`;
         console.log('=== CloseDay Signature Debug ===');
         console.log('Device ID:', deviceId);
         console.log('Fiscal Day No:', fiscalDayNo);
@@ -644,16 +651,37 @@ export class ZimraDevice {
 
         // 2. Generate Signature
         // Sort taxes for string construction
-        const sortedTaxes = [...prepared.receiptTaxes].sort((a, b) => a.taxID - b.taxID);
-        const concatenatedTaxes = sortedTaxes.map(t =>
-            `${t.taxPercent.toFixed(2)}${Math.round(t.taxAmount * 100)}${Math.round(t.salesAmountWithTax * 100)}`
-        ).join('');
+        // "Taxes are ordered by taxID in ascending order and taxCode in alphabetical order"
+        const sortedTaxes = [...prepared.receiptTaxes].sort((a, b) => {
+            if (a.taxID !== b.taxID) return a.taxID - b.taxID;
+            return (a.taxCode || '').localeCompare(b.taxCode || '');
+        });
+
+        const concatenatedTaxes = sortedTaxes.map(t => {
+            // "In case of exempt which does not send tax percent value, empty value should be used in signature."
+            // In Zimbabwe, Tax ID 1 is typically used for Exempt supplies.
+            let percentStr = "";
+            if (t.taxID !== 1 && t.taxPercent !== undefined && t.taxPercent !== null) {
+                // "In case taxPercent is an integer there should be dot and two zeros. 
+                // "In case taxPercent is not an integer there should be dot between integer and fractional part."
+                percentStr = t.taxPercent.toFixed(2);
+            }
+
+            const amount = Math.round(t.taxAmount * 100);
+            const sales = Math.round(t.salesAmountWithTax * 100);
+
+            // Removed taxCode from signature as per user request
+            return `${percentStr}${amount}${sales}`;
+        }).join('');
 
         const deviceIdStr = parseInt(this.config.deviceId).toString();
-        const rType = prepared.receiptType;
+        // "receiptType Receipt type value in upper case."
+        const rType = prepared.receiptType.toUpperCase();
+        // "receiptCurrency Currency code (ISO 4217 currency code). It must be in upper case."
         const rCurr = prepared.receiptCurrency.toUpperCase();
         const rGlobal = prepared.receiptGlobalNo;
         const rDate = prepared.receiptDate;
+        // "receiptTotal Receipt total is included in signature in cents."
         const rTotal = Math.round(prepared.receiptTotal * 100);
 
         let stringToSign = `${deviceIdStr}${rType}${rCurr}${rGlobal}${rDate}${rTotal}${concatenatedTaxes}`;
@@ -720,7 +748,7 @@ export class ZimraDevice {
             const absTaxPercent = Math.abs(line.taxPercent);
             if (!taxID) {
                 if (absTaxPercent === 0) taxID = 2; // Zero rate
-                else if (absTaxPercent === 15) taxID = 3; // Standard
+                else if (absTaxPercent === 15.5) taxID = 3; // Standard
                 else if (absTaxPercent === 5) taxID = 1; // Deemed
                 else taxID = 3; // Default
             }
@@ -749,11 +777,12 @@ export class ZimraDevice {
         const taxMap = new Map<string, ReceiptTax>();
 
         receipt.receiptLines.forEach(line => {
-            const key = `${line.taxPercent}-${line.taxID}`;
+            const key = `${line.taxPercent}-${line.taxID}-${line.taxCode || ''}`;
             if (!taxMap.has(key)) {
                 taxMap.set(key, {
                     taxPercent: line.taxPercent,
                     taxID: line.taxID,
+                    // taxCode: line.taxCode,
                     taxAmount: 0,
                     salesAmountWithTax: 0
                 });
@@ -831,27 +860,35 @@ export class ZimraDevice {
             return { valid: true, errors: [] };
         }
 
-        // ZIMRA validation errors are typically in a specific format
-        // Based on the specification, validation errors come with error codes
         const errors: ValidationError[] = [];
 
-        // Check for validation error codes in the response
+        // Check for validationErrors array in the response (actual ZIMRA format)
         if (response.validationErrors && Array.isArray(response.validationErrors)) {
             for (const error of response.validationErrors) {
-                const errorCode = error.code || error.errorCode;
+                const errorCode = error.validationErrorCode;
+                const errorColor = error.validationErrorColor;
+
                 if (errorCode && ZIMRA_VALIDATION_ERRORS[errorCode]) {
                     const errorInfo = ZIMRA_VALIDATION_ERRORS[errorCode];
                     errors.push({
                         errorCode,
-                        errorMessage: error.message || error.description || `Validation error ${errorCode}`,
-                        errorColor: errorInfo.errorColor,
+                        errorMessage: errorInfo.errorMessage,
+                        errorColor: errorColor as ValidationErrorColor,
                         requiresPreviousReceipt: errorInfo.requiresPreviousReceipt
+                    });
+                } else if (errorCode) {
+                    // Handle unknown error codes
+                    errors.push({
+                        errorCode,
+                        errorMessage: `Validation error ${errorCode}`,
+                        errorColor: (errorColor as ValidationErrorColor) || 'Red',
+                        requiresPreviousReceipt: false
                     });
                 }
             }
         }
 
-        // Check for specific error codes in response properties
+        // Check for legacy format validation error codes in response properties
         if (response.errorCode && ZIMRA_VALIDATION_ERRORS[response.errorCode]) {
             const errorInfo = ZIMRA_VALIDATION_ERRORS[response.errorCode];
             errors.push({
@@ -866,9 +903,9 @@ export class ZimraDevice {
         return {
             valid: errors.length === 0,
             errors,
-            receiptId: response.receiptId || response.operationID,
+            receiptId: response.receiptID || response.receiptId || response.operationID,
             fiscalCode: response.fiscalCode,
-            signature: response.signature
+            signature: response.receiptServerSignature?.signature || response.signature
         };
     }
 

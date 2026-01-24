@@ -21,8 +21,9 @@ export interface IStorage {
   // User & Auth
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
-  updateUser(id: string, user: Partial<InsertUser>): Promise<User>;
+  updateUser(id: string, user: Partial<User>): Promise<User>;
 
   // Companies
   createCompany(company: InsertCompany, userId: string): Promise<Company>;
@@ -50,13 +51,13 @@ export interface IStorage {
   createValidationErrors(errors: Array<{ invoiceId: number; errorCode: string; errorMessage: string; errorColor: string; requiresPreviousReceipt: boolean }>): Promise<void>;
 
   // Tax Config
-  getTaxTypes(): Promise<TaxType[]>;
-  createTaxType(taxType: InsertTaxType): Promise<TaxType>;
-  updateTaxType(id: number, taxType: Partial<InsertTaxType>): Promise<TaxType>;
-  getTaxCategories(): Promise<TaxCategory[]>;
-  createTaxCategory(category: InsertTaxCategory): Promise<TaxCategory>;
-  updateTaxCategory(id: number, category: Partial<InsertTaxCategory>): Promise<TaxCategory>;
-  syncTaxTypes(zimraTaxes: any[]): Promise<TaxType[]>;
+  getTaxTypes(companyId?: number): Promise<TaxType[]>;
+  createTaxType(taxType: InsertTaxType & { companyId: number }): Promise<TaxType>;
+  updateTaxType(id: number, companyId: number, taxType: Partial<InsertTaxType>): Promise<TaxType | undefined>;
+  getTaxCategories(companyId?: number): Promise<TaxCategory[]>;
+  createTaxCategory(category: InsertTaxCategory & { companyId: number }): Promise<TaxCategory>;
+  updateTaxCategory(id: number, companyId: number, category: Partial<InsertTaxCategory>): Promise<TaxCategory | undefined>;
+  syncTaxTypes(companyId: number, zimraTaxes: any[]): Promise<TaxType[]>;
 
   // Currencies
   getCurrencies(companyId: number): Promise<Currency[]>;
@@ -133,12 +134,17 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
+  }
+
   async createUser(insertUser: InsertUser): Promise<User> {
     const [user] = await db.insert(users).values(insertUser).returning();
     return user;
   }
 
-  async updateUser(id: string, updateUser: Partial<InsertUser>): Promise<User> {
+  async updateUser(id: string, updateUser: Partial<User>): Promise<User> {
     const [user] = await db
       .update(users)
       .set(updateUser)
@@ -414,31 +420,37 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async getTaxTypes(): Promise<TaxType[]> {
-    return await db.select().from(taxTypes);
+  async getTaxTypes(companyId?: number): Promise<TaxType[]> {
+    if (companyId) {
+      return await db.select().from(taxTypes).where(eq(taxTypes.companyId, companyId)).orderBy(taxTypes.rate);
+    }
+    return await db.select().from(taxTypes).orderBy(taxTypes.rate);
   }
 
-  async createTaxType(taxType: InsertTaxType): Promise<TaxType> {
+  async createTaxType(taxType: InsertTaxType & { companyId: number }): Promise<TaxType> {
     const [newTaxType] = await db.insert(taxTypes).values(taxType).returning();
     return newTaxType;
   }
 
-  async updateTaxType(id: number, taxType: Partial<InsertTaxType>): Promise<TaxType> {
-    const [updated] = await db.update(taxTypes).set(taxType).where(eq(taxTypes.id, id)).returning();
+  async updateTaxType(id: number, companyId: number, taxType: Partial<InsertTaxType>): Promise<TaxType | undefined> {
+    const [updated] = await db.update(taxTypes).set(taxType).where(and(eq(taxTypes.id, id), eq(taxTypes.companyId, companyId))).returning();
     return updated;
   }
 
-  async getTaxCategories(): Promise<TaxCategory[]> {
+  async getTaxCategories(companyId?: number): Promise<TaxCategory[]> {
+    if (companyId) {
+      return await db.select().from(taxCategories).where(eq(taxCategories.companyId, companyId));
+    }
     return await db.select().from(taxCategories);
   }
 
-  async createTaxCategory(category: InsertTaxCategory): Promise<TaxCategory> {
+  async createTaxCategory(category: InsertTaxCategory & { companyId: number }): Promise<TaxCategory> {
     const [newCategory] = await db.insert(taxCategories).values(category).returning();
     return newCategory;
   }
 
-  async updateTaxCategory(id: number, category: Partial<InsertTaxCategory>): Promise<TaxCategory> {
-    const [updated] = await db.update(taxCategories).set(category).where(eq(taxCategories.id, id)).returning();
+  async updateTaxCategory(id: number, companyId: number, category: Partial<InsertTaxCategory>): Promise<TaxCategory | undefined> {
+    const [updated] = await db.update(taxCategories).set(category).where(and(eq(taxCategories.id, id), eq(taxCategories.companyId, companyId))).returning();
     return updated;
   }
 
@@ -461,10 +473,10 @@ export class DatabaseStorage implements IStorage {
     await db.delete(currencies).where(eq(currencies.id, id));
   }
   // Tax Sync
-  async syncTaxTypes(zimraTaxes: any[]): Promise<TaxType[]> {
+  async syncTaxTypes(companyId: number, zimraTaxes: any[]): Promise<TaxType[]> {
     return await db.transaction(async (tx) => {
-      // Delete all existing tax types for a clean sync as requested
-      await tx.delete(taxTypes);
+      // Delete existing tax types for THIS company only
+      await tx.delete(taxTypes).where(eq(taxTypes.companyId, companyId));
 
       const results: TaxType[] = [];
 
@@ -474,19 +486,24 @@ export class DatabaseStorage implements IStorage {
         // Default to 0 if taxPercent is missing (e.g. for Exempt)
         const percent = zTax.taxPercent !== undefined ? zTax.taxPercent : 0;
         const taxRate = percent.toFixed(2);
-        const code = `VAT-${zTax.taxID}`; // Generate a code e.g. VAT-3
+        const zimraCode = zTax.taxCode || zTax.taxName?.substring(0, 1).toUpperCase() || "V";
+        const code = zTax.taxCode ? `VAT-${zTax.taxCode}` : `VAT-${zTax.taxID}`;
         const taxName = zTax.taxName || `VAT ${percent}%`;
+
         // Use ZIMRA validFrom or current date, formatted for SQL DATE (YYYY-MM-DD)
         const effectiveFrom = (zTax.validFrom || new Date().toISOString()).split('T')[0];
 
         // Create new tax type
         const [created] = await tx.insert(taxTypes).values({
+          companyId: companyId,
           code: code,
           name: taxName,
           rate: taxRate,
-          description: `ZIMRA Tax Level ${zTax.taxID}`,
+          description: `ZIMRA Tax Level ${zTax.taxID} (${zTax.taxName})`,
           zimraTaxId: zTax.taxID.toString(),
-          effectiveFrom: effectiveFrom
+          zimraCode: zimraCode, // Store A, B, C etc.
+          effectiveFrom: effectiveFrom,
+          isActive: true
         }).returning();
 
         results.push(created);
@@ -624,6 +641,9 @@ export class DatabaseStorage implements IStorage {
       return countersMap.get(key);
     };
 
+    // Pre-fetch tax types for the company once
+    const dbTaxTypes = await this.getTaxTypes(companyId);
+
     for (const row of dayInvoicesInfo) {
       if (!row.invoice || !row.item) continue;
 
@@ -632,20 +652,32 @@ export class DatabaseStorage implements IStorage {
       const currency = inv.currency || "USD";
       const taxPercent = Number(item.taxRate);
 
-      let taxID = 3;
-      if (taxPercent === 0) taxID = 2;
-      else if (taxPercent === 15) taxID = 3;
+      // Look up taxID from database taxTypes
+      const matchingTax = dbTaxTypes.find(t =>
+        Math.abs(Number(t.rate) - taxPercent) < 0.01
+      );
+
+      // ZIMRA Tax ID (Default to 2 for Exempt/0%, 3 for Standard supplies)
+      const taxID = matchingTax?.zimraTaxId ? parseInt(matchingTax.zimraTaxId) : (taxPercent === 0 ? 2 : 3);
 
       const type = inv.transactionType || "FiscalInvoice";
       const valLineTotal = Number(item.lineTotal);
       let amountWithTax = valLineTotal;
-      let taxAmt = valLineTotal * (taxPercent / 100);
+      let taxAmt = 0;
 
       if (!inv.taxInclusive) {
-        amountWithTax = valLineTotal + taxAmt; // Approximation
+        // net + tax
+        taxAmt = valLineTotal * (taxPercent / 100);
+        amountWithTax = valLineTotal + taxAmt;
       } else {
+        // total - net
         taxAmt = valLineTotal - (valLineTotal / (1 + taxPercent / 100));
+        amountWithTax = valLineTotal;
       }
+
+      // Round taxAmt and amountWithTax to 2 decimals for accuracy
+      taxAmt = Math.round(taxAmt * 100) / 100;
+      amountWithTax = Math.round(amountWithTax * 100) / 100;
 
       if (type === 'FiscalInvoice') {
         const keySale = `SaleByTax-${currency}-${taxPercent}`;
@@ -674,9 +706,9 @@ export class DatabaseStorage implements IStorage {
     for (const inv of uniqueInvoices.values()) {
       const currency = inv.currency || "USD";
       const method = (inv.paymentMethod || "CASH").toUpperCase();
-      let moneyType = "Cash";
-      if (['CARD', 'SWIPE'].includes(method)) moneyType = "Card";
-      else if (['ECOCASH', 'MOBILE'].includes(method)) moneyType = "MobileWallet";
+      let moneyType = "CASH";
+      if (['CARD', 'SWIPE'].includes(method)) moneyType = "CARD";
+      else if (['ECOCASH', 'MOBILE', 'MOBILEWALLET'].includes(method)) moneyType = "MOBILE";
 
       const keyBal = `BalanceByMoneyType-${currency}-${moneyType}`;
       // MoneyType counter should not have taxPercent/ID theoretically but schema might require structure.

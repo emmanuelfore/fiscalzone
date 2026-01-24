@@ -3,15 +3,17 @@ import { Document, Page, Text, View, StyleSheet, Image, Font } from "@react-pdf/
 import { format } from "date-fns";
 
 // Register custom font to look more professional
-Font.register({
-    family: 'Roboto',
-    fonts: [
-        { src: 'https://cdnjs.cloudflare.com/ajax/libs/ink/3.1.10/fonts/Roboto/roboto-light-webfont.ttf', fontWeight: 300 },
-        { src: 'https://cdnjs.cloudflare.com/ajax/libs/ink/3.1.10/fonts/Roboto/roboto-regular-webfont.ttf', fontWeight: 400 },
-        { src: 'https://cdnjs.cloudflare.com/ajax/libs/ink/3.1.10/fonts/Roboto/roboto-medium-webfont.ttf', fontWeight: 500 },
-        { src: 'https://cdnjs.cloudflare.com/ajax/libs/ink/3.1.10/fonts/Roboto/roboto-bold-webfont.ttf', fontWeight: 700 },
-    ],
-});
+try {
+    Font.register({
+        family: 'Roboto',
+        fonts: [
+            { src: 'https://cdnjs.cloudflare.com/ajax/libs/ink/3.1.10/fonts/Roboto/roboto-regular-webfont.ttf', fontWeight: 400 },
+            { src: 'https://cdnjs.cloudflare.com/ajax/libs/ink/3.1.10/fonts/Roboto/roboto-bold-webfont.ttf', fontWeight: 700 },
+        ],
+    });
+} catch (error) {
+    console.warn('Failed to load Roboto fonts, using system fonts');
+}
 
 const styles = StyleSheet.create({
     page: {
@@ -364,25 +366,39 @@ export const InvoicePDF = ({ invoice, company, customer, qrCodeUrl }: InvoicePDF
                             PAYMENT DETAILS
                         </Text>
                         <View style={{ marginBottom: 4 }}>
-                            <Text style={{ fontSize: 8, color: '#1e293b', marginBottom: 3 }}>
-                                <Text style={{ fontWeight: 700, color: '#64748b' }}>Bank Name: </Text>
-                                <Text style={{ fontWeight: 700 }}>{company.bankName || "Not Specified"}</Text>
-                            </Text>
-                            <Text style={{ fontSize: 8, color: '#1e293b', marginBottom: 3 }}>
-                                <Text style={{ fontWeight: 700, color: '#64748b' }}>Account Name: </Text>
-                                <Text style={{ fontWeight: 700 }}>{company.accountName || company.name}</Text>
-                            </Text>
-                            <Text style={{ fontSize: 8, color: '#1e293b', marginBottom: 3 }}>
-                                <Text style={{ fontWeight: 700, color: '#64748b' }}>Account Number: </Text>
-                                <Text style={{ fontFamily: 'Courier', fontWeight: 700, letterSpacing: 0.5 }}>
+                            <View style={{ marginBottom: 6 }}>
+                                <Text style={{ fontSize: 7, color: '#64748b', textTransform: 'uppercase', marginBottom: 2, fontWeight: 700 }}>
+                                    Bank Name
+                                </Text>
+                                <Text style={{ fontSize: 9, fontWeight: 700, color: '#1e293b' }}>
+                                    {company.bankName || "Not Specified"}
+                                </Text>
+                            </View>
+                            <View style={{ marginBottom: 6 }}>
+                                <Text style={{ fontSize: 7, color: '#64748b', textTransform: 'uppercase', marginBottom: 2, fontWeight: 700 }}>
+                                    Account Name
+                                </Text>
+                                <Text style={{ fontSize: 9, fontWeight: 700, color: '#1e293b' }}>
+                                    {company.accountName || company.name}
+                                </Text>
+                            </View>
+                            <View style={{ marginBottom: 6 }}>
+                                <Text style={{ fontSize: 7, color: '#64748b', textTransform: 'uppercase', marginBottom: 2, fontWeight: 700 }}>
+                                    Account Number
+                                </Text>
+                                <Text style={{ fontSize: 9, fontWeight: 700, fontFamily: 'Courier', color: '#1e293b', letterSpacing: 0.5 }}>
                                     {company.accountNumber || "Not Specified"}
                                 </Text>
-                            </Text>
+                            </View>
                             {company.branchCode && (
-                                <Text style={{ fontSize: 8, color: '#1e293b' }}>
-                                    <Text style={{ fontWeight: 700, color: '#64748b' }}>Branch Code: </Text>
-                                    <Text style={{ fontWeight: 700 }}>{company.branchCode}</Text>
-                                </Text>
+                                <View style={{ marginBottom: 6 }}>
+                                    <Text style={{ fontSize: 7, color: '#64748b', textTransform: 'uppercase', marginBottom: 2, fontWeight: 700 }}>
+                                        Branch Code
+                                    </Text>
+                                    <Text style={{ fontSize: 9, fontWeight: 700, color: '#1e293b' }}>
+                                        {company.branchCode}
+                                    </Text>
+                                </View>
                             )}
                         </View>
                         <View style={{ marginTop: 8, paddingTop: 6, borderTopWidth: 1, borderTopColor: '#e2e8f0' }}>
@@ -397,7 +413,10 @@ export const InvoicePDF = ({ invoice, company, customer, qrCodeUrl }: InvoicePDF
                 <View style={styles.footerSection}>
                     <View style={{ flex: 1 }}>
                         <Text style={[styles.footerLabel, { fontSize: 12, marginBottom: 2 }]}>
-                            {invoice.fiscalCode ? "FISCAL TAX INVOICE" : "PROFORMA INVOICE"}
+                            {invoice.fiscalCode
+                              ? (company?.vatRegistered ? "FISCAL TAX INVOICE" : "FISCAL INVOICE")
+                              : "PROFORMA INVOICE"
+                            }
                         </Text>
                         <View style={{ flexDirection: 'column' }}>
                             <Text style={{ fontSize: 8, color: '#64748b' }}>

@@ -1,5 +1,5 @@
 
-import { pgTable, text, serial, integer, boolean, timestamp, decimal, jsonb, primaryKey, uuid, date } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, decimal, jsonb, primaryKey, uuid, date, unique } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -8,8 +8,10 @@ import { z } from "zod";
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(), // Use UUID for Supabase Auth compatibility
   email: text("email").unique().notNull(),
-  password: text("password"), // Optional - can use Supabase Auth instead
+  password: text("password"),
   name: text("name"),
+  username: text("username").unique(),
+  passwordChanged: boolean("password_changed").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -67,7 +69,6 @@ export const companies = pgTable("companies", {
   branchCode: text("branch_code"),
   vatRegistered: boolean("vat_registered").default(true),
   emailSettings: jsonb("email_settings"),
-  qrUrl: text("qr_url"),
 
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -122,7 +123,8 @@ export const customersRelations = relations(customers, ({ one, many }) => ({
 // Tax Types
 export const taxTypes = pgTable("tax_types", {
   id: serial("id").primaryKey(),
-  code: text("code").notNull().unique(), // VAT-STD, VAT-ZERO
+  companyId: integer("company_id").references(() => companies.id), // Nullable for system defaults if any
+  code: text("code").notNull(), // VAT-STD, VAT-ZERO
   name: text("name").notNull(),
   description: text("description"),
   rate: decimal("rate", { precision: 5, scale: 2 }).notNull(),
@@ -132,23 +134,36 @@ export const taxTypes = pgTable("tax_types", {
   zimraCode: text("zimra_code"), // A, B, E, C
   zimraTaxId: text("zimra_tax_id"), // Optional ZIMRA ID e.g. "3"
   calculationMethod: text("calculation_method").default("INCLUSIVE"), // INCLUSIVE, EXCLUSIVE
+}, (table) => {
+  return {
+    companyCodeUnique: unique("company_code_idx").on(table.companyId, table.code),
+  };
 });
 
 // Tax Categories
 export const taxCategories = pgTable("tax_categories", {
   id: serial("id").primaryKey(),
+  companyId: integer("company_id").references(() => companies.id),
   name: text("name").notNull(),
   defaultTaxTypeId: integer("default_tax_type_id").references(() => taxTypes.id),
   zimraCategoryCode: text("zimra_category_code"), // GOODS_STD, FOOD_BASIC
   description: text("description"),
   isActive: boolean("is_active").default(true),
+}, (table) => {
+  return {
+    companyNameUnique: unique("company_name_idx").on(table.companyId, table.name),
+  };
 });
 
-export const insertTaxCategorySchema = createInsertSchema(taxCategories).omit({ id: true });
+export const insertTaxCategorySchema = createInsertSchema(taxCategories).omit({ id: true, companyId: true });
 export type InsertTaxCategory = z.infer<typeof insertTaxCategorySchema>;
 export type TaxCategory = typeof taxCategories.$inferSelect;
 
-export const insertTaxTypeSchema = createInsertSchema(taxTypes).omit({ id: true });
+export const insertTaxTypeSchema = createInsertSchema(taxTypes, {
+  rate: z.string().or(z.number()),
+  effectiveFrom: z.string(),
+  effectiveTo: z.string().optional().nullable(),
+}).omit({ id: true, companyId: true });
 export type InsertTaxType = z.infer<typeof insertTaxTypeSchema>;
 export type TaxType = typeof taxTypes.$inferSelect;
 
@@ -342,7 +357,7 @@ export type CreateInvoiceRequest = InsertInvoice & {
   items: InsertInvoiceItem[];
 };
 
-export const insertCurrencySchema = createInsertSchema(currencies).omit({ id: true, lastUpdated: true });
+export const insertCurrencySchema = createInsertSchema(currencies).omit({ id: true, companyId: true, lastUpdated: true });
 export type InsertCurrency = z.infer<typeof insertCurrencySchema>;
 export type Currency = typeof currencies.$inferSelect;
 
@@ -383,7 +398,7 @@ export const invoicesRelations = relations(invoices, ({ one, many }) => ({
 }));
 
 
-export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true });
+export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, companyId: true, createdAt: true });
 export type InsertPayment = z.infer<typeof insertPaymentSchema>;
 export type Payment = typeof payments.$inferSelect;
 

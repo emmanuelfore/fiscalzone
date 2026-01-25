@@ -13,12 +13,12 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
+import { DayManagementControls } from "@/components/zimra/day-management-controls";
 
 export default function ZimraSettingsPage() {
   const rawId = parseInt(localStorage.getItem("selectedCompanyId") || "0");
@@ -26,7 +26,6 @@ export default function ZimraSettingsPage() {
 
   const { data: companies, isLoading } = useCompanies();
   const currentCompany = companies?.find(c => c.id === storedCompanyId) || companies?.[0];
-  const companyId = currentCompany?.id || 0;
 
   if (isLoading) return <Layout><div className="p-8">Loading...</div></Layout>;
   if (!currentCompany) return <Layout><div className="p-8">No company details available.</div></Layout>;
@@ -74,10 +73,6 @@ function ZimraDeviceConfig({ company }: { company: any }) {
   const [connectivityResult, setConnectivityResult] = useState<any>(null);
   const [showConnectivityDialog, setShowConnectivityDialog] = useState(false);
 
-  // Error Recovery State
-  const [errorRecovery, setErrorRecovery] = useState<any>(null);
-  const [showErrorDialog, setShowErrorDialog] = useState(false);
-
   const isRegistered = !!company.fdmsDeviceId && !!company.zimraCertificate;
 
   // Verify Taxpayer
@@ -102,26 +97,8 @@ function ZimraDeviceConfig({ company }: { company: any }) {
     }
   });
 
-  // Save & Register
-  const updateCompanyMutation = useMutation({
-    mutationFn: async (data: any) => {
-      const res = await apiFetch(`/api/companies/${company.id}`, {
-        method: "PATCH",
-        body: JSON.stringify(data)
-      });
-      if (!res.ok) throw new Error("Failed to save configuration");
-      return await res.json();
-    },
-    onSuccess: () => {
-      // Invalidate company query
-      queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
-    }
-  });
-
   const registerDeviceMutation = useMutation({
     mutationFn: async () => {
-      // 1. Initial Device Registration (First Time)
-      // Calls public registration endpoint to get certificate
       const res = await apiFetch(`/api/companies/${company.id}/zimra/register`, {
         method: "POST",
         body: JSON.stringify({
@@ -148,7 +125,6 @@ function ZimraDeviceConfig({ company }: { company: any }) {
 
   const renewCertificateMutation = useMutation({
     mutationFn: async () => {
-      // 2. Issue/Renew Certificate (Requires existing certificate for mTLS)
       const res = await apiFetch(`/api/companies/${company.id}/zimra/issue-certificate`, {
         method: "POST"
       });
@@ -167,39 +143,6 @@ function ZimraDeviceConfig({ company }: { company: any }) {
     }
   });
 
-
-  // Revised Close Day Mutation with support for structured errors
-  const closeDayEnhanced = useMutation({
-    mutationFn: async () => {
-      const res = await apiFetch(`/api/companies/${company.id}/zimra/day/close`, {
-        method: "POST"
-      });
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw errorData; // Throwing the whole object
-      }
-      return await res.json();
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
-      queryClient.invalidateQueries({ queryKey: ["zimraStatus", company.id] });
-      toast({ title: "Fiscal Day Closed", description: `Operation ID: ${data.operationID || 'N/A'}`, className: "bg-green-100 text-green-900" });
-    },
-    onError: (err: any) => {
-      if (err.recovery) {
-        setErrorRecovery(err);
-        setShowErrorDialog(true);
-      } else {
-        toast({
-          title: "Close Day Failed",
-          description: err.message || "Unknown error occurred",
-          variant: "destructive"
-        });
-      }
-    }
-  });
-
-  // Sync Config
   const syncConfigMutation = useMutation({
     mutationFn: async () => {
       const res = await apiFetch(`/api/companies/${company.id}/zimra/config/sync`, {
@@ -244,7 +187,6 @@ function ZimraDeviceConfig({ company }: { company: any }) {
     }
   });
 
-  // Connectivity Test
   const testConnectivityMutation = useMutation({
     mutationFn: async () => {
       const res = await apiFetch(`/api/companies/${company.id}/zimra/connectivity-test`, {
@@ -270,32 +212,14 @@ function ZimraDeviceConfig({ company }: { company: any }) {
     }
   });
 
-  // Auto-Test Connectivity on Mount if registered
-  useState(() => {
-    if (isRegistered) {
-      testConnectivityMutation.mutate();
-    }
-  }); // Run once on mount (useState lazy init trick or use useEffect) - Actually useEffect is better
-
   useEffect(() => {
     if (isRegistered) {
       testConnectivityMutation.mutate();
     }
-  }, []); // Empty dependency array = mount only
-
-  // Live Status Query
-  const zimraStatusQuery = useQuery({
-    queryKey: ["zimraStatus", company.id],
-    queryFn: async () => {
-      if (!isRegistered) return null;
-      const res = await apiFetch(`/api/companies/${company.id}/zimra/status`);
-      if (!res.ok) return null;
-      return await res.json();
-    },
-    enabled: isRegistered
-  });
+  }, []);
 
   const isOnline = testConnectivityMutation.data?.overallStatus === 'Online';
+  const isPinging = testConnectivityMutation.isPending;
 
   return (
     <div className="space-y-6">
@@ -382,7 +306,7 @@ function ZimraDeviceConfig({ company }: { company: any }) {
           </>
         ) : (
           <div className={`flex items-center gap-2 px-4 py-2 rounded-md w-full border ${isOnline ? 'text-green-700 bg-green-50 border-green-200' : 'text-red-700 bg-red-50 border-red-200'}`}>
-            {testConnectivityMutation.isPending ? (
+            {isPinging ? (
               <RefreshCw className="w-5 h-5 animate-spin text-slate-400" />
             ) : isOnline ? (
               <Wifi className="w-5 h-5" />
@@ -391,13 +315,10 @@ function ZimraDeviceConfig({ company }: { company: any }) {
             )}
             <div className="flex flex-col">
               <span className="font-semibold text-sm">
-                {testConnectivityMutation.isPending ? "Checking Connectivity..." : (isOnline ? 'Online & Registered' : 'Offline / Connection Failed')}
+                {isPinging ? "Checking Connectivity..." : (isOnline ? 'Online & Registered' : 'Offline / Connection Failed')}
               </span>
               <span className="text-xs opacity-75">
-                {/* Show Day from Live Query if available, else Company */}
-                {zimraStatusQuery.data?.lastFiscalDayNo
-                  ? `Day ${zimraStatusQuery.data.lastFiscalDayNo}`
-                  : (company.currentFiscalDayNo ? `Day ${company.currentFiscalDayNo}` : 'No Active Day')}
+                {company.fiscalDayOpen ? `Day ${company.currentFiscalDayNo || '?'}` : 'No Active Day'}
               </span>
             </div>
             <Button variant="ghost" size="sm" className="ml-auto" onClick={() => setDeviceId("") /* Reset for edit */}>
@@ -446,146 +367,61 @@ function ZimraDeviceConfig({ company }: { company: any }) {
         </DialogContent>
       </Dialog>
 
-      {/* Error Recovery Dialog */}
-      <Dialog open={showErrorDialog} onOpenChange={setShowErrorDialog}>
-        <DialogContent className="sm:max-w-lg border-2 border-red-100">
-          <DialogHeader>
-            <div className="flex items-center gap-2 text-red-600 mb-2">
-              <AlertTriangle className="w-6 h-6" />
-              <DialogTitle>Fiscal Day Closure Failed</DialogTitle>
-            </div>
-            <DialogDescription className="font-medium text-slate-700">
-              {errorRecovery?.message}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            <div className="bg-slate-50 p-3 rounded text-xs font-mono border text-slate-600">
-              {errorRecovery?.lastError && <p className="mb-1"><strong>Error:</strong> {errorRecovery.lastError}</p>}
-              {errorRecovery?.zimraErrorCode && <p><strong>Code:</strong> {errorRecovery.zimraErrorCode}</p>}
-            </div>
-
-            <div className="space-y-2">
-              <h4 className="text-sm font-semibold text-slate-900">Suggested Recovery Actions:</h4>
-              <ul className="space-y-2">
-                {errorRecovery?.recovery?.options?.map((option: string, i: number) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-slate-600">
-                    <span className="mt-1 w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
-                    {option}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {errorRecovery?.recovery?.manualClosureUrl && (
-              <div className="pt-2">
-                <a
-                  href={errorRecovery.recovery.manualClosureUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-indigo-600 hover:text-indigo-800 text-sm font-medium flex items-center gap-1"
-                >
-                  Open ZIMRA Public Portal <RefreshCw className="w-3 h-3" />
-                </a>
-              </div>
-            )}
+      {isRegistered && (
+        <div className="pt-6 border-t space-y-4">
+          <div>
+            <h4 className="text-sm font-semibold mb-2 text-slate-700 flex items-center gap-2">
+              <RefreshCw className="w-4 h-4" />
+              Day Management
+            </h4>
+            <DayManagementControls company={company} variant="light" />
           </div>
 
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setShowErrorDialog(false)}>Dismiss</Button>
-            <Button variant="default" onClick={() => { setShowErrorDialog(false); closeDayEnhanced.mutate(); }}>Retry Closure</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+          <div>
+            <h4 className="text-sm font-semibold mb-2 text-slate-700">Maintenance</h4>
+            <div className="flex gap-2 flex-wrap">
+              <Button variant="outline" size="sm" onClick={() => renewCertificateMutation.mutate()}>
+                <RefreshCw className="w-4 h-4 mr-2" />
+                {renewCertificateMutation.isPending ? "Renewing..." : "Renew Certificate"}
+              </Button>
 
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => testConnectivityMutation.mutate()}
+                disabled={testConnectivityMutation.isPending}
+              >
+                {testConnectivityMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Activity className="w-4 h-4 mr-2" />
+                )}
+                Test Connectivity
+              </Button>
 
-      {
-        isRegistered && (
-          <div className="pt-6 border-t space-y-4">
-            <div>
-              <h4 className="text-sm font-semibold mb-2 text-slate-700 flex items-center gap-2">
-                <RefreshCw className="w-4 h-4" />
-                Day Management
-              </h4>
-              <div className="bg-slate-50 p-4 rounded-md border flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-slate-500">Current Fiscal Day</p>
-                  <p className="text-xl font-bold">
-                    {zimraStatusQuery.data?.lastFiscalDayNo || company.currentFiscalDayNo || "N/A"}
-                  </p>
-                  <div className="flex items-center gap-2">
-                    {zimraStatusQuery.isLoading && <RefreshCw className="w-3 h-3 animate-spin text-slate-400" />}
-                    <p className={`text-xs font-medium ${(zimraStatusQuery.data?.fiscalDayStatus === 'FiscalDayOpened' || (!zimraStatusQuery.data && company.fiscalDayOpen))
-                      ? "text-green-600"
-                      : "text-amber-600"
-                      }`}>
-                      {(zimraStatusQuery.data?.fiscalDayStatus === 'FiscalDayOpened' || (!zimraStatusQuery.data && company.fiscalDayOpen))
-                        ? "Status: OPEN"
-                        : "Status: CLOSED"}
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  variant={(zimraStatusQuery.data?.fiscalDayStatus === 'FiscalDayOpened' || (!zimraStatusQuery.data && company.fiscalDayOpen)) ? "destructive" : "secondary"}
-                  onClick={() => closeDayEnhanced.mutate()}
-                  disabled={
-                    zimraStatusQuery.isLoading ||
-                    (zimraStatusQuery.data && zimraStatusQuery.data.fiscalDayStatus !== 'FiscalDayOpened') ||
-                    (!zimraStatusQuery.data && !company.fiscalDayOpen) ||
-                    closeDayEnhanced.isPending
-                  }
-                >
-                  {closeDayEnhanced.isPending ? "Closing..." : "Close Fiscal Day"}
-                </Button>
-              </div>
-            </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => verifyTaxpayerMutation.mutate()}
+                disabled={verifyTaxpayerMutation.isPending || !deviceSerialNo}
+              >
+                <Server className="w-4 h-4 mr-2" />
+                {verifyTaxpayerMutation.isPending ? "Verifying..." : "Verify Taxpayer Info"}
+              </Button>
 
-            <div>
-              <h4 className="text-sm font-semibold mb-2 text-slate-700">Maintenance</h4>
-              <div className="flex gap-2 flex-wrap">
-                <Button variant="outline" size="sm" onClick={() => renewCertificateMutation.mutate()}>
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  {renewCertificateMutation.isPending ? "Renewing..." : "Renew Certificate"}
-                </Button>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => testConnectivityMutation.mutate()}
-                  disabled={testConnectivityMutation.isPending}
-                >
-                  {testConnectivityMutation.isPending ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <Activity className="w-4 h-4 mr-2" />
-                  )}
-                  Test Connectivity
-                </Button>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => verifyTaxpayerMutation.mutate()}
-                  disabled={verifyTaxpayerMutation.isPending || !deviceSerialNo}
-                >
-                  <Server className="w-4 h-4 mr-2" />
-                  {verifyTaxpayerMutation.isPending ? "Verifying..." : "Verify Taxpayer Info"}
-                </Button>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => syncConfigMutation.mutate()}
-                  disabled={syncConfigMutation.isPending}
-                >
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Sync Tax Config
-                </Button>
-              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => syncConfigMutation.mutate()}
+                disabled={syncConfigMutation.isPending}
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Sync Tax Config
+              </Button>
             </div>
           </div>
-        )
-      }
-    </div >
+        </div>
+      )}
+    </div>
   );
 }

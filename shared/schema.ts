@@ -48,6 +48,7 @@ export const companies = pgTable("companies", {
   zimraEnvironment: text("zimra_environment").default("test"), // 'test' or 'production'
   fiscalDayOpen: boolean("fiscal_day_open").default(false),
   currentFiscalDayNo: integer("current_fiscal_day_no").default(0),
+  fiscalDayOpenedAt: timestamp("fiscal_day_opened_at"),
   lastFiscalDayStatus: text("last_fiscal_day_status"),
 
   // Customization

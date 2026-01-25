@@ -6,7 +6,7 @@ import { Layout } from "@/components/layout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import {
   Users,
@@ -22,15 +22,15 @@ import {
   Fingerprint,
   Activity,
   RefreshCw,
+  Clock,
   ClipboardList
 } from "lucide-react";
 import React, { useMemo } from "react";
 import { Link, useLocation } from "wouter";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useDeviceStatus } from "@/hooks/use-device-status";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Clock } from "lucide-react";
+import { DayManagementControls } from "@/components/zimra/day-management-controls";
 import { useCurrencies } from "@/hooks/use-currencies";
 import {
   Select,
@@ -95,75 +95,6 @@ export default function Dashboard() {
       pingZimra();
     }
   }, [selectedCompany?.fdmsDeviceId]);
-
-  // Fetch Live Status on Mount (to get real fiscal day status)
-  const zimraStatusQuery = useQuery({
-    queryKey: ["zimraStatus", selectedCompany?.id],
-    queryFn: async () => {
-      if (!selectedCompany?.id || !selectedCompany.fdmsDeviceId) return null;
-      const res = await apiFetch(`/api/companies/${selectedCompany.id}/zimra/status`);
-      if (!res.ok) return null;
-      return await res.json();
-    },
-    enabled: !!selectedCompany?.id && !!selectedCompany.fdmsDeviceId
-  });
-
-  const { mutate: closeFiscalDay, isPending: isClosing } = useMutation({
-    mutationFn: async () => {
-      if (!selectedCompany?.id) return;
-      const res = await apiFetch(`/api/companies/${selectedCompany.id}/zimra/day/close`, { method: "POST" });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "Failed to close fiscal day");
-      }
-      return await res.json();
-    },
-    onSuccess: (data) => {
-      toast({
-        title: "Fiscal Day Closed",
-        description: `Successfully closed day ${data.fiscalDayNo}.`,
-        className: "bg-emerald-600 text-white"
-      });
-      queryClient.invalidateQueries({ queryKey: ["companies"] });
-      queryClient.invalidateQueries({ queryKey: ["stats", "summary", selectedCompany?.id] });
-      queryClient.invalidateQueries({ queryKey: ["zimraStatus", selectedCompany?.id] });
-    },
-    onError: (err: Error) => {
-      toast({
-        title: "Closure Failed",
-        description: err.message,
-        variant: "destructive",
-      });
-    }
-  });
-
-  const { mutate: openFiscalDay, isPending: isOpening } = useMutation({
-    mutationFn: async () => {
-      if (!selectedCompany?.id) return;
-      const res = await apiFetch(`/api/companies/${selectedCompany.id}/zimra/day/open`, { method: "POST" });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "Failed to open fiscal day");
-      }
-      return await res.json();
-    },
-    onSuccess: (data) => {
-      toast({
-        title: "Fiscal Day Opened",
-        description: `Successfully opened day ${data.fiscalDayNo}.`,
-        className: "bg-emerald-600 text-white"
-      });
-      queryClient.invalidateQueries({ queryKey: ["companies"] });
-      queryClient.invalidateQueries({ queryKey: ["zimraStatus", selectedCompany?.id] });
-    },
-    onError: (err: Error) => {
-      toast({
-        title: "Opening Failed",
-        description: err.message,
-        variant: "destructive",
-      });
-    }
-  });
 
   const { data: currencies } = useCurrencies(selectedCompany?.id || 0);
   const [reportCurrencyCode, setReportCurrencyCode] = React.useState<string>("ZiG");
@@ -397,7 +328,7 @@ export default function Dashboard() {
                   </div>
                 </div>
                 {/* Status Badge: Dependent on Ping Result */}
-                {zimraStatusQuery.isLoading || isPinging ? (
+                {isPinging ? (
                   <span className="bg-slate-500/20 text-slate-300 border border-slate-500/30 backdrop-blur-md px-3 py-0.5 rounded-full text-xs font-medium uppercase tracking-wide">
                     Checking...
                   </span>
@@ -410,68 +341,21 @@ export default function Dashboard() {
                 )}
               </div>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors flex flex-col justify-between">
-                  <div>
-                    <div className="text-xs text-slate-400 mb-2 uppercase tracking-wider font-semibold">Fiscal Day</div>
-                    <div className="flex items-center justify-between">
-                      {/* Prefer Live Status over Company Data */}
-                      <div className="text-2xl font-bold font-display tracking-tight text-white">
-                        {zimraStatusQuery.isLoading ? (
-                          <span className="text-sm text-slate-400">Loading...</span>
-                        ) : zimraStatusQuery.data ? (
-                          zimraStatusQuery.data.fiscalDayStatus === 'FiscalDayOpened' ? "OPEN" : "CLOSED"
-                        ) : (
-                          selectedCompany.fiscalDayOpen ? "OPEN" : "CLOSED"
-                        )}
-                      </div>
-                      {zimraStatusQuery.data?.fiscalDayStatus === 'FiscalDayOpened' || (!zimraStatusQuery.data && selectedCompany.fiscalDayOpen) ? (
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          className="h-7 text-[10px] font-bold uppercase bg-red-600 hover:bg-red-700 shadow-lg shadow-red-900/40"
-                          onClick={() => {
-                            if (confirm("Are you sure you want to close the fiscal day? This action cannot be undone.")) {
-                              closeFiscalDay();
-                            }
-                          }}
-                          disabled={isClosing}
-                        >
-                          {isClosing ? <RefreshCw className="w-3 h-3 animate-spin mr-1" /> : null}
-                          Close Day
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          className="h-7 text-[10px] font-bold uppercase bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-900/40"
-                          onClick={() => openFiscalDay()}
-                          disabled={isOpening}
-                        >
-                          {isOpening ? <RefreshCw className="w-3 h-3 animate-spin mr-1" /> : null}
-                          Open Day
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                  <div className="text-xs text-slate-500 mt-2">
-                    Status: {zimraStatusQuery.data?.fiscalDayStatus || selectedCompany.lastFiscalDayStatus || (selectedCompany.fiscalDayOpen ? "Active" : "Closed")}
-                  </div>
+            <CardContent className="space-y-4">
+              <DayManagementControls company={selectedCompany} variant="dark" />
+
+              <div className="p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs text-slate-400 mb-2 uppercase tracking-wider font-semibold">System Status</div>
+                  <Button variant="ghost" size="icon" className="h-5 w-5 text-slate-400 hover:text-white" onClick={() => pingZimra()} disabled={isPinging}>
+                    <RefreshCw className={`w-3 h-3 ${isPinging ? 'animate-spin' : ''}`} />
+                  </Button>
                 </div>
-                <div className="p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors">
-                  <div className="flex items-center justify-between">
-                    <div className="text-xs text-slate-400 mb-2 uppercase tracking-wider font-semibold">System Status</div>
-                    <Button variant="ghost" size="icon" className="h-5 w-5 text-slate-400 hover:text-white" onClick={() => pingZimra()} disabled={isPinging}>
-                      <RefreshCw className={`w-3 h-3 ${isPinging ? 'animate-spin' : ''}`} />
-                    </Button>
-                  </div>
-                  <div className="text-2xl font-bold font-display tracking-tight text-white flex items-center gap-2">
-                    {pingSuccess ? new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (isPinging ? '...' : (
-                      // Fallback to stored ping if available but show Offline if ping failed
-                      selectedCompany.lastPing ? 'Offline' : 'Offline'
-                    ))}
-                  </div>
-                  <div className={`text-xs mt-1 flex items-center gap-1 ${isOnline ? 'text-emerald-400' : 'text-red-400'}`}>
+                <div className="text-xl font-bold font-display tracking-tight text-white flex items-center gap-2">
+                  {pingSuccess ? new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (isPinging ? '...' : (
+                    selectedCompany.lastPing ? 'Offline' : 'Offline'
+                  ))}
+                  <div className={`text-xs ml-auto flex items-center gap-1 ${isOnline ? 'text-emerald-400' : 'text-red-400'}`}>
                     {isOnline ? <Activity className="w-3 h-3" /> : <Wifi className="w-3 h-3" />}
                     {isOnline ? 'Online' : 'No Signal'}
                   </div>
@@ -503,7 +387,7 @@ export default function Dashboard() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-bold text-slate-900">${Number(inv.total).toFixed(2)}</p>
+                      <p className="text-sm font-bold text-slate-900 group-hover:scale-105 transition-transform origin-right">${Number(inv.total).toFixed(2)}</p>
                       <StatusBadge status={inv.status!} className="scale-75 origin-right" />
                     </div>
                   </div>
@@ -514,7 +398,7 @@ export default function Dashboard() {
               )}
 
               <Link href="/invoices">
-                <Button variant="ghost" className="w-full mt-4 text-slate-500 hover:text-violet-600">View All History</Button>
+                <Button variant="ghost" className="w-full mt-4 text-slate-500 hover:text-violet-600 transition-colors">View All History</Button>
               </Link>
             </div>
           </CardContent>

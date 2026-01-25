@@ -1,4 +1,5 @@
 import { AlertTriangle, AlertCircle, XCircle, RefreshCw, Edit } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,12 +23,14 @@ interface ValidationErrorsDisplayProps {
 }
 
 const getErrorIcon = (color: string) => {
-  switch (color) {
-    case 'Red':
+  const c = color.toLowerCase();
+  switch (c) {
+    case 'red':
       return <XCircle className="w-4 h-4 text-red-500" />;
-    case 'Yellow':
+    case 'yellow':
       return <AlertTriangle className="w-4 h-4 text-yellow-500" />;
-    case 'Grey':
+    case 'grey':
+    case 'gray':
       return <AlertCircle className="w-4 h-4 text-gray-500" />;
     default:
       return <AlertCircle className="w-4 h-4" />;
@@ -35,25 +38,29 @@ const getErrorIcon = (color: string) => {
 };
 
 const getErrorBadgeVariant = (color: string) => {
-  switch (color) {
-    case 'Red':
+  const c = color.toLowerCase();
+  switch (c) {
+    case 'red':
       return 'destructive';
-    case 'Yellow':
-      return 'secondary'; // Yellow/orange
-    case 'Grey':
-      return 'outline'; // Gray
+    case 'yellow':
+      return 'secondary';
+    case 'grey':
+    case 'gray':
+      return 'outline';
     default:
       return 'outline';
   }
 };
 
 const getErrorDescription = (color: string) => {
-  switch (color) {
-    case 'Red':
+  const c = color.toLowerCase();
+  switch (c) {
+    case 'red':
       return 'Major validation error - fiscal day cannot be closed';
-    case 'Yellow':
+    case 'yellow':
       return 'Minor validation error - fiscal day can still be closed';
-    case 'Grey':
+    case 'grey':
+    case 'gray':
       return 'Receipt chain gap - waiting for previous receipt';
     default:
       return 'Validation error';
@@ -70,31 +77,40 @@ export function ValidationErrorsDisplay({
     return null;
   }
 
-  const hasRedErrors = errors.some(e => e.errorColor === 'Red');
-  const hasGreyErrors = errors.some(e => e.errorColor === 'Grey');
+  const hasRedErrors = errors.some(e => e.errorColor.toLowerCase() === 'red');
+  const hasGreyErrors = errors.some(e => e.errorColor.toLowerCase() === 'grey' || e.errorColor.toLowerCase() === 'gray');
 
   return (
-    <Card className="border-red-200 bg-red-50/50">
+    <Card className={cn(
+      "border",
+      hasRedErrors ? "border-red-200 bg-red-50/50" :
+        hasGreyErrors ? "border-slate-200 bg-slate-50/50" :
+          "border-yellow-200 bg-yellow-50/50"
+    )}>
       <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-red-900">
-          <AlertTriangle className="w-5 h-5" />
-          Validation Errors
+        <CardTitle className={cn(
+          "flex items-center gap-2",
+          hasRedErrors ? "text-red-900" :
+            hasGreyErrors ? "text-slate-900" :
+              "text-yellow-900"
+        )}>
+          {hasRedErrors ? <XCircle className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
+          ZIMRA Validation Errors
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Summary Alert */}
-        <Alert className={`${
-          hasRedErrors
-            ? 'border-red-200 bg-red-50'
-            : hasGreyErrors
-            ? 'border-gray-200 bg-gray-50'
-            : 'border-yellow-200 bg-yellow-50'
-        }`}>
-          <AlertTriangle className="h-4 w-4" />
+        <Alert className={cn(
+          "border",
+          hasRedErrors ? "border-red-200 bg-red-50" :
+            hasGreyErrors ? "border-slate-200 bg-slate-50" :
+              "border-yellow-200 bg-yellow-50"
+        )}>
+          {hasRedErrors ? <AlertCircle className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
           <AlertDescription>
-            {hasRedErrors && "This receipt contains major validation errors that prevent fiscal day closure."}
-            {hasGreyErrors && !hasRedErrors && "This receipt has missing previous receipts in the chain."}
-            {!hasRedErrors && !hasGreyErrors && "This receipt contains minor validation errors."}
+            {hasRedErrors && "This receipt contains major validation errors (RED) that prevent fiscal day closure."}
+            {hasGreyErrors && !hasRedErrors && "This receipt has missing previous receipts in the chain (GREY)."}
+            {!hasRedErrors && !hasGreyErrors && "This receipt contains minor validation errors (YELLOW)."}
           </AlertDescription>
         </Alert>
 

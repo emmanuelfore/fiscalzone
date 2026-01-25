@@ -264,6 +264,7 @@ export interface ZimraStatusResponse {
     fiscalDayCounters?: FiscalDayCounter[];
     fiscalDayDocumentQuantities?: FiscalDayDocumentQuantity[];
     lastReceiptGlobalNo?: number;
+    lastReceiptCounter?: number;
     lastFiscalDayNo?: number;
 }
 
@@ -545,39 +546,41 @@ export class ZimraDevice {
                 const pb = typePriority(b.fiscalCounterType);
                 if (pa !== pb) return pa - pb;
 
-                // 2. Sort by Currency (Alphabetical Ascending)
-                if (a.fiscalCounterCurrency !== b.fiscalCounterCurrency) {
-                    return a.fiscalCounterCurrency.localeCompare(b.fiscalCounterCurrency);
-                }
-
-                // 3. Sort by TaxID or MoneyType (Ascending)
-                const getThirdKey = (obj: any) => {
+                // 2. Sort by Feature Key (TaxID or MoneyType)
+                // Spec examples imply TaxID/MoneyType takes precedence over Currency
+                const getFeatureKey = (obj: any) => {
                     if (obj.fiscalCounterTaxID !== undefined && obj.fiscalCounterTaxID !== null) {
-                        return obj.fiscalCounterTaxID;
+                        return obj.fiscalCounterTaxID; // Number
                     }
                     if (obj.fiscalCounterTaxPercent !== undefined && obj.fiscalCounterTaxPercent !== null) {
-                        return obj.fiscalCounterTaxPercent;
+                        return obj.fiscalCounterTaxPercent; // Number
                     }
                     if (obj.fiscalCounterMoneyType !== undefined && obj.fiscalCounterMoneyType !== null) {
-                        // Map numeric money type to string for comparison
+                        // Map to string for "CARD" vs "CASH" alphabetical comparison
+                        // ZIMRA Example: CARD (1) comes before CASH (0) -> "CARD" < "CASH"
                         if (typeof obj.fiscalCounterMoneyType === 'number') {
-                            return obj.fiscalCounterMoneyType === 0 ? 'CASH' : 'CARD';
+                            return moneyTypeMapping[obj.fiscalCounterMoneyType] || "";
                         }
                         return obj.fiscalCounterMoneyType;
                     }
                     return 0;
                 };
 
-                const k3a = getThirdKey(a);
-                const k3b = getThirdKey(b);
+                const ka = getFeatureKey(a);
+                const kb = getFeatureKey(b);
 
-                if (typeof k3a === 'number' && typeof k3b === 'number') {
-                    return k3a - k3b;
+                if (ka !== kb) {
+                    if (typeof ka === 'number' && typeof kb === 'number') return ka - kb;
+                    if (typeof ka === 'string' && typeof kb === 'string') return ka.localeCompare(kb);
+                    return String(ka).localeCompare(String(kb));
                 }
-                if (typeof k3a === 'string' && typeof k3b === 'string') {
-                    return k3a.localeCompare(k3b);
+
+                // 3. Sort by Currency (Alphabetical Ascending)
+                if (a.fiscalCounterCurrency !== b.fiscalCounterCurrency) {
+                    return a.fiscalCounterCurrency.localeCompare(b.fiscalCounterCurrency);
                 }
-                return String(k3a).localeCompare(String(k3b));
+
+                return 0;
             });
 
             concatenatedCounters = sortedCounters.map((c: any) => {
@@ -594,6 +597,7 @@ export class ZimraDevice {
                     // In case of exempt which does not send tax percent value, empty value should be used in signature. 
                     // In case taxPercent is an integer there should be value of tax percent, dot and two zeros sent."
                     if (c.fiscalCounterTaxID !== 1 && c.fiscalCounterTaxPercent !== undefined && c.fiscalCounterTaxPercent !== null) {
+                        // Examples in spec (Sec 13.3.1) show 14.5 -> 14.50. So toFixed(2) is correct.
                         field3 = c.fiscalCounterTaxPercent.toFixed(2);
                     }
                 } else if (type.includes('BYMONEYTYPE')) {
@@ -867,12 +871,13 @@ export class ZimraDevice {
             for (const error of response.validationErrors) {
                 const errorCode = error.validationErrorCode;
                 const errorColor = error.validationErrorColor;
+                const customMessage = error.validationErrorMessage || error.errorMessage || error.message;
 
                 if (errorCode && ZIMRA_VALIDATION_ERRORS[errorCode]) {
                     const errorInfo = ZIMRA_VALIDATION_ERRORS[errorCode];
                     errors.push({
                         errorCode,
-                        errorMessage: errorInfo.errorMessage,
+                        errorMessage: customMessage || errorInfo.errorMessage,
                         errorColor: errorColor as ValidationErrorColor,
                         requiresPreviousReceipt: errorInfo.requiresPreviousReceipt
                     });
@@ -880,7 +885,7 @@ export class ZimraDevice {
                     // Handle unknown error codes
                     errors.push({
                         errorCode,
-                        errorMessage: `Validation error ${errorCode}`,
+                        errorMessage: customMessage || `Validation error ${errorCode}`,
                         errorColor: (errorColor as ValidationErrorColor) || 'Red',
                         requiresPreviousReceipt: false
                     });

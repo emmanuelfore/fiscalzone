@@ -121,6 +121,9 @@ export interface IStorage {
   createZimraLog(log: InsertZimraLog): Promise<ZimraLog>;
   getZimraLogs(invoiceId: number): Promise<ZimraLog[]>;
   getCompanyZimraLogs(companyId: number, limit?: number): Promise<ZimraLog[]>;
+  // ZIMRA Helpers
+  resolveGreyErrors(companyId: number, fiscalDayNo: number, skipInvoiceId?: number): Promise<void>;
+  getInvoicesByFiscalDay(companyId: number, fiscalDayNo: number): Promise<Invoice[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -348,7 +351,7 @@ export class DatabaseStorage implements IStorage {
         fdmsStatus,
         validationStatus,
         lastValidationAttempt,
-        status: syncedWithFdms && (!validationStatus || validationStatus === 'valid') ? "issued" : "draft"
+        status: syncedWithFdms ? "issued" : "draft"
       })
       .where(eq(invoices.id, id))
       .returning();
@@ -428,12 +431,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createTaxType(taxType: InsertTaxType & { companyId: number }): Promise<TaxType> {
-    const [newTaxType] = await db.insert(taxTypes).values(taxType).returning();
+    const [newTaxType] = await db.insert(taxTypes).values({
+      ...taxType,
+      rate: taxType.rate.toString()
+    }).returning();
     return newTaxType;
   }
 
   async updateTaxType(id: number, companyId: number, taxType: Partial<InsertTaxType>): Promise<TaxType | undefined> {
-    const [updated] = await db.update(taxTypes).set(taxType).where(and(eq(taxTypes.id, id), eq(taxTypes.companyId, companyId))).returning();
+    const updateData = { ...taxType };
+    if (updateData.rate !== undefined) {
+      updateData.rate = updateData.rate.toString();
+    }
+    const [updated] = await db
+      .update(taxTypes)
+      .set(updateData as any)
+      .where(and(eq(taxTypes.id, id), eq(taxTypes.companyId, companyId)))
+      .returning();
     return updated;
   }
 
@@ -460,12 +474,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createCurrency(currency: InsertCurrency): Promise<Currency> {
-    const [newCurrency] = await db.insert(currencies).values(currency).returning();
+    const [newCurrency] = await db.insert(currencies).values({
+      ...currency,
+      exchangeRate: currency.exchangeRate?.toString()
+    }).returning();
     return newCurrency;
   }
 
   async updateCurrency(id: number, currency: Partial<InsertCurrency>): Promise<Currency> {
-    const [updated] = await db.update(currencies).set(currency).where(eq(currencies.id, id)).returning();
+    const updateData = { ...currency };
+    if (updateData.exchangeRate !== undefined) {
+      updateData.exchangeRate = updateData.exchangeRate.toString();
+    }
+    const [updated] = await db
+      .update(currencies)
+      .set(updateData as any)
+      .where(eq(currencies.id, id))
+      .returning();
     return updated;
   }
 
@@ -610,8 +635,6 @@ export class DatabaseStorage implements IStorage {
 
     const result = Array.from(dailyMap.entries())
       .map(([date, amount]) => ({ date, amount: Math.round(amount * 100) / 100 }))
-      .sort((a, b) => a.date.localeCompare(b.date));
-
     return result;
   }
 
@@ -679,7 +702,7 @@ export class DatabaseStorage implements IStorage {
       taxAmt = Math.round(taxAmt * 100) / 100;
       amountWithTax = Math.round(amountWithTax * 100) / 100;
 
-      if (type === 'FiscalInvoice') {
+      if (type === 'FiscalInvoice' || type === 'Invoice') {
         const keySale = `SaleByTax-${currency}-${taxPercent}`;
         const cSale = getCounter(keySale, 'SaleByTax', currency, taxPercent, taxID);
         cSale.fiscalCounterValue += amountWithTax;
@@ -694,6 +717,14 @@ export class DatabaseStorage implements IStorage {
 
         const keyTax = `CreditNoteTaxByTax-${currency}-${taxPercent}`;
         const cTax = getCounter(keyTax, 'CreditNoteTaxByTax', currency, taxPercent, taxID);
+        cTax.fiscalCounterValue += taxAmt;
+      } else if (type === 'DebitNote') {
+        const keySale = `DebitNoteByTax-${currency}-${taxPercent}`;
+        const cSale = getCounter(keySale, 'DebitNoteByTax', currency, taxPercent, taxID);
+        cSale.fiscalCounterValue += amountWithTax;
+
+        const keyTax = `DebitNoteTaxByTax-${currency}-${taxPercent}`;
+        const cTax = getCounter(keyTax, 'DebitNoteTaxByTax', currency, taxPercent, taxID);
         cTax.fiscalCounterValue += taxAmt;
       }
     }
@@ -721,6 +752,72 @@ export class DatabaseStorage implements IStorage {
       ...c,
       fiscalCounterValue: Math.round(c.fiscalCounterValue * 100) / 100
     }));
+  }
+
+  async getZReportData(companyId: number, fiscalDayNo: number) {
+    const company = await this.getCompany(companyId);
+    if (!company) throw new Error("Company not found");
+
+    const invoicesInDay = await db
+      .select()
+      .from(invoices)
+      .where(and(eq(invoices.companyId, companyId), eq(invoices.fiscalDayNo, fiscalDayNo)));
+
+    const counters = await this.calculateFiscalCounters(companyId, fiscalDayNo);
+
+    // Group document quantities by currency and type
+    const docStatsByCurrency = new Map<string, any>();
+
+    const getDocStat = (currency: string) => {
+      if (!docStatsByCurrency.has(currency)) {
+        docStatsByCurrency.set(currency, {
+          currency,
+          invoices: { quantity: 0, total: 0 },
+          creditNotes: { quantity: 0, total: 0 },
+          debitNotes: { quantity: 0, total: 0 },
+          totalDocuments: { quantity: 0, total: 0 }
+        });
+      }
+      return docStatsByCurrency.get(currency);
+    };
+
+    invoicesInDay.forEach(inv => {
+      const currency = inv.currency || "USD";
+      const stats = getDocStat(currency);
+      const type = inv.transactionType || "FiscalInvoice";
+      const amount = Number(inv.total);
+
+      if (type === 'FiscalInvoice' || type === 'Invoice') {
+        stats.invoices.quantity++;
+        stats.invoices.total += amount;
+      } else if (type === 'CreditNote') {
+        stats.creditNotes.quantity++;
+        stats.creditNotes.total += amount; // Amount is expected to be negative for CN
+      } else if (type === 'DebitNote') {
+        stats.debitNotes.quantity++;
+        stats.debitNotes.total += amount;
+      }
+
+      stats.totalDocuments.quantity++;
+      stats.totalDocuments.total += amount;
+    });
+
+    // Round stats
+    for (const stats of docStatsByCurrency.values()) {
+      stats.invoices.total = Math.round(stats.invoices.total * 100) / 100;
+      stats.creditNotes.total = Math.round(stats.creditNotes.total * 100) / 100;
+      stats.debitNotes.total = Math.round(stats.debitNotes.total * 100) / 100;
+      stats.totalDocuments.total = Math.round(stats.totalDocuments.total * 100) / 100;
+    }
+
+    return {
+      company,
+      fiscalDayNo,
+      openedAt: company.fiscalDayOpenedAt,
+      closedAt: new Date(), // If this is called during close, it's roughly now
+      counters,
+      docStats: Array.from(docStatsByCurrency.values()).sort((a, b) => a.currency.localeCompare(b.currency))
+    };
   }
 
   async getNextInvoiceNumber(companyId: number, prefix: string = 'INV'): Promise<string> {
@@ -1050,6 +1147,68 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(zimraLogs.createdAt))
       .limit(limit);
   }
+
+  async resolveGreyErrors(companyId: number, fiscalDayNo: number, skipInvoiceId?: number): Promise<void> {
+    const dayInvoices = await db
+      .select()
+      .from(invoices)
+      .where(and(eq(invoices.companyId, companyId), eq(invoices.fiscalDayNo, fiscalDayNo)))
+      .orderBy(invoices.receiptCounter);
+
+    // Find the end of the continuous synced chain (starting from 1)
+    let chainCompleteUntil = 0;
+    let expectedCounter = 1;
+    for (const inv of dayInvoices) {
+      if (inv.syncedWithFdms && inv.receiptCounter === expectedCounter) {
+        chainCompleteUntil = inv.receiptCounter;
+        expectedCounter++;
+      } else {
+        break; // Gap found (not synced or skip in sequence)
+      }
+    }
+
+    if (chainCompleteUntil === 0) return;
+
+    // "Heal" invoices that were "Grey" but are now preceding the broken part of the chain
+    // Per ZIMRA Spec: "With each of the next received receipt, such 'Grey' receipt will be revalidated"
+    for (const inv of dayInvoices) {
+      // SKIP the invoice that was just submitted - we want to keep ZIMRA's explicit feedback for it
+      if (skipInvoiceId && inv.id === skipInvoiceId) continue;
+
+      // If it's within the completed part of the chain and has a validation status that needs re-checking
+      if (inv.receiptCounter && inv.receiptCounter <= chainCompleteUntil &&
+        (inv.validationStatus === 'grey' || inv.validationStatus === 'invalid' || inv.validationStatus === 'red')) {
+
+        // Fetch current validation errors
+        const errors = await db.select().from(validationErrors).where(eq(validationErrors.invoiceId, inv.id));
+        const hasChainError = errors.some(e => e.requiresPreviousReceipt);
+
+        if (hasChainError) {
+          // Remove the chain-related errors locally (they are now resolved by the complete chain)
+          await db.delete(validationErrors).where(and(
+            eq(validationErrors.invoiceId, inv.id),
+            eq(validationErrors.requiresPreviousReceipt, true)
+          ));
+
+          // Recalculate overall status from remaining errors (if any)
+          const remainingErrors = await db.select().from(validationErrors)
+            .where(eq(validationErrors.invoiceId, inv.id));
+
+          let newStatus = 'valid';
+          if (remainingErrors.length > 0) {
+            // Priority: Red > Grey > Yellow
+            if (remainingErrors.some(e => e.errorColor === 'Red')) newStatus = 'red';
+            else if (remainingErrors.some(e => e.errorColor === 'Grey')) newStatus = 'grey';
+            else if (remainingErrors.some(e => e.errorColor === 'Yellow')) newStatus = 'yellow';
+          }
+
+          await db.update(invoices).set({ validationStatus: newStatus }).where(eq(invoices.id, inv.id));
+          console.log(`[ZIMRA] Auto-resolved Grey errors for Invoice #${inv.id} (${inv.invoiceNumber})`);
+        }
+      }
+    }
+  }
+
 }
 
 export const storage = new DatabaseStorage();

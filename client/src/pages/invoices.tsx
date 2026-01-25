@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { DeleteButton } from "@/components/delete-button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/status-badge";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Select,
@@ -42,6 +42,7 @@ import { DateRange } from "react-day-picker";
 import { SmartFixDialog } from "@/components/smart-fix-dialog";
 
 export default function InvoicesPage() {
+  const [, setLocation] = useLocation();
   const selectedCompanyId = parseInt(localStorage.getItem("selectedCompanyId") || "0");
   const { data: invoices, isLoading } = useInvoices(selectedCompanyId);
   const deleteInvoice = useDeleteInvoice();
@@ -320,7 +321,15 @@ export default function InvoicesPage() {
                     </td>
                   </tr>
                 ) : filteredInvoices?.map((invoice) => (
-                  <tr key={invoice.id} className="data-table-row group">
+                  <tr
+                    key={invoice.id}
+                    className="data-table-row group cursor-pointer hover:bg-slate-50 transition-colors"
+                    onClick={(e) => {
+                      // Prevent navigation if clicking specific interactive elements
+                      if ((e.target as HTMLElement).closest('button, a, [role="menuitem"]')) return;
+                      setLocation(`/invoices/${invoice.id}`);
+                    }}
+                  >
                     <td className="data-table-cell font-medium font-mono text-slate-700">
                       <Link href={`/invoices/${invoice.id}`} className="hover:underline text-primary">
                         {invoice.invoiceNumber}
@@ -377,8 +386,27 @@ export default function InvoicesPage() {
                     <td className="data-table-cell">
                       <div className="flex flex-col gap-1 w-fit">
                         <StatusBadge status={invoice.status!} />
+
+                        {invoice.fiscalCode && (
+                          <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] py-0.5 h-auto font-medium gap-1 hover:bg-emerald-100">
+                            <ShieldCheck className="w-3 h-3" /> Fiscalized
+                          </Badge>
+                        )}
+
                         {!invoice.syncedWithFdms && invoice.status === 'issued' && (
                           <StatusBadge status="pending-sync" className="text-[8px] h-4 py-0" />
+                        )}
+
+                        {invoice.validationStatus && invoice.validationStatus !== 'valid' && (
+                          <Badge variant="outline" className={cn(
+                            "text-[10px] py-0.5 h-auto font-medium border-dashed",
+                            invoice.validationStatus === 'red' ? "text-red-700 bg-red-50 border-red-200" :
+                              invoice.validationStatus === 'grey' ? "text-slate-600 bg-slate-100 border-slate-300" :
+                                "text-yellow-700 bg-yellow-50 border-yellow-200"
+                          )}>
+                            {invoice.validationStatus === 'red' ? 'Critical Error' :
+                              invoice.validationStatus === 'grey' ? 'Map Error' : 'Warning'}
+                          </Badge>
                         )}
                       </div>
                     </td>

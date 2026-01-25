@@ -104,11 +104,21 @@ export function useFiscalizeInvoice() {
       queryClient.invalidateQueries({ queryKey: [api.invoices.get.path, id] });
       // Also invalidate list if we are viewing the list
       queryClient.invalidateQueries({ queryKey: [api.invoices.list.path] });
-      toast({
-        title: "Invoice Fiscalized Successfully",
-        description: `Fiscal Number: ${data.fiscalCode}`,
-        className: "bg-green-100 text-green-900"
-      });
+
+      // Check if there are validation errors
+      if (data.validationErrors && data.validationErrors.length > 0) {
+        toast({
+          title: "Fiscalization Completed with Errors",
+          description: `Receipt submitted but ${data.validationErrors.length} validation error(s) found. Please review and fix.`,
+          variant: "destructive"
+        });
+      } else {
+        toast({
+          title: "Invoice Fiscalized Successfully",
+          description: `Fiscal Number: ${data.fiscalCode}`,
+          className: "bg-green-100 text-green-900"
+        });
+      }
     },
     onError: (err: Error) => {
       toast({

@@ -195,7 +195,7 @@ export default function ZimraLogs() {
                                                     {format(new Date(log.createdAt), "MMM d, HH:mm:ss")}
                                                 </TableCell>
                                                 <TableCell>
-                                                    {log.requestPayload?.endpoint || "Unknown Request"}
+                                                    {log.endpoint || "Unknown Request"}
                                                 </TableCell>
                                                 <TableCell>
                                                     {log.statusCode >= 200 && log.statusCode < 300 ? (

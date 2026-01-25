@@ -63,6 +63,8 @@ export function setupAuth(app: Express) {
             email: supabaseUser.email,
             password: "", // Handled by Supabase
             name: supabaseUser.user_metadata?.name || supabaseUser.user_metadata?.full_name || "New User",
+            username: supabaseUser.email.split('@')[0],
+            passwordChanged: true, // Self-registered users have their own password
           });
         } catch (err) {
           console.error("Error creating user from Supabase token:", err);

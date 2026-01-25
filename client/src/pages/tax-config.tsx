@@ -47,6 +47,18 @@ export default function TaxConfigPage() {
             <div className="mb-8">
                 <h1 className="text-3xl font-display font-bold text-slate-900">Tax Configuration</h1>
                 <p className="text-slate-500 mt-1">Manage ZIMRA Fiscalization and Tax Categories</p>
+                {!currentCompany.vatRegistered && (
+                    <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
+                        <Calculator className="w-5 h-5 text-amber-600 mt-0.5" />
+                        <div>
+                            <p className="font-bold text-amber-900">Non-VAT Registered Company</p>
+                            <p className="text-sm text-amber-800 leading-relaxed">
+                                Your company is currently marked as <strong>not registered for VAT</strong>.
+                                VAT will be automatically disabled (set to 0%) for all invoices to ensure compliance with ZIMRA regulations for non-VAT taxpayers.
+                            </p>
+                        </div>
+                    </div>
+                )}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

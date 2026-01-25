@@ -226,8 +226,16 @@ export const InvoicePDF = ({ invoice, company, customer, qrCodeUrl }: InvoicePDF
                 </View>
 
                 {/* Title */}
-                <Text style={{ textAlign: 'center', fontSize: 14, fontWeight: 'bold', marginVertical: 10, textTransform: 'uppercase' }}>
-                    {invoice.fiscalCode ? "FISCAL TAX INVOICE" : (invoice.status === 'quote' ? "QUOTATION" : "INVOICE")}
+                <Text style={{ textAlign: 'center', fontSize: 18, fontWeight: 'bold', marginVertical: 10, textTransform: 'uppercase' }}>
+                    {invoice.status === 'quote'
+                        ? "OFFICIAL QUOTATION"
+                        : (invoice.transactionType === 'CreditNote'
+                            ? "CREDIT NOTE"
+                            : (invoice.transactionType === 'DebitNote'
+                                ? "DEBIT NOTE"
+                                : (invoice.fiscalCode
+                                    ? (company?.vatRegistered ? "FISCAL TAX INVOICE" : "FISCAL INVOICE")
+                                    : (invoice.status === 'draft' ? "DRAFT INVOICE" : "PROFORMA INVOICE"))))}
                 </Text>
 
 
@@ -396,19 +404,83 @@ export const InvoicePDF = ({ invoice, company, customer, qrCodeUrl }: InvoicePDF
                     <View style={styles.taxTable}>
                         <Text style={[styles.sectionTitle, { marginBottom: 4, borderBottomWidth: 0 }]}>Tax Analysis</Text>
                         <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderColor: '#e2e8f0', paddingBottom: 2 }}>
-                            <Text style={{ fontSize: 8, width: '40%', color: '#64748b' }}>Type</Text>
-                            <Text style={{ fontSize: 8, width: '30%', textAlign: 'right', color: '#64748b' }}>Rate</Text>
-                            <Text style={{ fontSize: 8, width: '30%', textAlign: 'right', color: '#64748b' }}>Tax Amt</Text>
+                            <Text style={{ fontSize: 8, width: '25%', color: '#64748b' }}>Type</Text>
+                            <Text style={{ fontSize: 8, width: '25%', textAlign: 'right', color: '#64748b' }}>Net</Text>
+                            <Text style={{ fontSize: 8, width: '25%', textAlign: 'right', color: '#64748b' }}>VAT</Text>
+                            <Text style={{ fontSize: 8, width: '25%', textAlign: 'right', color: '#64748b' }}>Total</Text>
                         </View>
-                        <View style={{ flexDirection: 'row', paddingTop: 2 }}>
-                            <Text style={{ fontSize: 8, width: '40%' }}>Standard</Text>
-                            <Text style={{ fontSize: 8, width: '30%', textAlign: 'right' }}>15%</Text>
-                            <Text style={{ fontSize: 8, width: '30%', textAlign: 'right' }}>{Number(invoice.taxAmount).toFixed(2)}</Text>
-                        </View>
+                        {(() => {
+                            // Calculate Tax Summary dynamically
+                            const taxSummary = invoice.items?.reduce((acc: any, item: any) => {
+                                const taxRate = Number(item.taxRate || item.product?.taxRate || 0);
+                                const lineTotal = Number(item.lineTotal);
+                                let netAmount = 0;
+                                let taxAmount = 0;
+
+                                if (invoice.taxInclusive) {
+                                    netAmount = lineTotal / (1 + taxRate / 100);
+                                    taxAmount = lineTotal - netAmount;
+                                } else {
+                                    netAmount = lineTotal; // Assuming lineTotal is exclusive if !taxInclusive in item mapping
+                                    // Wait, in item mapping above (Line 338), we saw item.lineTotal usage. 
+                                    // Let's rely on the same logic as invoice-details.tsx
+                                    taxAmount = lineTotal * (taxRate / 100);
+                                }
+
+                                // Actually, let's verify lineTotal meaning. 
+                                // referencing lines 337-362 of this file:
+                                // "displayTotalIncl = unitPrice * qty; // item.lineTotal should match this" (Inclusive case)
+                                // "displayAmtExcl = unitPrice * qty;" (Exclusive case)
+                                // In `invoice-details.tsx`, lineTotal = qty * unitPrice.
+                                // If invoice.taxInclusive, unitPrice is incl. If false, unitPrice is excl.
+
+                                // Let's simplify and use the same logic as the items table loop in this file for consistency
+                                const qty = Number(item.quantity);
+                                const unitPrice = Number(item.unitPrice);
+
+                                if (invoice.taxInclusive) {
+                                    const totalIncl = unitPrice * qty;
+                                    const net = totalIncl / (1 + taxRate / 100);
+                                    const tax = totalIncl - net;
+                                    netAmount = net;
+                                    taxAmount = tax;
+                                } else {
+                                    const totalExcl = unitPrice * qty;
+                                    const tax = totalExcl * (taxRate / 100);
+                                    netAmount = totalExcl;
+                                    taxAmount = tax;
+                                }
+
+                                const key = taxRate.toString();
+                                if (!acc[key]) {
+                                    acc[key] = { taxRate, netAmount: 0, taxAmount: 0, totalAmount: 0 };
+                                }
+                                acc[key].netAmount += netAmount;
+                                acc[key].taxAmount += taxAmount;
+                                acc[key].totalAmount += netAmount + taxAmount;
+                                return acc;
+                            }, {} as Record<string, { taxRate: number; netAmount: number; taxAmount: number; totalAmount: number }>) || {};
+
+                            return Object.entries(taxSummary).map(([rate, data]: [string, any]) => (
+                                <View key={rate} style={{ flexDirection: 'row', paddingTop: 2 }}>
+                                    <Text style={{ fontSize: 8, width: '25%' }}>{data.taxRate === 0 ? 'Exempt' : `${data.taxRate}%`}</Text>
+                                    <Text style={{ fontSize: 8, width: '25%', textAlign: 'right' }}>{data.netAmount.toFixed(2)}</Text>
+                                    <Text style={{ fontSize: 8, width: '25%', textAlign: 'right' }}>{data.taxAmount.toFixed(2)}</Text>
+                                    <Text style={{ fontSize: 8, width: '25%', textAlign: 'right' }}>{data.totalAmount.toFixed(2)}</Text>
+                                </View>
+                            ));
+                        })()}
                     </View>
 
                     {/* Totals */}
                     <View style={styles.totalsBox}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4, paddingBottom: 4, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}>
+                            <Text style={{ color: '#64748b' }}>Number of Items</Text>
+                            <Text style={{ fontWeight: 700, color: '#1e293b' }}>
+                                {invoice.items?.reduce((sum: number, item: any) => sum + Number(item.quantity), 0) || 0}
+                            </Text>
+                        </View>
+
                         {(isExclusive) && (
                             <View style={styles.totalRow}>
                                 <Text>Total (excl. tax)</Text>

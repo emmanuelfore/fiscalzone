@@ -25,6 +25,9 @@ export default function TeamSettingsPage() {
 
     const [isAddUserOpen, setIsAddUserOpen] = useState(false);
     const [newUserEmail, setNewUserEmail] = useState("");
+    const [newName, setNewName] = useState("");
+    const [newUsername, setNewUsername] = useState("");
+    const [newUserPassword, setNewUserPassword] = useState("Zimra123!");
     const [newUserRole, setNewUserRole] = useState("member");
 
     // Fetch Users
@@ -44,7 +47,13 @@ export default function TeamSettingsPage() {
         mutationFn: async () => {
             const res = await apiFetch(`/api/companies/${companyId}/users`, {
                 method: "POST",
-                body: JSON.stringify({ email: newUserEmail, role: newUserRole })
+                body: JSON.stringify({
+                    email: newUserEmail,
+                    role: newUserRole,
+                    name: newName,
+                    username: newUsername,
+                    password: newUserPassword
+                })
             });
             if (!res.ok) {
                 const err = await res.json();
@@ -54,9 +63,12 @@ export default function TeamSettingsPage() {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["users", companyId] });
-            toast({ title: "User Added", description: `Invited ${newUserEmail} successfully.` });
+            toast({ title: "User Added", description: `Added ${newUserEmail} successfully.` });
             setIsAddUserOpen(false);
             setNewUserEmail("");
+            setNewName("");
+            setNewUsername("");
+            setNewUserPassword("Zimra123!");
             setNewUserRole("member");
         },
         onError: (err: Error) => {
@@ -127,30 +139,59 @@ export default function TeamSettingsPage() {
                         <DialogHeader>
                             <DialogTitle>Add Team Member</DialogTitle>
                             <DialogDescription>
-                                Invite a user by email. They must already have a registered account.
+                                Create a new user account or add an existing user to your team.
                             </DialogDescription>
                         </DialogHeader>
                         <div className="space-y-4 py-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label>Full Name</Label>
+                                    <Input
+                                        placeholder="John Doe"
+                                        value={newName}
+                                        onChange={(e) => setNewName(e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Username</Label>
+                                    <Input
+                                        placeholder="jdoe"
+                                        value={newUsername}
+                                        onChange={(e) => setNewUsername(e.target.value)}
+                                    />
+                                </div>
+                            </div>
                             <div className="space-y-2">
                                 <Label>Email Address</Label>
                                 <Input
                                     placeholder="user@example.com"
+                                    type="email"
                                     value={newUserEmail}
                                     onChange={(e) => setNewUserEmail(e.target.value)}
                                 />
                             </div>
-                            <div className="space-y-2">
-                                <Label>Role</Label>
-                                <Select value={newUserRole} onValueChange={setNewUserRole}>
-                                    <SelectTrigger>
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="member">Member</SelectItem>
-                                        <SelectItem value="admin">Admin</SelectItem>
-                                        <SelectItem value="owner">Owner</SelectItem>
-                                    </SelectContent>
-                                </Select>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label>Initial Password</Label>
+                                    <Input
+                                        type="password"
+                                        value={newUserPassword}
+                                        onChange={(e) => setNewUserPassword(e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Role</Label>
+                                    <Select value={newUserRole} onValueChange={setNewUserRole}>
+                                        <SelectTrigger>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="member">Member</SelectItem>
+                                            <SelectItem value="admin">Admin</SelectItem>
+                                            <SelectItem value="owner">Owner</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
                             </div>
                         </div>
                         <DialogFooter>

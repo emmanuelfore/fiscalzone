@@ -4,7 +4,6 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { createServer, type Server } from "http";
-import { fileURLToPath } from 'url';
 // Path resolution helper
 const rootDir = process.cwd();
 import { storage } from "./storage.js";
@@ -570,8 +569,35 @@ export async function registerRoutes(
   });
 
   app.get(api.companies.get.path, requireAuth, async (req, res) => {
-    const company = await storage.getCompany(Number(req.params.id));
+    let company = await storage.getCompany(Number(req.params.id));
     if (!company) return res.status(404).json({ message: "Company not found" });
+
+    // ZIMRA Auto-Repair: QR URL
+    // If QR URL is missing but we have ZIMRA credentials, fetch it now.
+    if (!company.qrUrl && company.fdmsDeviceId && company.zimraPrivateKey && company.zimraCertificate) {
+      try {
+        console.log(`[ZIMRA] Auto-fetching missing QR URL for Company ${company.id}`);
+        const device = new ZimraDevice({
+          deviceId: company.fdmsDeviceId,
+          deviceSerialNo: company.fdmsDeviceSerialNo || "UNKNOWN",
+          activationKey: company.fdmsApiKey || "",
+          privateKey: company.zimraPrivateKey,
+          certificate: company.zimraCertificate,
+          baseUrl: company.zimraEnvironment === 'production' ? 'https://fdmsapi.zimra.co.zw' : 'https://fdmsapitest.zimra.co.zw'
+        }, getZimraLogger(company.id));
+
+        const config = await device.getConfig();
+        if (config && config.qrUrl) {
+          await storage.updateCompany(company.id, { qrUrl: config.qrUrl });
+          company.qrUrl = config.qrUrl; // Update local instance
+          console.log(`[ZIMRA] QR URL Updated: ${config.qrUrl}`);
+        }
+      } catch (e: any) {
+        console.warn(`[ZIMRA] Auto-Repair Failed: ${e.message}`);
+        // Non-fatal, return company as is
+      }
+    }
+
     res.json(company);
   });
 
@@ -868,27 +894,55 @@ export async function registerRoutes(
     try {
       const companyId = Number(req.params.companyId);
       const userId = (req as any).user.id;
-      const { email, role } = req.body;
+      const { email, role, name, username, password } = req.body;
 
       if (!email) return res.status(400).json({ message: "Email is required" });
 
       // Permission check
-      const users = await storage.getCompanyUsers(companyId);
-      const me = users.find(u => u.id === userId);
+      const companyUsersList = await storage.getCompanyUsers(companyId);
+      const me = companyUsersList.find(u => u.id === userId);
       if (!me || (me.role !== 'owner' && me.role !== 'admin')) {
         return res.status(403).json({ message: "Insufficient permissions" });
       }
 
       // Check if user exists in system
-      const userToAdd = await storage.getUserByEmail(email);
+      let userToAdd = await storage.getUserByEmail(email);
+
       if (!userToAdd) {
-        // Option: Create a placeholder user or error. schema requires valid user_id foreign key.
-        // For simplicity: Limit to adding existing users for now.
-        return res.status(404).json({ message: "User not found. They must register first." });
+        // Create user in Supabase first
+        if (!supabaseAdmin) {
+          return res.status(500).json({ message: "Supabase Admin client not configured" });
+        }
+
+        const defaultPassword = password || "Zimra123!"; // Secure default or provided
+
+        const { data: { user: sbUser }, error: sbError } = await supabaseAdmin.auth.admin.createUser({
+          email,
+          password: defaultPassword,
+          email_confirm: true,
+          user_metadata: { name: name || email.split('@')[0], full_name: name }
+        });
+
+        if (sbError) {
+          console.error("Supabase Admin Create User Error:", sbError);
+          return res.status(400).json({ message: "Failed to create user in auth system: " + sbError.message });
+        }
+
+        if (!sbUser) return res.status(500).json({ message: "No user returned from Auth" });
+
+        // Create in our DB
+        userToAdd = await storage.createUser({
+          id: sbUser.id,
+          email: sbUser.email!,
+          name: name || sbUser.user_metadata?.name || "New User",
+          username: username || email.split('@')[0],
+          password: "", // Handled by Supabase
+          passwordChanged: false
+        });
       }
 
       // Check if already in company
-      if (users.find(u => u.id === userToAdd.id)) {
+      if (companyUsersList.find(u => u.id === userToAdd.id)) {
         return res.status(409).json({ message: "User already in company" });
       }
 
@@ -897,7 +951,38 @@ export async function registerRoutes(
 
     } catch (err: any) {
       console.error("Add User Error:", err);
-      res.status(500).json({ message: "Failed to add user" });
+      res.status(500).json({ message: "Failed to add user: " + err.message });
+    }
+  });
+
+  // 2.1 Change Password (Local & Supabase sync)
+  app.post("/api/user/password", requireAuth, async (req, res) => {
+    try {
+      const { newPassword } = req.body;
+      if (!newPassword) return res.status(400).json({ message: "New password is required" });
+      if (newPassword.length < 6) return res.status(400).json({ message: "Password must be at least 6 characters" });
+
+      const userId = (req as any).user.id;
+
+      // Update in Supabase
+      if (!supabaseAdmin) return res.status(500).json({ message: "Admin client not configured" });
+
+      const { error: sbError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+        password: newPassword
+      });
+
+      if (sbError) {
+        console.error("STpabase Update Password Error:", sbError);
+        return res.status(400).json({ message: "Failed to update password in auth system: " + sbError.message });
+      }
+
+      // Update local flag
+      await storage.updateUser(userId, { passwordChanged: true });
+
+      res.json({ message: "Password updated successfully" });
+    } catch (err: any) {
+      console.error("Change Password Error:", err);
+      res.status(500).json({ message: "Failed to update password" });
     }
   });
 
@@ -1026,7 +1111,7 @@ export async function registerRoutes(
 
       const device = new ZimraDevice({
         deviceId: company.fdmsDeviceId,
-        deviceSerialNo: "UNKNOWN",
+        deviceSerialNo: company.fdmsDeviceSerialNo || "UNKNOWN",
         activationKey: company.fdmsApiKey || "",
         privateKey: company.zimraPrivateKey || undefined,
         certificate: company.zimraCertificate || undefined,
@@ -1044,7 +1129,12 @@ export async function registerRoutes(
       }
 
       // Sync with DB
-      const syncedTaxes = await storage.syncTaxTypes(taxes);
+      const syncedTaxes = await storage.syncTaxTypes(companyId, taxes);
+
+      // Update company with qrUrl from config
+      if (config.qrUrl) {
+        await storage.updateCompany(companyId, { qrUrl: config.qrUrl });
+      }
 
       res.json({
         message: "Configuration synced successfully",
@@ -1082,7 +1172,7 @@ export async function registerRoutes(
 
       const device = new ZimraDevice({
         deviceId: company.fdmsDeviceId,
-        deviceSerialNo: "UNKNOWN",
+        deviceSerialNo: company.fdmsDeviceSerialNo || "UNKNOWN",
         activationKey: company.fdmsApiKey || "",
         privateKey: company.zimraPrivateKey || "",
         certificate: company.zimraCertificate || "",
@@ -1117,7 +1207,7 @@ export async function registerRoutes(
 
       const device = new ZimraDevice({
         deviceId: company.fdmsDeviceId,
-        deviceSerialNo: "UNKNOWN",
+        deviceSerialNo: company.fdmsDeviceSerialNo || "UNKNOWN",
         activationKey: company.fdmsApiKey || "",
         privateKey: company.zimraPrivateKey || "",
         certificate: company.zimraCertificate || "",
@@ -1211,7 +1301,7 @@ export async function registerRoutes(
 
       const device = new ZimraDevice({
         deviceId: company.fdmsDeviceId,
-        deviceSerialNo: "UNKNOWN",
+        deviceSerialNo: company.fdmsDeviceSerialNo || "UNKNOWN",
         activationKey: company.fdmsApiKey || "",
         privateKey: company.zimraPrivateKey || "",
         certificate: company.zimraCertificate || "",
@@ -1239,7 +1329,8 @@ export async function registerRoutes(
         currentFiscalDayNo: result.fiscalDayNo || nextDayNo,
         fiscalDayOpen: true,
         lastFiscalDayStatus: 'FiscalDayOpened',
-        dailyReceiptCount: 0 // Reset daily counter
+        dailyReceiptCount: 0, // Reset daily counter
+        lastFiscalHash: null  // Clear hash chain for new day
       });
 
       res.json(result);
@@ -1290,7 +1381,28 @@ export async function registerRoutes(
       const counters = await storage.calculateFiscalCounters(companyId, fiscalDayNo);
       console.log(`[CloseDay] Calculated ${counters.length} fiscal counters`);
 
-      const todayStr = new Date().toISOString().slice(0, 19);
+      const todayStr = new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD local
+
+      // Spec 13.3.1: fiscalDayDate must be the "date when fiscal day was opened".
+      // If we use todayStr (closure date), signature verification fails if opened on a different day.
+      let fiscalDayDate = todayStr;
+      if (company.fiscalDayOpenedAt) {
+        fiscalDayDate = new Date(company.fiscalDayOpenedAt).toLocaleDateString('sv-SE');
+      }
+
+      // Pre-check for Red or Grey receipts
+      const dayInvoices = await storage.getInvoices(companyId);
+      const invalidReceipts = dayInvoices.filter(inv =>
+        inv.fiscalDayNo === fiscalDayNo &&
+        (inv.validationStatus === 'red' || inv.validationStatus === 'grey' || inv.validationStatus === 'invalid')
+      );
+
+      if (invalidReceipts.length > 0) {
+        return res.status(400).json({
+          message: `Cannot close fiscal day ${fiscalDayNo}. There are ${invalidReceipts.length} receipts with 'Red' or 'Grey' validation errors that must be resolved first.`,
+          invalidReceipts: invalidReceipts.map(r => ({ id: r.id, number: r.invoiceNumber, status: r.validationStatus }))
+        });
+      }
 
       // Retry mechanism for fiscal day closure
       let lastError: any = null;
@@ -1302,7 +1414,7 @@ export async function registerRoutes(
 
           result = await device.closeDay(
             fiscalDayNo,
-            todayStr,
+            fiscalDayDate, // Use the OPENING date
             receiptCounter,
             counters
           );
@@ -1348,6 +1460,7 @@ export async function registerRoutes(
             options: [
               "Review and correct the fiscal counters data",
               "Verify all receipts for the day are properly recorded",
+              "Verify there are no 'Red' or 'Grey' validation status receipts",
               "Try closing the day again via this endpoint",
               "If issue persists, manually close via ZIMRA Public Portal",
               "Contact ZIMRA support if manual closure is also failing"
@@ -1388,13 +1501,17 @@ export async function registerRoutes(
         timestamp: new Date().toISOString()
       });
 
+      // Pre-generate Z-Report data for the response
+      const reportData = await storage.getZReportData(companyId, fiscalDayNo);
+
       res.json({
         success: true,
         message: `Fiscal day ${fiscalDayNo} closed successfully`,
         fiscalDayNo,
         receiptCounter,
         countersSubmitted: counters.length,
-        result
+        result,
+        reportData
       });
 
     } catch (err: any) {
@@ -1421,6 +1538,51 @@ export async function registerRoutes(
         message: "Failed to close fiscal day: " + err.message,
         error: err.toString()
       });
+    }
+  });
+
+  app.get("/api/companies/:id/zimra/day/x-report", requireAuth, async (req, res) => {
+    try {
+      const companyId = Number(req.params.id);
+      const company = await storage.getCompany(companyId);
+      if (!company || !company.fiscalDayOpen) {
+        return res.status(400).json({ message: "No open fiscal day" });
+      }
+      const data = await storage.getZReportData(companyId, company.currentFiscalDayNo || 0);
+      res.json(data);
+    } catch (err: any) {
+      console.error("X-Report Error:", err);
+      res.status(500).json({ message: "Failed to generate X-Report: " + err.message });
+    }
+  });
+
+  // Z-Report endpoint - fetch report data for any closed fiscal day
+  app.get("/api/companies/:id/zimra/day/z-report", requireAuth, async (req, res) => {
+    try {
+      const companyId = Number(req.params.id);
+      const company = await storage.getCompany(companyId);
+
+      if (!company) {
+        return res.status(404).json({ message: "Company not found" });
+      }
+
+      // Get the fiscal day number from query params or use the last closed day
+      const fiscalDayNo = req.query.fiscalDayNo
+        ? Number(req.query.fiscalDayNo)
+        : company.currentFiscalDayNo || 0;
+
+      // Verify the day is closed (or allow if explicitly requested)
+      if (company.fiscalDayOpen && fiscalDayNo === company.currentFiscalDayNo) {
+        return res.status(400).json({
+          message: "Cannot generate Z-Report for an open fiscal day. Close the day first or generate an X-Report instead."
+        });
+      }
+
+      const data = await storage.getZReportData(companyId, fiscalDayNo);
+      res.json(data);
+    } catch (err: any) {
+      console.error("Z-Report Error:", err);
+      res.status(500).json({ message: "Failed to generate Z-Report: " + err.message });
     }
   });
 
@@ -1482,61 +1644,76 @@ export async function registerRoutes(
 
   // Tax Routes
   app.get(api.tax.types.path, requireAuth, async (req, res) => {
-    const types = await storage.getTaxTypes();
+    const companyId = req.user!.companyId;
+    if (!companyId) return res.status(403).json({ message: "No company associated with user" });
+    const types = await storage.getTaxTypes(companyId);
     res.json(types);
   });
 
   app.post(api.tax.createType.path, requireAuth, async (req, res) => {
     try {
-      // Date parsing happens in Zod schema refinement if needed, but for now we expect string YYYY-MM-DD which postgres handles or we fix schema
+      const companyId = req.user!.companyId;
+      if (!companyId) return res.status(403).json({ message: "No company associated with user" });
+
       const input = api.tax.createType.input.parse(req.body);
-      const type = await storage.createTaxType(input);
+      const type = await storage.createTaxType({ ...input, companyId });
       res.status(201).json(type);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      res.status(500).json({ message: "Failed to create tax type" });
+      res.status(500).json({ message: "Failed to create tax type", error: err.message });
     }
   });
 
   app.patch(api.tax.updateType.path, requireAuth, async (req, res) => {
     try {
+      const companyId = req.user!.companyId;
+      if (!companyId) return res.status(403).json({ message: "No company associated with user" });
+
       const id = Number(req.params.id);
       const input = api.tax.updateType.input.parse(req.body);
-      const updated = await storage.updateTaxType(id, input);
+      const updated = await storage.updateTaxType(id, companyId, input);
       if (!updated) return res.status(404).json({ message: "Tax Type not found" });
       res.json(updated);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      res.status(500).json({ message: "Failed to update tax type" });
+      res.status(500).json({ message: "Failed to update tax type", error: err.message });
     }
   });
 
   app.get(api.tax.categories.path, requireAuth, async (req, res) => {
-    const categories = await storage.getTaxCategories();
+    const companyId = req.user!.companyId;
+    if (!companyId) return res.status(403).json({ message: "No company associated with user" });
+    const categories = await storage.getTaxCategories(companyId);
     res.json(categories);
   });
 
   app.post(api.tax.createCategory.path, requireAuth, async (req, res) => {
     try {
+      const companyId = req.user!.companyId;
+      if (!companyId) return res.status(403).json({ message: "No company associated with user" });
+
       const input = api.tax.createCategory.input.parse(req.body);
-      const category = await storage.createTaxCategory(input);
+      const category = await storage.createTaxCategory({ ...input, companyId });
       res.status(201).json(category);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      res.status(500).json({ message: "Failed to create tax category" });
+      res.status(500).json({ message: "Failed to create tax category", error: err.message });
     }
   });
 
   app.patch(api.tax.updateCategory.path, requireAuth, async (req, res) => {
     try {
+      const companyId = req.user!.companyId;
+      if (!companyId) return res.status(403).json({ message: "No company associated with user" });
+
       const id = Number(req.params.id);
       const input = api.tax.updateCategory.input.parse(req.body);
-      const updated = await storage.updateTaxCategory(id, input);
+      const updated = await storage.updateTaxCategory(id, companyId, input);
       if (!updated) return res.status(404).json({ message: "Category not found" });
       res.json(updated);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      res.status(500).json({ message: "Failed to update tax category" });
+      res.status(500).json({ message: "Failed to update tax category", error: err.message });
     }
   });
 
@@ -1600,7 +1777,6 @@ export async function registerRoutes(
   });
 
   // Fiscalize invoice using ZIMRA Fiscal Device Gateway
-  // Fiscalize invoice using ZIMRA Fiscal Device Gateway
   app.post(api.invoices.fiscalize.path, requireAuth, async (req, res) => {
     try {
       const invoiceId = Number(req.params.id);
@@ -1635,21 +1811,76 @@ export async function registerRoutes(
       // Set invoice ID for logging
       device.setInvoiceId(invoiceId);
 
-      // 1. AUTO-OPEN DAY CHECK
+      let justOpened = false; // Fix: Declare variable in outer scope
+
       try {
         const status = await device.getStatus() as any;
-        if (status.fiscalDayStatus !== 'FiscalDayOpened') {
-          console.log("Fiscal Day Closed. Auto-opening...");
+        console.log(`[ZIMRA] Check Status: ${status.fiscalDayStatus}, LastDay: ${status.lastFiscalDayNo}`);
+
+        const now = new Date();
+        const fiscalDayOpenedAt = company.fiscalDayOpenedAt ? new Date(company.fiscalDayOpenedAt) : null;
+        const oneDayMs = 24 * 60 * 60 * 1000;
+        const isStale = fiscalDayOpenedAt && (now.getTime() - fiscalDayOpenedAt.getTime() > oneDayMs);
+
+        if (isStale) console.log(`[ZIMRA] Day is Stale. OpenedAt: ${fiscalDayOpenedAt?.toISOString()}, Now: ${now.toISOString()}`);
+
+        // Auto-close if stale or explicitly reported by ZIMRA status
+        const statusStr = (status.fiscalDayStatus || "").toLowerCase();
+        console.log(`[ZIMRA] Status Check Normalized: '${statusStr}' vs 'fiscaldayopened'`);
+
+        if (statusStr !== 'fiscaldayopened' || isStale) {
+          if (isStale) {
+            console.log(`[ZIMRA] Fiscal Day ${company.currentFiscalDayNo} is stale (>24h). Auto-replacing...`);
+          } else {
+            console.log("[ZIMRA] Fiscal Day Closed (or invalid status). Auto-opening...");
+          }
+
+          // 1. Force close the current stale day if it was still "open" on ZIMRA side
+          if (status.fiscalDayStatus === 'FiscalDayOpened' && isStale) {
+            try {
+              // Get current counters for closure
+              const receiptCounter = company.dailyReceiptCount || 0;
+              const invoicesToClose = await storage.getInvoicesByFiscalDay(company.id, company.currentFiscalDayNo || 0);
+              const counters = await storage.calculateFiscalCounters(company.id, company.currentFiscalDayNo || 0);
+
+              // Fix: Use Opening Date for Signature (from company record), fallback to today if missing (unlikely for open day)
+              let signDate = new Date().toLocaleDateString('sv-SE');
+              if (company.fiscalDayOpenedAt) {
+                signDate = new Date(company.fiscalDayOpenedAt).toLocaleDateString('sv-SE');
+              }
+
+              await device.closeDay(
+                company.currentFiscalDayNo || 0,
+                signDate,
+                receiptCounter,
+                counters
+              );
+              console.log(`[ZIMRA] Stale Day ${company.currentFiscalDayNo} closed successfully.`);
+            } catch (closeErr) {
+              console.warn(`[ZIMRA] Failed to close stale day: ${closeErr}. Proceeding with OpenDay anyway.`);
+            }
+          }
+
           const nextDayNo = (status.lastFiscalDayNo || 0) + 1;
           const openResult = await device.openDay(nextDayNo) as any;
 
           // Update company state
+          const openedAt = new Date();
           await storage.updateCompany(company.id, {
             currentFiscalDayNo: openResult.fiscalDayNo || nextDayNo,
             fiscalDayOpen: true,
-            lastFiscalDayStatus: 'FiscalDayOpened'
+            fiscalDayOpenedAt: openedAt,
+            lastFiscalDayStatus: 'FiscalDayOpened',
+            dailyReceiptCount: 0,
+            lastFiscalHash: null
           });
-          console.log(`Fiscal Day Opened: ${openResult.fiscalDayNo}`);
+          console.log(`Fiscal Day Opened: ${openResult.fiscalDayNo} at ${openedAt.toISOString()}`);
+
+          // Re-fetch status to update local variables below
+          status.fiscalDayStatus = 'FiscalDayOpened';
+          status.lastFiscalDayNo = openResult.fiscalDayNo || nextDayNo;
+          justOpened = true;
+
         } else {
           // Ensure local state is synced if it was somehow out
           if (!company.fiscalDayOpen) {
@@ -1660,30 +1891,97 @@ export async function registerRoutes(
             });
           }
         }
+
+        // 2. SYNC COUNTERS FROM ZIMRA
+        const zimraGlobalNo = status.lastReceiptGlobalNo || 0;
+        let zimraDailyCount = status.lastReceiptCounter || 0;
+
+        // Fallback to summing quantities if lastReceiptCounter is not explicitly provided
+        if (zimraDailyCount === 0 && status.fiscalDayDocumentQuantities) {
+          zimraDailyCount = status.fiscalDayDocumentQuantities.reduce((sum: number, dq: any) => sum + (dq.receiptQuantity || 0), 0);
+        }
+
+        console.log(`[Fiscalize] ZIMRA Status Sync - GlobalNo: ${zimraGlobalNo}, DailyCount: ${zimraDailyCount}`);
+
+        // Update company state using Math.max to prevent regressions from stale ZIMRA status reports
+        // FIX: If justOpened, force daily count to 0 (don't sync with OLD day status)
+        await storage.updateCompany(company.id, {
+          lastReceiptGlobalNo: Math.max(company.lastReceiptGlobalNo || 0, zimraGlobalNo),
+          dailyReceiptCount: justOpened ? 0 : Math.max(company.dailyReceiptCount || 0, zimraDailyCount),
+          fiscalDayOpen: true,
+          currentFiscalDayNo: status.lastFiscalDayNo
+        });
+
+        // Re-fetch to get the resulting peaked counters
+        const currentCompany = await storage.getCompany(company.id) || company;
+        const nextGlobalNo = (currentCompany.lastReceiptGlobalNo || 0) + 1;
+        const nextReceiptCounter = (currentCompany.dailyReceiptCount || 0) + 1;
+
+        console.log(`[Fiscalize] Calculated Next Sequence - GlobalNo: ${nextGlobalNo}, DailyCount: ${nextReceiptCounter}`);
+
+        // Pass these strictly to the submission logic
+        (req as any).zimraSync = { nextGlobalNo, nextReceiptCounter };
+
       } catch (e: any) {
-        console.error("Auto-Open Day Failed:", e.message);
-        return res.status(500).json({ message: `Failed to auto-open fiscal day: ${e.message}` });
+        console.error("ZIMRA Status/Sync Failed:", e.message);
+        return res.status(500).json({ message: `Failed to sync with ZIMRA: ${e.message}` });
       }
 
       // 1. Get ZIMRA Config for correct Tax IDs
       let zimraConfig: ZimraConfigResponse | undefined;
+      const dbTaxTypes = await storage.getTaxTypes(company.id);
+
       try {
         zimraConfig = await device.getConfig();
+        // Auto-update QR URL if missing or different/better
+        if (zimraConfig && zimraConfig.qrUrl && (!company.qrUrl || company.qrUrl !== zimraConfig.qrUrl)) {
+          console.log(`[ZIMRA] Auto-updating Company QR URL to: ${zimraConfig.qrUrl}`);
+          await storage.updateCompany(company.id, { qrUrl: zimraConfig.qrUrl });
+          company.qrUrl = zimraConfig.qrUrl; // Update local scope for usage this turn
+        }
       } catch (e) {
-        console.warn("Failed to fetch ZIMRA config, falling back to defaults for tax mapping");
+        console.warn("Failed to fetch ZIMRA config, falling back to database for tax mapping");
       }
 
       // Map Invoice to ReceiptData
       const receiptLines = invoice.items.map((item, index) => {
-        const taxPercent = parseFloat(item.taxRate as any);
+        let taxPercent = parseFloat(item.taxRate as any);
+
+        // Force 0% tax if company is not VAT registered
+        if (!company.vatRegistered) {
+          taxPercent = 0;
+        }
+
         let taxID = 0;
+
 
         // Try to find matching tax ID from ZIMRA configuration
         if (zimraConfig?.applicableTaxes) {
           const matchingTax = zimraConfig.applicableTaxes.find((t: ZimraTax) =>
             t.taxPercent !== undefined && Math.abs(t.taxPercent - taxPercent) < 0.01
           );
-          if (matchingTax) taxID = matchingTax.taxID;
+          if (matchingTax) {
+            taxID = matchingTax.taxID;
+          }
+        }
+
+        // Secondary fallback: Look in database synced tax types
+        if (taxID === 0) {
+          const dbMatchingTax = dbTaxTypes.find(t => Math.abs(Number(t.rate) - taxPercent) < 0.01);
+          if (dbMatchingTax) {
+            taxID = dbMatchingTax.zimraTaxId ? parseInt(dbMatchingTax.zimraTaxId) : 0;
+          }
+        }
+
+        // Tertiary fallback for non-VAT if still 0
+        if (taxID === 0 && !company.vatRegistered) {
+          // Default to first tax with 0% or marked as exempt
+          const zeroTax = zimraConfig?.applicableTaxes?.find((t: ZimraTax) => t.taxPercent === 0 || t.taxName?.toLowerCase().includes('exempt')) ||
+            dbTaxTypes.find(t => Number(t.rate) === 0 || t.name?.toLowerCase().includes('exempt'));
+
+          if (zeroTax) {
+            taxID = (zeroTax as any).taxID || parseInt((zeroTax as any).zimraTaxId || "0");
+          }
         }
 
         // Fallback or auto-detect in device class if still 0
@@ -1696,7 +1994,7 @@ export async function registerRoutes(
           receiptLineQuantity: parseFloat(Number(item.quantity).toFixed(2)),
           receiptLineTotal: parseFloat(Number(item.lineTotal).toFixed(2)),
           taxPercent: taxPercent,
-          taxID: taxID
+          taxID: taxID,
         };
       });
 
@@ -1735,27 +2033,50 @@ export async function registerRoutes(
         }
       }
 
-      // Construct Buyer Data
-      buyerData = invoice.customer ? {
-        buyerRegisterName: invoice.customer.name,
-        buyerTradeName: invoice.customer.name,
-        vatNumber: invoice.customer.vatNumber || "",
-        buyerTIN: invoice.customer.tin || "",
-        buyerContacts: {
-          phoneNo: invoice.customer.phone || "",
-          email: invoice.customer.email || ""
-        },
-        buyerAddress: {
-          province: invoice.customer.city || "",
-          city: invoice.customer.city || "",
-          street: invoice.customer.address || "",
-          houseNo: "",
-          district: ""
-        }
-      } : undefined;
+      // Construct Buyer Data - Only include fields that have actual data
+      if (invoice.customer) {
+        buyerData = {
+          buyerRegisterName: invoice.customer.name,
+          buyerTradeName: invoice.customer.name,
+        };
 
-      const nextGlobalNo = invoice.receiptGlobalNo || ((company.lastReceiptGlobalNo || 0) + 1);
-      const nextReceiptCounter = invoice.receiptCounter || ((company.dailyReceiptCount || 0) + 1);
+        // Only include VAT number if it exists
+        if (invoice.customer.vatNumber && invoice.customer.vatNumber.trim()) {
+          buyerData.vatNumber = invoice.customer.vatNumber.trim();
+        }
+
+        // Only include TIN if it exists
+        if (invoice.customer.tin && invoice.customer.tin.trim()) {
+          buyerData.buyerTIN = invoice.customer.tin.trim();
+        }
+
+        // Only include contacts if at least one field has data
+        const hasPhone = invoice.customer.phone && invoice.customer.phone.trim();
+        const hasEmail = invoice.customer.email && invoice.customer.email.trim();
+
+        if (hasPhone || hasEmail) {
+          buyerData.buyerContacts = {};
+          if (hasPhone) buyerData.buyerContacts.phoneNo = invoice.customer.phone.trim();
+          if (hasEmail) buyerData.buyerContacts.email = invoice.customer.email.trim();
+        }
+
+        // Only include address if at least one field has data
+        const hasProvince = invoice.customer.city && invoice.customer.city.trim();
+        const hasCity = invoice.customer.city && invoice.customer.city.trim();
+        const hasStreet = invoice.customer.address && invoice.customer.address.trim();
+
+        if (hasProvince || hasCity || hasStreet) {
+          buyerData.buyerAddress = {};
+          if (hasProvince) buyerData.buyerAddress.province = invoice.customer.city.trim();
+          if (hasCity) buyerData.buyerAddress.city = invoice.customer.city.trim();
+          if (hasStreet) buyerData.buyerAddress.street = invoice.customer.address.trim();
+          // houseNo and district are optional and not used in our schema
+        }
+      }
+
+      const zimraSync = (req as any).zimraSync;
+      let nextGlobalNo = zimraSync ? zimraSync.nextGlobalNo : ((invoice.status === 'issued' ? invoice.receiptGlobalNo : null) || ((company.lastReceiptGlobalNo || 0) + 1));
+      let nextReceiptCounter = zimraSync ? zimraSync.nextReceiptCounter : ((invoice.status === 'issued' ? invoice.receiptCounter : null) || ((company.dailyReceiptCount || 0) + 1));
 
       const receiptData: ReceiptData = {
         receiptType: receiptType,
@@ -1763,7 +2084,7 @@ export async function registerRoutes(
         receiptCounter: nextReceiptCounter,
         receiptGlobalNo: nextGlobalNo,
         invoiceNo: invoice.invoiceNumber,
-        receiptDate: new Date().toISOString().split('.')[0],
+        receiptDate: new Date().toLocaleDateString('sv-SE') + 'T' + new Date().toLocaleTimeString('sv-SE'),
         receiptLines: receiptLines as any,
         receiptTaxes: [],
         receiptPayments: payments as any,
@@ -1776,13 +2097,88 @@ export async function registerRoutes(
 
       console.log(`[Fiscalize] Prepared Receipt Data for Invoice ${invoiceId}:`, JSON.stringify(receiptData, null, 2));
 
-      // Submit with previous hash for chaining (allow offline fallback)
-      const result = await device.submitReceipt(receiptData, company.lastFiscalHash || null, true);
+      // Submit with previous hash for chaining (first receipt of day has no previous hash)
+      let prevHash = (nextReceiptCounter === 1) ? null : (company.lastFiscalHash || null);
+      let result;
+
+      try {
+        result = await device.submitReceipt(receiptData, prevHash, true);
+      } catch (submitErr: any) {
+        // Auto-Open Retry Logic: Catch "Day Closed" errors (typically code 310 or message containing "closed")
+        if (submitErr.message?.toLowerCase().includes('closed') || submitErr.toString().includes('310')) {
+          console.log("[ZIMRA] Auto-Open Retry: Fiscal Day reported closed during submission. Opening new day...");
+
+          try {
+            // 1. Open New Fiscal Day
+            const nextDay = (company.currentFiscalDayNo || 0) + 1;
+            await device.openDay(nextDay);
+
+            // 2. Update Local Company State
+            await storage.updateCompany(company.id, {
+              fiscalDayOpen: true,
+              currentFiscalDayNo: nextDay,
+              fiscalDayOpenedAt: new Date(),
+              dailyReceiptCount: 0,
+              lastFiscalHash: null // Reset hash for new day
+            });
+
+            // 3. Reset Receipt Data for New Day (Counter = 1, PrevHash = null)
+            receiptData.receiptCounter = 1;
+            nextReceiptCounter = 1; // Update local variable for DB update later
+            prevHash = null;
+
+            console.log("[ZIMRA] Retry: Resubmitting receipt as first of new day...");
+            result = await device.submitReceipt(receiptData, prevHash, true);
+
+          } catch (retryErr: any) {
+            console.error("[ZIMRA] Retry Failed:", retryErr);
+            // Explicit error for user feedback
+            throw new Error(`Fiscal Day Closed. Automatic opening failed: ${retryErr.message}`);
+          }
+        } else {
+          throw submitErr;
+        }
+      }
 
       console.log(`[Fiscalize] Result for Invoice ${invoiceId}:`, JSON.stringify(result, null, 2));
 
-      // Generate QR Code
-      const qrCode = device.generateQrCode(result.signature, receiptData.receiptGlobalNo, receiptData.receiptDate);
+      // Handle validation errors
+      const validationResult = result.validationResult;
+      let validationStatus = 'valid';
+      let validationErrors: any[] = [];
+
+      if (validationResult && !validationResult.valid) {
+        // Map ZIMRA validation colors
+        if (validationResult.errors.some(e => e.errorColor === 'Red')) {
+          validationStatus = 'red';
+        } else if (validationResult.errors.some(e => e.errorColor === 'Grey')) {
+          validationStatus = 'grey';
+        } else if (validationResult.errors.some(e => e.errorColor === 'Yellow')) {
+          validationStatus = 'yellow';
+        } else {
+          validationStatus = 'invalid';
+        }
+
+        // Store validation errors
+        validationErrors = validationResult.errors.map(error => ({
+          invoiceId,
+          errorCode: error.errorCode,
+          errorMessage: error.errorMessage,
+          errorColor: error.errorColor,
+          requiresPreviousReceipt: error.requiresPreviousReceipt
+        }));
+
+        // Save validation errors to database
+        if (validationErrors.length > 0) {
+          await storage.createValidationErrors(validationErrors);
+        }
+      }
+
+      // Generate QR Code (if successful and synced/signed - validation errors don't prevent signature)
+      let qrCode = '';
+      if (result.synced) {
+        qrCode = device.generateQrCode(result.signature, receiptData.receiptGlobalNo, receiptData.receiptDate);
+      }
 
       const updatedInvoice = await storage.fiscalizeInvoice(invoiceId, {
         fiscalCode: result.hash,
@@ -1792,20 +2188,35 @@ export async function registerRoutes(
         receiptCounter: nextReceiptCounter,
         receiptGlobalNo: nextGlobalNo,
         syncedWithFdms: result.synced,
-        fdmsStatus: result.synced ? 'issued' : 'pending'
+        fdmsStatus: result.synced ? 'issued' : 'pending',
+        validationStatus,
+        lastValidationAttempt: new Date()
       });
 
-      // Update Company Counters and Hash ONLY for new fiscalizations (even if offline)
-      // If re-syncing, we don't touch company totals to avoid mess-ups
-      if (!invoice.receiptGlobalNo) {
+      // Update Company Counters and Hash if synced (regardless of validation errors)
+      // Per spec: signed receipts MUST increase counters and become part of the hash chain.
+      if (!invoice.receiptGlobalNo && result.synced) {
         await storage.updateCompany(company.id, {
           lastReceiptGlobalNo: nextGlobalNo,
           dailyReceiptCount: nextReceiptCounter,
           lastFiscalHash: result.hash
         });
+
+        // Trigger Grey Error Resolution (Heal the chain locally)
+        if (company.currentFiscalDayNo) {
+          storage.resolveGreyErrors(company.id, company.currentFiscalDayNo, invoiceId).catch(err => {
+            console.error("[ZIMRA] Failed to resolve grey errors:", err);
+          });
+        }
       }
 
-      res.json(updatedInvoice);
+      // Return invoice with validation errors if any
+      const response = {
+        ...updatedInvoice,
+        validationErrors: validationErrors.length > 0 ? validationErrors : undefined
+      };
+
+      res.json(response);
     } catch (err: any) {
       console.error(err);
       if (err instanceof ZimraApiError) {
@@ -2252,6 +2663,7 @@ export async function registerRoutes(
   return httpServer;
 }
 
+
 // Helper to seed database if empty
 async function seedDatabase() {
   const testUserEmail = "demo@zimra.com";
@@ -2262,3 +2674,4 @@ async function seedDatabase() {
     // Create seed logic here if needed
   }
 }
+

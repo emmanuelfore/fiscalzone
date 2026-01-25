@@ -168,8 +168,15 @@ export default function CreateInvoicePage() {
   const [dueDate, setDueDate] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
   const [taxInclusive, setTaxInclusive] = useState<boolean>(false);
+
+  // Helper to get default tax rate based on company registration
+  const getDefaultTaxRate = () => {
+    if (company && !company.vatRegistered) return 0;
+    return 15;
+  };
+
   const [items, setItems] = useState<LineItem[]>([
-    { localId: Math.random().toString(36).substring(2, 11), productId: null, description: "", quantity: 1, unitPrice: 0, taxRate: 15 }
+    { localId: Math.random().toString(36).substring(2, 11), productId: null, description: "", quantity: 1, unitPrice: 0, taxRate: getDefaultTaxRate() }
   ]);
   const [isRestored, setIsRestored] = useState(false);
 
@@ -280,7 +287,7 @@ export default function CreateInvoicePage() {
   }, [companyId, isEditing, isDuplicating, isRestored, toast]);
 
   const handleAddItem = () => {
-    setItems([...items, { localId: Math.random().toString(36).substring(2, 11), productId: null, description: "", quantity: 1, unitPrice: 0, taxRate: 15 }]);
+    setItems([...items, { localId: Math.random().toString(36).substring(2, 11), productId: null, description: "", quantity: 1, unitPrice: 0, taxRate: getDefaultTaxRate() }]);
   };
 
   const handleRemoveItem = (localId: string) => {
@@ -294,8 +301,8 @@ export default function CreateInvoicePage() {
         if (item.localId !== localId) return item;
 
         // Determine tax rate: prefer master tax type if linked, otherwise fallback to product override
-        let taxRate = Number(product.taxRate ?? 15);
-        if ((product as any).taxTypeId && taxTypes.data) {
+        let taxRate = company?.vatRegistered ? Number(product.taxRate ?? 15) : 0;
+        if (company?.vatRegistered && (product as any).taxTypeId && taxTypes.data) {
           const found = taxTypes.data.find(t => t.id === (product as any).taxTypeId);
           if (found) taxRate = Number(found.rate);
         }
@@ -437,6 +444,18 @@ export default function CreateInvoicePage() {
       })
     };
 
+    // Credit Note / Debit Note Validation: Notes are mandatory
+    const isCnDn = existingInvoice?.transactionType === "CreditNote" || existingInvoice?.transactionType === "DebitNote";
+    if (isCnDn && !notes?.trim()) {
+      toast({
+        title: "Notes Required",
+        description: `Please provide a reason/notes for this ${existingInvoice?.transactionType === "CreditNote" ? "Credit Note" : "Debit Note"}.`,
+        variant: "destructive",
+      });
+      setLoadingAction(null);
+      return;
+    }
+
     try {
       if (isEditing && editId) {
         await updateInvoice.mutateAsync({
@@ -509,6 +528,18 @@ export default function CreateInvoicePage() {
         };
       })
     };
+
+    // Credit Note / Debit Note Validation: Notes are mandatory
+    const isCnDn = existingInvoice?.transactionType === "CreditNote" || existingInvoice?.transactionType === "DebitNote";
+    if (isCnDn && !notes?.trim()) {
+      toast({
+        title: "Notes Required",
+        description: `Please provide a reason/notes for this ${existingInvoice?.transactionType === "CreditNote" ? "Credit Note" : "Debit Note"}.`,
+        variant: "destructive",
+      });
+      setLoadingAction(null);
+      return;
+    }
 
     try {
       if (isEditing && editId) {
@@ -605,6 +636,18 @@ export default function CreateInvoicePage() {
       })
     };
 
+    // Credit Note / Debit Note Validation: Notes are mandatory
+    const isCnDn = existingInvoice?.transactionType === "CreditNote" || existingInvoice?.transactionType === "DebitNote";
+    if (isCnDn && !notes?.trim()) {
+      toast({
+        title: "Notes Required",
+        description: `Please provide a reason/notes for this ${existingInvoice?.transactionType === "CreditNote" ? "Credit Note" : "Debit Note"}.`,
+        variant: "destructive",
+      });
+      setLoadingAction(null);
+      return;
+    }
+
     try {
       if (isEditing && editId) {
         await updateInvoice.mutateAsync({
@@ -667,44 +710,6 @@ export default function CreateInvoicePage() {
         </div>
       )}
 
-      {/* Banking Details Banner */}
-      {company && (company.bankName || company.accountNumber) && (
-        <div className="mb-6 bg-slate-50 border border-slate-200 rounded-lg p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <div className="p-2 bg-emerald-100 rounded-full text-emerald-600 mt-1">
-              <ShieldCheck className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-slate-900 text-sm">Banking Details</h3>
-              <p className="text-xs text-slate-500 mt-1">These details will appear on the invoice.</p>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-1 mt-2 text-sm text-slate-700">
-                <div>
-                  <span className="text-xs text-slate-400 block">Bank</span>
-                  {company.bankName || "-"}
-                </div>
-                <div>
-                  <span className="text-xs text-slate-400 block">Account Name</span>
-                  {company.accountName || "-"}
-                </div>
-                <div>
-                  <span className="text-xs text-slate-400 block">Account Number</span>
-                  {company.accountNumber || "-"}
-                </div>
-                {company.branchCode && (
-                  <div>
-                    <span className="text-xs text-slate-400 block">Branch Code</span>
-                    {company.branchCode}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-          <Button variant="outline" size="sm" onClick={() => setLocation("/settings?tab=finance")} className="shrink-0 h-8 text-xs">
-            Edit Details
-          </Button>
-        </div>
-      )}
-
       <div className="mb-6 flex flex-col md:flex-row gap-4 items-center justify-between no-print">
         <div className="flex items-center gap-4">
           <Button variant="ghost" onClick={() => setLocation("/invoices")} className="pl-0 hover:pl-0 hover:bg-transparent text-slate-500 hover:text-slate-900">
@@ -743,694 +748,836 @@ export default function CreateInvoicePage() {
             {loadingAction === 'issue' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
             Issue Invoice
           </Button>
-          <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" className="gap-2">
-                <Eye className="w-4 h-4" />
-                Preview PDF
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-4xl h-[90vh]">
-              <DialogHeader>
-                <DialogTitle>Invoice Preview</DialogTitle>
-              </DialogHeader>
-              <div className="flex-1 h-full min-h-[500px] w-full bg-slate-100 rounded-md overflow-hidden">
-                {customerId && company ? (
-                  <PDFViewer width="100%" height="100%" className="w-full h-full">
-                    <InvoicePDF
-                      invoice={{
-                        invoiceNumber: "DRAFT",
-                        issueDate: issueDate ? new Date(issueDate).toISOString() : new Date().toISOString(),
-                        dueDate: dueDate ? new Date(dueDate).toISOString() : new Date().toISOString(),
-                        status: "draft",
-                        items: items.map(item => ({
-                          ...item,
-                          lineTotal: (item.quantity * item.unitPrice).toString(),
-                          product: { hsCode: item.hsCode }
-                        })),
-                        subtotal: subtotal.toString(),
-                        taxAmount: taxAmount.toString(),
-                        total: total.toString(),
-                        currency: currencyCode,
-                        taxInclusive,
-                        notes,
-                        currencySymbol: currentSymbol
-                      }}
-                      company={{
-                        ...company,
-                        bankName,
-                        accountName,
-                        accountNumber,
-                        branchCode
-                      }}
-                      customer={customers?.find(c => c.id.toString() === customerId)}
-                    />
-                  </PDFViewer>
-                ) : (
-                  <div className="flex items-center justify-center h-full text-slate-400">
-                    Please select a customer and ensure company details are loaded to preview PDF.
-                  </div>
-                )}
-              </div>
-              <div className="flex justify-end gap-2 mt-4">
-                {customerId && company && (
-                  <PDFDownloadLink
-                    document={
-                      <InvoicePDF
-                        invoice={{
-                          invoiceNumber: "DRAFT",
-                          issueDate: issueDate ? new Date(issueDate).toISOString() : new Date().toISOString(),
-                          dueDate: dueDate ? new Date(dueDate).toISOString() : new Date().toISOString(),
-                          status: "draft",
-                          items: items.map(item => ({
-                            ...item,
-                            lineTotal: (item.quantity * item.unitPrice).toString(),
-                            product: { hsCode: item.hsCode }
-                          })),
-                          subtotal: subtotal.toString(),
-                          taxAmount: taxAmount.toString(),
-                          total: total.toString(),
-                          currency: currencyCode,
-                          taxInclusive,
-                          notes,
-                          currencySymbol: currentSymbol
-                        }}
-                        company={{
-                          ...company,
-                          bankName,
-                          accountName,
-                          accountNumber,
-                          branchCode
-                        }}
-                        customer={customers?.find(c => c.id.toString() === customerId)}
-                      />
-                    }
-                    fileName={`Invoice-Draft.pdf`}
-                  >
-                    {({ blob, url, loading, error }) => (
-                      <Button disabled={loading} className="gap-2">
-                        <Download className="w-4 h-4" />
-                        {loading ? 'Generating...' : 'Download PDF'}
-                      </Button>
-                    )}
-                  </PDFDownloadLink>
-                )}
-                <Button variant="outline" onClick={() => setIsPreviewOpen(false)}>Close</Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+          <Button variant="outline" className="gap-2" onClick={() => setIsPreviewOpen(true)}>
+            <Eye className="w-4 h-4" />
+            Preview PDF
+          </Button>
 
 
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4">
-        <Card className="bg-white shadow-lg border-slate-200 p-8 md:p-12 min-h-[1100px] text-sm">
-          {/* Header Row */}
-          <div className="flex justify-between items-start mb-12 border-b border-slate-100 pb-8">
-            <div className="space-y-1">
-              <h2 className="text-3xl font-bold text-slate-900 tracking-tight uppercase">
-                {searchParams.get('type') === 'quote' || existingInvoice?.status === 'quote'
-                  ? "OFFICIAL QUOTATION"
-                  : (existingInvoice?.fiscalCode
-                    ? (existingInvoice?.transactionType === "CreditNote" ? "FISCAL CREDIT NOTE" : (existingInvoice?.transactionType === "DebitNote" ? "FISCAL DEBIT NOTE" : "FISCAL TAX INVOICE"))
-                    : (existingInvoice?.transactionType === "CreditNote" ? "CREDIT NOTE" : (existingInvoice?.transactionType === "DebitNote" ? "DEBIT NOTE" : "TAX INVOICE")))
-                }
-              </h2>
-              <p className="text-slate-500">Original Document</p>
-            </div>
-
-            <div className="flex flex-col items-end gap-4">
-              <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-100">
-                <Button
-                  variant={taxInclusive ? "ghost" : "secondary"}
-                  size="sm"
-                  onClick={() => setTaxInclusive(false)}
-                  className="text-xs font-medium"
-                >
-                  Tax Exclusive
-                </Button>
-                <Button
-                  variant={taxInclusive ? "secondary" : "ghost"}
-                  size="sm"
-                  onClick={() => setTaxInclusive(true)}
-                  className="text-xs font-medium"
-                >
-                  Tax Inclusive
-                </Button>
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        <div className="bg-white shadow-xl border border-slate-200 rounded-2xl overflow-hidden">
+          {/* Header Section */}
+          <div className="bg-gradient-to-r from-slate-50 to-white border-b border-slate-100 px-8 md:px-12 py-8">
+            <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-6">
+              <div className="space-y-2">
+                <h1 className="text-4xl font-bold text-slate-900 tracking-tight">
+                  {searchParams.get('type') === 'quote' || existingInvoice?.status === 'quote'
+                    ? "OFFICIAL QUOTATION"
+                    : (existingInvoice?.fiscalCode
+                      ? (existingInvoice?.transactionType === "CreditNote" ? "FISCAL CREDIT NOTE" : (existingInvoice?.transactionType === "DebitNote" ? "FISCAL DEBIT NOTE" : (company?.vatRegistered ? "FISCAL TAX INVOICE" : "FISCAL INVOICE")))
+                      : (existingInvoice?.transactionType === "CreditNote" ? "CREDIT NOTE" : (existingInvoice?.transactionType === "DebitNote" ? "DEBIT NOTE" : "TAX INVOICE")))
+                  }
+                </h1>
+                <p className="text-slate-600 text-lg">Create and customize your document</p>
               </div>
-            </div>
-          </div>
 
-          {/* Invoice Details Header Row */}
-          <div className="bg-slate-50/50 rounded-xl p-6 border border-slate-100 mb-12">
-            <div className="flex flex-wrap items-start gap-x-12 gap-y-6">
-              <div className="space-y-1.5">
-                <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Invoice No</Label>
-                <div className="font-mono font-bold text-slate-700 bg-white/50 px-2 py-1 rounded border border-slate-100">
-                  {isEditing && existingInvoice ? existingInvoice.invoiceNumber : "[Auto-Generated]"}
+              <div className="flex flex-col items-start lg:items-end gap-4">
+                <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
+                  <Button
+                    variant={taxInclusive ? "ghost" : "default"}
+                    size="sm"
+                    onClick={() => setTaxInclusive(false)}
+                    className="text-sm font-medium px-4 py-2"
+                  >
+                    Tax Exclusive
+                  </Button>
+                  <Button
+                    variant={taxInclusive ? "default" : "ghost"}
+                    size="sm"
+                    onClick={() => setTaxInclusive(true)}
+                    className="text-sm font-medium px-4 py-2"
+                  >
+                    Tax Inclusive
+                  </Button>
                 </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Fiscal Day</Label>
-                <div className="font-mono font-bold text-slate-700 bg-white/50 px-2 py-1 rounded border border-slate-100">
-                  {isEditing && existingInvoice ? (existingInvoice.fiscalDayNo || "-") : "[Auto-Generated]"}
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Date</Label>
-                <Input
-                  type="date"
-                  value={issueDate}
-                  onChange={(e) => setIssueDate(e.target.value)}
-                  className="h-9 py-0 px-3 w-40 bg-white border-slate-200"
-                  required
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Due Date</Label>
-                <Input
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  className="h-9 py-0 px-3 w-40 bg-white border-slate-200"
-                  required
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Currency</Label>
-                <Select value={currencyCode} onValueChange={handleCurrencyChange}>
-                  <SelectTrigger className="h-9 py-0 px-3 w-32 bg-white border-slate-200">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {currencies?.map(c => (
-                      <SelectItem key={c.id} value={c.code}>{c.code} ({c.symbol})</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Payment Method</Label>
-                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                  <SelectTrigger className="h-9 py-0 px-3 w-44 bg-white border-slate-200">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="CASH">Cash</SelectItem>
-                    <SelectItem value="CARD">Card / Swipe</SelectItem>
-                    <SelectItem value="TRANSFER">Bank Transfer</SelectItem>
-                    <SelectItem value="ECOCASH">Ecocash / Mobile</SelectItem>
-                    <SelectItem value="OTHER">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Fiscal Device ID</Label>
-                <div className="text-slate-900 font-mono font-medium pt-1">
-                  {company?.fdmsDeviceId || "Not Registered"}
-                </div>
-                <div className="text-[9px] text-slate-400 leading-none">
-                  Verification code generated on submission
-                </div>
+                <p className="text-xs text-slate-500">Choose your tax calculation method</p>
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-12 mb-12">
-            {/* Seller Details */}
-            <div className="space-y-4">
-              <div className="font-semibold text-xs text-slate-400 uppercase tracking-wider">Seller</div>
-              <div className="flex flex-col md:flex-row gap-8 items-start">
-                {company?.logoUrl && (
-                  <div className="flex-shrink-0">
-                    <img
-                      src={company.logoUrl}
-                      alt="Company Logo"
-                      className="h-16 w-32 object-contain"
-                      onError={(e) => {
-                        console.error("Logo load error:", e);
-                        e.currentTarget.style.display = 'none';
-                      }}
-                    />
+          {/* Main Content */}
+          <div className="px-8 md:px-12 py-10 space-y-12">
+
+            {/* Invoice Details Header */}
+            <div className="bg-slate-50/30 rounded-2xl p-8 border border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-800 mb-6 uppercase tracking-wide">Document Details</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Invoice No</Label>
+                  <div className="font-mono font-bold text-slate-700 bg-white/50 px-2 py-1 rounded border border-slate-100">
+                    {isEditing && existingInvoice ? existingInvoice.invoiceNumber : "[Auto-Generated]"}
                   </div>
-                )}
-                <div className="space-y-1">
-                  <h3 className="text-xl font-bold text-slate-900">{company?.tradingName || company?.name || "Company Name"}</h3>
-                  <div className="text-slate-600 grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-1 mt-2 text-sm">
-                    <p>TIN: <span className="font-mono text-slate-900">{company?.tin || "-"}</span></p>
-                    <p>VAT No: <span className="font-mono text-slate-900">{company?.vatNumber || "-"}</span></p>
-                    <p>{company?.address || "Address Line 1"}, {company?.city}</p>
-                    <p>{company?.email} | {company?.phone}</p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Fiscal Day</Label>
+                  <div className="font-mono font-bold text-slate-700 bg-white/50 px-2 py-1 rounded border border-slate-100">
+                    {isEditing && existingInvoice ? (existingInvoice.fiscalDayNo || "-") : "[Auto-Generated]"}
                   </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Date</Label>
+                  <Input
+                    type="date"
+                    value={issueDate}
+                    onChange={(e) => setIssueDate(e.target.value)}
+                    className="h-9 py-0 px-3 w-40 bg-white border-slate-200"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Due Date</Label>
+                  <Input
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    className="h-9 py-0 px-3 w-40 bg-white border-slate-200"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Currency</Label>
+                  <Select value={currencyCode} onValueChange={handleCurrencyChange}>
+                    <SelectTrigger className="h-9 py-0 px-3 w-32 bg-white border-slate-200">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {currencies?.map(c => (
+                        <SelectItem key={c.id} value={c.code}>{c.code} ({c.symbol})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Payment Method</Label>
+                  <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                    <SelectTrigger className="h-9 py-0 px-3 w-44 bg-white border-slate-200">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="CASH">Cash</SelectItem>
+                      <SelectItem value="CARD">Card / Swipe</SelectItem>
+                      <SelectItem value="TRANSFER">Bank Transfer</SelectItem>
+                      <SelectItem value="ECOCASH">Ecocash / Mobile</SelectItem>
+                      <SelectItem value="OTHER">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Fiscal Device ID</Label>
+                  <div className="text-slate-900 font-mono font-medium pt-1">
+                    {company?.fdmsDeviceId || "Not Registered"}
+                  </div>
+
                 </div>
               </div>
             </div>
-          </div>
 
-          <div className="mb-12">
-            <div className="font-semibold text-xs text-slate-400 uppercase tracking-wider mb-4">Buyer</div>
-            <div className="bg-slate-50/50 p-6 rounded-lg border border-slate-100">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="space-y-4">
-                  <div className="flex gap-2">
-                    <Popover open={open} onOpenChange={setOpen}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          aria-expanded={open}
-                          className="w-full justify-between bg-white border-slate-200 h-10"
-                        >
-                          {customerId
-                            ? customers?.find((customer) => customer.id.toString() === customerId)?.name
-                            : "Select a client or search..."}
-                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[300px] p-0" align="start">
-                        <Command>
-                          <CommandInput
-                            placeholder="Search customer..."
-                            value={customerSearch}
-                            onValueChange={setCustomerSearch}
-                          />
-                          <CommandList>
-                            <CommandEmpty className="p-0">
-                              <div className="p-4 text-sm text-center text-slate-500">
-                                No customer found.
-                              </div>
-                              {customerSearch.trim() && (
-                                <div className="p-1 border-t">
-                                  <Button
-                                    variant="ghost"
-                                    className="w-full justify-start h-9 text-xs font-medium text-primary hover:text-primary hover:bg-primary/5"
-                                    onClick={async () => {
-                                      try {
-                                        const newC = await createCustomer.mutateAsync({
-                                          name: customerSearch,
-                                          customerType: "individual"
-                                        });
-                                        setCustomerId(newC.id.toString());
-                                        setCustomerSearch("");
-                                        setOpen(false);
-                                        toast({ title: "Customer Added", description: `${newC.name} has been created.` });
-                                      } catch (e) {
-                                        console.error(e);
-                                      }
-                                    }}
-                                  >
-                                    <Plus className="w-3 h-3 mr-2" /> Add "{customerSearch}" as new customer
-                                  </Button>
-                                </div>
-                              )}
-                            </CommandEmpty>
-                            <CommandGroup>
-                              {customers?.map((customer) => (
-                                <CommandItem
-                                  key={customer.id}
-                                  value={`${customer.name} ${customer.tin || ""} ${customer.email || ""}`}
-                                  onSelect={() => {
-                                    setCustomerId(customer.id.toString());
-                                    setOpen(false);
-                                  }}
-                                >
-                                  <Check
-                                    className={cn(
-                                      "mr-2 h-4 w-4",
-                                      customerId === customer.id.toString() ? "opacity-100" : "opacity-0"
-                                    )}
-                                  />
-                                  <div className="flex flex-col">
-                                    <span className="font-medium">{customer.name}</span>
-                                    {(customer.tin || customer.email) && (
-                                      <span className="text-xs text-muted-foreground">
-                                        {[customer.tin, customer.email].filter(Boolean).join(" | ")}
-                                      </span>
-                                    )}
-                                  </div>
-                                </CommandItem>
-                              ))}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
-                    <Dialog open={isCustomerModalOpen} onOpenChange={setCustomerModalOpen}>
-                      <DialogTrigger asChild>
-                        <Button variant="outline" size="icon" className="shrink-0 h-10 w-10">
-                          <Plus className="w-4 h-4" />
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle>Add Customer</DialogTitle>
-                        </DialogHeader>
-                        <div className="space-y-4 pt-4">
-                          <div className="space-y-2">
-                            <Label>Customer Name</Label>
-                            <Input
-                              value={newCustomerName}
-                              onChange={e => setNewCustomerName(e.target.value)}
-                              placeholder="John Doe"
-                            />
-                          </div>
-                          <Button onClick={handleCreateCustomer} className="w-full" disabled={createCustomer.isPending}>
-                            {createCustomer.isPending ? "Adding..." : "Add Customer"}
-                          </Button>
-                        </div>
-                      </DialogContent>
-                    </Dialog>
+            {/* Seller & Buyer Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+              {/* Seller Details */}
+              <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
                   </div>
-                  {/* Selected Customer Details */}
-                  {customerId && (
-                    <div className="text-sm text-slate-600 pl-1 space-y-1">
-                      {(() => {
-                        const c = customers?.find(cust => cust.id.toString() === customerId);
-                        if (!c) return null;
-                        return (
-                          <>
-                            <div className="font-medium text-slate-900">{c.name}</div>
-                            <div>TIN: {c.tin || "-"}</div>
-                            <div>VAT: {c.vatNumber || "-"}</div>
-                            <div>{c.address}</div>
-                            <div>{c.email} {c.phone && `| ${c.phone}`}</div>
-                          </>
-                        );
-                      })()}
+                  <h3 className="text-lg font-semibold text-slate-800 uppercase tracking-wide">Seller</h3>
+                </div>
+                <div className="flex gap-6 items-start">
+                  {company?.logoUrl && (
+                    <div className="flex-shrink-0">
+                      <img
+                        src={company.logoUrl}
+                        alt="Company Logo"
+                        className="h-20 w-32 object-contain rounded-lg border border-slate-100"
+                        onError={(e) => {
+                          console.error("Logo load error:", e);
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
                     </div>
                   )}
+                  <div className="flex-1 space-y-3">
+                    <h4 className="text-xl font-bold text-slate-900">{company?.tradingName || company?.name || "Company Name"}</h4>
+                    <div className="text-slate-600 space-y-2 text-sm">
+                      <div className="grid grid-cols-2 gap-4">
+                        <p><span className="font-medium text-slate-500">TIN:</span> <span className="font-mono text-slate-900">{company?.tin || "-"}</span></p>
+                        <p><span className="font-medium text-slate-500">VAT:</span> <span className="font-mono text-slate-900">{company?.vatNumber || "-"}</span></p>
+                      </div>
+                      <p><span className="font-medium text-slate-500">Address:</span> {company?.address || "Address Line 1"}, {company?.city}</p>
+                      <p><span className="font-medium text-slate-500">Contact:</span> {company?.email} {company?.phone && `| ${company?.phone}`}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Buyer Details */}
+              <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-green-100 rounded-lg">
+                    <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-800 uppercase tracking-wide">Buyer</h3>
+                </div>
+                <div className="space-y-4">
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold text-slate-700 block">Select Customer</Label>
+                    <div className="flex gap-2">
+                      <Popover open={open} onOpenChange={setOpen}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={open}
+                            className="flex-1 justify-between bg-white border-slate-200 h-12 text-sm"
+                          >
+                            {customerId
+                              ? customers?.find((customer) => customer.id.toString() === customerId)?.name
+                              : "Select a client or search..."}
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[300px] p-0" align="start">
+                          <Command>
+                            <CommandInput
+                              placeholder="Search customer..."
+                              value={customerSearch}
+                              onValueChange={setCustomerSearch}
+                            />
+                            <CommandList>
+                              <CommandEmpty className="p-0">
+                                <div className="p-4 text-sm text-center text-slate-500">
+                                  No customer found.
+                                </div>
+                                {customerSearch.trim() && (
+                                  <div className="p-1 border-t">
+                                    <Button
+                                      variant="ghost"
+                                      className="w-full justify-start h-9 text-xs font-medium text-primary hover:text-primary hover:bg-primary/5"
+                                      onClick={async () => {
+                                        try {
+                                          const newC = await createCustomer.mutateAsync({
+                                            name: customerSearch,
+                                            customerType: "individual"
+                                          });
+                                          setCustomerId(newC.id.toString());
+                                          setCustomerSearch("");
+                                          setOpen(false);
+                                          toast({ title: "Customer Added", description: `${newC.name} has been created.` });
+                                        } catch (e) {
+                                          console.error(e);
+                                        }
+                                      }}
+                                    >
+                                      <Plus className="w-3 h-3 mr-2" /> Add "{customerSearch}" as new customer
+                                    </Button>
+                                  </div>
+                                )}
+                              </CommandEmpty>
+                              <CommandGroup>
+                                {customers?.map((customer) => (
+                                  <CommandItem
+                                    key={customer.id}
+                                    value={`${customer.name} ${customer.tin || ""} ${customer.email || ""}`}
+                                    onSelect={() => {
+                                      setCustomerId(customer.id.toString());
+                                      setOpen(false);
+                                    }}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        customerId === customer.id.toString() ? "opacity-100" : "opacity-0"
+                                      )}
+                                    />
+                                    <div className="flex flex-col">
+                                      <span className="font-medium">{customer.name}</span>
+                                      {(customer.tin || customer.email) && (
+                                        <span className="text-xs text-muted-foreground">
+                                          {[customer.tin, customer.email].filter(Boolean).join(" | ")}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+
+                  {/* Selected Customer Details */}
+                  {customerId && (() => {
+                    const c = customers?.find(cust => cust.id.toString() === customerId);
+                    if (!c) return null;
+                    return (
+                      <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                        <h4 className="text-lg font-bold text-slate-900 mb-3">{c.name}</h4>
+                        <div className="text-slate-600 space-y-2 text-sm">
+                          <div className="grid grid-cols-2 gap-4">
+                            <p><span className="font-medium text-slate-500">TIN:</span> <span className="font-mono text-slate-900">{c.tin || "-"}</span></p>
+                            <p><span className="font-medium text-slate-500">VAT:</span> <span className="font-mono text-slate-900">{c.vatNumber || "-"}</span></p>
+                          </div>
+                          <p><span className="font-medium text-slate-500">Address:</span> {c.address || "No Address"}, {c.city}</p>
+                          <p><span className="font-medium text-slate-500">Contact:</span> {c.email} {c.phone && `| ${c.phone}`}</p>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             </div>
-          </div>
 
-          <div className="mb-12">
-            <div className="font-semibold text-xs text-slate-400 uppercase tracking-wider mb-4">Invoice Items</div>
-            <div className="border border-slate-200 rounded-lg overflow-hidden bg-white shadow-sm">
-              <Table>
-                <TableHeader className="bg-slate-50 border-b border-slate-100">
-                  <TableRow className="hover:bg-slate-50">
-                    <TableHead className="w-[240px] pl-4">Item (Search Name/Code)</TableHead>
-                    <TableHead className="min-w-[150px]">Description</TableHead>
-                    <TableHead className="w-[100px] text-center">Qty</TableHead>
-                    <TableHead className="w-[140px] text-right">Unit Price {taxInclusive ? '(Incl)' : '(Excl)'}</TableHead>
-                    <TableHead className="w-[80px] text-center">Tax %</TableHead>
-                    <TableHead className="w-[120px] text-right">Total (Incl)</TableHead>
-                    <TableHead className="w-[50px]"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <AnimatePresence mode="popLayout">
-                    {items.map((item, index) => {
-                      const lineVal = item.quantity * item.unitPrice;
-                      let vatAmt = 0;
-                      let totalAmt = 0;
+            {/* Invoice Items Section */}
+            <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-semibold text-slate-800 uppercase tracking-wide">Invoice Items</h3>
+              </div>
+              <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
+                <Table>
+                  <TableHeader className="bg-slate-50 border-b border-slate-100">
+                    <TableRow className="hover:bg-slate-50">
+                      <TableHead className="w-[240px] pl-4">Item (Search Name/Code)</TableHead>
+                      <TableHead className="min-w-[150px]">Description</TableHead>
+                      <TableHead className="w-[100px] text-center">Qty</TableHead>
+                      <TableHead className="w-[140px] text-right">Unit Price {taxInclusive ? '(Incl)' : '(Excl)'}</TableHead>
+                      <TableHead className="w-[80px] text-center">Tax %</TableHead>
+                      <TableHead className="w-[120px] text-right">Total Amount (incl. tax)</TableHead>
+                      <TableHead className="w-[50px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <AnimatePresence mode="popLayout">
+                      {items.map((item, index) => {
+                        const lineVal = item.quantity * item.unitPrice;
+                        let vatAmt = 0;
+                        let totalAmt = 0;
 
-                      if (taxInclusive) {
-                        totalAmt = lineVal;
-                      } else {
-                        vatAmt = lineVal * (item.taxRate / 100);
-                        totalAmt = lineVal + vatAmt;
-                      }
+                        if (taxInclusive) {
+                          totalAmt = lineVal;
+                        } else {
+                          vatAmt = lineVal * (item.taxRate / 100);
+                          totalAmt = lineVal + vatAmt;
+                        }
 
-                      return (
-                        <motion.tr
-                          key={item.localId}
-                          initial={{ opacity: 0, y: -10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, x: -20 }}
-                          transition={{ duration: 0.2 }}
-                          className="group hover:bg-slate-50/30 transition-colors border-b border-slate-50"
-                        >
-                          <TableCell className="align-middle pl-4 py-3">
-                            <Popover
-                              open={openRowIndex === index}
-                              onOpenChange={(isOpen) => setOpenRowIndex(isOpen ? index : null)}
-                            >
-                              <PopoverTrigger asChild>
-                                <Button
-                                  variant="outline"
-                                  role="combobox"
-                                  className={cn(
-                                    "w-full justify-between bg-white h-9 px-3 font-normal overflow-hidden",
-                                    !item.productId && "text-muted-foreground"
-                                  )}
-                                >
-                                  <div className="flex items-center gap-2 overflow-hidden">
-                                    {item.hsCode && (
-                                      <Badge variant="secondary" className="text-[9px] h-4 py-0 px-1 font-mono opacity-60">
-                                        {item.hsCode}
-                                      </Badge>
+                        return (
+                          <motion.tr
+                            key={item.localId}
+                            initial={{ opacity: 0, y: -10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, x: -20 }}
+                            transition={{ duration: 0.2 }}
+                            className="group hover:bg-slate-50/30 transition-colors border-b border-slate-50"
+                          >
+                            <TableCell className="align-middle pl-4 py-3">
+                              <Popover
+                                open={openRowIndex === index}
+                                onOpenChange={(isOpen) => setOpenRowIndex(isOpen ? index : null)}
+                              >
+                                <PopoverTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    role="combobox"
+                                    className={cn(
+                                      "w-full justify-between bg-white h-9 px-3 font-normal overflow-hidden",
+                                      !item.productId && "text-muted-foreground"
                                     )}
-                                    <span className="truncate">
-                                      {item.productId
-                                        ? products?.find((p) => p.id === item.productId)?.name || "Select Item"
-                                        : "Select Item"}
-                                    </span>
-                                  </div>
-                                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-[300px] p-0" align="start">
-                                <Command>
-                                  <CommandInput
-                                    placeholder="Search items..."
-                                    value={productSearch[item.localId] || ""}
-                                    onValueChange={(val) => setProductSearch(prev => ({ ...prev, [item.localId]: val }))}
-                                  />
-                                  <CommandList>
-                                    <CommandEmpty className="p-0">
-                                      <div className="p-4 text-sm text-center text-slate-500">
-                                        No item found.
-                                      </div>
-                                      {productSearch[item.localId]?.trim() && (
-                                        <div className="p-1 border-t">
-                                          <Button
-                                            variant="ghost"
-                                            className="w-full justify-start h-9 text-xs font-medium text-primary hover:text-primary hover:bg-primary/5"
-                                            onClick={async () => {
-                                              try {
-                                                const newP = await createProduct.mutateAsync({
-                                                  name: productSearch[item.localId],
-                                                  price: "0",
-                                                  taxRate: "15",
-                                                  productType: "good",
-                                                  sku: `AUTO-${Date.now().toString().slice(-4)}`
-                                                });
-                                                handleProductSelect(item.localId, newP.id.toString());
-                                                setProductSearch(prev => {
-                                                  const next = { ...prev };
-                                                  delete next[item.localId];
-                                                  return next;
-                                                });
-                                                setOpenRowIndex(null);
-                                                toast({ title: "Product Added", description: `${newP.name} has been created.` });
-                                              } catch (e) {
-                                                console.error(e);
-                                              }
+                                  >
+                                    <div className="flex items-center gap-2 overflow-hidden">
+                                      {item.hsCode && (
+                                        <Badge variant="secondary" className="text-[9px] h-4 py-0 px-1 font-mono opacity-60">
+                                          {item.hsCode}
+                                        </Badge>
+                                      )}
+                                      <span className="truncate">
+                                        {item.productId
+                                          ? products?.find((p) => p.id === item.productId)?.name || "Select Item"
+                                          : "Select Item"}
+                                      </span>
+                                    </div>
+                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[300px] p-0" align="start">
+                                  <Command>
+                                    <CommandInput
+                                      placeholder="Search items..."
+                                      value={productSearch[item.localId] || ""}
+                                      onValueChange={(val) => setProductSearch(prev => ({ ...prev, [item.localId]: val }))}
+                                    />
+                                    <CommandList>
+                                      <CommandEmpty className="p-0">
+                                        <div className="p-4 text-sm text-center text-slate-500">
+                                          No item found.
+                                        </div>
+                                        {productSearch[item.localId]?.trim() && (
+                                          <div className="p-1 border-t">
+                                            <Button
+                                              variant="ghost"
+                                              className="w-full justify-start h-9 text-xs font-medium text-primary hover:text-primary hover:bg-primary/5"
+                                              onClick={async () => {
+                                                try {
+                                                  const newP = await createProduct.mutateAsync({
+                                                    name: productSearch[item.localId],
+                                                    price: "0",
+                                                    taxRate: "15",
+                                                    productType: "good",
+                                                    sku: `AUTO-${Date.now().toString().slice(-4)}`
+                                                  });
+                                                  handleProductSelect(item.localId, newP.id.toString());
+                                                  setProductSearch(prev => {
+                                                    const next = { ...prev };
+                                                    delete next[item.localId];
+                                                    return next;
+                                                  });
+                                                  setOpenRowIndex(null);
+                                                  toast({ title: "Product Added", description: `${newP.name} has been created.` });
+                                                } catch (e) {
+                                                  console.error(e);
+                                                }
+                                              }}
+                                            >
+                                              <Plus className="w-3 h-3 mr-2" /> Add "{productSearch[item.localId]}" as new product
+                                            </Button>
+                                          </div>
+                                        )}
+                                      </CommandEmpty>
+                                      <CommandGroup heading="Products">
+                                        {products?.filter(p => !p.productType || p.productType === 'good').map((product) => (
+                                          <CommandItem
+                                            key={product.id}
+                                            value={`product ${product.name} ${product.sku || ""}`}
+                                            onSelect={() => {
+                                              handleProductSelect(item.localId, product.id.toString());
+                                              setOpenRowIndex(null);
                                             }}
                                           >
-                                            <Plus className="w-3 h-3 mr-2" /> Add "{productSearch[item.localId]}" as new product
-                                          </Button>
-                                        </div>
-                                      )}
-                                    </CommandEmpty>
-                                    <CommandGroup heading="Products">
-                                      {products?.filter(p => !p.productType || p.productType === 'good').map((product) => (
-                                        <CommandItem
-                                          key={product.id}
-                                          value={`product ${product.name} ${product.sku || ""}`}
-                                          onSelect={() => {
-                                            handleProductSelect(item.localId, product.id.toString());
-                                            setOpenRowIndex(null);
-                                          }}
-                                        >
-                                          <Check
-                                            className={cn(
-                                              "mr-2 h-4 w-4",
-                                              item.productId === product.id ? "opacity-100" : "opacity-0"
-                                            )}
-                                          />
-                                          <div className="flex flex-col flex-1">
-                                            <span className="font-medium text-sm">{product.name}</span>
-                                            <div className="flex justify-between w-full text-xs text-muted-foreground mt-0.5">
-                                              <span>{product.sku}</span>
-                                              <span className="font-mono">${Number(product.price).toFixed(2)}</span>
+                                            <Check
+                                              className={cn(
+                                                "mr-2 h-4 w-4",
+                                                item.productId === product.id ? "opacity-100" : "opacity-0"
+                                              )}
+                                            />
+                                            <div className="flex flex-col flex-1">
+                                              <span className="font-medium text-sm">{product.name}</span>
+                                              <div className="flex justify-between w-full text-xs text-muted-foreground mt-0.5">
+                                                <span>{product.sku}</span>
+                                                <span className="font-mono">${Number(product.price).toFixed(2)}</span>
+                                              </div>
                                             </div>
-                                          </div>
-                                        </CommandItem>
-                                      ))}
-                                    </CommandGroup>
-                                    <CommandGroup heading="Services">
-                                      {products?.filter(p => p.productType === 'service').map((service) => (
-                                        <CommandItem
-                                          key={service.id}
-                                          value={`service ${service.name} ${service.sku || ""}`}
-                                          onSelect={() => {
-                                            handleProductSelect(item.localId, service.id.toString());
-                                            setOpenRowIndex(null);
-                                          }}
-                                        >
-                                          <Check
-                                            className={cn(
-                                              "mr-2 h-4 w-4",
-                                              item.productId === service.id ? "opacity-100" : "opacity-0"
-                                            )}
-                                          />
-                                          <div className="flex flex-col flex-1">
-                                            <span className="font-medium text-sm">{service.name}</span>
-                                            <div className="flex justify-between w-full text-xs text-muted-foreground mt-0.5">
-                                              <span>{service.sku || 'Service'}</span>
-                                              <span className="font-mono">${Number(service.price).toFixed(2)}</span>
+                                          </CommandItem>
+                                        ))}
+                                      </CommandGroup>
+                                      <CommandGroup heading="Services">
+                                        {products?.filter(p => p.productType === 'service').map((service) => (
+                                          <CommandItem
+                                            key={service.id}
+                                            value={`service ${service.name} ${service.sku || ""}`}
+                                            onSelect={() => {
+                                              handleProductSelect(item.localId, service.id.toString());
+                                              setOpenRowIndex(null);
+                                            }}
+                                          >
+                                            <Check
+                                              className={cn(
+                                                "mr-2 h-4 w-4",
+                                                item.productId === service.id ? "opacity-100" : "opacity-0"
+                                              )}
+                                            />
+                                            <div className="flex flex-col flex-1">
+                                              <span className="font-medium text-sm">{service.name}</span>
+                                              <div className="flex justify-between w-full text-xs text-muted-foreground mt-0.5">
+                                                <span>{service.sku || 'Service'}</span>
+                                                <span className="font-mono">${Number(service.price).toFixed(2)}</span>
+                                              </div>
                                             </div>
-                                          </div>
-                                        </CommandItem>
-                                      ))}
-                                    </CommandGroup>
-                                  </CommandList>
-                                </Command>
-                              </PopoverContent>
-                            </Popover>
-                          </TableCell>
-                          <TableCell className="align-middle py-3">
-                            <Input
-                              placeholder="Description..."
-                              value={item.description}
-                              onChange={(e) => updateItem(item.localId, 'description', e.target.value)}
-                              className="bg-transparent border-transparent hover:border-slate-200 focus:border-primary focus:bg-white h-9 px-2 text-sm transition-all"
-                            />
-                          </TableCell>
-                          <TableCell className="align-middle py-3">
-                            <Input
-                              type="number"
-                              min="1"
-                              value={item.quantity}
-                              onChange={(e) => updateItem(item.localId, 'quantity', parseFloat(e.target.value) || 0)}
-                              className="bg-transparent border-transparent hover:border-slate-200 focus:border-primary focus:bg-white h-9 px-2 text-center text-sm font-medium w-full transition-all"
-                            />
-                          </TableCell>
-                          <TableCell className="align-middle py-3">
-                            <Input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={Number(item.unitPrice)}
-                              onChange={(e) => updateItem(item.localId, 'unitPrice', parseFloat(e.target.value) || 0)}
-                              onBlur={(e) => {
-                                const val = parseFloat(e.target.value) || 0;
-                                updateItem(item.localId, 'unitPrice', parseFloat(val.toFixed(2)));
-                              }}
-                              className="bg-transparent border-transparent hover:border-slate-200 focus:border-primary focus:bg-white h-9 px-2 text-right text-sm font-mono w-full transition-all"
-                            />
-                          </TableCell>
-                          <TableCell className="align-middle text-center py-3">
-                            <div className="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
-                              {item.taxRate}%
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right font-bold font-mono text-slate-900 align-middle py-3 pr-4">
-                            {totalAmt.toFixed(2)}
-                          </TableCell>
-                          <TableCell className="align-middle py-3">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                              onClick={() => handleRemoveItem(item.localId)}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </TableCell>
-                        </motion.tr>
-                      );
-                    })}
-                  </AnimatePresence>
-                </TableBody>
-              </Table>
-              <div className="p-2 border-t border-slate-100 bg-slate-50/30">
-                <Button variant="ghost" size="sm" onClick={handleAddItem} className="text-primary hover:text-primary hover:bg-primary/5 w-full justify-start h-8">
-                  <Plus className="w-3.5 h-3.5 mr-2" /> Add Line Item
-                </Button>
+                                          </CommandItem>
+                                        ))}
+                                      </CommandGroup>
+                                    </CommandList>
+                                  </Command>
+                                </PopoverContent>
+                              </Popover>
+                            </TableCell>
+                            <TableCell className="align-middle py-3">
+                              <Input
+                                placeholder="Description..."
+                                value={item.description}
+                                onChange={(e) => updateItem(item.localId, 'description', e.target.value)}
+                                className="bg-transparent border-transparent hover:border-slate-200 focus:border-primary focus:bg-white h-9 px-2 text-sm transition-all"
+                              />
+                            </TableCell>
+                            <TableCell className="align-middle py-3">
+                              <Input
+                                type="number"
+                                min="1"
+                                value={item.quantity}
+                                onChange={(e) => updateItem(item.localId, 'quantity', parseFloat(e.target.value) || 0)}
+                                className="bg-transparent border-transparent hover:border-slate-200 focus:border-primary focus:bg-white h-9 px-2 text-center text-sm font-medium w-full transition-all"
+                              />
+                            </TableCell>
+                            <TableCell className="align-middle py-3">
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={Number(item.unitPrice)}
+                                onChange={(e) => updateItem(item.localId, 'unitPrice', parseFloat(e.target.value) || 0)}
+                                onBlur={(e) => {
+                                  const val = parseFloat(e.target.value) || 0;
+                                  updateItem(item.localId, 'unitPrice', parseFloat(val.toFixed(2)));
+                                }}
+                                className="bg-transparent border-transparent hover:border-slate-200 focus:border-primary focus:bg-white h-9 px-2 text-right text-sm font-mono w-full transition-all"
+                              />
+                            </TableCell>
+                            <TableCell className="align-middle text-center py-3">
+                              <div className={cn(
+                                "inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-medium",
+                                item.taxRate > 0 ? "bg-slate-100 text-slate-600" : "bg-slate-50 text-slate-400"
+                              )}>
+                                {item.taxRate}%
+                              </div>
+                              {!company?.vatRegistered && item.taxRate > 0 && (
+                                <div className="text-[8px] text-red-500 mt-0.5 leading-tight">Company not VAT registered</div>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right font-bold font-mono text-slate-900 align-middle py-3 pr-4">
+                              {totalAmt.toFixed(2)}
+                            </TableCell>
+                            <TableCell className="align-middle py-3">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={() => handleRemoveItem(item.localId)}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </TableCell>
+                          </motion.tr>
+                        );
+                      })}
+                    </AnimatePresence>
+                  </TableBody>
+                </Table>
+                <div className="p-2 border-t border-slate-100 bg-slate-50/30">
+                  <Button variant="ghost" size="sm" onClick={handleAddItem} className="text-primary hover:text-primary hover:bg-primary/5 w-full justify-start h-8">
+                    <Plus className="w-3.5 h-3.5 mr-2" /> Add Line Item
+                  </Button>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-12 pt-8 border-t border-slate-100">
-            {/* Left Column: Notes & Banking */}
-            <div className="space-y-8">
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold uppercase text-slate-400">Notes</Label>
+            {/* Notes & Banking Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+              {/* Notes Section */}
+              <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-amber-100 rounded-lg">
+                    <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-slate-800 uppercase tracking-wide">Notes</h3>
+                    {(existingInvoice?.transactionType === "CreditNote" || existingInvoice?.transactionType === "DebitNote") && (
+                      <span className="text-xs font-bold text-red-500 uppercase tracking-tight">Required for CN/DN</span>
+                    )}
+                  </div>
+                </div>
                 <Textarea
                   placeholder="Invoice notes, terms and conditions, payment instructions, etc."
-                  className="bg-slate-50 border-slate-200 min-h-[100px] resize-none text-sm"
+                  className="bg-slate-50 border-slate-200 min-h-[120px] resize-none text-sm rounded-lg"
                   value={notes}
                   onChange={e => setNotes(e.target.value)}
                 />
-                <p className="text-[10px] text-slate-400">These notes will appear on the invoice</p>
+                <p className="text-xs text-slate-500 mt-2">These notes will appear on the invoice</p>
+              </div>
+
+              {/* Banking Details Section */}
+              <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-emerald-100 rounded-lg">
+                    <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-800 uppercase tracking-wide">Banking Details</h3>
+                </div>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold uppercase text-slate-400">Bank Name</Label>
+                      <Input
+                        placeholder="e.g. Stanbic, CBZ"
+                        value={bankName}
+                        onChange={e => setBankName(e.target.value)}
+                        className="bg-white border-slate-200 h-10"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold uppercase text-slate-400">Account Name</Label>
+                      <Input
+                        placeholder="Beneficiary Name"
+                        value={accountName}
+                        onChange={e => setAccountName(e.target.value)}
+                        className="bg-white border-slate-200 h-10"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold uppercase text-slate-400">Account Number</Label>
+                      <Input
+                        placeholder="Account Number"
+                        value={accountNumber}
+                        onChange={e => setAccountNumber(e.target.value)}
+                        className="bg-white border-slate-200 h-10 font-mono"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold uppercase text-slate-400">Branch Code</Label>
+                      <Input
+                        placeholder="Sort Code"
+                        value={branchCode}
+                        onChange={e => setBranchCode(e.target.value)}
+                        className="bg-white border-slate-200 h-10"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Totals & Verification Section */}
+            <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-indigo-100 rounded-lg">
+                  <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-semibold text-slate-800 uppercase tracking-wide">Invoice Summary</h3>
               </div>
 
               <div className="space-y-4">
-                <Label className="text-xs font-semibold uppercase text-slate-400">Banking Details</Label>
-                <div className="grid grid-cols-2 gap-4">
-                  <Input placeholder="Bank Name" value={bankName} onChange={e => setBankName(e.target.value)} className="bg-slate-50 border-slate-200" />
-                  <Input placeholder="Account Name" value={accountName} onChange={e => setAccountName(e.target.value)} className="bg-slate-50 border-slate-200" />
-                  <Input placeholder="Account Number" value={accountNumber} onChange={e => setAccountNumber(e.target.value)} className="bg-slate-50 border-slate-200" />
-                  <Input placeholder="Branch Code" value={branchCode} onChange={e => setBranchCode(e.target.value)} className="bg-slate-50 border-slate-200" />
-                </div>
-              </div>
-            </div>
-
-            {/* Right Column: Totals & Verification */}
-            <div className="space-y-8">
-              <div className="bg-slate-50 p-6 rounded-lg space-y-3">
-                <div className="flex justify-between text-slate-600">
-                  <span>Subtotal</span>
-                  <span className="font-mono">{currentSymbol}{subtotal.toFixed(2)}</span>
+                <div className="flex justify-between items-center py-3 border-b border-slate-100">
+                  <span className="text-slate-600 font-medium">Subtotal</span>
+                  <span className="font-mono font-bold text-slate-900">{currentSymbol}{subtotal.toFixed(2)}</span>
                 </div>
 
                 {Object.entries(taxBreakdown).map(([rate, vals]) => (
-                  <div key={rate} className="flex justify-between text-[11px] text-slate-500 pl-4 border-l-2 border-slate-200">
-                    <span>VAT {rate}%</span>
-                    <span className="font-mono">{currentSymbol}{vals.tax.toFixed(2)}</span>
+                  <div key={rate} className="flex justify-between items-center py-2 pl-4 border-l-2 border-slate-200">
+                    <span className="text-slate-500 text-sm">VAT {rate}%</span>
+                    <span className="font-mono text-slate-700">{currentSymbol}{vals.tax.toFixed(2)}</span>
                   </div>
                 ))}
 
-                <div className="flex justify-between text-slate-600 pt-1">
-                  <span>Total Tax</span>
-                  <span className="font-mono">{currentSymbol}{taxAmount.toFixed(2)}</span>
+                <div className="flex justify-between items-center py-3 border-b border-slate-100">
+                  <span className="text-slate-600 font-medium">Total Tax</span>
+                  <span className="font-mono font-bold text-slate-900">{currentSymbol}{taxAmount.toFixed(2)}</span>
                 </div>
-                <div className="border-t border-slate-200 pt-3 flex justify-between font-bold text-xl text-slate-900">
-                  <span>Total</span>
-                  <span className="font-mono">{currentSymbol}{total.toFixed(2)}</span>
+
+                <div className="flex justify-between items-center py-4 bg-slate-50 rounded-lg px-4">
+                  <span className="text-xl font-bold text-slate-900">Total</span>
+                  <span className="text-xl font-mono font-bold text-slate-900">{currentSymbol}{total.toFixed(2)}</span>
                 </div>
               </div>
 
-              <div className="grid grid-cols-[80px_1fr] gap-4">
-                <div className="bg-white border-2 border-slate-100 rounded-lg h-20 w-20 flex items-center justify-center text-[10px] text-slate-400 text-center p-1">
-                  [QR]
+              <div className="mt-6 pt-6 border-t border-slate-100">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-800">Verification</h4>
+                    <p className="text-xs text-slate-500">Will be generated on submission</p>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <div className="text-xs font-semibold uppercase text-slate-400">Verification</div>
-                  <div className="text-sm font-medium text-slate-700">Will be generated on submission</div>
-                  <div className="text-xs text-slate-500">Verify at <span className="text-primary underline">https://receipt.zimra.org/</span></div>
-                </div>
-              </div>
 
-              <div className="text-right text-[10px] text-slate-400 pt-4">
-                Invoice is issued according to ZIMRA regulations
+                <div className="bg-slate-50 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="bg-white border-2 border-slate-100 rounded-lg h-16 w-16 flex items-center justify-center text-[10px] text-slate-400 text-center p-1 flex-shrink-0">
+                      [QR]
+                    </div>
+                    <div className="text-xs text-slate-600 leading-relaxed">
+                      <p className="font-medium mb-1">Digital Verification</p>
+                      <p>QR code and fiscal signature will be automatically generated when you submit this invoice to ZIMRA for compliance verification.</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-
-        </Card>
+        </div>
       </div>
+
+      {/* PDF Preview Dialog */}
+      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+        <DialogContent className="max-w-4xl h-[90vh]">
+          <DialogHeader>
+            <DialogTitle>Invoice Preview - Debug Info</DialogTitle>
+            <div className="text-xs text-slate-500 mt-2">
+              Customer: {customerId ? '✅' : '❌'} |
+              Company: {company ? '✅' : '❌'} |
+              Items: {items.length} |
+              Subtotal: {subtotal} |
+              Tax: {taxAmount} |
+              Total: {total}
+            </div>
+          </DialogHeader>
+          <div className="flex-1 h-full min-h-[500px] w-full bg-slate-100 rounded-md overflow-hidden">
+            {customerId && company && items.length > 0 ? (
+              <div className="w-full h-full relative">
+                {/* PDF Preview Placeholder */}
+                <div className="w-full h-full bg-white flex items-center justify-center">
+                  <div className="text-center p-8 max-w-md">
+                    <div className="mb-6">
+                      <svg className="w-16 h-16 mx-auto text-slate-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <h3 className="text-lg font-medium text-slate-900 mb-2">PDF Preview</h3>
+                      <p className="text-sm text-slate-600">
+                        PDF preview is not available in development mode. Use the download button below to test PDF generation.
+                      </p>
+                    </div>
+                    <div className="bg-slate-50 rounded-lg p-4 text-left">
+                      <h4 className="text-sm font-medium text-slate-900 mb-2">Invoice Details:</h4>
+                      <div className="text-xs text-slate-600 space-y-1">
+                        <p><strong>Number:</strong> DRAFT</p>
+                        <p><strong>Customer:</strong> {customers?.find(c => c.id.toString() === customerId)?.name}</p>
+                        <p><strong>Items:</strong> {items.length}</p>
+                        <p><strong>Total:</strong> {currentSymbol}{total.toFixed(2)}</p>
+                        <p><strong>Currency:</strong> {currencyCode}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-full text-slate-400 text-center p-8">
+                <div>
+                  <p className="text-lg font-medium mb-2 text-slate-600">PDF Preview Unavailable</p>
+                  <p className="mb-4">Please ensure all requirements are met to preview PDF.</p>
+                  <div className="space-y-1 text-sm max-w-md">
+                    {!customerId && <p className="text-red-600">❌ Customer not selected</p>}
+                    {customerId && !company && <p className="text-red-600">❌ Company details not loaded</p>}
+                    {items.length === 0 && <p className="text-red-600">❌ No invoice items added</p>}
+                    {customerId && company && items.length > 0 && <p className="text-green-600">✅ All requirements met - PDF should work</p>}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end gap-2 mt-4">
+            {customerId && company && items.length > 0 && (
+              <PDFDownloadLink
+                document={
+                  <InvoicePDF
+                    invoice={{
+                      invoiceNumber: "DRAFT",
+                      issueDate: issueDate ? new Date(issueDate).toISOString() : new Date().toISOString(),
+                      dueDate: dueDate ? new Date(dueDate).toISOString() : new Date().toISOString(),
+                      status: "draft",
+                      items: items.map(item => ({
+                        ...item,
+                        lineTotal: (item.quantity * item.unitPrice).toString(),
+                        product: { hsCode: item.hsCode }
+                      })),
+                      subtotal: subtotal.toString(),
+                      taxAmount: taxAmount.toString(),
+                      total: total.toString(),
+                      currency: currencyCode,
+                      taxInclusive,
+                      notes,
+                      currencySymbol: currentSymbol
+                    }}
+                    company={{
+                      ...company,
+                      bankName,
+                      accountName,
+                      accountNumber,
+                      branchCode
+                    }}
+                    customer={customers?.find(c => c.id.toString() === customerId)}
+                  />
+                }
+                fileName={`Invoice-Draft-${Date.now()}.pdf`}
+              >
+                {({ blob, url, loading, error }) => {
+                  if (error) {
+                    console.error('PDF Generation Error:', error);
+                    return (
+                      <div className="space-y-2">
+                        <Button disabled className="gap-2 bg-red-100 text-red-700 border-red-200 w-full">
+                          <Download className="w-4 h-4" />
+                          PDF Generation Failed
+                        </Button>
+                        <p className="text-xs text-red-600">Check browser console for details</p>
+                      </div>
+                    );
+                  }
+                  if (loading) {
+                    return (
+                      <Button disabled className="gap-2 w-full">
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Generating PDF...
+                      </Button>
+                    );
+                  }
+                  return (
+                    <Button className="gap-2 w-full">
+                      <Download className="w-4 h-4" />
+                      Download PDF ({(blob?.size || 0) > 0 ? `${Math.round((blob?.size || 0) / 1024)}KB` : 'Ready'})
+                    </Button>
+                  );
+                }}
+              </PDFDownloadLink>
+            )}
+
+            {/* Additional download button for testing */}
+            {customerId && company && items.length > 0 && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  console.log('Testing PDF generation with:', {
+                    customerId,
+                    company: !!company,
+                    itemsCount: items.length,
+                    hasSubtotal: !!subtotal,
+                    currency: currencyCode
+                  });
+                }}
+                className="gap-2"
+              >
+                Test PDF
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => setIsPreviewOpen(false)}>Close</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }

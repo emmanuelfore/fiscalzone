@@ -93,10 +93,24 @@ export function useAuth() {
   };
 
   const updatePassword = async (password: string) => {
+    // 1. Update in Supabase
     const { error } = await supabase.auth.updateUser({
       password
     });
     if (error) throw error;
+
+    // 2. Update in our backend to clear "default password" flag
+    const res = await apiFetch("/api/user/password", {
+      method: "POST",
+      body: JSON.stringify({ newPassword: password })
+    });
+
+    if (!res.ok) {
+      console.warn("Failed to sync password change status with backend");
+    }
+
+    // Refresh user data to get updated passwordChanged flag
+    queryClient.invalidateQueries({ queryKey: ["/api/user"] });
   };
 
   const updateProfile = async (data: { name: string }) => {

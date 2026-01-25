@@ -26,7 +26,7 @@ import {
 } from "recharts";
 import { DollarSign, FileText, Users, TrendingUp, Calendar as CalendarIcon, Download, Loader2, ArrowRight } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { startOfMonth, endOfMonth, format } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -124,11 +124,19 @@ export default function ReportsPage() {
         return urlParams.get(param);
     };
 
-    const activeTab = getQueryParam("tab") || "overview";
+    // Manage active tab state locally for better reactivity
+    const [activeTab, setActiveTab] = useState(getQueryParam("tab") || "overview");
+
+    // Sync tab with URL if changed from outside (sidebar)
+    useEffect(() => {
+        const tab = getQueryParam("tab") || "overview";
+        if (tab !== activeTab) {
+            setActiveTab(tab);
+        }
+    }, [location]);
 
     const handleTabChange = (value: string) => {
-        // Update URL without full reload if possible, or just set it
-        // For simplicity with wouter, pushing new state constitutes a navigation
+        setActiveTab(value);
         if (value === "overview") setLocation("/reports");
         else setLocation(`/reports?tab=${value}`);
     };
@@ -332,7 +340,7 @@ export default function ReportsPage() {
                                                     </span>
                                                 </TableCell>
                                                 <TableCell className="text-right font-medium">
-                                                    {(inv.currency || "USD") === "USD" ? "$" : inv.currency} {Number(inv.total).toFixed(2)}
+                                                    {currencies?.find(c => c.code === (inv.currency || "USD"))?.symbol || (inv.currency === "USD" ? "$" : inv.currency)} {Number(inv.total).toFixed(2)}
                                                 </TableCell>
                                                 <TableCell className="text-right font-bold">
                                                     {consolidatedSymbol}{Number((Number(inv.total) / Number(inv.exchangeRate || 1)) * consolidatedRate).toFixed(2)}
@@ -376,7 +384,7 @@ export default function ReportsPage() {
                                                 <TableCell className="font-medium">{pay.reference || "-"}</TableCell>
                                                 <TableCell className="capitalize">{pay.method}</TableCell>
                                                 <TableCell className="text-right font-medium text-emerald-600">
-                                                    {(pay.currency || "USD") === "USD" ? "$" : pay.currency} {Number(pay.amount).toFixed(2)}
+                                                    {currencies?.find(c => c.code === (pay.currency || "USD"))?.symbol || (pay.currency === "USD" ? "$" : pay.currency)} {Number(pay.amount).toFixed(2)}
                                                 </TableCell>
                                                 <TableCell className="text-right font-bold text-emerald-700">
                                                     {consolidatedSymbol}{Number((Number(pay.amount) / Number(pay.exchangeRate || 1)) * consolidatedRate).toFixed(2)}

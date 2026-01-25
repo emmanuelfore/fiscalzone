@@ -27,6 +27,7 @@ import { Pencil, Plus, Loader2 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
 import { apiFetch } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 const schema = z.object({
     name: z.string().min(1, "Name is required"),
@@ -49,6 +50,7 @@ interface Props {
 
 export function ManageTaxTypeDialog({ taxType, trigger }: Props) {
     const [open, setOpen] = useState(false);
+    const { toast } = useToast();
     const queryClient = useQueryClient();
     const isEditing = !!taxType;
 
@@ -94,6 +96,18 @@ export function ManageTaxTypeDialog({ taxType, trigger }: Props) {
             queryClient.invalidateQueries({ queryKey: [api.tax.types.path] });
             setOpen(false);
             form.reset();
+            toast({
+                title: "Success",
+                description: `Tax type ${isEditing ? "updated" : "created"} successfully.`,
+            });
+        },
+        onError: (err: any) => {
+            console.error("Failed to save tax type:", err);
+            toast({
+                title: "Error",
+                description: err.message || "Failed to save tax type",
+                variant: "destructive",
+            });
         },
     });
 

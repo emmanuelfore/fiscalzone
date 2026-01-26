@@ -54,6 +54,8 @@ export async function registerRoutes(
 
   const requireOwner = async (req: any, res: any, next: any) => {
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    if (req.user?.isSuperAdmin) return next();
+
     // Resolve companyId strictly
     let companyId = parseInt(req.params.companyId);
     if (!companyId && req.params.id && req.path.startsWith('/api/companies/')) {
@@ -78,6 +80,7 @@ export async function registerRoutes(
 
   const requireStaff = async (req: any, res: any, next: any) => {
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    if (req.user?.isSuperAdmin) return next();
 
     // Resolve companyId strictly
     let companyId = parseInt(req.params.companyId);

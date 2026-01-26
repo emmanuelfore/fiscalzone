@@ -167,7 +167,10 @@ export function EditCustomerDialog({ customer, trigger }: Props) {
 
                         {customerType === "business" && (
                             <div className="grid grid-cols-3 gap-4 p-4 bg-slate-50 rounded-lg border">
-                                <div className="col-span-3 font-medium text-sm text-slate-700 mb-2">Business Details</div>
+                                <div className="col-span-3 font-medium text-sm text-slate-700 mb-2 flex items-center justify-between">
+                                    <span>Business Details</span>
+                                    <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">ZIMRA Requirement: 10 Digits</span>
+                                </div>
                                 <FormField
                                     control={form.control}
                                     name="tin"
@@ -175,7 +178,7 @@ export function EditCustomerDialog({ customer, trigger }: Props) {
                                         <FormItem>
                                             <FormLabel>TIN</FormLabel>
                                             <FormControl>
-                                                <Input placeholder="Tax ID" value={field.value || ""} onChange={field.onChange} />
+                                                <Input placeholder="1234567890" value={field.value || ""} onChange={field.onChange} />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -188,7 +191,7 @@ export function EditCustomerDialog({ customer, trigger }: Props) {
                                         <FormItem>
                                             <FormLabel>VAT Number</FormLabel>
                                             <FormControl>
-                                                <Input placeholder="Optional" value={field.value || ""} onChange={field.onChange} />
+                                                <Input placeholder="1234567890" value={field.value || ""} onChange={field.onChange} />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -201,7 +204,7 @@ export function EditCustomerDialog({ customer, trigger }: Props) {
                                         <FormItem>
                                             <FormLabel>BP Number</FormLabel>
                                             <FormControl>
-                                                <Input placeholder="Optional" value={field.value || ""} onChange={field.onChange} />
+                                                <Input placeholder="1234567890" value={field.value || ""} onChange={field.onChange} />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>

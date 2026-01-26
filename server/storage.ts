@@ -169,6 +169,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getCompanies(userId: string): Promise<Company[]> {
+    const user = await this.getUser(userId);
+    if (user?.isSuperAdmin) {
+      return await db.select().from(companies);
+    }
+
     const result = await db
       .select({ company: companies })
       .from(companyUsers)

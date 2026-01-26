@@ -51,6 +51,8 @@ export function useCreateInvoice(companyId: number) {
   });
 }
 
+import { getZimraErrorMessage } from "@/lib/zimra-errors";
+
 export function useUpdateInvoice() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -63,8 +65,7 @@ export function useUpdateInvoice() {
         body: JSON.stringify(data),
       });
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "Failed to update invoice");
+        throw await res.json();
       }
       return api.invoices.update.responses[200].parse(await res.json());
     },
@@ -76,10 +77,11 @@ export function useUpdateInvoice() {
         description: "Invoice updated successfully",
       });
     },
-    onError: (error: Error) => {
+    onError: (err: any) => {
+      const zimraErr = getZimraErrorMessage(err.zimraErrorCode);
       toast({
-        title: "Error",
-        description: error.message,
+        title: zimraErr.title,
+        description: err.message || zimraErr.message,
         variant: "destructive",
       });
     },
@@ -95,8 +97,7 @@ export function useFiscalizeInvoice() {
       const url = buildUrl(api.invoices.fiscalize.path, { id });
       const res = await apiFetch(url, { method: "POST" });
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "Failed to fiscalize invoice");
+        throw await res.json();
       }
       return api.invoices.fiscalize.responses[200].parse(await res.json());
     },
@@ -120,10 +121,11 @@ export function useFiscalizeInvoice() {
         });
       }
     },
-    onError: (err: Error) => {
+    onError: (err: any) => {
+      const zimraErr = getZimraErrorMessage(err.zimraErrorCode);
       toast({
-        title: "Fiscalization Failed",
-        description: err.message,
+        title: zimraErr.title,
+        description: err.message || zimraErr.message,
         variant: "destructive"
       });
     }

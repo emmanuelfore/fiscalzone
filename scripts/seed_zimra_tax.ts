@@ -4,14 +4,17 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-const connectionString = process.env.SUPABASE_DB_URL;
+const connectionString = process.env.DATABASE_URL || process.env.SUPABASE_DB_URL;
 
 if (!connectionString) {
-    console.error("SUPABASE_DB_URL is required.");
+    console.error("DATABASE_URL or SUPABASE_DB_URL is required.");
     process.exit(1);
 }
 
-const pool = new pg.Pool({ connectionString });
+const pool = new pg.Pool({
+    connectionString,
+    ssl: { rejectUnauthorized: false }
+});
 
 async function seedZimraTax() {
     console.log("🇿🇼  Seeding ZIMRA Tax Configuration...");
@@ -72,7 +75,7 @@ async function seedZimraTax() {
         // 2. Insert Tax Types (Master Table)
         console.log("Inserting Tax Types...");
         const taxTypesData = [
-            { code: "VAT-STD", name: "Standard Rate", rate: 15.00, zimra_code: "A", desc: "Standard VAT rate for taxable supplies" },
+            { code: "VAT-STD", name: "Standard Rate", rate: 15.50, zimra_code: "A", desc: "Standard VAT rate for taxable supplies" },
             { code: "VAT-ZERO", name: "Zero-Rated", rate: 0.00, zimra_code: "B", desc: "Zero-rated supplies (exports, basic foods)" },
             { code: "VAT-EX", name: "Exempt", rate: 0.00, zimra_code: "E", desc: "Exempt supplies (financial, education)" },
             { code: "VAT-SPECIAL", name: "Special Rate", rate: 0.00, zimra_code: "Z", desc: "Special circumstances" }

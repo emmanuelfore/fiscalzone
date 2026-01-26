@@ -25,6 +25,7 @@ import { Pencil, Plus, Loader2 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
 import { apiFetch } from "@/lib/api";
+import { useActiveCompany } from "@/hooks/use-active-company";
 
 const schema = z.object({
     name: z.string().min(1, "Name is required"),
@@ -43,6 +44,8 @@ export function ManageTaxCategoryDialog({ category, trigger }: Props) {
     const [open, setOpen] = useState(false);
     const queryClient = useQueryClient();
     const isEditing = !!category;
+    const { activeCompanyId } = useActiveCompany();
+    const companyId = activeCompanyId;
 
     const form = useForm<FormValues>({
         resolver: zodResolver(schema),
@@ -61,12 +64,19 @@ export function ManageTaxCategoryDialog({ category, trigger }: Props) {
 
             const method = isEditing ? "PATCH" : "POST";
 
-            const res = await apiFetch(url, {
+            if (companyId == null) {
+                throw new Error("Select a company first before creating a tax category");
+            }
+            const urlWithCompany = companyId ? `${url}?companyId=${companyId}` : url;
+            const res = await apiFetch(urlWithCompany, {
                 method,
                 body: JSON.stringify(data),
             });
 
-            if (!res.ok) throw new Error("Failed to save tax category");
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.message || "Failed to save tax category");
+            }
             return await res.json();
         },
         onSuccess: () => {

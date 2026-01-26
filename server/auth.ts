@@ -25,6 +25,7 @@ export function setupAuth(app: Express) {
     // Check for Authorization header
     const authHeader = req.headers.authorization;
     if (!authHeader) {
+      console.log(`[AUTH] No Authorization header for ${req.method} ${req.path}`);
       // Continue without user (will be caught by requireAuth if needed)
       return next();
     }
@@ -37,6 +38,7 @@ export function setupAuth(app: Express) {
       const { data: { user: supabaseUser }, error } = await supabaseServer.auth.getUser(token);
 
       if (error || !supabaseUser) {
+        console.log(`[AUTH] Supabase verification failed for ${req.path}: ${error?.message || 'No user'}`);
         return next();
       }
 
@@ -73,8 +75,11 @@ export function setupAuth(app: Express) {
       }
 
       if (user) {
+        console.log(`[AUTH] User ${user.email} authenticated for ${req.path}`);
         req.user = user;
         req.isAuthenticated = () => true;
+      } else {
+        console.log(`[AUTH] No DB user for Supabase ID ${supabaseUser.id}`);
       }
 
       next();

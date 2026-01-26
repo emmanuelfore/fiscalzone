@@ -39,7 +39,7 @@ import { useState, useEffect } from "react";
 export function CreateProductDialog({ companyId, defaultType = "good", triggerLabel = "Add Product" }: { companyId: number, defaultType?: "good" | "service", triggerLabel?: string }) {
     const [open, setOpen] = useState(false);
     const createProduct = useCreateProduct(companyId);
-    const { taxCategories, taxTypes } = useTaxConfig();
+    const { taxCategories, taxTypes } = useTaxConfig(companyId);
     const { toast } = useToast();
 
     const form = useForm<InsertProduct>({

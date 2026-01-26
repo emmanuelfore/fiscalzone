@@ -1,6 +1,7 @@
 
 import { Layout } from "@/components/layout";
 import { useProducts, useUpdateProduct } from "@/hooks/use-products";
+import { useActiveCompany } from "@/hooks/use-active-company";
 import { useTaxConfig } from "@/hooks/use-tax-config";
 import { Card, CardContent } from "@/components/ui/card";
 import { Briefcase, AlertCircle, Search, ChevronLeft, ChevronRight } from "lucide-react";
@@ -24,10 +25,11 @@ import { useState } from "react";
 const ITEMS_PER_PAGE = 10;
 
 export default function ServicesPage() {
-    const companyId = parseInt(localStorage.getItem("selectedCompanyId") || "0");
+    const { activeCompanyId } = useActiveCompany();
+    const companyId = activeCompanyId || 0;
     const { data: allItems, isLoading } = useProducts(companyId);
     const updateProduct = useUpdateProduct();
-    const { taxTypes } = useTaxConfig();
+    const { taxTypes } = useTaxConfig(companyId || undefined);
     const queryClient = useQueryClient();
     const [searchTerm, setSearchTerm] = useState("");
     const [statusFilter, setStatusFilter] = useState("all");

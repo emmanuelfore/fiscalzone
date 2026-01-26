@@ -20,12 +20,12 @@ import { apiFetch } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { DayManagementControls } from "@/components/zimra/day-management-controls";
 
-export default function ZimraSettingsPage() {
-  const rawId = parseInt(localStorage.getItem("selectedCompanyId") || "0");
-  const storedCompanyId = isNaN(rawId) ? 0 : rawId;
+import { useActiveCompany } from "@/hooks/use-active-company";
 
-  const { data: companies, isLoading } = useCompanies();
-  const currentCompany = companies?.find(c => c.id === storedCompanyId) || companies?.[0];
+export default function ZimraSettingsPage() {
+  const { activeCompany, isLoading: isLoadingActive } = useActiveCompany();
+  const currentCompany = activeCompany;
+  const isLoading = isLoadingActive;
 
   if (isLoading) return <Layout><div className="p-8">Loading...</div></Layout>;
   if (!currentCompany) return <Layout><div className="p-8">No company details available.</div></Layout>;
@@ -63,6 +63,8 @@ export default function ZimraSettingsPage() {
   );
 }
 
+import { getZimraErrorMessage } from "@/lib/zimra-errors";
+
 function ZimraDeviceConfig({ company }: { company: any }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -83,8 +85,7 @@ function ZimraDeviceConfig({ company }: { company: any }) {
         body: JSON.stringify({ deviceId, activationKey, deviceSerialNo })
       });
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "Verification failed");
+        throw await res.json();
       }
       return await res.json();
     },
@@ -92,8 +93,9 @@ function ZimraDeviceConfig({ company }: { company: any }) {
       setVerificationResult(data);
       toast({ title: "Taxpayer Verified", description: `Name: ${data.taxPayerName}, TIN: ${data.taxPayerTIN}` });
     },
-    onError: (err: Error) => {
-      toast({ title: "Verification Error", description: err.message, variant: "destructive" });
+    onError: (err: any) => {
+      const zimraErr = getZimraErrorMessage(err.zimraErrorCode);
+      toast({ title: zimraErr.title, description: err.message || zimraErr.message, variant: "destructive" });
     }
   });
 
@@ -109,8 +111,7 @@ function ZimraDeviceConfig({ company }: { company: any }) {
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "Registration failed");
+        throw await res.json();
       }
       return await res.json();
     },
@@ -118,8 +119,9 @@ function ZimraDeviceConfig({ company }: { company: any }) {
       queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
       toast({ title: "Device Registered Successfully!", className: "bg-green-100 text-green-900" });
     },
-    onError: (err: Error) => {
-      toast({ title: "Registration Failed", description: err.message, variant: "destructive" });
+    onError: (err: any) => {
+      const zimraErr = getZimraErrorMessage(err.zimraErrorCode);
+      toast({ title: zimraErr.title, description: err.message || zimraErr.message, variant: "destructive" });
     }
   });
 
@@ -129,8 +131,7 @@ function ZimraDeviceConfig({ company }: { company: any }) {
         method: "POST"
       });
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "Renewal failed");
+        throw await res.json();
       }
       return await res.json();
     },
@@ -138,8 +139,9 @@ function ZimraDeviceConfig({ company }: { company: any }) {
       queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
       toast({ title: "Certificate Renewed Successfully!", className: "bg-green-100 text-green-900" });
     },
-    onError: (err: Error) => {
-      toast({ title: "Renewal Failed", description: err.message, variant: "destructive" });
+    onError: (err: any) => {
+      const zimraErr = getZimraErrorMessage(err.zimraErrorCode);
+      toast({ title: zimraErr.title, description: err.message || zimraErr.message, variant: "destructive" });
     }
   });
 
@@ -149,16 +151,16 @@ function ZimraDeviceConfig({ company }: { company: any }) {
         method: "POST"
       });
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "Failed to sync configuration");
+        throw await res.json();
       }
       return await res.json();
     },
     onSuccess: (data) => {
       toast({ title: "Configuration Synced", description: `Updated ${data.taxLevels.length} tax levels.`, className: "bg-green-100 text-green-900" });
     },
-    onError: (err: Error) => {
-      toast({ title: "Sync Failed", description: err.message, variant: "destructive" });
+    onError: (err: any) => {
+      const zimraErr = getZimraErrorMessage(err.zimraErrorCode);
+      toast({ title: zimraErr.title, description: err.message || zimraErr.message, variant: "destructive" });
     }
   });
 

@@ -54,6 +54,8 @@ export async function registerRoutes(
 
   const requireOwner = async (req: any, res: any, next: any) => {
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    if (req.user?.isSuperAdmin) return next();
+
     // Resolve companyId strictly
     let companyId = parseInt(req.params.companyId);
     if (!companyId && req.params.id && req.path.startsWith('/api/companies/')) {
@@ -61,6 +63,9 @@ export async function registerRoutes(
     }
     if (!companyId && req.body.companyId) {
       companyId = parseInt(req.body.companyId);
+    }
+    if (!companyId && req.query.companyId) {
+      companyId = parseInt(req.query.companyId as string);
     }
 
     if (!companyId) return next();
@@ -77,7 +82,11 @@ export async function registerRoutes(
   };
 
   const requireStaff = async (req: any, res: any, next: any) => {
-    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    const isAuth = req.isAuthenticated?.() || false;
+    console.log(`[requireStaff] Path: ${req.path}, isAuthenticated: ${isAuth}, user: ${req.user?.id}`);
+
+    if (!isAuth) return res.status(401).json({ message: "Unauthorized" });
+    if (req.user?.isSuperAdmin) return next();
 
     // Resolve companyId strictly
     let companyId = parseInt(req.params.companyId);
@@ -87,6 +96,9 @@ export async function registerRoutes(
     if (!companyId && req.body.companyId) {
       companyId = parseInt(req.body.companyId);
     }
+    if (!companyId && req.query.companyId) {
+      companyId = parseInt(req.query.companyId as string);
+    }
 
     if (!companyId) return next();
 
@@ -94,6 +106,7 @@ export async function registerRoutes(
     const me = users.find(u => u.id === req.user.id);
 
     if (!me || (me.role !== 'owner' && me.role !== 'staff' && me.role !== 'admin')) {
+      console.log(`[requireStaff] 403 FORBIDDEN: User ${req.user.id} not in company ${companyId} or insufficient role`);
       return res.status(403).json({ message: "Insufficient permissions" });
     }
     next();
@@ -1643,76 +1656,100 @@ export async function registerRoutes(
   });
 
   // Tax Routes
-  app.get(api.tax.types.path, requireAuth, async (req, res) => {
-    const companyId = req.user!.companyId;
-    if (!companyId) return res.status(403).json({ message: "No company associated with user" });
-    const types = await storage.getTaxTypes(companyId);
+  app.get(api.tax.types.path, requireStaff, async (req, res) => {
+    const companyId = req.query.companyId ? Number(req.query.companyId) : (req as any).user?.companyId;
+    if (!companyId && !req.user?.isSuperAdmin) return res.status(403).json({ message: "No company associated with request" });
+    const types = await storage.getTaxTypes(companyId ? Number(companyId) : undefined);
     res.json(types);
   });
 
-  app.post(api.tax.createType.path, requireAuth, async (req, res) => {
+  app.post(api.tax.createType.path, requireStaff, async (req, res) => {
     try {
-      const companyId = req.user!.companyId;
-      if (!companyId) return res.status(403).json({ message: "No company associated with user" });
+      const companyId = req.query.companyId ? Number(req.query.companyId) : (req as any).user?.companyId;
+      if (!companyId) return res.status(400).json({ message: "Company ID is required" });
 
       const input = api.tax.createType.input.parse(req.body);
-      const type = await storage.createTaxType({ ...input, companyId });
+      const type = await storage.createTaxType({ ...input, companyId: Number(companyId) });
       res.status(201).json(type);
     } catch (err: any) {
       console.error(err);
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors.map((e) => e.message).join(", ") });
+      }
+      if (err?.code === '23505') {
+        return res.status(409).json({ message: "Tax code must be unique within the company" });
+      }
       res.status(500).json({ message: "Failed to create tax type", error: err.message });
     }
   });
 
-  app.patch(api.tax.updateType.path, requireAuth, async (req, res) => {
+  app.patch(api.tax.updateType.path, requireStaff, async (req, res) => {
     try {
-      const companyId = req.user!.companyId;
-      if (!companyId) return res.status(403).json({ message: "No company associated with user" });
+      const companyId = req.query.companyId ? Number(req.query.companyId) : (req as any).user?.companyId;
+      if (!companyId) return res.status(400).json({ message: "Company ID is required" });
 
       const id = Number(req.params.id);
       const input = api.tax.updateType.input.parse(req.body);
-      const updated = await storage.updateTaxType(id, companyId, input);
+      const updated = await storage.updateTaxType(id, Number(companyId), input);
       if (!updated) return res.status(404).json({ message: "Tax Type not found" });
       res.json(updated);
     } catch (err: any) {
       console.error(err);
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors.map((e) => e.message).join(", ") });
+      }
+      if (err?.code === '23505') {
+        return res.status(409).json({ message: "Tax code must be unique within the company" });
+      }
       res.status(500).json({ message: "Failed to update tax type", error: err.message });
     }
   });
 
-  app.get(api.tax.categories.path, requireAuth, async (req, res) => {
-    const companyId = req.user!.companyId;
-    if (!companyId) return res.status(403).json({ message: "No company associated with user" });
-    const categories = await storage.getTaxCategories(companyId);
+  app.get(api.tax.categories.path, requireStaff, async (req, res) => {
+    const companyId = req.query.companyId ? Number(req.query.companyId) : (req as any).user?.companyId;
+    if (!companyId && !req.user?.isSuperAdmin) return res.status(403).json({ message: "No company associated with request" });
+    const categories = await storage.getTaxCategories(companyId ? Number(companyId) : undefined);
     res.json(categories);
   });
 
-  app.post(api.tax.createCategory.path, requireAuth, async (req, res) => {
+  app.post(api.tax.createCategory.path, requireStaff, async (req, res) => {
     try {
-      const companyId = req.user!.companyId;
-      if (!companyId) return res.status(403).json({ message: "No company associated with user" });
+      const companyId = req.query.companyId ? Number(req.query.companyId) : (req as any).user?.companyId;
+      if (!companyId) return res.status(400).json({ message: "Company ID is required" });
 
       const input = api.tax.createCategory.input.parse(req.body);
-      const category = await storage.createTaxCategory({ ...input, companyId });
+      const category = await storage.createTaxCategory({ ...input, companyId: Number(companyId) });
       res.status(201).json(category);
     } catch (err: any) {
       console.error(err);
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors.map((e) => e.message).join(", ") });
+      }
+      if (err?.code === '23505') {
+        return res.status(409).json({ message: "Tax category name must be unique within the company" });
+      }
       res.status(500).json({ message: "Failed to create tax category", error: err.message });
     }
   });
 
-  app.patch(api.tax.updateCategory.path, requireAuth, async (req, res) => {
+  app.patch(api.tax.updateCategory.path, requireStaff, async (req, res) => {
     try {
-      const companyId = req.user!.companyId;
-      if (!companyId) return res.status(403).json({ message: "No company associated with user" });
+      const companyId = req.query.companyId ? Number(req.query.companyId) : (req as any).user?.companyId;
+      if (!companyId) return res.status(400).json({ message: "Company ID is required" });
 
       const id = Number(req.params.id);
       const input = api.tax.updateCategory.input.parse(req.body);
-      const updated = await storage.updateTaxCategory(id, companyId, input);
+      const updated = await storage.updateTaxCategory(id, Number(companyId), input);
       if (!updated) return res.status(404).json({ message: "Category not found" });
       res.json(updated);
     } catch (err: any) {
       console.error(err);
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors.map((e) => e.message).join(", ") });
+      }
+      if (err?.code === '23505') {
+        return res.status(409).json({ message: "Tax category name must be unique within the company" });
+      }
       res.status(500).json({ message: "Failed to update tax category", error: err.message });
     }
   });

@@ -13,6 +13,7 @@ export const users = pgTable("users", {
   username: text("username").unique(),
   passwordChanged: boolean("password_changed").default(false),
   createdAt: timestamp("created_at").defaultNow(),
+  isSuperAdmin: boolean("is_super_admin").default(false),
 });
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -313,7 +314,11 @@ export const currenciesRelations = relations(currencies, ({ one }) => ({
 
 export const insertUserSchema = createInsertSchema(users).omit({ createdAt: true });
 export const insertCompanySchema = createInsertSchema(companies).omit({ id: true, createdAt: true });
-export const insertCustomerSchema = createInsertSchema(customers).omit({ id: true, createdAt: true });
+export const insertCustomerSchema = createInsertSchema(customers).omit({ id: true, createdAt: true }).extend({
+  tin: z.string().regex(/^\d{10}$/, "TIN must be exactly 10 digits").or(z.string().length(0)).nullable().optional(),
+  vatNumber: z.string().regex(/^\d{10}$/, "VAT number must be exactly 10 digits").or(z.string().length(0)).nullable().optional(),
+  bpNumber: z.string().regex(/^\d{10}$/, "BP number must be exactly 10 digits").or(z.string().length(0)).nullable().optional(),
+});
 export const insertProductSchema = createInsertSchema(products).omit({ id: true, createdAt: true }).extend({
   sku: z.string().min(1, "Code/SKU is required")
 });

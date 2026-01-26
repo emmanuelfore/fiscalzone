@@ -67,7 +67,7 @@ export default function CreateQuotationPage() {
     const createQuotation = useCreateQuotation();
     const updateQuotation = useUpdateQuotation();
     const { toast } = useToast();
-    const { taxTypes } = useTaxConfig();
+    const { taxTypes } = useTaxConfig(companyId);
 
     // Form State
     const [customerId, setCustomerId] = useState<string>("");

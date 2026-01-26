@@ -524,115 +524,93 @@ export class ZimraDevice {
 
         const deviceId = parseInt(this.config.deviceId);
 
-        let concatenatedCounters = "";
-        if (counters && counters.length > 0) {
-            // Sort counters logic (replicated from Python)
-            const moneyTypeMapping: Record<number, string> = { 0: "CASH", 1: "CARD" };
+        // Filter out zero-value counters immediately as they should not be in signature OR payload
+        const activeCounters = counters.filter(c => Math.abs(parseFloat(c.fiscalCounterValue)) > 0.001);
 
-            const sortedCounters = counters.sort((a, b) => {
-                // 1. Sort by Fiscal Counter Type Priority
-                const typePriority = (type: string) => {
-                    if (type === 'SaleByTax') return 1;
-                    if (type === 'SaleTaxByTax') return 2;
-                    if (type === 'CreditNoteByTax') return 3;
-                    if (type === 'CreditNoteTaxByTax') return 4;
-                    if (type === 'DebitNoteByTax') return 5;
-                    if (type === 'DebitNoteTaxByTax') return 6;
-                    if (type === 'BalanceByMoneyType') return 7;
-                    return 99;
+        const moneyTypeMapping: Record<number, string> = { 0: "CASH", 1: "CARD" };
+
+        // Sort counters (Priority: Type -> TaxID/MoneyType -> Currency)
+        const sortedCounters = activeCounters.sort((a, b) => {
+            // 1. Sort by Fiscal Counter Type Priority
+            const typePriority = (type: string) => {
+                const map: Record<string, number> = {
+                    'SaleByTax': 1,
+                    'SaleTaxByTax': 2,
+                    'CreditNoteByTax': 3,
+                    'CreditNoteTaxByTax': 4,
+                    'DebitNoteByTax': 5,
+                    'DebitNoteTaxByTax': 6,
+                    'BalanceByMoneyType': 7
                 };
+                return map[type] || 99;
+            };
 
-                const pa = typePriority(a.fiscalCounterType);
-                const pb = typePriority(b.fiscalCounterType);
-                if (pa !== pb) return pa - pb;
+            const pa = typePriority(a.fiscalCounterType);
+            const pb = typePriority(b.fiscalCounterType);
+            if (pa !== pb) return pa - pb;
 
-                // 2. Sort by Feature Key (TaxID or MoneyType)
-                // Spec examples imply TaxID/MoneyType takes precedence over Currency
-                const getFeatureKey = (obj: any) => {
-                    if (obj.fiscalCounterTaxID !== undefined && obj.fiscalCounterTaxID !== null) {
-                        return obj.fiscalCounterTaxID; // Number
-                    }
-                    if (obj.fiscalCounterTaxPercent !== undefined && obj.fiscalCounterTaxPercent !== null) {
-                        return obj.fiscalCounterTaxPercent; // Number
-                    }
-                    if (obj.fiscalCounterMoneyType !== undefined && obj.fiscalCounterMoneyType !== null) {
-                        // Map to string for "CARD" vs "CASH" alphabetical comparison
-                        // ZIMRA Example: CARD (1) comes before CASH (0) -> "CARD" < "CASH"
-                        if (typeof obj.fiscalCounterMoneyType === 'number') {
-                            return moneyTypeMapping[obj.fiscalCounterMoneyType] || "";
-                        }
-                        return obj.fiscalCounterMoneyType;
-                    }
-                    return 0;
-                };
-
-                const ka = getFeatureKey(a);
-                const kb = getFeatureKey(b);
-
-                if (ka !== kb) {
-                    if (typeof ka === 'number' && typeof kb === 'number') return ka - kb;
-                    if (typeof ka === 'string' && typeof kb === 'string') return ka.localeCompare(kb);
-                    return String(ka).localeCompare(String(kb));
+            // 2. Sort by Feature Key (TaxID or MoneyType)
+            const getFeatureKey = (obj: any) => {
+                if (obj.fiscalCounterTaxID !== undefined && obj.fiscalCounterTaxID !== null) {
+                    return obj.fiscalCounterTaxID; // Number
                 }
-
-                // 3. Sort by Currency (Alphabetical Ascending)
-                if (a.fiscalCounterCurrency !== b.fiscalCounterCurrency) {
-                    return a.fiscalCounterCurrency.localeCompare(b.fiscalCounterCurrency);
+                if (obj.fiscalCounterTaxPercent !== undefined && obj.fiscalCounterTaxPercent !== null) {
+                    return obj.fiscalCounterTaxPercent; // Number
                 }
-
+                if (obj.fiscalCounterMoneyType !== undefined && obj.fiscalCounterMoneyType !== null) {
+                    // Spec example shows CASH before CARD, implying specific order or ID-based sorting
+                    const mType = String(obj.fiscalCounterMoneyType).toUpperCase();
+                    if (mType === 'CASH') return 0;
+                    if (mType === 'CARD') return 1;
+                    if (mType === 'MOBILE') return 2;
+                    return 9;
+                }
                 return 0;
-            });
+            };
 
-            concatenatedCounters = sortedCounters.map((c: any) => {
-                if (parseFloat(c.fiscalCounterValue) === 0) return "";
+            const ka = getFeatureKey(a);
+            const kb = getFeatureKey(b);
 
-                const type = c.fiscalCounterType.toUpperCase();
-                const currency = c.fiscalCounterCurrency.toUpperCase();
-                const valueInCents = Math.round(c.fiscalCounterValue * 100);
+            if (ka !== kb) {
+                if (typeof ka === 'number' && typeof kb === 'number') return ka - kb;
+                return String(ka).localeCompare(String(kb));
+            }
 
-                let field3 = ""; // Either taxPercent or moneyType
+            // 3. Sort by Currency (Alphabetical Ascending)
+            return (a.fiscalCounterCurrency || "").localeCompare(b.fiscalCounterCurrency || "");
+        });
 
-                if (type.includes('BYTAX')) {
-                    // "In case taxPercent is not an integer there should be dot between the integer and fractional part. 
-                    // In case of exempt which does not send tax percent value, empty value should be used in signature. 
-                    // In case taxPercent is an integer there should be value of tax percent, dot and two zeros sent."
-                    if (c.fiscalCounterTaxID !== 1 && c.fiscalCounterTaxPercent !== undefined && c.fiscalCounterTaxPercent !== null) {
-                        // Examples in spec (Sec 13.3.1) show 14.5 -> 14.50. So toFixed(2) is correct.
-                        field3 = c.fiscalCounterTaxPercent.toFixed(2);
-                    }
-                } else if (type.includes('BYMONEYTYPE')) {
-                    if (c.fiscalCounterMoneyType !== undefined && c.fiscalCounterMoneyType !== null) {
-                        if (typeof c.fiscalCounterMoneyType === 'string') {
-                            field3 = c.fiscalCounterMoneyType.toUpperCase();
-                        } else {
-                            field3 = moneyTypeMapping[c.fiscalCounterMoneyType] || "";
-                        }
-                    }
+        const concatenatedCounters = sortedCounters.map((c: any) => {
+            const type = c.fiscalCounterType.toUpperCase();
+            const currency = c.fiscalCounterCurrency.toUpperCase();
+            const valueInCents = Math.round(c.fiscalCounterValue * 100);
+
+            let field3 = ""; // Either taxPercent or moneyType
+
+            if (type.includes('BYTAX')) {
+                // Spec: Exempt (ID 1) should use empty value in signature
+                if (c.fiscalCounterTaxID !== 1 && c.fiscalCounterTaxPercent !== undefined && c.fiscalCounterTaxPercent !== null) {
+                    field3 = c.fiscalCounterTaxPercent.toFixed(2);
                 }
+            } else if (type.includes('BYMONEYTYPE')) {
+                if (c.fiscalCounterMoneyType !== undefined && c.fiscalCounterMoneyType !== null) {
+                    field3 = String(c.fiscalCounterMoneyType).toUpperCase();
+                }
+            }
 
-                return `${type}${currency}${field3}${valueInCents}`;
-            }).join("");
-        }
+            return `${type}${currency}${field3}${valueInCents}`;
+        }).join("");
 
-        const stringToSign = `${parseInt(this.config.deviceId)}${fiscalDayNo}${fiscalDayDate}${concatenatedCounters}`;
-        console.log('=== CloseDay Signature Debug ===');
-        console.log('Device ID:', deviceId);
-        console.log('Fiscal Day No:', fiscalDayNo);
-        console.log('Fiscal Day Date:', fiscalDayDate);
-        console.log('Concatenated Counters:', concatenatedCounters);
-        console.log('Full String to Sign:', stringToSign);
-
+        const stringToSign = `${deviceId}${fiscalDayNo}${fiscalDayDate}${concatenatedCounters}`;
         const hash = this.getHash(stringToSign);
         const signature = this.signData(stringToSign);
 
-        console.log('Generated Hash (base64):', hash);
-        console.log('Generated Signature (base64):', signature.substring(0, 50) + '...');
-        console.log('================================');
+        console.log(`[ZIMRA] CloseDay Signature Base: ${stringToSign}`);
 
         const payload = {
             deviceID: deviceId,
             fiscalDayNo,
-            fiscalDayCounters: counters, // Should be array of objects
+            fiscalDayCounters: sortedCounters, // Use sorted and filtered counters!
             fiscalDayDeviceSignature: {
                 hash,
                 signature

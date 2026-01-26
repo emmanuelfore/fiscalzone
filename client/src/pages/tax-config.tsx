@@ -19,18 +19,16 @@ import {
 } from "@/components/ui/select";
 import { apiFetch } from "@/lib/api";
 
+import { useActiveCompany } from "@/hooks/use-active-company";
+
 export default function TaxConfigPage() {
-    const rawId = parseInt(localStorage.getItem("selectedCompanyId") || "0");
-    const storedCompanyId = isNaN(rawId) ? 0 : rawId;
+    const { activeCompany, activeCompanyId, isLoading: isLoadingActive } = useActiveCompany();
+    const currentCompany = activeCompany;
+    const isLoadingCompanies = isLoadingActive;
+    const companyId = activeCompanyId;
 
-    const { data: companies, isLoading: isLoadingCompanies } = useCompanies();
-
-    // Robust selection: Try storage ID, otherwise fallback to first available company
-    const currentCompany = companies?.find(c => c.id === storedCompanyId) || companies?.[0];
-    const companyId = currentCompany?.id || 0;
-
-    const { data: products } = useProducts(companyId);
-    const { taxTypes, taxCategories } = useTaxConfig();
+    const { data: products } = useProducts(companyId || 0);
+    const { taxTypes, taxCategories } = useTaxConfig(companyId || undefined);
 
     if (isLoadingCompanies) return <Layout><div className="p-8">Loading companies...</div></Layout>;
     if (!currentCompany) return <Layout><div className="p-8">No company found. Please create one.</div></Layout>;

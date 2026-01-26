@@ -147,23 +147,53 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
 
-          <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-400 overflow-hidden shadow-sm">
-                {selectedCompany?.logoUrl ? (
-                  <img src={selectedCompany.logoUrl} alt="Logo" className="w-full h-full object-contain" />
-                ) : (
-                  <Building2 className="w-4 h-4" />
-                )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 hover:bg-slate-100 transition-colors cursor-pointer group">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-400 overflow-hidden shadow-sm">
+                    {selectedCompany?.logoUrl ? (
+                      <img src={selectedCompany.logoUrl} alt="Logo" className="w-full h-full object-contain" />
+                    ) : (
+                      <Building2 className="w-4 h-4" />
+                    )}
+                  </div>
+                  <div className="overflow-hidden flex-1 text-left">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Active Entity</p>
+                    <p className="text-sm font-bold text-slate-900 truncate flex items-center gap-1">
+                      {selectedCompany ? selectedCompany.name : "Setup Required"}
+                      <ChevronDown className="w-3 h-3 text-slate-400 group-hover:text-slate-600 transition-colors" />
+                    </p>
+                  </div>
+                </div>
               </div>
-              <div className="overflow-hidden">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Active Entity</p>
-                <p className="text-sm font-bold text-slate-900 truncate">
-                  {selectedCompany ? selectedCompany.name : "Setup Required"}
-                </p>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-64 max-h-[300px] overflow-y-auto bg-white border-slate-200">
+              <div className="p-2">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-2 pb-2">Your Companies</p>
+                {companies?.map((company) => (
+                  <DropdownMenuItem
+                    key={company.id}
+                    onClick={() => handleCompanyChange(company.id)}
+                    className={cn(
+                      "flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors",
+                      selectedCompanyId === company.id ? "bg-primary/10 text-primary font-semibold" : "hover:bg-slate-50"
+                    )}
+                  >
+                    <div className="w-6 h-6 rounded bg-slate-100 flex items-center justify-center text-slate-500 overflow-hidden text-[10px]">
+                      {company.logoUrl ? <img src={company.logoUrl} className="w-full h-full object-contain" /> : <Building2 className="w-3 h-3" />}
+                    </div>
+                    <span className="truncate flex-1">{company.name}</span>
+                  </DropdownMenuItem>
+                ))}
+                <div className="h-px bg-slate-100 my-2" />
+                <DropdownMenuItem onClick={() => setLocation("/onboarding")} className="flex items-center gap-2 p-2 text-primary font-medium cursor-pointer hover:bg-primary/5 rounded-lg">
+                  <Plus className="w-4 h-4" />
+                  <span>Register New Company</span>
+                </DropdownMenuItem>
               </div>
-            </div>
-          </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         <nav className="flex-1 p-4 space-y-1">
@@ -269,7 +299,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <DropdownMenuContent align="end" className="w-56 bg-white">
               <div className="flex items-center justify-start gap-2 p-2">
                 <div className="flex flex-col space-y-1 leading-none">
-                  {user.name && <p className="font-medium">{user.name}</p>}
+                  <div className="flex items-center gap-2">
+                    {user.name && <p className="font-medium">{user.name}</p>}
+                    {user.isSuperAdmin && (
+                      <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider">Super Admin</span>
+                    )}
+                  </div>
                   {user.email && (
                     <p className="w-[200px] truncate text-xs text-muted-foreground">
                       {user.email}

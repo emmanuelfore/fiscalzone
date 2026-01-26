@@ -15,6 +15,8 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 
+import { getZimraErrorMessage } from "@/lib/zimra-errors";
+
 interface DayManagementControlsProps {
     company: any;
     variant?: 'light' | 'dark';
@@ -26,7 +28,10 @@ export function DayManagementControls({ company, variant = 'light' }: DayManagem
     const [errorRecovery, setErrorRecovery] = useState<any>(null);
     const [showErrorDialog, setShowErrorDialog] = useState(false);
 
+    const zimraError = getZimraErrorMessage(errorRecovery?.zimraErrorCode);
+
     const isRegistered = !!company.fdmsDeviceId && !!company.zimraCertificate;
+    // ... rest of the component state/logic
 
     // Live Status Query
     const zimraStatusQuery = useQuery({
@@ -174,9 +179,16 @@ export function DayManagementControls({ company, variant = 'light' }: DayManagem
                     </DialogHeader>
 
                     <div className="space-y-4 py-4">
+                        {errorRecovery?.zimraErrorCode && (
+                            <div className="bg-amber-50 border border-amber-200 p-3 rounded-lg">
+                                <p className="text-sm font-semibold text-amber-900 mb-1">{zimraError.title}</p>
+                                <p className="text-xs text-amber-800">{zimraError.message}</p>
+                            </div>
+                        )}
+
                         <div className="bg-slate-50 p-3 rounded text-xs font-mono border text-slate-600">
-                            {errorRecovery?.lastError && <p className="mb-1"><strong>Error:</strong> {errorRecovery.lastError}</p>}
-                            {errorRecovery?.zimraErrorCode && <p><strong>Code:</strong> {errorRecovery.zimraErrorCode}</p>}
+                            {errorRecovery?.lastError && <p className="mb-1"><strong>Technical Message:</strong> {errorRecovery.lastError}</p>}
+                            {errorRecovery?.zimraErrorCode && <p><strong>ZIMRA Error Code:</strong> {errorRecovery.zimraErrorCode}</p>}
                         </div>
 
                         <div className="space-y-2">

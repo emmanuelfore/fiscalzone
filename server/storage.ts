@@ -702,6 +702,15 @@ export class DatabaseStorage implements IStorage {
       taxAmt = Math.round(taxAmt * 100) / 100;
       amountWithTax = Math.round(amountWithTax * 100) / 100;
 
+      // Handle sign based on transaction type
+      if (type === 'CreditNote') {
+        amountWithTax = -Math.abs(amountWithTax);
+        taxAmt = -Math.abs(taxAmt);
+      } else {
+        amountWithTax = Math.abs(amountWithTax);
+        taxAmt = Math.abs(taxAmt);
+      }
+
       if (type === 'FiscalInvoice' || type === 'Invoice') {
         const keySale = `SaleByTax-${currency}-${taxPercent}`;
         const cSale = getCounter(keySale, 'SaleByTax', currency, taxPercent, taxID);
@@ -745,7 +754,14 @@ export class DatabaseStorage implements IStorage {
       // MoneyType counter should not have taxPercent/ID theoretically but schema might require structure.
       // Spec: fiscalCounterTaxPercent is nullable.
       const cBal = getCounter(keyBal, 'BalanceByMoneyType', currency, 0, 0, moneyType);
-      cBal.fiscalCounterValue += Number(inv.total);
+
+      let amount = Number(inv.total);
+      if (inv.transactionType === 'CreditNote') {
+        amount = -Math.abs(amount);
+      } else {
+        amount = Math.abs(amount);
+      }
+      cBal.fiscalCounterValue += amount;
     }
 
     return Array.from(countersMap.values()).map(c => ({

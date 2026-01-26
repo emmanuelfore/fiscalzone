@@ -14,7 +14,7 @@ import {
   validationErrors, type ValidationError, type InsertValidationError
 } from "../shared/schema.js";
 import { db } from "./db.js";
-import { eq, and, desc, lte } from "drizzle-orm";
+import { eq, and, desc, lte, or, isNull } from "drizzle-orm";
 import { type FiscalDayCounter } from "./zimra.js";
 
 export interface IStorage {
@@ -430,7 +430,11 @@ export class DatabaseStorage implements IStorage {
 
   async getTaxTypes(companyId?: number): Promise<TaxType[]> {
     if (companyId) {
-      return await db.select().from(taxTypes).where(eq(taxTypes.companyId, companyId)).orderBy(taxTypes.rate);
+      return await db
+        .select()
+        .from(taxTypes)
+        .where(or(eq(taxTypes.companyId, companyId), isNull(taxTypes.companyId)))
+        .orderBy(taxTypes.rate);
     }
     return await db.select().from(taxTypes).orderBy(taxTypes.rate);
   }
@@ -458,7 +462,10 @@ export class DatabaseStorage implements IStorage {
 
   async getTaxCategories(companyId?: number): Promise<TaxCategory[]> {
     if (companyId) {
-      return await db.select().from(taxCategories).where(eq(taxCategories.companyId, companyId));
+      return await db
+        .select()
+        .from(taxCategories)
+        .where(or(eq(taxCategories.companyId, companyId), isNull(taxCategories.companyId)));
     }
     return await db.select().from(taxCategories);
   }

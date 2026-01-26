@@ -41,12 +41,13 @@ import {
 } from "@/components/ui/table";
 import { Link, useLocation, useRoute } from "wouter";
 
+import { useActiveCompany } from "@/hooks/use-active-company";
+
 export default function ReportsPage() {
-    const rawId = parseInt(localStorage.getItem("selectedCompanyId") || "0");
-    const storedCompanyId = isNaN(rawId) ? 0 : rawId;
-    const { data: companies, isLoading: isLoadingCompanies } = useCompanies();
-    const currentCompany = companies?.find(c => c.id === storedCompanyId) || companies?.[0];
-    const companyId = currentCompany?.id || 0;
+    const { activeCompany, isLoading: isLoadingActive } = useActiveCompany();
+    const companyId = activeCompany?.id || 0;
+    const currentCompany = activeCompany;
+    const isLoadingCompanies = isLoadingActive;
 
     const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
         from: startOfMonth(new Date()),

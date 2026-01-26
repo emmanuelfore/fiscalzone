@@ -44,7 +44,7 @@ interface Props {
 export function EditProductDialog({ product, trigger }: Props) {
     const [open, setOpen] = useState(false);
     const updateProduct = useUpdateProduct();
-    const { taxCategories, taxTypes } = useTaxConfig();
+    const { taxCategories, taxTypes } = useTaxConfig(product.companyId);
     const { toast } = useToast();
 
     const isService = product.productType === "service";

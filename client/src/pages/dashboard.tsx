@@ -40,10 +40,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+import { useActiveCompany } from "@/hooks/use-active-company";
+
 export default function Dashboard() {
   const { user } = useAuth();
-  const { data: companies } = useCompanies();
-  const selectedCompany = companies?.[0]; // Single tenant focus
+  const { activeCompany, isLoading: isLoadingCompany } = useActiveCompany();
+  const selectedCompany = activeCompany;
   const { data: invoices, isLoading } = useInvoices(selectedCompany?.id || 0);
   const [, setLocation] = useLocation();
 

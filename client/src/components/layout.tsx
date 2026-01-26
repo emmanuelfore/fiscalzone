@@ -50,36 +50,20 @@ type NavItem = {
   }[];
 };
 
+import { useActiveCompany } from "@/hooks/use-active-company";
+
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
   const { user, logout } = useAuth();
   const { data: companies } = useCompanies();
-  const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
-
-  // Auto-select first company
-  useEffect(() => {
-    if (companies && companies.length > 0 && !selectedCompanyId) {
-      const stored = localStorage.getItem("selectedCompanyId");
-      if (stored && companies.find(c => c.id === parseInt(stored))) {
-        setSelectedCompanyId(parseInt(stored));
-      } else {
-        const firstCompanyId = companies[0].id;
-        setSelectedCompanyId(firstCompanyId);
-        localStorage.setItem("selectedCompanyId", firstCompanyId.toString());
-        // Reload to ensure all components get the correct company ID
-        window.location.reload();
-      }
-    }
-  }, [companies, selectedCompanyId]);
+  const { activeCompany, activeCompanyId, setCompany } = useActiveCompany();
 
   const handleCompanyChange = (id: number) => {
-    setSelectedCompanyId(id);
-    localStorage.setItem("selectedCompanyId", id.toString());
-    // Refresh page or trigger a context update in a real app
-    window.location.reload();
+    setCompany(id);
   };
 
-  const selectedCompany = companies?.find(c => c.id === selectedCompanyId);
+  const selectedCompanyId = activeCompanyId;
+  const selectedCompany = activeCompany;
 
   const navItems: NavItem[] = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
@@ -159,7 +143,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     )}
                   </div>
                   <div className="overflow-hidden flex-1 text-left">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Active Entity</p>
+                    <div className="flex items-center justify-between mb-0.5">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active Entity</p>
+                      {user.isSuperAdmin && (
+                        <span className="text-[10px] bg-amber-500/10 text-amber-600 px-1.5 py-0 rounded-full font-bold uppercase tracking-wider">Super</span>
+                      )}
+                    </div>
                     <p className="text-sm font-bold text-slate-900 truncate flex items-center gap-1">
                       {selectedCompany ? selectedCompany.name : "Setup Required"}
                       <ChevronDown className="w-3 h-3 text-slate-400 group-hover:text-slate-600 transition-colors" />
@@ -285,6 +274,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
         {/* Top Header */}
         <header className="h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40 px-8 flex items-center justify-end gap-3">
+          {user.isSuperAdmin && (
+            <div className="mr-auto flex items-center gap-2 bg-amber-50 border border-amber-200 px-3 py-1 rounded-full shadow-sm">
+              <LogOut className="w-4 h-4 text-amber-600" />
+              <span className="text-xs font-bold text-amber-700 uppercase tracking-widest">Global Super Admin Access</span>
+            </div>
+          )}
           {selectedCompanyId && <DeviceStatusWidget companyId={selectedCompanyId} />}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

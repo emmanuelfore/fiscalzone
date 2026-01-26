@@ -15,14 +15,14 @@ import { apiFetch } from "@/lib/api";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+import { useActiveCompany } from "@/hooks/use-active-company";
+
 export default function SettingsPage() {
   const { toast } = useToast();
-  const rawId = parseInt(localStorage.getItem("selectedCompanyId") || "0");
-  const storedCompanyId = isNaN(rawId) ? 0 : rawId;
-
-  const { data: companies, isLoading } = useCompanies();
-  const currentCompany = companies?.find(c => c.id === storedCompanyId) || companies?.[0];
+  const { activeCompany, isLoading: isLoadingActive } = useActiveCompany();
+  const currentCompany = activeCompany;
   const companyId = currentCompany?.id || 0;
+  const isLoading = isLoadingActive;
 
   const updateCompany = useUpdateCompany(companyId);
   const queryClient = useQueryClient();

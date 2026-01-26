@@ -28,6 +28,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
+import { useActiveCompany } from "@/hooks/use-active-company";
 
 const schema = z.object({
     name: z.string().min(1, "Name is required"),
@@ -53,6 +54,8 @@ export function ManageTaxTypeDialog({ taxType, trigger }: Props) {
     const { toast } = useToast();
     const queryClient = useQueryClient();
     const isEditing = !!taxType;
+    const { activeCompanyId } = useActiveCompany();
+    const companyId = activeCompanyId;
 
     const form = useForm<FormValues>({
         resolver: zodResolver(schema),
@@ -84,12 +87,22 @@ export function ManageTaxTypeDialog({ taxType, trigger }: Props) {
                 zimraTaxId: data.zimraTaxId === "" ? null : data.zimraTaxId,
             };
 
-            const res = await apiFetch(url, {
+            if (companyId == null) {
+                throw new Error("Select a company first before creating a tax type");
+            }
+            if (!companyId) {
+                throw new Error("Select a company first before creating a tax type");
+            }
+            const urlWithCompany = companyId ? `${url}?companyId=${companyId}` : url;
+            const res = await apiFetch(urlWithCompany, {
                 method,
                 body: JSON.stringify(payload),
             });
 
-            if (!res.ok) throw new Error("Failed to save tax type");
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.message || "Failed to save tax type");
+            }
             return await res.json();
         },
         onSuccess: () => {

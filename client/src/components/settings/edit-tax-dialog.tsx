@@ -44,7 +44,7 @@ type UpdateFormValues = z.infer<typeof updateSchema>;
 export function EditTaxDialog({ product }: { product: any }) {
     const [open, setOpen] = useState(false);
     const queryClient = useQueryClient();
-    const { taxCategories, taxTypes } = useTaxConfig();
+    const { taxCategories, taxTypes } = useTaxConfig(product.companyId);
 
     const form = useForm<UpdateFormValues>({
         resolver: zodResolver(updateSchema),

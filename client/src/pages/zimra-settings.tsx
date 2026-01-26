@@ -20,12 +20,12 @@ import { apiFetch } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { DayManagementControls } from "@/components/zimra/day-management-controls";
 
-export default function ZimraSettingsPage() {
-  const rawId = parseInt(localStorage.getItem("selectedCompanyId") || "0");
-  const storedCompanyId = isNaN(rawId) ? 0 : rawId;
+import { useActiveCompany } from "@/hooks/use-active-company";
 
-  const { data: companies, isLoading } = useCompanies();
-  const currentCompany = companies?.find(c => c.id === storedCompanyId) || companies?.[0];
+export default function ZimraSettingsPage() {
+  const { activeCompany, isLoading: isLoadingActive } = useActiveCompany();
+  const currentCompany = activeCompany;
+  const isLoading = isLoadingActive;
 
   if (isLoading) return <Layout><div className="p-8">Loading...</div></Layout>;
   if (!currentCompany) return <Layout><div className="p-8">No company details available.</div></Layout>;

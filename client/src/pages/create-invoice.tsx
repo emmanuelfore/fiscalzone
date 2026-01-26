@@ -79,7 +79,7 @@ export default function CreateInvoicePage() {
   const { data: existingInvoice } = useInvoice(sourceId ? parseInt(sourceId) : 0);
   const createInvoice = useCreateInvoice(companyId);
   const createCustomer = useCreateCustomer(companyId);
-  const { taxTypes } = useTaxConfig();
+  const { taxTypes } = useTaxConfig(companyId);
   const { toast } = useToast();
   const updateInvoice = useUpdateInvoice();
   const createProduct = useCreateProduct(companyId);

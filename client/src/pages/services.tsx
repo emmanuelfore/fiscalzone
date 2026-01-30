@@ -173,7 +173,22 @@ export default function ServicesPage() {
                                     </td>
                                 </tr>
                             ) : paginatedServices?.map((s) => {
-                                const matchedType = taxTypes.data?.find((t: any) => parseFloat(t.rate) === parseFloat(s.taxRate || "0"));
+                                const matchedType = taxTypes.data?.find((t: any) => {
+                                    if (s.taxTypeId) return t.id === s.taxTypeId;
+                                    // Fallback for legacy data
+                                    if (parseFloat(t.rate) === parseFloat(s.taxRate || "0")) {
+                                        if (parseFloat(s.taxRate || "0") === 0) {
+                                            const isExempt = s.name.toLowerCase().includes("exempt") || s.description?.toLowerCase().includes("exempt");
+                                            if (isExempt) {
+                                                const zimraTaxId = t.zimraTaxId?.toString();
+                                                return zimraTaxId == "1" || t.zimraCode === 'C' || t.zimraCode === 'E' || t.name.toLowerCase().includes("exempt");
+                                            }
+                                            return t.zimraTaxId === "2" || t.name.toLowerCase().includes("zero");
+                                        }
+                                        return true;
+                                    }
+                                    return false;
+                                });
                                 return (
                                     <tr key={s.id} className={`data-table-row border-b border-slate-50 hover:bg-slate-50/50 transition-colors ${!s.isActive ? 'opacity-50 grayscale' : ''}`}>
                                         <td className="data-table-cell p-4 font-medium text-slate-900">

@@ -210,7 +210,22 @@ export default function ProductsPage() {
               ) : paginatedProducts?.map((p) => {
                 // Match tax rate to a known tax type if possible
                 // We use loose comparison for string/number match on rate
-                const matchedType = taxTypes.data?.find((t: any) => parseFloat(t.rate) === parseFloat(p.taxRate || "0"));
+                const matchedType = taxTypes.data?.find((t: any) => {
+                  if (p.taxTypeId) return t.id === p.taxTypeId;
+                  // Fallback for legacy data
+                  if (parseFloat(t.rate) === parseFloat(p.taxRate || "0")) {
+                    if (parseFloat(p.taxRate || "0") === 0) {
+                      const isExempt = p.name.toLowerCase().includes("exempt") || p.description?.toLowerCase().includes("exempt");
+                      if (isExempt) {
+                        const zimraTaxId = t.zimraTaxId?.toString();
+                        return zimraTaxId == "1" || t.zimraCode === 'C' || t.zimraCode === 'E' || t.name.toLowerCase().includes("exempt");
+                      }
+                      return t.zimraTaxId === "2" || t.name.toLowerCase().includes("zero");
+                    }
+                    return true;
+                  }
+                  return false;
+                });
 
                 return (
                   <tr key={p.id} className={`data-table-row border-b border-slate-50 hover:bg-slate-50/50 transition-colors ${!p.isActive ? 'opacity-50 grayscale' : ''}`}>

@@ -49,6 +49,7 @@ type LineItem = {
     quantity: number;
     unitPrice: number;
     taxRate: number;
+    taxTypeId?: number | null;
 };
 
 export default function CreateQuotationPage() {
@@ -98,7 +99,8 @@ export default function CreateQuotationPage() {
                     description: item.description,
                     quantity: Number(item.quantity),
                     unitPrice: Number(item.unitPrice),
-                    taxRate: Number(item.taxRate)
+                    taxRate: Number(item.taxRate),
+                    taxTypeId: item.taxTypeId
                 })));
             }
         }
@@ -112,6 +114,38 @@ export default function CreateQuotationPage() {
         setItems(prev => prev.map(item =>
             item.localId === localId ? { ...item, [field]: value } : item
         ));
+    };
+
+    const handleProductSelect = (localId: string, productId: string) => {
+        const product = products?.find(p => p.id === parseInt(productId));
+        if (product) {
+            setItems(prev => prev.map(item => {
+                if (item.localId !== localId) return item;
+
+                // Determine tax rate: prefer taxCategoryId if linked, otherwise fallback to product override
+                let taxRate = company?.vatRegistered ? Number(product.taxRate ?? 15) : 0;
+
+                if (company?.vatRegistered && product.taxCategoryId && taxTypes.data) {
+                    const category = taxTypes.data.find(t => t.id === product.taxCategoryId);
+                    if (category) {
+                        taxRate = Number(category.rate);
+                    }
+                }
+
+                const rate = Number(exchangeRate);
+                const scaledPrice = Number(product.price) * rate;
+
+                return {
+                    ...item,
+                    productId: product.id,
+                    description: product.name,
+                    quantity: 1,
+                    unitPrice: scaledPrice,
+                    taxRate: taxRate,
+                    taxTypeId: product.taxTypeId
+                };
+            }));
+        }
     };
 
     const calculateTotals = () => {
@@ -133,8 +167,33 @@ export default function CreateQuotationPage() {
         return { subtotal, taxAmount, total: subtotal + taxAmount };
     };
 
-    const { subtotal, taxAmount, total } = calculateTotals();
+    const calculateTaxBreakdown = () => {
+        const breakdown: Record<string, { net: number, tax: number, rate: number, taxTypeId: number }> = {};
 
+        items.forEach(item => {
+            const lineTotal = item.quantity * item.unitPrice;
+            const rate = Number(item.taxRate);
+            const taxTypeId = item.taxTypeId || 0;
+            const key = `${rate}-${taxTypeId}`;
+
+            if (!breakdown[key]) breakdown[key] = { net: 0, tax: 0, rate, taxTypeId };
+
+            if (taxInclusive) {
+                const taxPortion = lineTotal - (lineTotal / (1 + (rate / 100)));
+                breakdown[key].net += (lineTotal - taxPortion);
+                breakdown[key].tax += taxPortion;
+            } else {
+                const taxPortion = lineTotal * (rate / 100);
+                breakdown[key].net += lineTotal;
+                breakdown[key].tax += taxPortion;
+            }
+        });
+
+        return breakdown;
+    };
+
+    const { subtotal, taxAmount, total } = calculateTotals();
+    const taxBreakdown = calculateTaxBreakdown();
     const handleSave = async (status: string = "draft") => {
         if (!customerId) return toast({ title: "Error", description: "Select a customer", variant: "destructive" });
 
@@ -156,6 +215,7 @@ export default function CreateQuotationPage() {
                 quantity: item.quantity.toString(),
                 unitPrice: item.unitPrice.toString(),
                 taxRate: item.taxRate.toString(),
+                taxTypeId: item.taxTypeId,
                 lineTotal: (item.quantity * item.unitPrice).toFixed(2)
             }))
         };
@@ -216,6 +276,7 @@ export default function CreateQuotationPage() {
                                 }}
                                 company={company}
                                 customer={customers?.find(c => c.id.toString() === customerId)}
+                                taxTypes={taxTypes.data}
                             />
                         </PDFViewer>
                     </div>
@@ -267,8 +328,10 @@ export default function CreateQuotationPage() {
                                 <TableRow>
                                     <TableHead className="w-[40%]">Description</TableHead>
                                     <TableHead>Qty</TableHead>
-                                    <TableHead>Price</TableHead>
-                                    <TableHead>Tax%</TableHead>
+                                    <TableHead>
+                                        <div>Price</div>
+                                        <div className="text-[10px] lowercase font-normal text-slate-400 no-underline">(Neg. for discount)</div>
+                                    </TableHead>
                                     <TableHead className="text-right">Total</TableHead>
                                     <TableHead className="w-[50px]"></TableHead>
                                 </TableRow>
@@ -276,6 +339,57 @@ export default function CreateQuotationPage() {
                             <TableBody>
                                 {items.map((item, index) => (
                                     <TableRow key={item.localId}>
+                                        <TableCell className="max-w-[200px]">
+                                            <Popover>
+                                                <PopoverTrigger asChild>
+                                                    <Button
+                                                        variant="outline"
+                                                        role="combobox"
+                                                        className={cn(
+                                                            "w-full justify-between h-9 px-3 font-normal",
+                                                            !item.productId && "text-muted-foreground"
+                                                        )}
+                                                    >
+                                                        <span className="truncate block w-full text-left">
+                                                            {item.productId
+                                                                ? products?.find((p) => p.id === item.productId)?.name || "Select Product"
+                                                                : "Select Product"}
+                                                        </span>
+                                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                    </Button>
+                                                </PopoverTrigger>
+                                                <PopoverContent className="w-[300px] p-0" align="start">
+                                                    <Command>
+                                                        <CommandInput placeholder="Search products..." />
+                                                        <CommandList>
+                                                            <CommandEmpty>No product found.</CommandEmpty>
+                                                            <CommandGroup>
+                                                                {products?.map((product) => (
+                                                                    <CommandItem
+                                                                        key={product.id}
+                                                                        value={product.name}
+                                                                        onSelect={() => handleProductSelect(item.localId, product.id.toString())}
+                                                                    >
+                                                                        <Check
+                                                                            className={cn(
+                                                                                "mr-2 h-4 w-4",
+                                                                                item.productId === product.id ? "opacity-100" : "opacity-0"
+                                                                            )}
+                                                                        />
+                                                                        <div className="flex flex-col">
+                                                                            <span>{product.name}</span>
+                                                                            <span className="text-xs text-muted-foreground">
+                                                                                ${Number(product.price).toFixed(2)}
+                                                                            </span>
+                                                                        </div>
+                                                                    </CommandItem>
+                                                                ))}
+                                                            </CommandGroup>
+                                                        </CommandList>
+                                                    </Command>
+                                                </PopoverContent>
+                                            </Popover>
+                                        </TableCell>
                                         <TableCell>
                                             <Input value={item.description} onChange={e => updateItem(item.localId, "description", e.target.value)} placeholder="Item description..." />
                                         </TableCell>
@@ -284,9 +398,6 @@ export default function CreateQuotationPage() {
                                         </TableCell>
                                         <TableCell>
                                             <Input type="number" value={item.unitPrice} onChange={e => updateItem(item.localId, "unitPrice", parseFloat(e.target.value))} />
-                                        </TableCell>
-                                        <TableCell>
-                                            <Input type="number" value={item.taxRate} onChange={e => updateItem(item.localId, "taxRate", parseFloat(e.target.value))} />
                                         </TableCell>
                                         <TableCell className="text-right font-medium">
                                             {(item.quantity * item.unitPrice).toFixed(2)}
@@ -309,17 +420,47 @@ export default function CreateQuotationPage() {
                 <div className="space-y-6">
                     <Card>
                         <CardHeader>
-                            <CardTitle>Summary</CardTitle>
+                            <CardTitle className="text-center uppercase tracking-wider text-sm">Tax Analysis</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="flex justify-between text-sm">
-                                <span className="text-slate-500">Subtotal</span>
+                                <span className="text-slate-500">{!taxInclusive ? "Total (excl. tax)" : "Subtotal"}</span>
                                 <span>{currencyCode} {subtotal.toFixed(2)}</span>
                             </div>
-                            <div className="flex justify-between text-sm">
-                                <span className="text-slate-500">Tax</span>
-                                <span>{currencyCode} {taxAmount.toFixed(2)}</span>
+                            <div className="bg-slate-50 rounded-lg p-3 border border-slate-200 my-4">
+                                <h4 className="text-[10px] font-bold text-slate-700 uppercase mb-2 text-center">Tax Analysis</h4>
+                                <div className="grid grid-cols-4 gap-2 text-[9px] font-bold text-slate-500 uppercase mb-1 border-b border-slate-200 pb-1">
+                                    <div>Vat %</div>
+                                    <div className="text-right">Net.Amt</div>
+                                    <div className="text-right">VAT</div>
+                                    <div className="text-right">Amount</div>
+                                </div>
+                                <div className="space-y-1">
+                                    {Object.entries(taxBreakdown).map(([key, vals]) => {
+                                        const mTax = taxTypes.data?.find((t: any) => t.id == vals.taxTypeId);
+                                        const isZeroRated = mTax?.zimraTaxId == 2 || mTax?.zimraTaxId == "2" || mTax?.zimraCode === 'D' || mTax?.name?.toLowerCase().includes('zero rated');
+                                        const isExempt = mTax?.zimraTaxId == 1 || mTax?.zimraTaxId == "1" || mTax?.zimraCode === 'C' || mTax?.zimraCode === 'E' || mTax?.name?.toLowerCase().includes('exempt') || (vals.rate === 0 && !isZeroRated);
+
+                                        return (
+                                            <div key={key} className="grid grid-cols-4 gap-2 text-[10px] items-center py-1 border-b border-slate-100 last:border-0">
+                                                <div className="text-slate-600 truncate">
+                                                    {isExempt ? (mTax?.name || "Exempt") : (isZeroRated ? "0.00%" : `${vals.rate}%`)}
+                                                </div>
+                                                <div className="text-right font-mono text-slate-700">
+                                                    {vals.net.toFixed(2)}
+                                                </div>
+                                                <div className="text-right font-mono text-slate-700">
+                                                    {isExempt ? "" : vals.tax.toFixed(2)}
+                                                </div>
+                                                <div className="text-right font-mono font-bold text-slate-900">
+                                                    {(vals.net + vals.tax).toFixed(2)}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
                             </div>
+
                             <div className="pt-4 border-t flex justify-between font-bold text-lg">
                                 <span>Total</span>
                                 <span className="text-primary">{currencyCode} {total.toFixed(2)}</span>

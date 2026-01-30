@@ -4,7 +4,7 @@ import { format } from "date-fns";
 
 const styles = StyleSheet.create({
     page: {
-        padding: 30,
+        padding: 20,
         fontFamily: 'Helvetica',
         fontSize: 9,
         color: '#333333',
@@ -12,10 +12,10 @@ const styles = StyleSheet.create({
     },
     verificationBlock: {
         textAlign: 'center',
-        paddingBottom: 15,
+        paddingBottom: 10,
         borderBottomWidth: 1,
         borderBottomColor: '#e2e8f0',
-        marginBottom: 20,
+        marginBottom: 15,
     },
     verificationLabel: {
         fontSize: 8,
@@ -39,14 +39,14 @@ const styles = StyleSheet.create({
     columns: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        marginBottom: 20,
+        marginBottom: 15,
     },
     column: {
         width: '48%',
         flexDirection: 'column',
         borderWidth: 1,
         borderColor: '#e2e8f0',
-        padding: 10,
+        padding: 8,
     },
     sectionTitle: {
         fontSize: 9,
@@ -89,7 +89,7 @@ const styles = StyleSheet.create({
     },
     table: {
         width: '100%',
-        marginBottom: 20,
+        marginBottom: 15,
     },
     tableHeader: {
         flexDirection: 'row',
@@ -102,24 +102,24 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         borderBottomWidth: 1,
         borderBottomColor: '#f1f5f9',
-        paddingVertical: 6,
+        paddingVertical: 4,
     },
     // Column widths for Inclusive (Total 100%)
     colCode: { width: '10%', color: '#64748b' },
-    colDesc: { width: '35%' },
-    colQty: { width: '10%', textAlign: 'center' },
-    colPrice: { width: '15%', textAlign: 'right' },
+    colDesc: { width: '40%' },
+    colQty: { width: '8%', textAlign: 'center' },
+    colPrice: { width: '12%', textAlign: 'right' },
     colVat: { width: '15%', textAlign: 'right', fontSize: 8, color: '#64748b' },
     colTotal: { width: '15%', textAlign: 'right', fontWeight: 700 },
 
     // Column widths for Exclusive (Total 100%)
     colExCode: { width: '8%', color: '#64748b' },
-    colExDesc: { width: '27%' },
+    colExDesc: { width: '33%' },
     colExQty: { width: '8%', textAlign: 'center' },
-    colExPrice: { width: '12%', textAlign: 'right' },
-    colExAmt: { width: '15%', textAlign: 'right' }, // Amount (excl tax)
+    colExPrice: { width: '10%', textAlign: 'right' },
+    colExAmt: { width: '13%', textAlign: 'right' }, // Amount (excl tax)
     colExVat: { width: '12%', textAlign: 'right', fontSize: 8 },
-    colExTotal: { width: '18%', textAlign: 'right', fontWeight: 700 },
+    colExTotal: { width: '16%', textAlign: 'right', fontWeight: 700 },
 
     headerText: {
         fontSize: 8,
@@ -181,9 +181,10 @@ interface InvoicePDFProps {
     company: any;
     customer: any;
     qrCodeUrl?: string;
+    taxTypes?: any[];
 }
 
-export const InvoicePDF = ({ invoice, company, customer, qrCodeUrl }: InvoicePDFProps) => {
+export const InvoicePDF = ({ invoice, company, customer, qrCodeUrl, taxTypes }: InvoicePDFProps) => {
 
     // Extract Verification Code logic same as frontend
     const verificationCodeRaw = invoice.qrCodeData ? invoice.qrCodeData.slice(-16) : "";
@@ -195,11 +196,11 @@ export const InvoicePDF = ({ invoice, company, customer, qrCodeUrl }: InvoicePDF
         <Document>
             <Page size="A4" style={styles.page}>
                 {/* 0. Header: Logo (Left) - Verification (Center) - QR (Right) */}
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                     {/* Left: Logo */}
                     <View style={{ width: '25%' }}>
                         {company?.logoUrl ? (
-                            <Image src={company.logoUrl} style={{ width: 100, height: 50, objectFit: 'contain' }} />
+                            <Image src={company.logoUrl} style={{ width: 80, height: 40, objectFit: 'contain' }} />
                         ) : null}
                     </View>
 
@@ -207,10 +208,10 @@ export const InvoicePDF = ({ invoice, company, customer, qrCodeUrl }: InvoicePDF
                     <View style={{ width: '50%', alignItems: 'center' }}>
                         {invoice.fiscalCode && (
                             <>
-                                <Text style={{ fontSize: 10, fontWeight: 700, color: '#1e293b', marginBottom: 2 }}>
+                                <Text style={{ fontSize: 9, fontWeight: 700, color: '#1e293b', marginBottom: 1 }}>
                                     Verification Code: {verificationCode}
                                 </Text>
-                                <Text style={{ fontSize: 8, color: 'blue', textDecoration: 'none' }}>
+                                <Text style={{ fontSize: 7, color: 'blue', textDecoration: 'none' }}>
                                     Verify at {company?.qrUrl || "https://receipt.zimra.org"}
                                 </Text>
                             </>
@@ -220,13 +221,13 @@ export const InvoicePDF = ({ invoice, company, customer, qrCodeUrl }: InvoicePDF
                     {/* Right: QR Code */}
                     <View style={{ width: '25%', alignItems: 'flex-end' }}>
                         {qrCodeUrl && (
-                            <Image style={{ width: 80, height: 80 }} src={qrCodeUrl} />
+                            <Image style={{ width: 60, height: 60 }} src={qrCodeUrl} />
                         )}
                     </View>
                 </View>
 
                 {/* Title */}
-                <Text style={{ textAlign: 'center', fontSize: 18, fontWeight: 'bold', marginVertical: 10, textTransform: 'uppercase' }}>
+                <Text style={{ textAlign: 'center', fontSize: 14, fontWeight: 'bold', marginVertical: 6, textTransform: 'uppercase' }}>
                     {invoice.status === 'quote'
                         ? "OFFICIAL QUOTATION"
                         : (invoice.transactionType === 'CreditNote'
@@ -303,7 +304,7 @@ export const InvoicePDF = ({ invoice, company, customer, qrCodeUrl }: InvoicePDF
                         <View style={{ width: '48%' }}>
                             <View style={styles.fiscalRow}>
                                 <Text style={styles.fiscalLabel}>Date:</Text>
-                                <Text style={styles.fiscalValue}>{format(new Date(invoice.issueDate), "dd/MM/yy HH:mm")}</Text>
+                                <Text style={styles.fiscalValue}>{format(new Date(invoice.issueDate), "dd/MM/yyyy HH:mm")}</Text>
                             </View>
                             <View style={styles.fiscalRow}>
                                 <Text style={styles.fiscalLabel}>Fiscal Device ID:</Text>
@@ -317,6 +318,41 @@ export const InvoicePDF = ({ invoice, company, customer, qrCodeUrl }: InvoicePDF
                     </View>
                 </View>
 
+                {/* 3.1 Credit/Debit Note Reference Section - ZIMRA [24-28] */}
+                {(invoice.transactionType === 'CreditNote' || invoice.transactionType === 'DebitNote') && invoice.relatedInvoiceId && (
+                    <View style={{ marginTop: 6, padding: 5, borderTopWidth: 1, borderTopColor: '#e2e8f0', borderBottomWidth: 1, borderBottomColor: '#e2e8f0', backgroundColor: '#f8fafc' }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 3 }}>
+                            <Text style={{ fontSize: 7, fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginRight: 8 }}>
+                                {invoice.transactionType === 'CreditNote' ? "CREDITED INVOICE" : "DEBITED INVOICE"}
+                            </Text>
+                            <Text style={{ fontSize: 7, color: '#64748b' }}>|</Text>
+                            <Text style={{ fontSize: 7, color: '#64748b', marginLeft: 8 }}>Original Fiscal Reference</Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                            <Text style={{ fontSize: 7 }}>
+                                <Text style={{ color: '#64748b' }}>Inv No: </Text>
+                                <Text style={{ fontWeight: 700 }}>{invoice.relatedReceiptGlobalNo || "N/A"}</Text>
+                            </Text>
+                            <Text style={{ fontSize: 7 }}>
+                                <Text style={{ color: '#64748b' }}>Date: </Text>
+                                <Text style={{ fontWeight: 700 }}>{invoice.relatedInvoiceDate ? format(new Date(invoice.relatedInvoiceDate), "dd/MM/yyyy HH:mm") : "N/A"}</Text>
+                            </Text>
+                            <Text style={{ fontSize: 7 }}>
+                                <Text style={{ color: '#64748b' }}>Ref: </Text>
+                                <Text style={{ fontWeight: 700 }}>{invoice.relatedInvoiceNumber || "N/A"}</Text>
+                            </Text>
+                            <Text style={{ fontSize: 7 }}>
+                                <Text style={{ color: '#64748b' }}>ID: </Text>
+                                <Text style={{ fontWeight: 700 }}>{company?.fdmsDeviceId || "N/A"}</Text>
+                            </Text>
+                            <Text style={{ fontSize: 7 }}>
+                                <Text style={{ color: '#64748b' }}>Serial: </Text>
+                                <Text style={{ fontWeight: 700 }}>{company?.fdmsDeviceSerialNo || "N/A"}</Text>
+                            </Text>
+                        </View>
+                    </View>
+                )}
+
                 {/* 4. Items Table */}
                 <View style={styles.table}>
                     <View style={styles.tableHeader}>
@@ -326,9 +362,9 @@ export const InvoicePDF = ({ invoice, company, customer, qrCodeUrl }: InvoicePDF
                                 <Text style={[styles.colExDesc, styles.headerText]}>Description</Text>
                                 <Text style={[styles.colExQty, styles.headerText]}>Qty</Text>
                                 <Text style={[styles.colExPrice, styles.headerText]}>Price</Text>
-                                <Text style={[styles.colExAmt, styles.headerText]}>Amount{"\n"}(excl. tax)</Text>
+                                <Text style={[styles.colExAmt, styles.headerText]}>Amount{"\n"}(excl.)</Text>
                                 <Text style={[styles.colExVat, styles.headerText]}>VAT</Text>
-                                <Text style={[styles.colExTotal, styles.headerText]}>Total amount{"\n"}(incl. tax)</Text>
+                                <Text style={[styles.colExTotal, styles.headerText]}>Total{"\n"}(incl.)</Text>
                             </>
                         ) : (
                             <>
@@ -337,7 +373,7 @@ export const InvoicePDF = ({ invoice, company, customer, qrCodeUrl }: InvoicePDF
                                 <Text style={[styles.colQty, styles.headerText]}>Qty</Text>
                                 <Text style={[styles.colPrice, styles.headerText]}>Price</Text>
                                 <Text style={[styles.colVat, styles.headerText]}>VAT</Text>
-                                <Text style={[styles.colTotal, styles.headerText]}>Total amount{"\n"}(incl. tax)</Text>
+                                <Text style={[styles.colTotal, styles.headerText]}>Total{"\n"}(incl.)</Text>
                             </>
                         )}
                     </View>
@@ -370,6 +406,9 @@ export const InvoicePDF = ({ invoice, company, customer, qrCodeUrl }: InvoicePDF
                         }
 
                         // ZIMRA Spec: "Price" column. Is it Unit Price? Yes usually.
+                        const matchingTax = taxTypes?.find(t => t.id == item.taxTypeId);
+                        const isZeroRated = matchingTax?.zimraTaxId == 2 || matchingTax?.zimraTaxId == "2" || matchingTax?.zimraCode === 'D' || matchingTax?.name?.toLowerCase().includes('zero rated');
+                        const isExempt = matchingTax?.zimraTaxId == 1 || matchingTax?.zimraTaxId == "1" || matchingTax?.zimraCode === 'C' || matchingTax?.zimraCode === 'E' || matchingTax?.name?.toLowerCase().includes('exempt') || (taxRate === 0 && !isZeroRated);
 
                         return (
                             <View key={i} style={styles.tableRow}>
@@ -380,7 +419,7 @@ export const InvoicePDF = ({ invoice, company, customer, qrCodeUrl }: InvoicePDF
                                         <Text style={styles.colExQty}>{qty}</Text>
                                         <Text style={styles.colExPrice}>{displayPrice.toFixed(2)}</Text>
                                         <Text style={styles.colExAmt}>{displayAmtExcl.toFixed(2)}</Text>
-                                        <Text style={styles.colExVat}>{vatAmt.toFixed(2)}</Text>
+                                        <Text style={styles.colExVat}>{isExempt ? "" : vatAmt.toFixed(2)}</Text>
                                         <Text style={styles.colExTotal}>{displayTotalIncl.toFixed(2)}</Text>
                                     </>
                                 ) : (
@@ -389,7 +428,7 @@ export const InvoicePDF = ({ invoice, company, customer, qrCodeUrl }: InvoicePDF
                                         <Text style={styles.colDesc}>{item.description}</Text>
                                         <Text style={styles.colQty}>{qty}</Text>
                                         <Text style={styles.colPrice}>{displayPrice.toFixed(2)}</Text>
-                                        <Text style={styles.colVat}>{vatAmt.toFixed(2)}</Text>
+                                        <Text style={styles.colVat}>{isExempt ? "" : vatAmt.toFixed(2)}</Text>
                                         <Text style={styles.colTotal}>{displayTotalIncl.toFixed(2)}</Text>
                                     </>
                                 )}
@@ -404,10 +443,10 @@ export const InvoicePDF = ({ invoice, company, customer, qrCodeUrl }: InvoicePDF
                     <View style={styles.taxTable}>
                         <Text style={[styles.sectionTitle, { marginBottom: 4, borderBottomWidth: 0 }]}>Tax Analysis</Text>
                         <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderColor: '#e2e8f0', paddingBottom: 2 }}>
-                            <Text style={{ fontSize: 8, width: '25%', color: '#64748b' }}>Type</Text>
-                            <Text style={{ fontSize: 8, width: '25%', textAlign: 'right', color: '#64748b' }}>Net</Text>
+                            <Text style={{ fontSize: 8, width: '25%', color: '#64748b' }}></Text>
+                            <Text style={{ fontSize: 8, width: '25%', textAlign: 'right', color: '#64748b' }}>Net.Amt</Text>
                             <Text style={{ fontSize: 8, width: '25%', textAlign: 'right', color: '#64748b' }}>VAT</Text>
-                            <Text style={{ fontSize: 8, width: '25%', textAlign: 'right', color: '#64748b' }}>Total</Text>
+                            <Text style={{ fontSize: 8, width: '25%', textAlign: 'right', color: '#64748b' }}>Amount</Text>
                         </View>
                         {(() => {
                             // Calculate Tax Summary dynamically
@@ -451,21 +490,35 @@ export const InvoicePDF = ({ invoice, company, customer, qrCodeUrl }: InvoicePDF
                                     taxAmount = tax;
                                 }
 
-                                const key = taxRate.toString();
+                                const taxTypeId = item.taxTypeId || 0;
+                                const key = `${taxRate}-${taxTypeId}`;
                                 if (!acc[key]) {
-                                    acc[key] = { taxRate, netAmount: 0, taxAmount: 0, totalAmount: 0 };
+                                    acc[key] = { taxRate, taxTypeId, netAmount: 0, taxAmount: 0, totalAmount: 0 };
                                 }
                                 acc[key].netAmount += netAmount;
                                 acc[key].taxAmount += taxAmount;
                                 acc[key].totalAmount += netAmount + taxAmount;
                                 return acc;
-                            }, {} as Record<string, { taxRate: number; netAmount: number; taxAmount: number; totalAmount: number }>) || {};
+                            }, {} as Record<string, { taxRate: number; taxTypeId: number; netAmount: number; taxAmount: number; totalAmount: number }>) || {};
 
-                            return Object.entries(taxSummary).map(([rate, data]: [string, any]) => (
-                                <View key={rate} style={{ flexDirection: 'row', paddingTop: 2 }}>
-                                    <Text style={{ fontSize: 8, width: '25%' }}>{data.taxRate === 0 ? 'Exempt' : `${data.taxRate}%`}</Text>
+                            return Object.entries(taxSummary).map(([key, data]: [string, any]) => (
+                                <View key={key} style={{ flexDirection: 'row', paddingTop: 2 }}>
+                                    <Text style={{ fontSize: 8, width: '25%' }}>{(() => {
+                                        const mTax = taxTypes?.find(t => t.id == data.taxTypeId);
+                                        const isZeroRated = mTax?.zimraTaxId == 2 || mTax?.zimraTaxId == "2" || mTax?.zimraCode === 'D' || mTax?.name?.toLowerCase().includes('zero rated');
+                                        const isExempt = mTax?.zimraTaxId == 1 || mTax?.zimraTaxId == "1" || mTax?.zimraCode === 'C' || mTax?.zimraCode === 'E' || mTax?.name?.toLowerCase().includes('exempt') || (data.taxRate === 0 && !isZeroRated);
+
+                                        if (isExempt) return mTax?.name || "Exempt";
+                                        if (isZeroRated) return "VAT 0.00%";
+                                        return mTax?.name || "VAT";
+                                    })()}</Text>
                                     <Text style={{ fontSize: 8, width: '25%', textAlign: 'right' }}>{data.netAmount.toFixed(2)}</Text>
-                                    <Text style={{ fontSize: 8, width: '25%', textAlign: 'right' }}>{data.taxAmount.toFixed(2)}</Text>
+                                    <Text style={{ fontSize: 8, width: '25%', textAlign: 'right' }}>{(() => {
+                                        const mTax = taxTypes?.find(t => t.id == data.taxTypeId);
+                                        const isZeroRated = mTax?.zimraTaxId == 2 || mTax?.zimraTaxId == "2" || mTax?.zimraCode === 'D' || mTax?.name?.toLowerCase().includes('zero rated');
+                                        const isExempt = mTax?.zimraTaxId == 1 || mTax?.zimraTaxId == "1" || mTax?.zimraCode === 'C' || mTax?.zimraCode === 'E' || mTax?.name?.toLowerCase().includes('exempt') || (data.taxRate === 0 && !isZeroRated);
+                                        return isExempt ? "" : data.taxAmount.toFixed(2);
+                                    })()}</Text>
                                     <Text style={{ fontSize: 8, width: '25%', textAlign: 'right' }}>{data.totalAmount.toFixed(2)}</Text>
                                 </View>
                             ));
@@ -474,7 +527,7 @@ export const InvoicePDF = ({ invoice, company, customer, qrCodeUrl }: InvoicePDF
 
                     {/* Totals */}
                     <View style={styles.totalsBox}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4, paddingBottom: 4, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2, paddingBottom: 2, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}>
                             <Text style={{ color: '#64748b' }}>Number of Items</Text>
                             <Text style={{ fontWeight: 700, color: '#1e293b' }}>
                                 {invoice.items?.reduce((sum: number, item: any) => sum + Number(item.quantity), 0) || 0}
@@ -555,14 +608,8 @@ export const InvoicePDF = ({ invoice, company, customer, qrCodeUrl }: InvoicePDF
                 <View style={styles.footerSection}>
                     <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Text style={{ fontSize: 8, color: '#64748b' }}>
-                            {invoice.fiscalCode
-                                ? "Issued via ZIMRA Fiscal Device"
-                                : "PROFORMA - NOT VALID FOR TAX PURPOSES"}
+                            {!invoice.fiscalCode && "PROFORMA - NOT VALID FOR TAX PURPOSES"}
                         </Text>
-
-                        <Text style={{ fontSize: 8, color: '#64748b' }} render={({ pageNumber, totalPages }) => (
-                            `${pageNumber} of ${totalPages}`
-                        )} fixed />
                     </View>
                 </View>
 

@@ -16,6 +16,7 @@ import { PaymentModal } from "@/components/invoices/payment-modal";
 import { EmailInvoiceDialog } from "@/components/invoices/email-invoice-dialog";
 import { pdf } from "@react-pdf/renderer";
 import { apiFetch } from "@/lib/api";
+import { useTaxConfig } from "@/hooks/use-tax-config";
 
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -27,6 +28,7 @@ export default function InvoiceDetailsPage() {
   const invoiceId = parseInt(params?.id || "0");
   const { data: invoice, isLoading } = useInvoice(invoiceId);
   const { data: company } = useCompany(invoice?.companyId || 0);
+  const { taxTypes } = useTaxConfig(invoice?.companyId || 0);
   const fiscalize = useFiscalizeInvoice();
   const { data: payments } = usePayments(invoiceId);
   const updateInvoice = useUpdateInvoice();
@@ -217,7 +219,7 @@ export default function InvoiceDetailsPage() {
     }
   };
 
-  if (isLoading) {
+  if (isLoading || taxTypes.isLoading) {
     return (
       <Layout>
         <div className="flex items-center justify-center h-[60vh]">
@@ -254,9 +256,11 @@ export default function InvoiceDetailsPage() {
       taxAmount = lineTotal * (taxRate / 100);
     }
 
-    const key = taxRate.toString();
+    const taxTypeId = item.taxTypeId || 0;
+    const key = `${taxRate}-${taxTypeId}`;
+
     if (!acc[key]) {
-      acc[key] = { taxRate, netAmount: 0, taxAmount: 0, totalAmount: 0 };
+      acc[key] = { taxRate, taxTypeId, netAmount: 0, taxAmount: 0, totalAmount: 0 };
     }
 
     acc[key].netAmount += netAmount;
@@ -264,7 +268,7 @@ export default function InvoiceDetailsPage() {
     acc[key].totalAmount += netAmount + taxAmount;
 
     return acc;
-  }, {} as Record<string, { taxRate: number; netAmount: number; taxAmount: number; totalAmount: number }>);
+  }, {} as Record<string, { taxRate: number; taxTypeId: number; netAmount: number; taxAmount: number; totalAmount: number }>);
 
   // Calculate Number of Items (ZIMRA Field [39])
   const numberOfItems = invoice.items.reduce((sum, item) => sum + Number(item.quantity), 0);
@@ -319,6 +323,7 @@ export default function InvoiceDetailsPage() {
                     company={company}
                     customer={invoice.customer}
                     qrCodeUrl={qrCodeDataUrl}
+                    taxTypes={taxTypes.data}
                   />
                 }
                 fileName={`${isCreditNote ? "CreditNote" : "Invoice"}-${invoice.invoiceNumber}.pdf`}
@@ -621,7 +626,7 @@ export default function InvoiceDetailsPage() {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <p className="font-semibold text-slate-500 text-xs uppercase tracking-wide">Date</p>
-                    <p className="font-bold text-slate-900">{new Date(invoice.issueDate || new Date()).toLocaleString('en-GB')}</p>
+                    <p className="font-bold text-slate-900">{new Date(invoice.issueDate || new Date()).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
                   </div>
                   <div className="space-y-2">
                     <p className="font-semibold text-slate-500 text-xs uppercase tracking-wide">Device ID</p>
@@ -640,26 +645,38 @@ export default function InvoiceDetailsPage() {
 
               {/* CREDITED/DEBITED INVOICE Section - ZIMRA Spec [24-28] */}
               {(isCreditNote || isDebitNote) && invoice.relatedInvoiceId && (
-                <div className="mt-6 pt-6 border-t border-slate-300">
-                  <h4 className="font-bold text-slate-700 uppercase text-sm mb-3">
-                    {isCreditNote ? "Credited Invoice" : "Debited Invoice"}
-                  </h4>
-                  <div className="grid grid-cols-2 gap-y-2 gap-x-12">
-                    <div className="flex justify-between border-b border-slate-200 pb-1">
-                      <span className="text-slate-500">Invoice No:</span>
-                      <span className="font-bold text-emerald-700">{(invoice as any).relatedInvoiceNumber || `#${invoice.relatedInvoiceId}`}</span>
+                <div className="mt-3 pt-3 border-t border-slate-200">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase">
+                      {isCreditNote ? "Credited Invoice" : "Debited Invoice"}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-[11px]">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-slate-400 font-medium">Inv No:</span>
+                      <span className="font-bold text-slate-800">
+                        {(invoice as any).relatedReceiptGlobalNo !== undefined ? (invoice as any).relatedReceiptGlobalNo : "N/A"}
+                      </span>
                     </div>
-                    <div className="flex justify-between border-b border-slate-200 pb-1">
-                      <span className="text-slate-500">Date:</span>
-                      <span className="font-bold text-slate-900">{(invoice as any).relatedInvoiceDate ? new Date((invoice as any).relatedInvoiceDate).toLocaleString('en-GB') : "N/A"}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-slate-400 font-medium">Date:</span>
+                      <span className="font-bold text-slate-800">
+                        {(invoice as any).relatedInvoiceDate
+                          ? new Date((invoice as any).relatedInvoiceDate).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
+                          : "N/A"}
+                      </span>
                     </div>
-                    <div className="flex justify-between border-b border-slate-200 pb-1">
-                      <span className="text-slate-500">Customer Reference No:</span>
-                      <span className="font-bold text-slate-900">{(invoice as any).relatedInvoiceNumber || `#${invoice.relatedInvoiceId}`}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-slate-400 font-medium">Ref:</span>
+                      <span className="font-bold text-slate-800">{(invoice as any).relatedInvoiceNumber || "N/A"}</span>
                     </div>
-                    <div className="flex justify-between border-b border-slate-200 pb-1">
-                      <span className="text-slate-500">Device Serial No:</span>
-                      <span className="font-bold text-slate-900">{company?.fdmsDeviceSerialNo || "N/A"}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-slate-400 font-medium">ID:</span>
+                      <span className="font-bold text-slate-800">{company?.fdmsDeviceId || "N/A"}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-slate-400 font-medium">Serial:</span>
+                      <span className="font-bold text-slate-800">{company?.fdmsDeviceSerialNo || "N/A"}</span>
                     </div>
                   </div>
                 </div>
@@ -674,7 +691,6 @@ export default function InvoiceDetailsPage() {
                   <th className="text-left py-3 font-bold text-slate-900">Description</th>
                   <th className="text-center py-3 font-bold text-slate-900 w-16">Qty</th>
                   <th className="text-right py-3 font-bold text-slate-900 w-24">Price {invoice.taxInclusive ? '(Incl)' : '(Excl)'}</th>
-                  <th className="text-center py-3 font-bold text-slate-900 w-20">Tax %</th>
                   <th className="text-right py-3 font-bold text-slate-900 w-24">
                     {invoice.taxInclusive ? 'VAT' : 'Amount (excl. tax)'}
                   </th>
@@ -707,9 +723,13 @@ export default function InvoiceDetailsPage() {
                       <td className="py-3 text-slate-700">{item.description}</td>
                       <td className="py-3 text-center text-slate-700">{item.quantity}</td>
                       <td className="py-3 text-right text-slate-700">{displayPrice.toFixed(2)}</td>
-                      <td className="py-3 text-center text-slate-700 font-mono font-medium">{taxRate}%</td>
                       {!invoice.taxInclusive && <td className="py-3 text-right text-slate-700">{lineTotal.toFixed(2)}</td>}
-                      <td className="py-3 text-right text-slate-500 text-xs">{vatAmt.toFixed(2)}</td>
+                      <td className="py-3 text-right text-slate-500 text-xs">{(() => {
+                        const matchingType = taxTypes.data?.find((t: any) => t.id == item.taxTypeId);
+                        const isZeroRated = matchingType?.zimraTaxId == 2 || matchingType?.zimraTaxId == "2" || matchingType?.zimraCode === 'D' || matchingType?.name?.toLowerCase().includes('zero rated');
+                        const isExempt = matchingType?.zimraTaxId == 1 || matchingType?.zimraTaxId == "1" || matchingType?.zimraCode === 'C' || matchingType?.zimraCode === 'E' || matchingType?.name?.toLowerCase().includes('exempt') || (taxRate === 0 && !isZeroRated);
+                        return isExempt ? "" : vatAmt.toFixed(2);
+                      })()}</td>
                       <td className="py-3 text-right font-bold text-slate-900">{displayTotal.toFixed(2)}</td>
                     </tr>
                   );
@@ -724,23 +744,33 @@ export default function InvoiceDetailsPage() {
               {/* Tax Summary Section - ZIMRA Fields [40-44] */}
               {Object.keys(taxSummary).length > 0 && (
                 <div className="bg-slate-50 rounded-lg p-4 border border-slate-200 mb-4">
-                  <h3 className="text-sm font-bold text-slate-700 uppercase mb-3">Tax Summary</h3>
+                  <h3 className="text-sm font-bold text-slate-700 uppercase mb-3 text-center">Tax Analysis</h3>
+                  <div className="grid grid-cols-4 gap-4 text-[10px] font-bold text-slate-500 uppercase mb-2 border-b border-slate-200 pb-1">
+                    <div></div>
+                    <div className="text-right">Net.Amt</div>
+                    <div className="text-right">VAT</div>
+                    <div className="text-right">Amount</div>
+                  </div>
                   <div className="space-y-2">
-                    {Object.entries(taxSummary).map(([rate, data]) => {
-                      const summary = data as { taxRate: number; netAmount: number; taxAmount: number; totalAmount: number };
+                    {Object.entries(taxSummary).map(([key, data]) => {
+                      const summary = data as { taxRate: number; taxTypeId: number; netAmount: number; taxAmount: number; totalAmount: number };
+                      const matchingType = taxTypes.data?.find((t: any) => t.id == summary.taxTypeId);
+                      const isZeroRated = matchingType?.zimraTaxId == 2 || matchingType?.zimraTaxId == "2" || matchingType?.zimraCode === 'D' || matchingType?.name?.toLowerCase().includes('zero rated');
+                      const isExempt = matchingType?.zimraTaxId == 1 || matchingType?.zimraTaxId == "1" || matchingType?.zimraCode === 'C' || matchingType?.zimraCode === 'E' || matchingType?.name?.toLowerCase().includes('exempt') || (summary.taxRate === 0 && !isZeroRated);
+
                       return (
-                        <div key={rate} className="grid grid-cols-4 gap-4 text-sm border-b border-slate-200 pb-2 last:border-0">
+                        <div key={key} className="grid grid-cols-4 gap-4 text-sm border-b border-slate-200 pb-2 last:border-0">
                           <div className="font-medium text-slate-600">
-                            {summary.taxRate === 0 ? 'Exempt' : `VAT ${summary.taxRate}%`}
+                            {isExempt ? (matchingType?.name || "Exempt") : (isZeroRated ? "VAT 0.00%" : (matchingType?.name || "VAT"))}
                           </div>
-                          <div className="text-right text-slate-600">
-                            Net: {invoice.currency} {summary.netAmount.toFixed(2)}
+                          <div className="text-right text-slate-600 font-mono">
+                            {summary.netAmount.toFixed(2)}
                           </div>
-                          <div className="text-right text-slate-600">
-                            VAT: {invoice.currency} {summary.taxAmount.toFixed(2)}
+                          <div className="text-right text-slate-600 font-mono">
+                            {isExempt ? "" : summary.taxAmount.toFixed(2)}
                           </div>
-                          <div className="text-right font-bold text-slate-900">
-                            Total: {invoice.currency} {summary.totalAmount.toFixed(2)}
+                          <div className="text-right font-bold text-slate-900 font-mono">
+                            {summary.totalAmount.toFixed(2)}
                           </div>
                         </div>
                       );
@@ -758,7 +788,7 @@ export default function InvoiceDetailsPage() {
               {/* Totals (Right) */}
               <div className="w-64 space-y-2">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Total (Excl. Tax)</span>
+                  <span className="text-slate-500">{invoice.taxInclusive ? "Subtotal" : "Total (excl. tax)"}</span>
                   <span className="font-bold text-slate-900">{Number(invoice.subtotal).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">

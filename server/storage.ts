@@ -43,7 +43,7 @@ export interface IStorage {
 
   // Invoices
   getInvoices(companyId: number): Promise<Invoice[]>;
-  getInvoice(id: number): Promise<(Invoice & { items: (InvoiceItem & { product?: Product })[]; customer?: Customer; validationErrors?: any[] }) | undefined>;
+  getInvoice(id: number): Promise<(Invoice & { items: (InvoiceItem & { product?: Product })[]; customer?: Customer; validationErrors?: any[]; relatedInvoiceNumber?: string; relatedInvoiceDate?: Date | null; relatedFiscalCode?: string; relatedReceiptGlobalNo?: number; relatedReceiptCounter?: number }) | undefined>;
   createInvoice(invoice: CreateInvoiceRequest): Promise<Invoice>;
   updateInvoice(id: number, data: Partial<InsertInvoice>): Promise<Invoice>;
   deleteInvoice(id: number): Promise<void>;
@@ -239,17 +239,27 @@ export class DatabaseStorage implements IStorage {
 
     const [customer] = await db.select().from(customers).where(eq(customers.id, invoice.customerId));
 
-    // Fetch related invoice number and date if this is a credit/debit note
+    // Fetch related invoice details if this is a credit/debit note
     // ZIMRA Fields [26], [27], [28]
     let relatedInvoiceNumber: string | undefined;
     let relatedInvoiceDate: Date | null | undefined;
+    let relatedFiscalCode: string | undefined;
+    let relatedReceiptGlobalNo: number | undefined;
+    let relatedReceiptCounter: number | undefined;
+
     if (invoice.relatedInvoiceId) {
       const [relatedInvoice] = await db.select({
         invoiceNumber: invoices.invoiceNumber,
-        issueDate: invoices.issueDate
+        issueDate: invoices.issueDate,
+        fiscalCode: invoices.fiscalCode,
+        receiptGlobalNo: invoices.receiptGlobalNo,
+        receiptCounter: invoices.receiptCounter
       }).from(invoices).where(eq(invoices.id, invoice.relatedInvoiceId));
       relatedInvoiceNumber = relatedInvoice?.invoiceNumber;
       relatedInvoiceDate = relatedInvoice?.issueDate;
+      relatedFiscalCode = relatedInvoice?.fiscalCode || undefined;
+      relatedReceiptGlobalNo = relatedInvoice?.receiptGlobalNo || undefined;
+      relatedReceiptCounter = relatedInvoice?.receiptCounter || undefined;
     }
 
     const rows = await db
@@ -273,7 +283,17 @@ export class DatabaseStorage implements IStorage {
       .where(eq(validationErrors.invoiceId, id))
       .orderBy(validationErrors.createdAt);
 
-    return { ...invoice, items, customer, validationErrors: validationErrorsRows, relatedInvoiceNumber, relatedInvoiceDate };
+    return {
+      ...invoice,
+      items,
+      customer,
+      validationErrors: validationErrorsRows,
+      relatedInvoiceNumber,
+      relatedInvoiceDate,
+      relatedFiscalCode,
+      relatedReceiptGlobalNo,
+      relatedReceiptCounter
+    };
   }
 
 
@@ -344,14 +364,16 @@ export class DatabaseStorage implements IStorage {
     receiptGlobalNo?: number;
     syncedWithFdms?: boolean;
     fdmsStatus?: string;
+    submissionId?: string;
     validationStatus?: string;
     lastValidationAttempt?: Date;
   }): Promise<Invoice> {
-    const { syncedWithFdms = true, fdmsStatus = "issued", validationStatus, lastValidationAttempt, ...rest } = fiscalData;
+    const { syncedWithFdms = true, fdmsStatus = "issued", validationStatus, lastValidationAttempt, submissionId, ...rest } = fiscalData;
     const [updated] = await db
       .update(invoices)
       .set({
         ...rest,
+        submissionId,
         syncedWithFdms,
         fdmsStatus,
         validationStatus,
@@ -692,8 +714,18 @@ export class DatabaseStorage implements IStorage {
         Math.abs(Number(t.rate) - taxPercent) < 0.01
       );
 
-      // ZIMRA Tax ID (Default to 2 for Exempt/0%, 3 for Standard supplies)
-      const taxID = matchingTax?.zimraTaxId ? parseInt(matchingTax.zimraTaxId) : (taxPercent === 0 ? 2 : 3);
+      // ZIMRA Tax ID Mapping
+      let taxID = 3; // Default to Standard
+      if (matchingTax?.zimraTaxId) {
+        taxID = parseInt(matchingTax.zimraTaxId);
+      } else if (taxPercent === 0) {
+        // Fallback or explicit check for "Exempt" name
+        if (matchingTax?.name?.toLowerCase().includes('exempt')) {
+          taxID = 1;
+        } else {
+          taxID = 2; // Zero Rated
+        }
+      }
 
       const type = inv.transactionType || "FiscalInvoice";
       const valLineTotal = Number(item.lineTotal);
@@ -758,10 +790,11 @@ export class DatabaseStorage implements IStorage {
     for (const inv of uniqueInvoices.values()) {
       const currency = inv.currency || "USD";
       const method = (inv.paymentMethod || "CASH").toUpperCase();
-      let moneyType = "CASH";
-      if (['CARD', 'SWIPE'].includes(method)) moneyType = "CARD";
-      else if (['ECOCASH', 'MOBILE', 'MOBILEWALLET'].includes(method)) moneyType = "MOBILE";
-
+      let moneyType = "Cash";
+      if (['CARD', 'SWIPE', 'POS'].includes(method)) moneyType = "Card";
+      else if (['ECOCASH', 'MOBILE', 'MOBILEWALLET', 'ONE_MONEY', 'TELE_CASH'].includes(method)) moneyType = "MobileWallet";
+      else if (['EFT', 'RTGS', 'TRANSFER', 'ZIPIT', 'BANKTRANSFER'].includes(method)) moneyType = "BankTransfer";
+      else moneyType = "Other";
       const keyBal = `BalanceByMoneyType-${currency}-${moneyType}`;
       // MoneyType counter should not have taxPercent/ID theoretically but schema might require structure.
       // Spec: fiscalCounterTaxPercent is nullable.

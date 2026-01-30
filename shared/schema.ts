@@ -71,6 +71,7 @@ export const companies = pgTable("companies", {
   branchCode: text("branch_code"),
   vatRegistered: boolean("vat_registered").default(true),
   emailSettings: jsonb("email_settings"),
+  lastReceiptAt: timestamp("last_receipt_at"),
 
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -201,6 +202,7 @@ export const products = pgTable("products", {
   isActive: boolean("is_active").default(true),
   productType: text("product_type").default("good").notNull(), // 'good' or 'service'
   taxCategoryId: integer("tax_category_id").references(() => taxCategories.id),
+  taxTypeId: integer("tax_type_id").references(() => taxTypes.id),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -282,6 +284,7 @@ export const invoiceItems = pgTable("invoice_items", {
   unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
   taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).notNull(),
   lineTotal: decimal("line_total", { precision: 10, scale: 2 }).notNull(),
+  taxTypeId: integer("tax_type_id").references(() => taxTypes.id),
 });
 
 export const invoiceItemsRelations = relations(invoiceItems, ({ one }) => ({
@@ -447,6 +450,7 @@ export const quotationItems = pgTable("quotation_items", {
   unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
   taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).notNull(),
   lineTotal: decimal("line_total", { precision: 10, scale: 2 }).notNull(),
+  taxTypeId: integer("tax_type_id").references(() => taxTypes.id),
 });
 
 export const quotationsRelations = relations(quotations, ({ one, many }) => ({

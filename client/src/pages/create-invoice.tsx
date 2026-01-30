@@ -1,4 +1,4 @@
-import { Layout } from "@/components/layout";
+﻿import { Layout } from "@/components/layout";
 import { useCustomers, useCreateCustomer } from "@/hooks/use-customers";
 import { useProducts, useCreateProduct } from "@/hooks/use-products";
 import { useCreateInvoice, useInvoice, useUpdateInvoice } from "@/hooks/use-invoices";
@@ -54,6 +54,7 @@ type LineItem = {
   unitPrice: number;
   taxRate: number;
   hsCode?: string;
+  taxTypeId?: number | null;
 };
 
 export default function CreateInvoicePage() {
@@ -156,7 +157,8 @@ export default function CreateInvoicePage() {
           quantity: Number(item.quantity),
           unitPrice: Number(item.unitPrice),
           taxRate: Number(item.taxRate),
-          hsCode: (item as any).product?.hsCode || undefined
+          hsCode: (item as any).product?.hsCode || undefined,
+          taxTypeId: item.taxTypeId
         })));
       }
     }
@@ -300,11 +302,15 @@ export default function CreateInvoicePage() {
       setItems(prev => prev.map(item => {
         if (item.localId !== localId) return item;
 
-        // Determine tax rate: prefer master tax type if linked, otherwise fallback to product override
+        // Determine tax rate: prefer taxCategoryId if linked, otherwise fallback to product override
         let taxRate = company?.vatRegistered ? Number(product.taxRate ?? 15) : 0;
-        if (company?.vatRegistered && (product as any).taxTypeId && taxTypes.data) {
-          const found = taxTypes.data.find(t => t.id === (product as any).taxTypeId);
-          if (found) taxRate = Number(found.rate);
+
+        if (company?.vatRegistered && product.taxCategoryId && taxTypes.data) {
+          // Find the tax category, which should contain the rate or link to the type
+          const category = taxTypes.data.find(t => t.id === product.taxCategoryId);
+          if (category) {
+            taxRate = Number(category.rate);
+          }
         }
 
         const rate = Number(exchangeRate);
@@ -317,7 +323,8 @@ export default function CreateInvoicePage() {
           quantity: 1,
           unitPrice: scaledPrice,
           taxRate: taxRate,
-          hsCode: product.hsCode || "0000"
+          hsCode: product.hsCode || "0000",
+          taxTypeId: product.taxTypeId
         };
       }));
     }
@@ -361,22 +368,24 @@ export default function CreateInvoicePage() {
   const { subtotal, taxAmount, total } = calculateTotals();
 
   const calculateTaxBreakdown = () => {
-    const breakdown: Record<number, { net: number, tax: number }> = {};
+    const breakdown: Record<string, { net: number, tax: number, rate: number, taxTypeId: number }> = {};
 
     items.forEach(item => {
       const lineTotal = item.quantity * item.unitPrice;
       const rate = Number(item.taxRate);
+      const taxTypeId = item.taxTypeId || 0;
+      const key = `${rate}-${taxTypeId}`;
 
-      if (!breakdown[rate]) breakdown[rate] = { net: 0, tax: 0 };
+      if (!breakdown[key]) breakdown[key] = { net: 0, tax: 0, rate, taxTypeId };
 
       if (taxInclusive) {
         const taxPortion = lineTotal - (lineTotal / (1 + (rate / 100)));
-        breakdown[rate].net += (lineTotal - taxPortion);
-        breakdown[rate].tax += taxPortion;
+        breakdown[key].net += (lineTotal - taxPortion);
+        breakdown[key].tax += taxPortion;
       } else {
         const taxPortion = lineTotal * (rate / 100);
-        breakdown[rate].net += lineTotal;
-        breakdown[rate].tax += taxPortion;
+        breakdown[key].net += lineTotal;
+        breakdown[key].tax += taxPortion;
       }
     });
 
@@ -439,7 +448,8 @@ export default function CreateInvoicePage() {
           quantity: item.quantity.toString(),
           unitPrice: item.unitPrice.toString(),
           taxRate: item.taxRate.toString(),
-          lineTotal: rawLineTotal.toString()
+          lineTotal: rawLineTotal.toString(),
+          taxTypeId: item.taxTypeId
         };
       })
     };
@@ -524,7 +534,8 @@ export default function CreateInvoicePage() {
           quantity: item.quantity.toString(),
           unitPrice: item.unitPrice.toString(),
           taxRate: item.taxRate.toString(),
-          lineTotal: rawLineTotal.toString()
+          lineTotal: rawLineTotal.toString(),
+          taxTypeId: item.taxTypeId
         };
       })
     };
@@ -602,17 +613,65 @@ export default function CreateInvoicePage() {
       return;
     }
 
+    // Validate Issue Date & Fix Time
+    let finalIssueDate = new Date();
+    if (!issueDate || isNaN(new Date(issueDate).getTime())) {
+      toast({
+        title: "Validation Error",
+        description: "Please select a valid issue date.",
+        variant: "destructive",
+      });
+      setLoadingAction(null);
+      return;
+    } else {
+      const selectedDate = new Date(issueDate);
+      const today = new Date();
+      if (selectedDate.toISOString().slice(0, 10) === today.toISOString().slice(0, 10)) {
+        finalIssueDate = new Date();
+      } else {
+        finalIssueDate = new Date(issueDate);
+      }
+    }
+
+    if (company?.fiscalDayOpenedAt) {
+      const fiscalDayOpen = new Date(company.fiscalDayOpenedAt);
+      if (finalIssueDate < fiscalDayOpen) {
+        toast({ title: "Validation Error", description: `Invoice Date cannot be earlier than Fiscal Day Opening Time (${fiscalDayOpen.toLocaleString()}).`, variant: "destructive" });
+        setLoadingAction(null);
+        return;
+      }
+    }
+
+    if (company?.lastReceiptAt) {
+      const lastReceipt = new Date(company.lastReceiptAt);
+      if (finalIssueDate < lastReceipt) {
+        toast({ title: "Validation Error", description: `Invoice Date cannot be earlier than the last receipt (${lastReceipt.toLocaleString()}). Sequence must be maintained.`, variant: "destructive" });
+        setLoadingAction(null);
+        return;
+      }
+    }
+
+    // No Future Dates (RCPT031)
+    if (finalIssueDate > new Date()) {
+      toast({ title: "Validation Error", description: "Invoice Date cannot be in the future (RCPT031).", variant: "destructive" });
+      setLoadingAction(null);
+      return;
+    }
+
 
     const invoiceNumber = isEditing && existingInvoice && existingInvoice.status === 'issued'
       ? existingInvoice.invoiceNumber
       : `INV-${Date.now().toString().slice(-6)}`;
+
+    // Credit Note / Debit Note Check (Moved up for item mapping)
+    const isCnDn = existingInvoice?.transactionType === "CreditNote" || existingInvoice?.transactionType === "DebitNote";
 
     // Common data payload
     const invoiceData = {
       companyId,
       invoiceNumber,
       customerId: parseInt(customerId),
-      issueDate: issueDate ? new Date(issueDate) : new Date(),
+      issueDate: finalIssueDate,
       dueDate: new Date(dueDate),
       notes,
       currency: currencyCode,
@@ -627,17 +686,17 @@ export default function CreateInvoicePage() {
         const rawLineTotal = item.quantity * item.unitPrice;
         return {
           productId: item.productId,
-          description: item.description,
+          description: (!isCnDn && item.unitPrice < 0 && !item.description.toLowerCase().startsWith('discount')) ? `Discount: ${item.description}` : item.description,
           quantity: item.quantity.toString(),
           unitPrice: item.unitPrice.toString(),
           taxRate: item.taxRate.toString(),
-          lineTotal: rawLineTotal.toString()
+          lineTotal: rawLineTotal.toString(),
+          taxTypeId: item.taxTypeId
         };
       })
     };
 
     // Credit Note / Debit Note Validation: Notes are mandatory
-    const isCnDn = existingInvoice?.transactionType === "CreditNote" || existingInvoice?.transactionType === "DebitNote";
     if (isCnDn && !notes?.trim()) {
       toast({
         title: "Notes Required",
@@ -1059,8 +1118,10 @@ export default function CreateInvoicePage() {
                       <TableHead className="w-[240px] pl-4">Item (Search Name/Code)</TableHead>
                       <TableHead className="min-w-[150px]">Description</TableHead>
                       <TableHead className="w-[100px] text-center">Qty</TableHead>
-                      <TableHead className="w-[140px] text-right">Unit Price {taxInclusive ? '(Incl)' : '(Excl)'}</TableHead>
-                      <TableHead className="w-[80px] text-center">Tax %</TableHead>
+                      <TableHead className="w-[140px] text-right">
+                        <div>Unit Price {taxInclusive ? '(Incl)' : '(Excl)'}</div>
+                        <div className="text-[10px] lowercase font-normal text-slate-400 no-underline">(Neg. for discount)</div>
+                      </TableHead>
                       <TableHead className="w-[120px] text-right">Total Amount (incl. tax)</TableHead>
                       <TableHead className="w-[50px]"></TableHead>
                     </TableRow>
@@ -1088,7 +1149,7 @@ export default function CreateInvoicePage() {
                             transition={{ duration: 0.2 }}
                             className="group hover:bg-slate-50/30 transition-colors border-b border-slate-50"
                           >
-                            <TableCell className="align-middle pl-4 py-3">
+                            <TableCell className="align-middle pl-4 py-3 max-w-[240px]">
                               <Popover
                                 open={openRowIndex === index}
                                 onOpenChange={(isOpen) => setOpenRowIndex(isOpen ? index : null)}
@@ -1238,27 +1299,16 @@ export default function CreateInvoicePage() {
                             <TableCell className="align-middle py-3">
                               <Input
                                 type="number"
-                                min="0"
                                 step="0.01"
                                 value={Number(item.unitPrice)}
                                 onChange={(e) => updateItem(item.localId, 'unitPrice', parseFloat(e.target.value) || 0)}
                                 onBlur={(e) => {
+                                  // Allow negative values for discounts
                                   const val = parseFloat(e.target.value) || 0;
                                   updateItem(item.localId, 'unitPrice', parseFloat(val.toFixed(2)));
                                 }}
                                 className="bg-transparent border-transparent hover:border-slate-200 focus:border-primary focus:bg-white h-9 px-2 text-right text-sm font-mono w-full transition-all"
                               />
-                            </TableCell>
-                            <TableCell className="align-middle text-center py-3">
-                              <div className={cn(
-                                "inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-medium",
-                                item.taxRate > 0 ? "bg-slate-100 text-slate-600" : "bg-slate-50 text-slate-400"
-                              )}>
-                                {item.taxRate}%
-                              </div>
-                              {!company?.vatRegistered && item.taxRate > 0 && (
-                                <div className="text-[8px] text-red-500 mt-0.5 leading-tight">Company not VAT registered</div>
-                              )}
                             </TableCell>
                             <TableCell className="text-right font-bold font-mono text-slate-900 align-middle py-3 pr-4">
                               {totalAmt.toFixed(2)}
@@ -1381,16 +1431,43 @@ export default function CreateInvoicePage() {
 
               <div className="space-y-4">
                 <div className="flex justify-between items-center py-3 border-b border-slate-100">
-                  <span className="text-slate-600 font-medium">Subtotal</span>
+                  <span className="text-slate-600 font-medium">{!taxInclusive ? "Total (excl. tax)" : "Subtotal"}</span>
                   <span className="font-mono font-bold text-slate-900">{currentSymbol}{subtotal.toFixed(2)}</span>
                 </div>
 
-                {Object.entries(taxBreakdown).map(([rate, vals]) => (
-                  <div key={rate} className="flex justify-between items-center py-2 pl-4 border-l-2 border-slate-200">
-                    <span className="text-slate-500 text-sm">VAT {rate}%</span>
-                    <span className="font-mono text-slate-700">{currentSymbol}{vals.tax.toFixed(2)}</span>
+                <div className="bg-slate-50 rounded-lg p-3 border border-slate-200 my-4">
+                  <h4 className="text-[10px] font-bold text-slate-700 uppercase mb-2 text-center">Tax Analysis</h4>
+                  <div className="grid grid-cols-4 gap-2 text-[9px] font-bold text-slate-500 uppercase mb-1 border-b border-slate-200 pb-1">
+                    <div></div>
+                    <div className="text-right">Net.Amt</div>
+                    <div className="text-right">VAT</div>
+                    <div className="text-right">Amount</div>
                   </div>
-                ))}
+                  <div className="space-y-1">
+                    {Object.entries(taxBreakdown).map(([key, vals]) => {
+                      const mTax = taxTypes.data?.find((t: any) => t.id == vals.taxTypeId);
+                      const isZeroRated = mTax?.zimraTaxId == 2 || mTax?.zimraTaxId == "2" || mTax?.zimraCode === 'D' || mTax?.name?.toLowerCase().includes('zero rated');
+                      const isExempt = mTax?.zimraTaxId == 1 || mTax?.zimraTaxId == "1" || mTax?.zimraCode === 'C' || mTax?.zimraCode === 'E' || mTax?.name?.toLowerCase().includes('exempt') || (vals.rate === 0 && !isZeroRated);
+
+                      return (
+                        <div key={key} className="grid grid-cols-4 gap-2 text-[10px] items-center py-1 border-b border-slate-100 last:border-0">
+                          <div className="text-slate-600 truncate">
+                            {isExempt ? (mTax?.name || "Exempt") : (isZeroRated ? "0.00%" : (mTax?.name || "VAT"))}
+                          </div>
+                          <div className="text-right font-mono text-slate-700">
+                            {vals.net.toFixed(2)}
+                          </div>
+                          <div className="text-right font-mono text-slate-700">
+                            {isExempt ? "" : vals.tax.toFixed(2)}
+                          </div>
+                          <div className="text-right font-mono font-bold text-slate-900">
+                            {(vals.net + vals.tax).toFixed(2)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
 
                 <div className="flex justify-between items-center py-3 border-b border-slate-100">
                   <span className="text-slate-600 font-medium">Total Tax</span>
@@ -1439,8 +1516,8 @@ export default function CreateInvoicePage() {
           <DialogHeader>
             <DialogTitle>Invoice Preview - Debug Info</DialogTitle>
             <div className="text-xs text-slate-500 mt-2">
-              Customer: {customerId ? '✅' : '❌'} |
-              Company: {company ? '✅' : '❌'} |
+              Customer: {customerId ? 'âœ…' : 'âŒ'} |
+              Company: {company ? 'âœ…' : 'âŒ'} |
               Items: {items.length} |
               Subtotal: {subtotal} |
               Tax: {taxAmount} |
@@ -1481,10 +1558,10 @@ export default function CreateInvoicePage() {
                   <p className="text-lg font-medium mb-2 text-slate-600">PDF Preview Unavailable</p>
                   <p className="mb-4">Please ensure all requirements are met to preview PDF.</p>
                   <div className="space-y-1 text-sm max-w-md">
-                    {!customerId && <p className="text-red-600">❌ Customer not selected</p>}
-                    {customerId && !company && <p className="text-red-600">❌ Company details not loaded</p>}
-                    {items.length === 0 && <p className="text-red-600">❌ No invoice items added</p>}
-                    {customerId && company && items.length > 0 && <p className="text-green-600">✅ All requirements met - PDF should work</p>}
+                    {!customerId && <p className="text-red-600">âŒ Customer not selected</p>}
+                    {customerId && !company && <p className="text-red-600">âŒ Company details not loaded</p>}
+                    {items.length === 0 && <p className="text-red-600">âŒ No invoice items added</p>}
+                    {customerId && company && items.length > 0 && <p className="text-green-600">âœ… All requirements met - PDF should work</p>}
                   </div>
                 </div>
               </div>
@@ -1521,6 +1598,7 @@ export default function CreateInvoicePage() {
                       branchCode
                     }}
                     customer={customers?.find(c => c.id.toString() === customerId)}
+                    taxTypes={taxTypes.data}
                   />
                 }
                 fileName={`Invoice-Draft-${Date.now()}.pdf`}

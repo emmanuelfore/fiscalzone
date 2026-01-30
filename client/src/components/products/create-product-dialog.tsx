@@ -61,6 +61,7 @@ export function CreateProductDialog({ companyId, defaultType = "good", triggerLa
             lowStockThreshold: "10",
             productType: defaultType,
             companyId: companyId,
+            taxTypeId: undefined,
         },
     });
 
@@ -89,8 +90,21 @@ export function CreateProductDialog({ companyId, defaultType = "good", triggerLa
     const isTracked = form.watch("isTracked");
     const isService = defaultType === "service";
 
+    const [selectedTaxTypeId, setSelectedTaxTypeId] = useState<string | undefined>(undefined);
+
+    // Sync with default value or tax types load
+    useEffect(() => {
+        if (taxTypes.data && !selectedTaxTypeId && open) {
+            const defaultType = taxTypes.data?.find(t => t.rate === form.getValues("taxRate"));
+            if (defaultType) setSelectedTaxTypeId(defaultType.id.toString());
+        }
+    }, [taxTypes.data, open]);
+
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={(val) => {
+            setOpen(val);
+            if (!val) setSelectedTaxTypeId(undefined);
+        }}>
             <DialogTrigger asChild>
                 <Button className="gap-2">
                     <Plus className="w-4 h-4" />
@@ -150,13 +164,15 @@ export function CreateProductDialog({ companyId, defaultType = "good", triggerLa
                                             <FormLabel>ZIMRA Tax Type</FormLabel>
                                             <Select
                                                 onValueChange={(val) => {
-                                                    const selectedType = taxTypes.data?.find((t: any) => t.rate === val);
+                                                    setSelectedTaxTypeId(val);
+                                                    const selectedType = taxTypes.data?.find((t: any) => t.id.toString() === val);
                                                     if (selectedType) {
                                                         field.onChange(selectedType.rate);
+                                                        form.setValue("taxTypeId", selectedType.id);
                                                         form.setValue("taxCategoryId", null);
                                                     }
                                                 }}
-                                                value={field.value?.toString()}
+                                                value={selectedTaxTypeId}
                                             >
                                                 <FormControl>
                                                     <SelectTrigger className="bg-white">
@@ -165,7 +181,7 @@ export function CreateProductDialog({ companyId, defaultType = "good", triggerLa
                                                 </FormControl>
                                                 <SelectContent>
                                                     {taxTypes.data?.map((t: any) => (
-                                                        <SelectItem key={t.id} value={t.rate}>
+                                                        <SelectItem key={t.id} value={t.id.toString()}>
                                                             {t.name} ({t.rate}%)
                                                         </SelectItem>
                                                     ))}

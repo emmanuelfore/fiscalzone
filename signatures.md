@@ -347,7 +347,7 @@ Result:
 SALEBYTAXZWL2300000SALEBYTAXZWL0.001200000SALEBYTAXUSD15.002500SALEBYTAXZWL15.001200SALE
 TAXBYTAXUSD15.00250SALETAXBYTAXZWL15.00230000BALANCEBYMONEYTYPEZWLCARD1500000BALANCEB
 YMONEYTYPEUSDLCASH3700BALANCEBYMONEYTYPEZWLCASH2000000
-fiscalDayDeviceSign
+fiscalDayDeviceSign{"qrUrl":"https://fdmstest.zimra.co.zw","vatNumber":"","operationID":"0HNIQDS4I2SB0:00000001","taxPayerTIN":"1098765667","taxPayerName":"emmanuel","deviceSerialNo":"emmanueltest-1","applicableTaxes":[{"taxID":1,"taxName":"Exempt","validFrom":"2023-01-01T00:00:00"},{"taxID":2,"taxName":"Zero rated 0%","validFrom":"2023-01-01T00:00:00","taxPercent":0},{"taxID":514,"taxName":"Non-VAT Withholding Tax","validFrom":"2024-01-01T00:00:00","taxPercent":5},{"taxID":517,"taxName":"Standard rated 15.5%","validFrom":"2025-12-15T00:00:00","taxPercent":15.5}],"deviceBranchName":"test","taxPayerDayMaxHrs":24,"deviceBranchAddress":{"city":"Harare","street":"Crowhill Road","houseNo":"126","province":"Harare"},"deviceOperatingMode":"Online","certificateValidTill":"2027-01-23T09:37:20","deviceBranchContacts":{"email":"foreemmanuel@gmail.com","phoneNo":"0776344339"},"taxpayerDayEndNotificationHrs":2}
 ature
 YyXTSizBBrMjMk4VQL+sCNr+2AC6aQbDAn9JMV2rk3yJ6MDZwie0wqQW3oisNWrMkeZsuAyFSnFkU2A+pKm91sO
 HVdjeRBebjQgAQQIMTCVIcYrx+BizQ7Ib9iCdsVI+Jel2nThqQiQzfRef6EgtgsaIAN+PV55xSrHvPkIe+Bc=

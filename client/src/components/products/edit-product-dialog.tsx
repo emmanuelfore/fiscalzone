@@ -68,6 +68,7 @@ export function EditProductDialog({ product, trigger }: Props) {
             lowStockThreshold: product.lowStockThreshold?.toString() || "10",
             productType: product.productType,
             companyId: product.companyId,
+            taxTypeId: product.taxTypeId,
         },
     });
 
@@ -94,8 +95,41 @@ export function EditProductDialog({ product, trigger }: Props) {
 
     const isTracked = form.watch("isTracked");
 
+    const [selectedTaxTypeId, setSelectedTaxTypeId] = useState<string | undefined>(undefined);
+
+    // Sync with initial product once taxTypes load
+    useEffect(() => {
+        if (taxTypes.data && product && !selectedTaxTypeId && open) {
+            // First try explicit taxTypeId from database
+            if (product.taxTypeId) {
+                setSelectedTaxTypeId(product.taxTypeId.toString());
+            } else {
+                // Fallback to heuristic for legacy data
+                const initial = taxTypes.data?.find(t => {
+                    if (t.rate === product.taxRate?.toString()) {
+                        if (t.rate === "0" || t.rate === "0.00") {
+                            const isExempt = product.name?.toLowerCase().includes("exempt") || product.description?.toLowerCase().includes("exempt");
+                            if (isExempt) {
+                                const zimraTaxId = t.zimraTaxId?.toString();
+                                return zimraTaxId == "1" || t.zimraCode === 'C' || t.zimraCode === 'E' || t.name.toLowerCase().includes("exempt");
+                            }
+                            const zimraTaxId = t.zimraTaxId?.toString();
+                            return zimraTaxId == "2" || t.zimraCode === 'D' || t.name.toLowerCase().includes("zero");
+                        }
+                        return true;
+                    }
+                    return false;
+                })?.id.toString();
+                if (initial) setSelectedTaxTypeId(initial);
+            }
+        }
+    }, [taxTypes.data, product, open]);
+
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={(val) => {
+            setOpen(val);
+            if (!val) setSelectedTaxTypeId(undefined); // Reset on close
+        }}>
             <DialogTrigger asChild>
                 {trigger ? trigger : (
                     <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
@@ -156,24 +190,15 @@ export function EditProductDialog({ product, trigger }: Props) {
                                             <FormLabel>ZIMRA Tax Type</FormLabel>
                                             <Select
                                                 onValueChange={(val) => {
-                                                    // Find the tax type by rate/id logic if needed, but here we likely want to pick a tax TYPE ID
-                                                    // However, existing schema uses taxRate (decimal) + taxCategoryId.
-                                                    // If we are abandoning categories on frontend for direct tax type selection,
-                                                    // we should ideally store taxTypeId or just plain taxRate.
-                                                    // The user requested "use tax type".
-                                                    // We will list Tax Types, and on selection, set the rate.
-                                                    const selectedType = taxTypes.data?.find((t: any) => t.rate === val); // Assuming val is rate string
+                                                    setSelectedTaxTypeId(val);
+                                                    const selectedType = taxTypes.data?.find((t: any) => t.id.toString() === val);
                                                     if (selectedType) {
                                                         field.onChange(selectedType.rate);
-                                                        // We might want to clear or set taxCategoryId to null if we are bypassing it,
-                                                        // OR better: The user wants to map to a Tax Type, not Category.
-                                                        // If schema only has taxCategoryId, we might be stuck unless we update schema to support taxTypeId directly or just use rate.
-                                                        // existing schema: taxRate (decimal), taxCategoryId (fk).
-                                                        // We will set taxRate directly from the Tax Type selection.
+                                                        form.setValue("taxTypeId", selectedType.id);
                                                         form.setValue("taxCategoryId", null);
                                                     }
                                                 }}
-                                                value={field.value?.toString()}
+                                                value={selectedTaxTypeId}
                                             >
                                                 <FormControl>
                                                     <SelectTrigger className="bg-white">
@@ -182,7 +207,7 @@ export function EditProductDialog({ product, trigger }: Props) {
                                                 </FormControl>
                                                 <SelectContent>
                                                     {taxTypes.data?.map((t: any) => (
-                                                        <SelectItem key={t.id} value={t.rate}>
+                                                        <SelectItem key={t.id} value={t.id.toString()}>
                                                             {t.name} ({t.rate}%)
                                                         </SelectItem>
                                                     ))}

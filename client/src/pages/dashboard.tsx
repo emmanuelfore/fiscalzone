@@ -281,16 +281,6 @@ export default function Dashboard() {
             </Button>
             <Button
               variant="outline"
-              className="h-28 flex-col gap-3 bg-white card-depth border-none hover:border-amber-200 hover:bg-amber-50 group transition-all"
-              onClick={() => setLocation("/quotations/new")}
-            >
-              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 group-hover:bg-amber-600 group-hover:text-white transition-all shadow-sm group-hover:shadow-md">
-                <ClipboardList className="w-5 h-5" />
-              </div>
-              <span className="font-semibold text-slate-700">New Quote</span>
-            </Button>
-            <Button
-              variant="outline"
               className="h-28 flex-col gap-3 bg-white card-depth border-none hover:border-emerald-200 hover:bg-emerald-50 group transition-all"
               onClick={() => setLocation("/products")}
             >

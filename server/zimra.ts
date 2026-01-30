@@ -58,20 +58,20 @@ export interface ZimraConfig {
 }
 
 export interface ReceiptLine {
-    receiptLineType: 'Sale';
+    receiptLineType: 'Sale' | 'Discount';
     receiptLineNo: number;
     receiptLineHSCode: string;
     receiptLineName: string;
     receiptLinePrice: number;
     receiptLineQuantity: number;
     receiptLineTotal: number;
-    taxPercent: number;
+    taxPercent?: number;
     taxID: number;
     taxCode?: string;
 }
 
 export interface ReceiptTax {
-    taxPercent: number;
+    taxPercent?: number;
     taxID: number;
     taxAmount: number;
     salesAmountWithTax: number;
@@ -79,7 +79,7 @@ export interface ReceiptTax {
 }
 
 export interface ReceiptPayment {
-    moneyTypeCode: 'CASH' | 'CARD' | 'OTHER' | 'EFT' | 'MOBILE';
+    moneyTypeCode: 'Cash' | 'Card' | 'MobileWallet' | 'Coupon' | 'Credit' | 'BankTransfer' | 'Other';
     paymentAmount: number;
 }
 
@@ -527,7 +527,7 @@ export class ZimraDevice {
         // Filter out zero-value counters immediately as they should not be in signature OR payload
         const activeCounters = counters.filter(c => Math.abs(parseFloat(c.fiscalCounterValue)) > 0.001);
 
-        const moneyTypeMapping: Record<number, string> = { 0: "CASH", 1: "CARD" };
+        const moneyTypeMapping: Record<number, string> = { 0: "Cash", 1: "Card", 2: "MobileWallet", 3: "Coupon", 4: "Credit", 5: "BankTransfer", 6: "Other" };
 
         // Sort counters (Priority: Type -> TaxID/MoneyType -> Currency)
         const sortedCounters = activeCounters.sort((a, b) => {
@@ -562,8 +562,11 @@ export class ZimraDevice {
                     const mType = String(obj.fiscalCounterMoneyType).toUpperCase();
                     if (mType === 'CASH') return 0;
                     if (mType === 'CARD') return 1;
-                    if (mType === 'MOBILE') return 2;
-                    return 9;
+                    if (mType === 'MOBILEWALLET' || mType === 'MOBILE') return 2;
+                    if (mType === 'COUPON') return 3;
+                    if (mType === 'CREDIT') return 4;
+                    if (mType === 'BANKTRANSFER' || mType === 'EFT') return 5;
+                    return 6;
                 }
                 return 0;
             };
@@ -727,16 +730,22 @@ export class ZimraDevice {
         receipt.receiptLines = receipt.receiptLines.map((line) => {
             let taxID = line.taxID;
             // Auto-detect tax ID if not set correctly based on percent
-            const absTaxPercent = Math.abs(line.taxPercent);
+            const absTaxPercent = Math.abs(line.taxPercent || 0);
             if (!taxID) {
-                if (absTaxPercent === 0) taxID = 2; // Zero rate
+                if (absTaxPercent === 0) {
+                    // Check if name or code indicates exempt. Otherwise default to Zero Rate (2)
+                    // We can't see the name here directly, so we'll rely on the fact that 
+                    // Zero Rate (2) is more common for 0%. 
+                    // Exempt (1) usually has to be explicitly set.
+                    taxID = 2;
+                }
                 else if (absTaxPercent === 15.5) taxID = 3; // Standard
-                else if (absTaxPercent === 5) taxID = 1; // Deemed
+                else if (absTaxPercent === 5) taxID = 1; // DEPRECATED: 5% should probably be ID 3 now if 1 is reserved for Exempt
                 else taxID = 3; // Default
             }
 
             let linePrice = line.receiptLinePrice;
-            let lineTotal = line.receiptLineQuantity * line.receiptLinePrice;
+            let lineTotal = Math.round(line.receiptLineQuantity * line.receiptLinePrice * 100) / 100;
 
             // ZIMRA Rule: CreditNote values must be negative
             if (receipt.receiptType === 'CreditNote') {
@@ -744,15 +753,23 @@ export class ZimraDevice {
                 if (lineTotal > 0) lineTotal = -lineTotal;
             }
 
-            return {
+            const result: ReceiptLine = {
                 ...line,
-                receiptLineType: 'Sale',
-                receiptLineHSCode: line.receiptLineHSCode || '04021099', // Default per Python
+                receiptLineType: line.receiptLineType || 'Sale',
+                receiptLineHSCode: (line.receiptLineHSCode || '04021099').trim(), // Default per Python
+                receiptLineName: (line.receiptLineName || '').trim(),
                 receiptLinePrice: linePrice,
                 receiptLineTotal: lineTotal,
                 taxID,
                 taxPercent: line.taxPercent
-            } as ReceiptLine;
+            };
+
+            // "In case of exempt which does not send tax percent value"
+            if (taxID === 1) {
+                delete result.taxPercent;
+            }
+
+            return result;
         });
 
         // 2. Calculate Taxes
@@ -771,34 +788,37 @@ export class ZimraDevice {
             }
             const taxEntry = taxMap.get(key)!;
             // Calculate tax for this line
-            const taxForLine = this.taxCalculator(line.receiptLineTotal, line.taxPercent, receipt.receiptLinesTaxInclusive);
+            const taxForLine = this.taxCalculator(line.receiptLineTotal, line.taxPercent || 0, receipt.receiptLinesTaxInclusive);
 
-            taxEntry.taxAmount += taxForLine;
+            taxEntry.taxAmount = Math.round((taxEntry.taxAmount + taxForLine) * 100) / 100;
+
             // salesAmountWithTax is either the total (if inclusive) or net+tax (if exclusive)
             if (receipt.receiptLinesTaxInclusive) {
-                taxEntry.salesAmountWithTax += line.receiptLineTotal;
+                taxEntry.salesAmountWithTax = Math.round((taxEntry.salesAmountWithTax + line.receiptLineTotal) * 100) / 100;
             } else {
-                taxEntry.salesAmountWithTax += (line.receiptLineTotal + taxForLine);
+                taxEntry.salesAmountWithTax = Math.round((taxEntry.salesAmountWithTax + (line.receiptLineTotal + taxForLine)) * 100) / 100;
             }
         });
 
-        // Fix consolidated tax amounts to be strictly derived from the sum of sales if needed, 
-        // but Python code sums the taxCalculated for each line?
-        // Python: tax_lines[(tax_percent, tax_id)]["taxAmount"] += self.tax_calculator(item["receiptLineTotal"], tax_percent)
-        // Yes, it sums line-level tax calculations.
+        receipt.receiptTaxes = Array.from(taxMap.values()).map(t => {
+            const result: ReceiptTax = {
+                ...t,
+                // Consistency: Recalculate based on total sales in this category to avoid summing rounding errors
+                taxAmount: this.taxCalculator(t.salesAmountWithTax, t.taxPercent || 0, true),
+            };
 
-        // Then Python re-calculates the final tax entry based on the SUM of salesAmountWithTax?
-        // Python: "taxAmount": self.tax_calculator(sale_amount=value["salesAmountWithTax"]...)
-        // The Python code actually overwrites the summed taxAmount with a recalculation on the total sales!
+            // "In case of exempt which does not send tax percent value"
+            if (t.taxID === 1) {
+                delete result.taxPercent;
+            } else {
+                result.taxPercent = parseFloat((t.taxPercent || 0).toFixed(2));
+            }
 
-        receipt.receiptTaxes = Array.from(taxMap.values()).map(t => ({
-            ...t,
-            taxAmount: this.taxCalculator(t.salesAmountWithTax, t.taxPercent, true),
-            taxPercent: parseFloat(t.taxPercent.toFixed(2))
-        }));
+            return result;
+        });
 
-        // 3. Totals (Strictly based on lines sum to satisfy RCPT019)
-        const calculatedTotal = receipt.receiptLines.reduce((acc, l) => acc + l.receiptLineTotal, 0);
+        // 3. Totals (Strictly based on SUM OF TAX TABLE to satisfy RCPT038)
+        const calculatedTotal = receipt.receiptTaxes.reduce((acc, t) => acc + t.salesAmountWithTax, 0);
         receipt.receiptTotal = Math.round(calculatedTotal * 100) / 100;
 
         // 4. Ensure payments match strictly (RCPT039)
@@ -820,9 +840,9 @@ export class ZimraDevice {
                 }
             }
         } else {
-            // If no payments provided, add a default CASH payment (safer than failing)
+            // If no payments provided, add a default Cash payment (safer than failing)
             receipt.receiptPayments = [{
-                moneyTypeCode: 'CASH',
+                moneyTypeCode: 'Cash',
                 paymentAmount: receipt.receiptTotal
             }];
         }

@@ -14,6 +14,7 @@ import { ZimraDevice, type ReceiptData, ZimraApiError, getZimraBaseUrl, type Zim
 import { sendInvoiceEmail } from './email.js';
 import { supabaseAdmin } from "./supabase.js";
 import { parse } from "csv-parse/sync";
+import { parseStringPromise } from "xml2js";
 import { logAction } from "./audit.js";
 import {
   insertQuotationSchema,
@@ -112,6 +113,44 @@ export async function registerRoutes(
     }
     next();
     */
+  };
+
+  const requireAuthOrApiKey = async (req: any, res: any, next: any) => {
+    // 1. Session Auth Check
+    if (req.isAuthenticated?.() || req.user?.isSuperAdmin) {
+      return next();
+    }
+
+    // 2. API Key Check
+    const apiKey = req.headers['x-api-key'] || req.query.apiKey;
+    if (apiKey) {
+      try {
+        const company = await storage.getCompanyByApiKey(apiKey as string);
+        if (company) {
+          // Attach mock user and company context
+          req.user = {
+            id: 'api-key-user',
+            username: 'api-device',
+            role: 'owner',
+            companyId: company.id
+          };
+          // Also set params.id if it matches the route pattern to ensure consistency
+          if (req.params.id && parseInt(req.params.id) !== company.id) {
+            console.warn(`[API Key Auth] Mismatch: Route ID ${req.params.id} vs Key ID ${company.id}`);
+            // Depending on strictness, we might block this. For now, let's assume route param takes precedence or we override it?
+            // Actually, for security, if they provide an API key for Company A, they shouldn't access Company B's route.
+            if (req.params.id) {
+              return res.status(403).json({ message: "Forbidden: API Key does not match the requested company resource" });
+            }
+          }
+          return next();
+        }
+      } catch (err) {
+        console.error("API Key Auth Error:", err);
+      }
+    }
+
+    return res.status(401).json({ message: "Unauthorized. Provide valid session cookie OR x-api-key header." });
   };
 
   const getZimraLogger = (companyId: number) => ({
@@ -1608,6 +1647,666 @@ export async function registerRoutes(
     }
   });
 
+  // ==========================================
+  // RevMax/ZIMRA API Endpoints
+  // ==========================================
+
+  // Helper function to parse XML items
+  async function parseItemsXML(itemsXML: string): Promise<any[]> {
+    try {
+      const parsed = await parseStringPromise(itemsXML, { explicitArray: false });
+      const items = parsed.ITEMS.ITEM;
+      return Array.isArray(items) ? items : [items];
+    } catch (error: any) {
+      throw new Error(`Invalid ITEMSXML format: ${error.message}`);
+    }
+  }
+
+  // Helper function to parse XML currencies
+  async function parseCurrenciesXML(currenciesXML: string): Promise<any[]> {
+    try {
+      const parsed = await parseStringPromise(currenciesXML, { explicitArray: false });
+      const currencies = parsed.CurrenciesReceived.Currency;
+      return Array.isArray(currencies) ? currencies : [currencies];
+    } catch (error: any) {
+      throw new Error(`Invalid CURRENCIES XML format: ${error.message}`);
+    }
+  }
+
+  // Helper function to format RevMax response
+  function formatRevMaxResponse(code: string, message: string, data: any = {}, company?: any) {
+    return {
+      Code: code,
+      Message: message,
+      DeviceID: company?.fdmsDeviceId || "",
+      DeviceSerialNumber: company?.fdmsDeviceSerialNo || "",
+      FiscalDay: company?.currentFiscalDayNo?.toString() || "",
+      QRcode: data.qrCode || data.QRcode || "",
+      VerificationCode: data.verificationCode || data.VerificationCode || "",
+      Data: data.Data || data
+    };
+  }
+
+  // 1. GET /api/zimra/device-details - GetCardDetails
+  app.get("/api/zimra/device-details", requireAuthOrApiKey, async (req, res) => {
+    try {
+      // Get the user's company from session
+      const user = req.user as any;
+      if (!user || !user.companyId) {
+        return res.status(401).json(formatRevMaxResponse("0", "Unauthorized - No company associated with user"));
+      }
+
+      const company = await storage.getCompany(user.companyId);
+      if (!company || !company.fdmsDeviceId) {
+        return res.status(404).json(formatRevMaxResponse("0", "Device not found or not registered"));
+      }
+
+      const response = formatRevMaxResponse("1", "Success", {
+        TIN: company.tin || "",
+        BPN: company.bpn || "",
+        VAT: company.vatNumber || "",
+        COMPANYNAME: company.name || "",
+        ADDRESS: company.address || "",
+        REGISTRATIONNUMBER: company.fdmsDeviceId || "",
+        SERIALNUMBER: company.fdmsDeviceSerialNo || ""
+      }, company);
+
+      res.json(response);
+    } catch (err: any) {
+      console.error("GetCardDetails Error:", err);
+      res.status(500).json(formatRevMaxResponse("0", `Error: ${err.message}`));
+    }
+  });
+
+  // 2. GET /api/companies/:id/zimra/device-status - GetDeviceStatus (RevMax format)
+  app.get("/api/companies/:id/zimra/device-status", requireAuthOrApiKey, async (req, res) => {
+    try {
+      const companyId = Number(req.params.id);
+      const company = await storage.getCompany(companyId);
+
+      if (!company || !company.fdmsDeviceId || !company.zimraPrivateKey) {
+        return res.status(400).json(formatRevMaxResponse("0", "Company not registered with ZIMRA"));
+      }
+
+      const device = new ZimraDevice({
+        deviceId: company.fdmsDeviceId,
+        deviceSerialNo: company.fdmsDeviceSerialNo || "UNKNOWN",
+        activationKey: company.fdmsApiKey || "",
+        privateKey: company.zimraPrivateKey,
+        certificate: company.zimraCertificate || "",
+      }, getZimraLogger(companyId));
+
+      const status = await device.getStatus();
+
+      // Update local state
+      await storage.updateCompany(companyId, {
+        currentFiscalDayNo: status.lastFiscalDayNo,
+        lastFiscalDayStatus: status.fiscalDayStatus,
+        lastReceiptGlobalNo: status.lastReceiptGlobalNo,
+        fiscalDayOpen: status.fiscalDayStatus === 'FiscalDayOpened'
+      });
+
+      const response = formatRevMaxResponse("1", "Success", {
+        fiscalDayStatus: status.fiscalDayStatus,
+        lastReceiptGlobalNo: status.lastReceiptGlobalNo,
+        lastFiscalDayNo: status.lastFiscalDayNo,
+        operationID: status.operationID || ""
+      }, company);
+
+      res.json(response);
+    } catch (err: any) {
+      console.error("GetDeviceStatus Error:", err);
+      if (err instanceof ZimraApiError) {
+        return res.status(err.statusCode).json(formatRevMaxResponse("0", err.message));
+      }
+      res.status(500).json(formatRevMaxResponse("0", `Error: ${err.message}`));
+    }
+  });
+
+  // 3. POST /api/companies/:id/zimra/transact - TransactM
+  app.post("/api/companies/:id/zimra/transact", requireAuthOrApiKey, async (req, res) => {
+    try {
+      const companyId = Number(req.params.id);
+      const company = await storage.getCompany(companyId);
+
+      if (!company || !company.fdmsDeviceId) {
+        return res.status(400).json(formatRevMaxResponse("0", "Company not registered with ZIMRA", {}, company));
+      }
+
+      const {
+        CURRENCY,
+        CUSTOMEREMAIL,
+        INVOICENUMBER,
+        CUSTOMERNAME,
+        CUSTOMERVATNUMBER,
+        CUSTOMERADDRESS,
+        CUSTOMERTELEPHONENUMBER,
+        CUSTOMERTIN,
+        INVOICEAMOUNT,
+        INVOICETAXAMOUNT,
+        INVOICEFLAG,
+        ORIGINALINVOICENUMBER,
+        INVOICECOMMENT,
+        ITEMSXML,
+        CURRENCIES
+      } = req.body;
+
+      // Validate required fields
+      if (!CURRENCY || !INVOICENUMBER || !INVOICEAMOUNT || !INVOICETAXAMOUNT || !INVOICEFLAG || !ITEMSXML || !CURRENCIES) {
+        return res.status(400).json(formatRevMaxResponse("0", "Missing required fields", {}, company));
+      }
+
+      // Parse XML
+      const items = await parseItemsXML(ITEMSXML);
+      const currencies = await parseCurrenciesXML(CURRENCIES);
+
+      // Create invoice in database
+      const invoiceData: any = {
+        companyId,
+        invoiceNumber: INVOICENUMBER,
+        customerName: CUSTOMERNAME || "Walk-in Customer",
+        customerEmail: CUSTOMEREMAIL || null,
+        customerVatNumber: CUSTOMERVATNUMBER || null,
+        customerAddress: CUSTOMERADDRESS || null,
+        customerPhone: CUSTOMERTELEPHONENUMBER || null,
+        issueDate: new Date(),
+        dueDate: new Date(),
+        currency: CURRENCY,
+        total: parseFloat(INVOICEAMOUNT),
+        taxAmount: parseFloat(INVOICETAXAMOUNT),
+        status: INVOICEFLAG === "01" ? "draft" : "draft",
+        notes: INVOICECOMMENT || null,
+        originalInvoiceNumber: ORIGINALINVOICENUMBER || null
+      };
+
+      const invoice = await storage.createInvoice(invoiceData);
+
+      // Create line items
+      for (const item of items) {
+        await storage.createInvoiceItem({
+          invoiceId: invoice.id,
+          description: item.ITEMNAME1 || item.ITEMNAME2 || "Item",
+          quantity: parseFloat(item.QTY || "1"),
+          unitPrice: parseFloat(item.PRICE || "0"),
+          taxRate: parseFloat(item.TAXR || "0"),
+          total: parseFloat(item.AMT || "0")
+        });
+      }
+
+      // Fiscalize the invoice
+      const device = new ZimraDevice({
+        deviceId: company.fdmsDeviceId,
+        deviceSerialNo: company.fdmsDeviceSerialNo || "UNKNOWN",
+        activationKey: company.fdmsApiKey || "",
+        privateKey: company.zimraPrivateKey || "",
+        certificate: company.zimraCertificate || "",
+      }, getZimraLogger(companyId));
+
+      // Get invoice details for fiscalization
+      const fullInvoice = await storage.getInvoiceWithItems(invoice.id);
+      if (!fullInvoice) {
+        throw new Error("Failed to retrieve created invoice");
+      }
+
+      const receiptData = await device.fiscalizeInvoice(fullInvoice as any, company as any);
+
+      // Update invoice with fiscal data
+      await storage.updateInvoice(invoice.id, {
+        fiscalCode: receiptData.verificationCode,
+        qrCodeData: receiptData.qrCode,
+        status: "issued",
+        syncedWithFdms: true
+      });
+
+      const response = formatRevMaxResponse("1", "Upload Success - Transacted to Card", {
+        receipt: receiptData,
+        qrCode: receiptData.qrCode,
+        verificationCode: receiptData.verificationCode
+      }, company);
+
+      res.json(response);
+    } catch (err: any) {
+      console.error("TransactM Error:", err);
+      const company = await storage.getCompany(Number(req.params.id));
+      res.status(500).json(formatRevMaxResponse("0", `Transaction error: ${err.message}`, {}, company || undefined));
+    }
+  });
+
+  // 4. POST /api/companies/:id/zimra/transact-ext - TransactMExt
+  app.post("/api/companies/:id/zimra/transact-ext", requireAuthOrApiKey, async (req, res) => {
+    try {
+      const companyId = Number(req.params.id);
+      const company = await storage.getCompany(companyId);
+
+      if (!company || !company.fdmsDeviceId) {
+        return res.status(400).json(formatRevMaxResponse("0", "Company not registered with ZIMRA", {}, company));
+      }
+
+      const {
+        Currency,
+        InvoiceNumber,
+        InvoiceAmount,
+        InvoiceTaxAmount,
+        InvoiceFlag,
+        InvoiceComment,
+        OriginalInvoiceNumber,
+        ItemsXML,
+        Currencies,
+        CustomerEmail,
+        CustomerRegisteredName,
+        CustomerTradeName,
+        CustomerVATNumber,
+        CustomerTIN,
+        CustomerTelephoneNumber,
+        CustomerFullAddress,
+        buyerProvince,
+        buyerStreet,
+        buyerHouseNo,
+        buyerCity,
+        refDeviceId,
+        refReceiptGlobalnumber,
+        refFiscalDay
+      } = req.body;
+
+      // Validate required fields
+      if (!Currency || !InvoiceNumber || !InvoiceAmount || !InvoiceTaxAmount || !InvoiceFlag || !ItemsXML || !Currencies) {
+        return res.status(400).json(formatRevMaxResponse("0", "Missing required fields", {}, company));
+      }
+
+      // Parse XML
+      const items = await parseItemsXML(ItemsXML);
+      const currencies = await parseCurrenciesXML(Currencies);
+
+      // Build full address from granular fields
+      const fullAddress = [buyerHouseNo, buyerStreet, buyerCity, buyerProvince]
+        .filter(Boolean)
+        .join(", ") || CustomerFullAddress || "";
+
+      // Create invoice with extended fields
+      const invoiceData: any = {
+        companyId,
+        invoiceNumber: InvoiceNumber,
+        customerName: CustomerRegisteredName || CustomerTradeName || "Walk-in Customer",
+        customerEmail: CustomerEmail || null,
+        customerVatNumber: CustomerVATNumber || null,
+        customerAddress: fullAddress || null,
+        customerPhone: CustomerTelephoneNumber || null,
+        issueDate: new Date(),
+        dueDate: new Date(),
+        currency: Currency,
+        total: parseFloat(InvoiceAmount),
+        taxAmount: parseFloat(InvoiceTaxAmount),
+        status: InvoiceFlag === "01" ? "draft" : "draft",
+        notes: InvoiceComment || null,
+        originalInvoiceNumber: OriginalInvoiceNumber || null
+      };
+
+      const invoice = await storage.createInvoice(invoiceData);
+
+      // Create line items
+      for (const item of items) {
+        await storage.createInvoiceItem({
+          invoiceId: invoice.id,
+          description: item.ITEMNAME1 || item.ITEMNAME2 || "Item",
+          quantity: parseFloat(item.QTY || "1"),
+          unitPrice: parseFloat(item.PRICE || "0"),
+          taxRate: parseFloat(item.TAXR || "0"),
+          total: parseFloat(item.AMT || "0")
+        });
+      }
+
+      // Fiscalize the invoice
+      const device = new ZimraDevice({
+        deviceId: company.fdmsDeviceId,
+        deviceSerialNo: company.fdmsDeviceSerialNo || "UNKNOWN",
+        activationKey: company.fdmsApiKey || "",
+        privateKey: company.zimraPrivateKey || "",
+        certificate: company.zimraCertificate || "",
+      }, getZimraLogger(companyId));
+
+      const fullInvoice = await storage.getInvoiceWithItems(invoice.id);
+      if (!fullInvoice) {
+        throw new Error("Failed to retrieve created invoice");
+      }
+
+      const receiptData = await device.fiscalizeInvoice(fullInvoice as any, company as any);
+
+      // Update invoice
+      await storage.updateInvoice(invoice.id, {
+        fiscalCode: receiptData.verificationCode,
+        qrCodeData: receiptData.qrCode,
+        status: "issued",
+        syncedWithFdms: true
+      });
+
+      const response = formatRevMaxResponse("1", "Upload Success - Transacted to Card", {
+        receipt: receiptData,
+        qrCode: receiptData.qrCode,
+        verificationCode: receiptData.verificationCode
+      }, company);
+
+      res.json(response);
+    } catch (err: any) {
+      console.error("TransactMExt Error:", err);
+      const company = await storage.getCompany(Number(req.params.id));
+      res.status(500).json(formatRevMaxResponse("0", `Transaction error: ${err.message}`, {}, company || undefined));
+    }
+  });
+
+  // 5. POST /api/companies/:id/zimra/z-report - Unified Z-Report (open/close)
+  app.post("/api/companies/:id/zimra/z-report", requireAuthOrApiKey, async (req, res) => {
+    try {
+      const companyId = Number(req.params.id);
+      const action = req.query.action as string;
+      const company = await storage.getCompany(companyId);
+
+      if (!company || !company.fdmsDeviceId) {
+        return res.status(400).json(formatRevMaxResponse("0", "Company not registered with ZIMRA", {}, company));
+      }
+
+      if (!action || (action !== "open" && action !== "close")) {
+        return res.status(400).json(formatRevMaxResponse("0", "Invalid action parameter. Use 'open' or 'close'", {}, company));
+      }
+
+      const device = new ZimraDevice({
+        deviceId: company.fdmsDeviceId,
+        deviceSerialNo: company.fdmsDeviceSerialNo || "UNKNOWN",
+        activationKey: company.fdmsApiKey || "",
+        privateKey: company.zimraPrivateKey || "",
+        certificate: company.zimraCertificate || "",
+      }, getZimraLogger(companyId));
+
+      if (action === "open") {
+        // Open fiscal day
+        const status = await device.getStatus() as any;
+        if (status.fiscalDayStatus === 'FiscalDayOpened') {
+          return res.json(formatRevMaxResponse("1", "Fiscal day is already open", {
+            fiscalDayNo: status.lastFiscalDayNo
+          }, company));
+        }
+
+        const nextDayNo = (status.lastFiscalDayNo || 0) + 1;
+        const result = await device.openDay(nextDayNo) as any;
+
+        await storage.updateCompany(companyId, {
+          currentFiscalDayNo: result.fiscalDayNo || nextDayNo,
+          fiscalDayOpen: true,
+          lastFiscalDayStatus: 'FiscalDayOpened',
+          fiscalDayOpenedAt: new Date(),
+          dailyReceiptCount: 0,
+          lastFiscalHash: null
+        });
+
+        res.json(formatRevMaxResponse("1", "Success: Fiscal Day Opened", result, company));
+      } else {
+        // Close fiscal day
+        const result = await device.closeDay() as any;
+
+        await storage.updateCompany(companyId, {
+          fiscalDayOpen: false,
+          lastFiscalDayStatus: 'FiscalDayClosed',
+          fiscalDayClosedAt: new Date()
+        });
+
+        // Get Z-Report data
+        const zReportData = await storage.getZReportData(companyId, company.currentFiscalDayNo || 0);
+
+        res.json(formatRevMaxResponse("1", "Success: Fiscal Day Closed - Z-Report Generated", {
+          ZREPORTS: [zReportData],
+          ...result
+        }, company));
+      }
+    } catch (err: any) {
+      console.error("ZReport Error:", err);
+      const company = await storage.getCompany(Number(req.params.id));
+      if (err instanceof ZimraApiError) {
+        return res.status(err.statusCode).json(formatRevMaxResponse("0", err.message, {}, company || undefined));
+      }
+      res.status(500).json(formatRevMaxResponse("0", `Error: ${err.message}`, {}, company || undefined));
+    }
+  });
+
+  // 6. GET /api/companies/:id/zimra/transactions/:invoiceNumber - GetTransaction
+  app.get("/api/companies/:id/zimra/transactions/:invoiceNumber", requireAuthOrApiKey, async (req, res) => {
+    try {
+      const companyId = Number(req.params.id);
+      const invoiceNumber = req.params.invoiceNumber;
+      const company = await storage.getCompany(companyId);
+
+      const invoices = await storage.getInvoices(companyId);
+      const invoice = invoices.find(inv => inv.invoiceNumber === invoiceNumber);
+
+      if (!invoice) {
+        return res.status(404).json(formatRevMaxResponse("0", "Transaction not found", {}, company || undefined));
+      }
+
+      const fullInvoice = await storage.getInvoiceWithItems(invoice.id);
+
+      const response = formatRevMaxResponse("1", "Success", {
+        invoiceNumber: invoice.invoiceNumber,
+        receiptData: fullInvoice,
+        qrCode: invoice.qrCodeData || "",
+        verificationCode: invoice.fiscalCode || "",
+        fiscalDayNo: company?.currentFiscalDayNo || 0,
+        receiptGlobalNo: invoice.id
+      }, company || undefined);
+
+      res.json(response);
+    } catch (err: any) {
+      console.error("GetTransaction Error:", err);
+      const company = await storage.getCompany(Number(req.params.id));
+      res.status(500).json(formatRevMaxResponse("0", `Error: ${err.message}`, {}, company || undefined));
+    }
+  });
+
+  // 7. GET /api/companies/:id/zimra/transactions/unprocessed/summary - GetUnProcessedTransactionSummary
+  app.get("/api/companies/:id/zimra/transactions/unprocessed/summary", requireAuthOrApiKey, async (req, res) => {
+    try {
+      const companyId = Number(req.params.id);
+      const fiscalDayNumber = req.query.fiscalDayNumber as string;
+      const fiscalDate = req.query.fiscalDate as string;
+      const company = await storage.getCompany(companyId);
+
+      // Get all invoices
+      const invoices = await storage.getInvoices(companyId);
+
+      // Filter unprocessed (draft or failed)
+      const unprocessed = invoices.filter(inv =>
+        inv.status === "draft" || !inv.syncedWithFdms
+      );
+
+      const totalUnprocessed = unprocessed.length;
+      const totalAmount = unprocessed.reduce((sum, inv) => sum + parseFloat(inv.total.toString()), 0);
+
+      const response = formatRevMaxResponse("1", "Success", {
+        fiscalDayNumber: fiscalDayNumber || company?.currentFiscalDayNo?.toString() || "",
+        fiscalDate: fiscalDate || new Date().toISOString().split('T')[0],
+        totalUnprocessed,
+        totalAmount
+      }, company || undefined);
+
+      res.json(response);
+    } catch (err: any) {
+      console.error("GetUnProcessedTransactionSummary Error:", err);
+      const company = await storage.getCompany(Number(req.params.id));
+      res.status(500).json(formatRevMaxResponse("0", `Error: ${err.message}`, {}, company || undefined));
+    }
+  });
+
+  // 8. GET /api/companies/:id/zimra/transactions/unprocessed - GetUnProcessedTransactions (paginated)
+  app.get("/api/companies/:id/zimra/transactions/unprocessed", requireAuthOrApiKey, async (req, res) => {
+    try {
+      const companyId = Number(req.params.id);
+      const fiscalDayNumber = req.query.fiscalDayNumber as string;
+      const page = parseInt(req.query.page as string) || 1;
+      const pageSize = Math.min(parseInt(req.query.pageSize as string) || 50, 1000);
+      const company = await storage.getCompany(companyId);
+
+      const invoices = await storage.getInvoices(companyId);
+      const unprocessed = invoices.filter(inv =>
+        inv.status === "draft" || !inv.syncedWithFdms
+      );
+
+      const totalRecords = unprocessed.length;
+      const totalPages = Math.ceil(totalRecords / pageSize);
+      const startIndex = (page - 1) * pageSize;
+      const endIndex = startIndex + pageSize;
+      const paginatedTransactions = unprocessed.slice(startIndex, endIndex);
+
+      const response = formatRevMaxResponse("1", "Success", {
+        page,
+        pageSize,
+        totalRecords,
+        totalPages,
+        transactions: paginatedTransactions
+      }, company || undefined);
+
+      res.json(response);
+    } catch (err: any) {
+      console.error("GetUnProcessedTransactions Error:", err);
+      const company = await storage.getCompany(Number(req.params.id));
+      res.status(500).json(formatRevMaxResponse("0", `Error: ${err.message}`, {}, company || undefined));
+    }
+  });
+
+  // 9. GET /api/companies/:id/zimra/transactions/unprocessed/by-date - GetUnProcessedTransactionsByDate
+  app.get("/api/companies/:id/zimra/transactions/unprocessed/by-date", requireAuthOrApiKey, async (req, res) => {
+    try {
+      const companyId = Number(req.params.id);
+      const fiscalDate = req.query.fiscalDate as string;
+      const page = parseInt(req.query.page as string) || 1;
+      const pageSize = Math.min(parseInt(req.query.pageSize as string) || 50, 1000);
+      const company = await storage.getCompany(companyId);
+
+      if (!fiscalDate) {
+        return res.status(400).json(formatRevMaxResponse("0", "fiscalDate parameter is required", {}, company || undefined));
+      }
+
+      const invoices = await storage.getInvoices(companyId);
+      const targetDate = new Date(fiscalDate);
+
+      const unprocessed = invoices.filter(inv => {
+        const invDate = new Date(inv.issueDate);
+        const sameDate = invDate.toISOString().split('T')[0] === targetDate.toISOString().split('T')[0];
+        return sameDate && (inv.status === "draft" || !inv.syncedWithFdms);
+      });
+
+      const totalRecords = unprocessed.length;
+      const totalPages = Math.ceil(totalRecords / pageSize);
+      const startIndex = (page - 1) * pageSize;
+      const endIndex = startIndex + pageSize;
+      const paginatedTransactions = unprocessed.slice(startIndex, endIndex);
+
+      const response = formatRevMaxResponse("1", "Success", {
+        page,
+        pageSize,
+        totalRecords,
+        totalPages,
+        transactions: paginatedTransactions
+      }, company || undefined);
+
+      res.json(response);
+    } catch (err: any) {
+      console.error("GetUnProcessedTransactionsByDate Error:", err);
+      const company = await storage.getCompany(Number(req.params.id));
+      res.status(500).json(formatRevMaxResponse("0", `Error: ${err.message}`, {}, company || undefined));
+    }
+  });
+
+  // 10. DELETE /api/companies/:id/zimra/transactions/unprocessed - ClearUnprocessedTransactions
+  app.delete("/api/companies/:id/zimra/transactions/unprocessed", requireAuthOrApiKey, async (req, res) => {
+    try {
+      const companyId = Number(req.params.id);
+      const fiscalDayNumber = req.query.fiscalDayNumber as string;
+      const company = await storage.getCompany(companyId);
+
+      if (!fiscalDayNumber) {
+        return res.status(400).json(formatRevMaxResponse("0", "fiscalDayNumber parameter is required", {}, company || undefined));
+      }
+
+      // Safety check: only clear if newer fiscal day exists
+      const currentDay = company?.currentFiscalDayNo || 0;
+      if (parseInt(fiscalDayNumber) >= currentDay) {
+        return res.status(400).json(formatRevMaxResponse("0", "Safety check failed - cannot clear current or future fiscal day", {}, company || undefined));
+      }
+
+      const invoices = await storage.getInvoices(companyId);
+      const toClear = invoices.filter(inv =>
+        (inv.status === "draft" || !inv.syncedWithFdms)
+      );
+
+      // Soft delete by updating status
+      let clearedCount = 0;
+      for (const invoice of toClear) {
+        await storage.updateInvoice(invoice.id, { status: "cancelled" });
+        clearedCount++;
+      }
+
+      const response = formatRevMaxResponse("1", "Successfully cleared unprocessed transactions", {
+        clearedCount,
+        fiscalDayNumber,
+        fiscalDate: new Date().toISOString().split('T')[0]
+      }, company || undefined);
+
+      res.json(response);
+    } catch (err: any) {
+      console.error("ClearUnprocessedTransactions Error:", err);
+      const company = await storage.getCompany(Number(req.params.id));
+      res.status(500).json(formatRevMaxResponse("0", `Error: ${err.message}`, {}, company || undefined));
+    }
+  });
+
+  // 11. DELETE /api/companies/:id/zimra/transactions/unprocessed/by-date - ClearUnprocessedTransactionsByDate
+  app.delete("/api/companies/:id/zimra/transactions/unprocessed/by-date", requireAuthOrApiKey, async (req, res) => {
+    try {
+      const companyId = Number(req.params.id);
+      const fiscalDate = req.query.fiscalDate as string;
+      const company = await storage.getCompany(companyId);
+
+      if (!fiscalDate) {
+        return res.status(400).json(formatRevMaxResponse("0", "fiscalDate parameter is required", {}, company || undefined));
+      }
+
+      // Safety check: don't clear today's transactions
+      const today = new Date().toISOString().split('T')[0];
+      if (fiscalDate === today) {
+        return res.status(400).json(formatRevMaxResponse("0", "Safety check failed - cannot clear today's transactions", {}, company || undefined));
+      }
+
+      const invoices = await storage.getInvoices(companyId);
+      const targetDate = new Date(fiscalDate);
+
+      const toClear = invoices.filter(inv => {
+        const invDate = new Date(inv.issueDate);
+        const sameDate = invDate.toISOString().split('T')[0] === targetDate.toISOString().split('T')[0];
+        return sameDate && (inv.status === "draft" || !inv.syncedWithFdms);
+      });
+
+      // Soft delete by updating status
+      let clearedCount = 0;
+      for (const invoice of toClear) {
+        await storage.updateInvoice(invoice.id, { status: "cancelled" });
+        clearedCount++;
+      }
+
+      const response = formatRevMaxResponse("1", "Successfully cleared unprocessed transactions", {
+        clearedCount,
+        fiscalDayNumber: "",
+        fiscalDate
+      }, company || undefined);
+
+      res.json(response);
+    } catch (err: any) {
+      console.error("ClearUnprocessedTransactionsByDate Error:", err);
+      const company = await storage.getCompany(Number(req.params.id));
+      res.status(500).json(formatRevMaxResponse("0", `Error: ${err.message}`, {}, company || undefined));
+    }
+  });
+
+  // ==========================================
+  // End of RevMax/ZIMRA API Endpoints
+  // ==========================================
+
   // Customer Routes
   app.get(api.customers.list.path, requireAuth, async (req, res) => {
     const customers = await storage.getCustomers(Number(req.params.companyId));
@@ -2439,6 +3138,7 @@ export async function registerRoutes(
         total: originalInvoice.total,
         status: "draft",
         taxInclusive: originalInvoice.taxInclusive,
+        currency: originalInvoice.currency, // Maintain same currency from original
         transactionType: "CreditNote",
         relatedInvoiceId: originalInvoice.id,
         items: originalInvoice.items.map(item => ({
@@ -2447,6 +3147,7 @@ export async function registerRoutes(
           quantity: item.quantity, // Positive quantity, logic handles it as credit
           unitPrice: item.unitPrice,
           taxRate: item.taxRate,
+          taxTypeId: item.taxTypeId, // Maintain tax type for proper zero-rated/exempt classification
           lineTotal: item.lineTotal
         }))
       });
@@ -2480,6 +3181,7 @@ export async function registerRoutes(
         total: originalInvoice.total,
         status: "draft",
         taxInclusive: originalInvoice.taxInclusive,
+        currency: originalInvoice.currency, // Maintain same currency from original
         transactionType: "DebitNote",
         relatedInvoiceId: originalInvoice.id,
         items: originalInvoice.items.map(item => ({
@@ -2488,6 +3190,7 @@ export async function registerRoutes(
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           taxRate: item.taxRate,
+          taxTypeId: item.taxTypeId, // Maintain tax type for proper zero-rated/exempt classification
           lineTotal: item.lineTotal
         }))
       });

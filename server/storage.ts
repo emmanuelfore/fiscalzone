@@ -29,6 +29,7 @@ export interface IStorage {
   createCompany(company: InsertCompany, userId: string): Promise<Company>;
   getCompanies(userId: string): Promise<Company[]>;
   getCompany(id: number): Promise<Company | undefined>;
+  getCompanyByApiKey(apiKey: string): Promise<Company | undefined>;
   updateCompany(id: number, data: Partial<InsertCompany>): Promise<Company>;
 
   // Customers
@@ -164,6 +165,29 @@ export class DatabaseStorage implements IStorage {
         companyId: newCompany.id,
         role: "owner"
       });
+
+      // Automatically create default currencies (USD and ZIG)
+      await tx.insert(currencies).values([
+        {
+          companyId: newCompany.id,
+          code: "USD",
+          name: "US Dollar",
+          symbol: "$",
+          exchangeRate: "1.000000",
+          isBase: true,
+          isActive: true
+        },
+        {
+          companyId: newCompany.id,
+          code: "ZIG",
+          name: "Zimbabwe Gold",
+          symbol: "ZiG",
+          exchangeRate: "13.500000",
+          isBase: false,
+          isActive: true
+        }
+      ]);
+
       return newCompany;
     });
   }
@@ -185,6 +209,11 @@ export class DatabaseStorage implements IStorage {
 
   async getCompany(id: number): Promise<Company | undefined> {
     const [company] = await db.select().from(companies).where(eq(companies.id, id));
+    return company;
+  }
+
+  async getCompanyByApiKey(apiKey: string): Promise<Company | undefined> {
+    const [company] = await db.select().from(companies).where(eq(companies.apiKey, apiKey));
     return company;
   }
 

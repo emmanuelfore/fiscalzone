@@ -6,30 +6,19 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 import { Redirect } from "wouter";
-import { FcGoogle } from "react-icons/fc";
 import { Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 
 export default function AuthPage() {
-  const { user, isLoading, loginWithGoogle, loginWithPassword } = useAuth();
+  const { user, isLoading, loginWithPassword } = useAuth();
   const { data: companies, isLoading: isLoadingCompanies } = useCompanies(!!user);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [formData, setFormData] = useState({ email: "", password: "", name: "" });
   const [error, setError] = useState<string | null>(null);
   const [, setLocation] = useLocation();
 
-  const handleGoogleLogin = async () => {
-    try {
-      setError(null);
-      setIsLoggingIn(true);
-      await loginWithGoogle();
-    } catch (error: any) {
-      console.error("Login failed:", error);
-      setError(error.message || "Google login failed");
-      setIsLoggingIn(false);
-    }
-  };
+
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -108,32 +97,7 @@ export default function AuthPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="mb-6">
-              <Button
-                className="w-full h-11 text-base bg-white text-gray-700 hover:bg-gray-50 border border-gray-200"
-                variant="outline"
-                onClick={handleGoogleLogin}
-                disabled={isLoggingIn}
-              >
-                {isLoggingIn && !formData.email ? (
-                  <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                ) : (
-                  <FcGoogle className="w-5 h-5 mr-3" />
-                )}
-                Continue with Google
-              </Button>
-            </div>
 
-            <div className="relative mb-6">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-white px-2 text-muted-foreground">
-                  Or continue with email
-                </span>
-              </div>
-            </div>
 
             {error && (
               <div className="mb-4 p-3 rounded-md bg-red-50 text-red-500 text-sm">

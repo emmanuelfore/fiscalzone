@@ -978,6 +978,71 @@ export class ZimraDevice {
         this.currentInvoiceId = id;
     }
 
+    public async fiscalizeInvoice(invoice: any, company: any): Promise<any> {
+        // Map Invoice to ReceiptData
+        const receiptData: ReceiptData = {
+            receiptType: 'FiscalInvoice', // Default, logic below can adjust
+            receiptCurrency: invoice.currency || 'USD',
+            receiptCounter: (company.dailyReceiptCount || 0) + 1,
+            receiptGlobalNo: (company.lastReceiptGlobalNo || 0) + 1,
+            invoiceNo: invoice.invoiceNumber,
+            receiptDate: new Date().toISOString().slice(0, 19),
+            receiptLines: invoice.items.map((item: any, index: number) => ({
+                receiptLineType: 'Sale',
+                receiptLineNo: index + 1,
+                receiptLineHSCode: item.hscode || '00000000', // Default dummy
+                receiptLineName: item.description,
+                receiptLinePrice: parseFloat(item.unitPrice),
+                receiptLineQuantity: parseFloat(item.quantity),
+                receiptLineTotal: parseFloat(item.total),
+                taxPercent: parseFloat(item.taxRate),
+                taxID: 3 // Default standard, should be mapped better
+            })),
+            receiptTaxes: [], // Will be calculated by prepareReceipt
+            receiptPayments: [{
+                moneyTypeCode: 'Cash', // Default
+                paymentAmount: parseFloat(invoice.total)
+            }],
+            receiptTotal: parseFloat(invoice.total),
+            receiptLinesTaxInclusive: true // Assuming inclusive for now
+        };
+
+        // Determine Receipt Type based on invoice properties if needed
+        if (invoice.total < 0) {
+            receiptData.receiptType = 'CreditNote';
+        }
+
+        // Submit to ZIMRA
+        const result = await this.submitReceipt(receiptData, company.lastFiscalHash, false);
+
+        // Generate Verification Code (MD5 of Hex Signature)
+        // 1. Convert signature (Base64) to Buffer
+        const signatureBytes = Buffer.from(result.signature, 'base64');
+        // 2. Convert to Hex
+        const hexStr = signatureBytes.toString('hex').toLowerCase();
+        // 3. MD5 Hash
+        const md5Hash = crypto.createHash('md5').update(hexStr).digest('hex').toLowerCase();
+        // 4. First 16 chars
+        const verificationCode = md5Hash.substring(0, 16).toUpperCase();
+
+        // Generate QR Code URL
+        // generateQrCode uses internal logic that duplicates the hashing above, but we trust it or pass params?
+        // It takes signature, globalNo, date.
+        // Let's use it directly.
+        const qrCode = this.generateQrCode(result.signature, receiptData.receiptGlobalNo, receiptData.receiptDate);
+
+        return {
+            ...result,
+            verificationCode,
+            qrCode,
+            receiptGlobalNo: receiptData.receiptGlobalNo,
+            receiptCounter: receiptData.receiptCounter,
+            // Return raw data usually needed
+            deviceID: this.config.deviceId,
+            fiscalDayNo: company.currentFiscalDayNo
+        };
+    }
+
     // --- QR Code ---
     public generateQrCode(signature: string, receiptGlobalNo: number, receiptDate: string) {
         // Signature is base64. 

@@ -44,6 +44,7 @@ export const companies = pgTable("companies", {
   fdmsDeviceId: text("fdms_device_id"),
   fdmsDeviceSerialNo: text("fdms_device_serial_no"), // ZIMRA Field [21] - Device Serial Number
   fdmsApiKey: text("fdms_api_key"),
+  apiKey: text("api_key").unique(), // For external device authentication
   zimraPrivateKey: text("zimra_private_key"),
   zimraCertificate: text("zimra_certificate"),
   zimraEnvironment: text("zimra_environment").default("test"), // 'test' or 'production'

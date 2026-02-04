@@ -26,11 +26,13 @@ import {
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { motion, useScroll, useTransform } from "framer-motion";
+import { ContactForm } from "@/components/contact-form";
 
 export default function LandingPage() {
     const [, setLocation] = useLocation();
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
+    const [contactFormOpen, setContactFormOpen] = useState(false);
     const { scrollY } = useScroll();
     const y1 = useTransform(scrollY, [0, 500], [0, 200]);
     const y2 = useTransform(scrollY, [0, 500], [0, -100]);
@@ -142,8 +144,8 @@ export default function LandingPage() {
                                 <Button size="lg" className="h-14 px-8 rounded-full text-lg btn-gradient border-none transition-transform hover:scale-105" onClick={() => setLocation("/onboarding")}>
                                     Start Free Trial <ArrowRight className="ml-2 w-5 h-5" />
                                 </Button>
-                                <Button size="lg" variant="outline" className="h-14 px-8 rounded-full text-lg border-2 hover:bg-white bg-white/50 backdrop-blur-sm">
-                                    View Demo
+                                <Button size="lg" variant="outline" className="h-14 px-8 rounded-full text-lg border-2 hover:bg-white bg-white/50 backdrop-blur-sm" onClick={() => setContactFormOpen(true)}>
+                                    Request Demo
                                 </Button>
                             </div>
 
@@ -515,13 +517,9 @@ export default function LandingPage() {
                             Our support team is here to help. Get in touch and we'll respond as soon as possible.
                         </p>
                         <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                            <Button className="btn-gradient rounded-full px-6">
+                            <Button className="btn-gradient rounded-full px-6" onClick={() => setContactFormOpen(true)}>
                                 <Globe className="w-4 h-4 mr-2" />
                                 Contact Support
-                            </Button>
-                            <Button variant="outline" className="rounded-full px-6 bg-white hover:bg-slate-50">
-                                <FileText className="w-4 h-4 mr-2" />
-                                View Documentation
                             </Button>
                         </div>
                     </motion.div>
@@ -540,6 +538,9 @@ export default function LandingPage() {
                     </div>
                 </div>
             </footer>
+
+            {/* Contact Form Modal */}
+            <ContactForm isOpen={contactFormOpen} onClose={() => setContactFormOpen(false)} />
         </div>
     );
 }

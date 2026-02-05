@@ -433,12 +433,117 @@ function ZimraDeviceConfig({ company }: { company: any }) {
                 disabled={syncConfigMutation.isPending}
               >
                 <RefreshCw className="w-4 h-4 mr-2" />
+
                 Sync Tax Config
               </Button>
             </div>
           </div>
+
+          <Accordion type="single" collapsible className="w-full border rounded-md">
+            <AccordionItem value="danger_zone" className="border-none">
+              <AccordionTrigger className="px-4 text-red-600 font-semibold hover:no-underline hover:bg-red-50 rounded-t-md">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4" />
+                  Advanced Maintenance (Danger Zone)
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="p-4 bg-slate-50 space-y-4">
+                <p className="text-xs text-slate-500">
+                  Manually reset critical device counters. <strong>Use with extreme caution</strong> - only when switching devices or fixing synchronization errors.
+                </p>
+                <AdvancedResetControls company={company} />
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         </div>
       )}
+    </div>
+  );
+}
+
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+
+function AdvancedResetControls({ company }: { company: any }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [globalNumber, setGlobalNumber] = useState(company.lastReceiptGlobalNo?.toString() || "");
+  const [dailyCounter, setDailyCounter] = useState(company.dailyReceiptCount?.toString() || "");
+  const [previousHash, setPreviousHash] = useState(company.lastFiscalHash || "");
+
+  const resetMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiFetch(`/api/companies/${company.id}/zimra/config/reset`, {
+        method: "POST",
+        body: JSON.stringify({
+          globalNumber: globalNumber ? Number(globalNumber) : undefined,
+          dailyCounter: dailyCounter ? Number(dailyCounter) : undefined,
+          previousHash: previousHash === "" ? "" : previousHash // Allow empty string to clear
+        })
+      });
+      if (!res.ok) throw await res.json();
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
+      toast({ title: "Counters Reset", description: "Device configuration has been updated.", className: "bg-orange-100 text-orange-900" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Reset Failed", description: err.message, variant: "destructive" });
+    }
+  });
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+      <div className="space-y-2">
+        <Label className="text-xs">Global No (Last Used)</Label>
+        <Input
+          value={globalNumber}
+          onChange={(e) => setGlobalNumber(e.target.value)}
+          placeholder="0"
+          className="h-8 text-xs font-mono"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label className="text-xs">Daily Count</Label>
+        <Input
+          value={dailyCounter}
+          onChange={(e) => setDailyCounter(e.target.value)}
+          placeholder="0"
+          className="h-8 text-xs font-mono"
+        />
+      </div>
+      <div className="space-y-2">
+        <Button
+          variant="destructive"
+          size="sm"
+          className="w-full h-8 text-xs"
+          onClick={() => {
+            if (confirm("Are you sure you want to manually overwrite these counters? This can break ZIMRA chain validation if incorrect.")) {
+              resetMutation.mutate();
+            }
+          }}
+          disabled={resetMutation.isPending}
+        >
+          {resetMutation.isPending ? "Applying..." : "Apply Manual Reset"}
+        </Button>
+      </div>
+      <div className="md:col-span-3 space-y-2">
+        <Label className="text-xs">Previous Fiscal Hash (Optional)</Label>
+        <Input
+          value={previousHash}
+          onChange={(e) => setPreviousHash(e.target.value)}
+          placeholder="Leave empty to clear, or paste hash"
+          className="h-8 text-xs font-mono"
+        />
+        <p className="text-[10px] text-slate-500">
+          Only change this if you know the exact hash of the last successfully submitted receipt.
+        </p>
+      </div>
     </div>
   );
 }

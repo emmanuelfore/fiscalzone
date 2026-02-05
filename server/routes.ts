@@ -1883,7 +1883,16 @@ export async function registerRoutes(
         fiscalCode: receiptData.verificationCode,
         qrCodeData: receiptData.qrCode,
         status: "issued",
-        syncedWithFdms: true
+        syncedWithFdms: true,
+        receiptGlobalNo: receiptData.receiptGlobalNo,
+        receiptCounter: receiptData.receiptCounter
+      });
+
+      // CRITICAL: Update Company Counters to maintain chain
+      await storage.updateCompany(companyId, {
+        lastReceiptGlobalNo: receiptData.receiptGlobalNo,
+        dailyReceiptCount: receiptData.receiptCounter,
+        lastFiscalHash: receiptData.hash
       });
 
       const response = formatRevMaxResponse("1", "Upload Success - Transacted to Card", {
@@ -2005,7 +2014,16 @@ export async function registerRoutes(
         fiscalCode: receiptData.verificationCode,
         qrCodeData: receiptData.qrCode,
         status: "issued",
-        syncedWithFdms: true
+        syncedWithFdms: true,
+        receiptGlobalNo: receiptData.receiptGlobalNo,
+        receiptCounter: receiptData.receiptCounter
+      });
+
+      // CRITICAL: Update Company Counters to maintain chain
+      await storage.updateCompany(companyId, {
+        lastReceiptGlobalNo: receiptData.receiptGlobalNo,
+        dailyReceiptCount: receiptData.receiptCounter,
+        lastFiscalHash: receiptData.hash
       });
 
       const response = formatRevMaxResponse("1", "Upload Success - Transacted to Card", {
@@ -2330,6 +2348,28 @@ export async function registerRoutes(
       console.error("ClearUnprocessedTransactionsByDate Error:", err);
       const company = await storage.getCompany(Number(req.params.id));
       res.status(500).json(formatRevMaxResponse("0", `Error: ${err.message}`, {}, company || undefined));
+    }
+  });
+
+  // 12. POST /api/companies/:id/zimra/config/reset - Reset Device Counters
+  app.post("/api/companies/:id/zimra/config/reset", requireAuth, async (req, res) => {
+    try {
+      const companyId = Number(req.params.id);
+      const { globalNumber, dailyCounter, previousHash } = req.body;
+
+      // Only allow if authenticated (requireAuth is already on)
+
+      const updateData: any = {};
+      if (globalNumber !== undefined) updateData.lastReceiptGlobalNo = Number(globalNumber);
+      if (dailyCounter !== undefined) updateData.dailyReceiptCount = Number(dailyCounter);
+      if (previousHash !== undefined) updateData.lastFiscalHash = previousHash === "" ? null : previousHash;
+
+      await storage.updateCompany(companyId, updateData);
+
+      res.json({ message: "Counters reset successfully", updated: updateData });
+    } catch (err: any) {
+      console.error("Reset Counters Error:", err);
+      res.status(500).json({ message: "Failed to reset counters" });
     }
   });
 

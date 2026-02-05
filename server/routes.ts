@@ -891,6 +891,7 @@ export async function registerRoutes(
         activationKey: company.fdmsApiKey || "",
         privateKey: company.zimraPrivateKey || "",
         certificate: company.zimraCertificate || "",
+        baseUrl: getZimraBaseUrl(company.zimraEnvironment || 'test')
       }, getZimraLogger(companyId));
 
       const keys = await device.issueCertificate();
@@ -930,6 +931,7 @@ export async function registerRoutes(
         deviceId: company.fdmsDeviceId || "0",
         deviceSerialNo: "UNKNOWN",
         activationKey: "",
+        baseUrl: getZimraBaseUrl(company.zimraEnvironment || 'test')
       }, getZimraLogger(companyId));
 
       const certs = await device.getServerCertificate(thumbprint);
@@ -1153,6 +1155,7 @@ export async function registerRoutes(
         activationKey: company.fdmsApiKey || "",
         privateKey: company.zimraPrivateKey,
         certificate: company.zimraCertificate || "",
+        baseUrl: getZimraBaseUrl(company.zimraEnvironment || 'test')
       }, getZimraLogger(companyId));
 
       const status = await device.getStatus();
@@ -1189,7 +1192,7 @@ export async function registerRoutes(
         activationKey: company.fdmsApiKey || "",
         privateKey: company.zimraPrivateKey || undefined,
         certificate: company.zimraCertificate || undefined,
-        baseUrl: 'https://fdmsapitest.zimra.co.zw' // TODO: Config
+        baseUrl: getZimraBaseUrl(company.zimraEnvironment || 'test')
       }, getZimraLogger(companyId));
 
       // Get Config from ZIMRA
@@ -1250,6 +1253,7 @@ export async function registerRoutes(
         activationKey: company.fdmsApiKey || "",
         privateKey: company.zimraPrivateKey || "",
         certificate: company.zimraCertificate || "",
+        baseUrl: getZimraBaseUrl(company.zimraEnvironment || 'test')
       }, getZimraLogger(companyId));
 
       const response = await device.ping();
@@ -1285,6 +1289,7 @@ export async function registerRoutes(
         activationKey: company.fdmsApiKey || "",
         privateKey: company.zimraPrivateKey || "",
         certificate: company.zimraCertificate || "",
+        baseUrl: getZimraBaseUrl(company.zimraEnvironment || 'test')
       }, getZimraLogger(companyId));
 
       const checks: any[] = [];
@@ -1379,6 +1384,7 @@ export async function registerRoutes(
         activationKey: company.fdmsApiKey || "",
         privateKey: company.zimraPrivateKey || "",
         certificate: company.zimraCertificate || "",
+        baseUrl: getZimraBaseUrl(company.zimraEnvironment || 'test')
       }, getZimraLogger(companyId));
 
       // Check current status first
@@ -1443,7 +1449,7 @@ export async function registerRoutes(
         activationKey: company.fdmsApiKey || "",
         privateKey: company.zimraPrivateKey || "",
         certificate: company.zimraCertificate || "",
-        baseUrl: 'https://fdmsapitest.zimra.co.zw' // TODO: Config
+        baseUrl: getZimraBaseUrl(company.zimraEnvironment || 'test')
       }, getZimraLogger(companyId));
 
       const fiscalDayNo = company.currentFiscalDayNo || 0;
@@ -1754,6 +1760,7 @@ export async function registerRoutes(
         activationKey: company.fdmsApiKey || "",
         privateKey: company.zimraPrivateKey,
         certificate: company.zimraCertificate || "",
+        baseUrl: getZimraBaseUrl(company.zimraEnvironment || 'test')
       }, getZimraLogger(companyId));
 
       const status = await device.getStatus();
@@ -1860,6 +1867,7 @@ export async function registerRoutes(
         activationKey: company.fdmsApiKey || "",
         privateKey: company.zimraPrivateKey || "",
         certificate: company.zimraCertificate || "",
+        baseUrl: getZimraBaseUrl(company.zimraEnvironment || 'test')
       }, getZimraLogger(companyId));
 
       // Get invoice details for fiscalization
@@ -1982,6 +1990,7 @@ export async function registerRoutes(
         activationKey: company.fdmsApiKey || "",
         privateKey: company.zimraPrivateKey || "",
         certificate: company.zimraCertificate || "",
+        baseUrl: getZimraBaseUrl(company.zimraEnvironment || 'test')
       }, getZimraLogger(companyId));
 
       const fullInvoice = await storage.getInvoiceWithItems(invoice.id);
@@ -2034,6 +2043,7 @@ export async function registerRoutes(
         activationKey: company.fdmsApiKey || "",
         privateKey: company.zimraPrivateKey || "",
         certificate: company.zimraCertificate || "",
+        baseUrl: getZimraBaseUrl(company.zimraEnvironment || 'test')
       }, getZimraLogger(companyId));
 
       if (action === "open") {

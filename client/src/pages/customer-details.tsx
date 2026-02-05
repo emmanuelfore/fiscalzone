@@ -45,7 +45,11 @@ export default function CustomerDetailsPage() {
     const { data: customers, isLoading: isLoadingCustomer } = useCustomers(companyId);
     const updateCustomer = useUpdateCustomer();
 
+    // We will fetch up to 100 recent invoices for this customer
+    const { data: invoicesResult, isLoading: isLoadingInvoices } = useInvoices(companyId, { limit: 100 });
+
     const customer = customers?.find(c => c.id === customerId);
+    const customerInvoices = invoicesResult?.data?.filter((inv: any) => inv.customerId === customerId);
 
     // Form State
     const [formData, setFormData] = useState<any>({});

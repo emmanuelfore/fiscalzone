@@ -726,9 +726,9 @@ export default function InvoiceDetailsPage() {
                       {!invoice.taxInclusive && <td className="py-3 text-right text-slate-700">{lineTotal.toFixed(2)}</td>}
                       <td className="py-3 text-right text-slate-500 text-xs">{(() => {
                         const matchingType = taxTypes.data?.find((t: any) => t.id == item.taxTypeId);
-                        const isZeroRated = matchingType?.zimraTaxId == 2 || matchingType?.zimraTaxId == "2" || matchingType?.zimraCode === 'D' || matchingType?.name?.toLowerCase().includes('zero rated');
-                        const isExempt = matchingType?.zimraTaxId == 1 || matchingType?.zimraTaxId == "1" || matchingType?.zimraCode === 'C' || matchingType?.zimraCode === 'E' || matchingType?.name?.toLowerCase().includes('exempt') || (taxRate === 0 && !isZeroRated);
-                        return isExempt ? "" : vatAmt.toFixed(2);
+                        const isExempt = matchingType?.zimraTaxId == 1 || matchingType?.zimraTaxId == "1" || matchingType?.zimraCode === 'C' || matchingType?.zimraCode === 'E' || matchingType?.name?.toLowerCase().includes('exempt');
+                        const isZeroRated = matchingType?.zimraTaxId == 2 || matchingType?.zimraTaxId == "2" || matchingType?.zimraCode === 'D' || matchingType?.name?.toLowerCase().includes('zero rated') || (!isExempt && taxRate === 0);
+                        return isExempt ? "-" : vatAmt.toFixed(2);
                       })()}</td>
                       <td className="py-3 text-right font-bold text-slate-900">{displayTotal.toFixed(2)}</td>
                     </tr>
@@ -746,7 +746,7 @@ export default function InvoiceDetailsPage() {
                 <div className="bg-slate-50 rounded-lg p-4 border border-slate-200 mb-4">
                   <h3 className="text-sm font-bold text-slate-700 uppercase mb-3 text-center">Tax Analysis</h3>
                   <div className="grid grid-cols-4 gap-4 text-[10px] font-bold text-slate-500 uppercase mb-2 border-b border-slate-200 pb-1">
-                    <div></div>
+                    <div className="text-left font-bold text-slate-500 uppercase">VAT %</div>
                     <div className="text-right">Net.Amt</div>
                     <div className="text-right">VAT</div>
                     <div className="text-right">Amount</div>
@@ -755,19 +755,19 @@ export default function InvoiceDetailsPage() {
                     {Object.entries(taxSummary).map(([key, data]) => {
                       const summary = data as { taxRate: number; taxTypeId: number; netAmount: number; taxAmount: number; totalAmount: number };
                       const matchingType = taxTypes.data?.find((t: any) => t.id == summary.taxTypeId);
-                      const isZeroRated = matchingType?.zimraTaxId == 2 || matchingType?.zimraTaxId == "2" || matchingType?.zimraCode === 'D' || matchingType?.name?.toLowerCase().includes('zero rated');
-                      const isExempt = matchingType?.zimraTaxId == 1 || matchingType?.zimraTaxId == "1" || matchingType?.zimraCode === 'C' || matchingType?.zimraCode === 'E' || matchingType?.name?.toLowerCase().includes('exempt') || (summary.taxRate === 0 && !isZeroRated);
+                      const isExempt = matchingType?.zimraTaxId == 1 || matchingType?.zimraTaxId == "1" || matchingType?.zimraCode === 'C' || matchingType?.zimraCode === 'E' || matchingType?.name?.toLowerCase().includes('exempt');
+                      const isZeroRated = matchingType?.zimraTaxId == 2 || matchingType?.zimraTaxId == "2" || matchingType?.zimraCode === 'D' || matchingType?.name?.toLowerCase().includes('zero rated') || (!isExempt && summary.taxRate === 0);
 
                       return (
                         <div key={key} className="grid grid-cols-4 gap-4 text-sm border-b border-slate-200 pb-2 last:border-0">
                           <div className="font-medium text-slate-600">
-                            {isExempt ? (matchingType?.name || "Exempt") : (isZeroRated ? "VAT 0.00%" : (matchingType?.name || "VAT"))}
+                            {isExempt ? (matchingType?.name || "Exempt") : `${Number(summary.taxRate).toFixed(2)}%`}
                           </div>
                           <div className="text-right text-slate-600 font-mono">
                             {summary.netAmount.toFixed(2)}
                           </div>
                           <div className="text-right text-slate-600 font-mono">
-                            {isExempt ? "" : summary.taxAmount.toFixed(2)}
+                            {isExempt ? "-" : summary.taxAmount.toFixed(2)}
                           </div>
                           <div className="text-right font-bold text-slate-900 font-mono">
                             {summary.totalAmount.toFixed(2)}

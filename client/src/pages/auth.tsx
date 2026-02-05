@@ -11,21 +11,37 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 
 export default function AuthPage() {
-  const { user, isLoading, loginWithPassword } = useAuth();
+  const { user, isLoading, loginWithPassword, registerWithPassword } = useAuth();
   const { data: companies, isLoading: isLoadingCompanies } = useCompanies(!!user);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [formData, setFormData] = useState({ email: "", password: "", name: "" });
-  const [error, setError] = useState<string | null>(null);
   const [, setLocation] = useLocation();
+  // We need to parse the search params manually since useLocation returns only path in wouter sometimes,
+  // or use basic window.location.search
+  const getInitialMode = () => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      return params.get("mode") === "signup" ? "signup" : "login";
+    }
+    return "login";
+  };
 
+  const [mode, setMode] = useState<"login" | "signup">(getInitialMode);
 
+  // Login State
+  const [loginData, setLoginData] = useState({ email: "", password: "" });
 
-  const handleEmailLogin = async (e: React.FormEvent) => {
+  // Signup State
+  const [signupData, setSignupData] = useState({ name: "", email: "", password: "", confirmPassword: "" });
+
+  const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       setError(null);
       setIsLoggingIn(true);
-      await loginWithPassword({ email: formData.email, password: formData.password });
+      await loginWithPassword({ email: loginData.email, password: loginData.password });
     } catch (error: any) {
       console.error("Login failed:", error);
       setError(error.message || "Invalid email or password");
@@ -33,6 +49,32 @@ export default function AuthPage() {
     }
   };
 
+  const handleSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (signupData.password !== signupData.confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+
+    try {
+      setError(null);
+      setIsLoggingIn(true);
+      await registerWithPassword({
+        email: signupData.email,
+        password: signupData.password,
+        name: signupData.name
+      });
+
+      setSuccessMsg("Account created! Logging you in...");
+    } catch (error: any) {
+      console.error("Signup failed:", error);
+      setError(error.message || "Registration failed");
+      setIsLoggingIn(false);
+    }
+  };
+
+  // ... (useEffect and loading checks remain same, omitted for brevity) ...
 
   useEffect(() => {
     if (user && !isLoading && !isLoadingCompanies) {
@@ -53,7 +95,7 @@ export default function AuthPage() {
   }
 
   if (user) {
-    return <Redirect to="/dashboard" />;
+    return <Redirect to={companies && companies.length > 0 ? "/dashboard" : "/onboarding"} />;
   }
 
   return (
@@ -91,49 +133,140 @@ export default function AuthPage() {
         <div className="absolute top-0 left-0 w-full h-full bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03] pointer-events-none" />
         <Card className="w-full max-w-md card-depth border-none relative z-10">
           <CardHeader className="text-center pb-2">
-            <CardTitle className="font-display text-2xl">Welcome Back</CardTitle>
+            <CardTitle className="font-display text-2xl">
+              {mode === "login" ? "Welcome Back" : "Create Account"}
+            </CardTitle>
             <CardDescription>
-              Sign in to your account or create a new one
+              {mode === "login"
+                ? "Sign in to your account"
+                : "Enter your details to get started"}
             </CardDescription>
           </CardHeader>
           <CardContent>
-
-
             {error && (
-              <div className="mb-4 p-3 rounded-md bg-red-50 text-red-500 text-sm">
+              <div className="mb-4 p-3 rounded-md bg-red-50 text-red-500 text-sm border border-red-100">
                 {error}
               </div>
             )}
 
-            <form onSubmit={handleEmailLogin} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email Address</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="name@company.com"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  required
-                />
+            {successMsg && (
+              <div className="mb-4 p-3 rounded-md bg-emerald-50 text-emerald-600 text-sm border border-emerald-100">
+                {successMsg}
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  required
-                />
-              </div>
-              <Button type="submit" className="w-full h-11" disabled={isLoggingIn}>
-                {isLoggingIn && formData.email ? (
-                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                ) : null}
-                Sign In
-              </Button>
-            </form>
+            )}
+
+            {mode === "login" ? (
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email Address</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="name@company.com"
+                    value={loginData.email}
+                    onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="password">Password</Label>
+                    <Button variant="link" className="p-0 h-auto text-xs text-primary" type="button">
+                      Forgot password?
+                    </Button>
+                  </div>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={loginData.password}
+                    onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
+                    required
+                  />
+                </div>
+                <Button type="submit" className="w-full h-11" disabled={isLoggingIn}>
+                  {isLoggingIn ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                  Sign In
+                </Button>
+
+                <div className="text-center text-sm text-slate-500 mt-4">
+                  Don't have an account?{" "}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode("signup");
+                      setError(null);
+                    }}
+                    className="text-primary font-semibold hover:underline"
+                  >
+                    Sign Up
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <form onSubmit={handleSignup} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Full Name</Label>
+                  <Input
+                    id="name"
+                    placeholder="John Doe"
+                    value={signupData.name}
+                    onChange={(e) => setSignupData({ ...signupData, name: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signup-email">Email Address</Label>
+                  <Input
+                    id="signup-email"
+                    type="email"
+                    placeholder="name@company.com"
+                    value={signupData.email}
+                    onChange={(e) => setSignupData({ ...signupData, email: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signup-password">Password</Label>
+                  <Input
+                    id="signup-password"
+                    type="password"
+                    value={signupData.password}
+                    onChange={(e) => setSignupData({ ...signupData, password: e.target.value })}
+                    required
+                    minLength={6}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="confirm-password">Confirm Password</Label>
+                  <Input
+                    id="confirm-password"
+                    type="password"
+                    value={signupData.confirmPassword}
+                    onChange={(e) => setSignupData({ ...signupData, confirmPassword: e.target.value })}
+                    required
+                    minLength={6}
+                  />
+                </div>
+                <Button type="submit" className="w-full h-11" disabled={isLoggingIn}>
+                  {isLoggingIn ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                  Create Account
+                </Button>
+
+                <div className="text-center text-sm text-slate-500 mt-4">
+                  Already have an account?{" "}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode("login");
+                      setError(null);
+                    }}
+                    className="text-primary font-semibold hover:underline"
+                  >
+                    Sign In
+                  </button>
+                </div>
+              </form>
+            )}
           </CardContent>
         </Card>
       </div>

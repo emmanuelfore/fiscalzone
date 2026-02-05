@@ -44,18 +44,41 @@ import { SmartFixDialog } from "@/components/smart-fix-dialog";
 export default function InvoicesPage() {
   const [, setLocation] = useLocation();
   const selectedCompanyId = parseInt(localStorage.getItem("selectedCompanyId") || "0");
-  const { data: invoices, isLoading } = useInvoices(selectedCompanyId);
+
+  // State for Backend Filtering
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+
+  const { data: result, isLoading } = useInvoices(selectedCompanyId, {
+    page,
+    limit: pageSize,
+    search: searchTerm || undefined,
+    status: statusFilter,
+    type: typeFilter,
+    dateFrom: dateRange?.from,
+    dateTo: dateRange?.to
+  });
+
+  const invoices = result?.data;
+  const totalPages = result?.pages || 0;
+  const totalInvoices = result?.total || 0;
+
   const deleteInvoice = useDeleteInvoice();
   const fiscalize = useFiscalizeInvoice();
   const updateInvoice = useUpdateInvoice();
   const createRecurring = useCreateRecurringInvoice();
   const { toast } = useToast();
-
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [typeFilter, setTypeFilter] = useState<string>("all");
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [loadingId, setLoadingId] = useState<number | null>(null);
+
+  // Reset page when filters change
+  const handleFilterChange = (setter: any, value: any) => {
+    setter(value);
+    setPage(1);
+  };
 
   const handleIssue = async (invoice: any) => {
     try {
@@ -126,25 +149,6 @@ export default function InvoicesPage() {
     });
   };
 
-  const filteredInvoices = invoices?.filter(inv => {
-    const matchesSearch = inv.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      inv.total.toString().includes(searchTerm) ||
-      (inv.customer?.name && inv.customer.name.toLowerCase().includes(searchTerm.toLowerCase()));
-
-    const matchesStatus = statusFilter === "all" || inv.status === statusFilter;
-    const matchesType = typeFilter === "all" || (inv.transactionType || "FiscalInvoice") === typeFilter;
-
-    const matchesDate = !dateRange?.from ? true : (
-      !dateRange.to ? (
-        new Date(inv.issueDate!).toDateString() === dateRange.from.toDateString()
-      ) : (
-        new Date(inv.issueDate!) >= dateRange.from && new Date(inv.issueDate!) <= dateRange.to
-      )
-    );
-
-    return matchesSearch && matchesStatus && matchesType && matchesDate;
-  });
-
   return (
     <Layout>
       <SmartFixDialog
@@ -187,12 +191,12 @@ export default function InvoicesPage() {
                 placeholder="Search by invoice number or customer..."
                 className="pl-9 border-slate-200 bg-slate-50 focus:bg-white transition-colors"
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => handleFilterChange(setSearchTerm, e.target.value)}
               />
             </div>
 
             {/* Status Filter */}
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <Select value={statusFilter} onValueChange={(val) => handleFilterChange(setStatusFilter, val)}>
               <SelectTrigger className="w-full sm:w-[150px] border-slate-200 bg-slate-50">
                 <div className="flex items-center gap-2">
                   <Filter className="w-3.5 h-3.5 text-slate-400" />
@@ -211,7 +215,7 @@ export default function InvoicesPage() {
             </Select>
 
             {/* Type Filter */}
-            <Select value={typeFilter} onValueChange={setTypeFilter}>
+            <Select value={typeFilter} onValueChange={(val) => handleFilterChange(setTypeFilter, val)}>
               <SelectTrigger className="w-full sm:w-[150px] border-slate-200 bg-slate-50">
                 <div className="flex items-center gap-2">
                   <FileText className="w-3.5 h-3.5 text-slate-400" />
@@ -258,14 +262,14 @@ export default function InvoicesPage() {
                   mode="range"
                   defaultMonth={dateRange?.from}
                   selected={dateRange}
-                  onSelect={setDateRange}
+                  onSelect={(range) => handleFilterChange(setDateRange, range)}
                   numberOfMonths={2}
                 />
               </PopoverContent>
             </Popover>
 
             {/* Clear Filters */}
-            {(searchTerm || statusFilter !== 'all' || dateRange) && (
+            {(searchTerm || statusFilter !== 'all' || typeFilter !== 'all' || dateRange) && (
               <Button
                 variant="ghost"
                 onClick={() => {
@@ -273,6 +277,7 @@ export default function InvoicesPage() {
                   setStatusFilter("all");
                   setTypeFilter("all");
                   setDateRange(undefined);
+                  setPage(1);
                 }}
                 className="text-slate-500"
               >
@@ -301,16 +306,16 @@ export default function InvoicesPage() {
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-slate-500">
+                    <td colSpan={9} className="p-8 text-center text-slate-500">
                       <div className="flex flex-col items-center justify-center gap-2">
                         <Loader2 className="h-6 w-6 animate-spin text-primary" />
                         <p>Loading invoices...</p>
                       </div>
                     </td>
                   </tr>
-                ) : filteredInvoices?.length === 0 ? (
+                ) : invoices?.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-12 text-center text-slate-500">
+                    <td colSpan={9} className="p-12 text-center text-slate-500">
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mb-3">
                           <FileText className="w-6 h-6 text-slate-400" />
@@ -320,7 +325,7 @@ export default function InvoicesPage() {
                       </div>
                     </td>
                   </tr>
-                ) : filteredInvoices?.map((invoice) => (
+                ) : invoices?.map((invoice) => (
                   <tr
                     key={invoice.id}
                     className="data-table-row group cursor-pointer hover:bg-slate-50 transition-colors"
@@ -494,6 +499,34 @@ export default function InvoicesPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Pagination Controls */}
+          <div className="flex items-center justify-between px-4 py-4 border-t border-slate-100">
+            <div className="text-sm text-slate-500">
+              Showing {((page - 1) * pageSize) + 1} to {Math.min(page * pageSize, totalInvoices)} of {totalInvoices} results
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1 || isLoading}
+              >
+                Previous
+              </Button>
+              <div className="flex items-center justify-center min-w-[32px] text-sm font-medium">
+                Page {page} of {totalPages || 1}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages || isLoading}
+              >
+                Next
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

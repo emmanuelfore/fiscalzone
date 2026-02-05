@@ -14,7 +14,7 @@ import {
   validationErrors, type ValidationError, type InsertValidationError
 } from "../shared/schema.js";
 import { db } from "./db.js";
-import { eq, and, desc, lte, or, isNull } from "drizzle-orm";
+import { eq, and, desc, lte, or, isNull, sql, ilike, count } from "drizzle-orm";
 import { type FiscalDayCounter } from "./zimra.js";
 
 export interface IStorage {
@@ -43,6 +43,7 @@ export interface IStorage {
   updateProduct(id: number, product: Partial<InsertProduct>): Promise<Product>;
 
   // Invoices
+  getInvoicesPaginated(companyId: number, page?: number, limit?: number, search?: string, status?: string, type?: string, dateFrom?: Date, dateTo?: Date): Promise<{ data: (Invoice & { customer?: Customer })[]; total: number; pages: number }>;
   getInvoices(companyId: number): Promise<Invoice[]>;
   getInvoice(id: number): Promise<(Invoice & { items: (InvoiceItem & { product?: Product })[]; customer?: Customer; validationErrors?: any[]; relatedInvoiceNumber?: string; relatedInvoiceDate?: Date | null; relatedFiscalCode?: string; relatedReceiptGlobalNo?: number; relatedReceiptCounter?: number }) | undefined>;
   createInvoice(invoice: CreateInvoiceRequest): Promise<Invoice>;
@@ -260,6 +261,81 @@ export class DatabaseStorage implements IStorage {
       ...r.invoice,
       customer: r.customer || undefined
     }));
+  }
+
+  async getInvoicesPaginated(
+    companyId: number,
+    page: number = 1,
+    limit: number = 20,
+    search?: string,
+    status?: string,
+    type?: string,
+    dateFrom?: Date,
+    dateTo?: Date
+  ): Promise<{ data: (Invoice & { customer?: Customer })[]; total: number; pages: number }> {
+    const offset = (page - 1) * limit;
+
+    const filters = [eq(invoices.companyId, companyId)];
+
+    if (search) {
+      const searchTerm = `%${search}%`;
+      filters.push(
+        or(
+          ilike(invoices.invoiceNumber, searchTerm),
+          ilike(customers.name, searchTerm),
+          sql`CAST(${invoices.total} AS TEXT) ILIKE ${searchTerm}`
+        )
+      );
+    }
+
+    if (status && status !== 'all') {
+      filters.push(eq(invoices.status, status));
+    }
+
+    if (type && type !== 'all') {
+      filters.push(eq(invoices.transactionType, type));
+    }
+
+    if (dateFrom) {
+      filters.push(sql`${invoices.issueDate} >= ${dateFrom.toISOString()}`);
+    }
+
+    if (dateTo) {
+      // Add one day to include the end date fully
+      const nextDay = new Date(dateTo);
+      nextDay.setDate(nextDay.getDate() + 1);
+      filters.push(sql`${invoices.issueDate} < ${nextDay.toISOString()}`);
+    }
+
+    const whereClause = and(...filters);
+
+    const [totalResult] = await db
+      .select({ count: count() })
+      .from(invoices)
+      .leftJoin(customers, eq(invoices.customerId, customers.id))
+      .where(whereClause);
+
+    const total = totalResult?.count || 0;
+    const pages = Math.ceil(total / limit);
+
+    const rows = await db
+      .select({
+        invoice: invoices,
+        customer: customers
+      })
+      .from(invoices)
+      .leftJoin(customers, eq(invoices.customerId, customers.id))
+      .where(whereClause)
+      .limit(limit)
+      .offset(offset)
+      .orderBy(desc(invoices.createdAt));
+
+    const data = rows.map(r => ({
+      ...r.invoice,
+      customer: r.customer || undefined
+    }));
+
+    return { data, total, pages };
   }
 
   async getInvoice(id: number): Promise<(Invoice & { items: (InvoiceItem & { product?: Product })[]; customer?: Customer; validationErrors?: any[]; relatedInvoiceNumber?: string; relatedInvoiceDate?: Date | null }) | undefined> {

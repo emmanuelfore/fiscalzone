@@ -9,14 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { ShieldCheck, Calculator, FileText, Smartphone, Pencil } from "lucide-react";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
+import { ShieldCheck, Calculator, Smartphone, Pencil } from "lucide-react";
+
 import { apiFetch } from "@/lib/api";
 
 import { useActiveCompany } from "@/hooks/use-active-company";
@@ -121,29 +115,7 @@ export default function TaxConfigPage() {
                         </CardContent>
                     </Card>
 
-                    <Card className="card-depth border-none">
-                        <CardHeader>
-                            <CardTitle className="flex items-center text-slate-700">
-                                <FileText className="w-5 h-5 mr-2" />
-                                Invoice Settings
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="space-y-2">
-                                <Label>Template Style</Label>
-                                <Select defaultValue="standard">
-                                    <SelectTrigger className="bg-slate-50 border-slate-200">
-                                        <SelectValue placeholder="Select template" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="standard">Standard ZIMRA</SelectItem>
-                                        <SelectItem value="professional">Professional</SelectItem>
-                                        <SelectItem value="modern">Modern</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </CardContent>
-                    </Card>
+
                 </div>
 
                 {/* Right Column: Tax Categories & Mapping */}

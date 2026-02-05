@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, Settings, Landmark, Save, RefreshCw, Upload, Image as ImageIcon, ShieldCheck, Mail } from "lucide-react";
+import { Building2, Settings, Landmark, Save, RefreshCw, Upload, Image as ImageIcon, ShieldCheck, Mail, Key, Copy } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -16,6 +16,7 @@ import { apiFetch } from "@/lib/api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { useActiveCompany } from "@/hooks/use-active-company";
+import { TaxTypesManager } from "@/components/settings/tax-types-manager";
 
 export default function SettingsPage() {
   const { toast } = useToast();
@@ -49,6 +50,21 @@ export default function SettingsPage() {
         description: err.message,
         variant: "destructive",
       });
+    }
+  });
+
+  const { mutate: generateApiKey, isPending: isGeneratingKey } = useMutation({
+    mutationFn: async () => {
+      const res = await apiFetch(`/api/companies/${companyId}/api-key`, { method: "POST" });
+      if (!res.ok) throw new Error("Failed to generate API Key");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "API Key generated successfully" });
+      queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to generate API Key", variant: "destructive" });
     }
   });
 
@@ -423,6 +439,28 @@ export default function SettingsPage() {
               </CardContent>
             </Card>
           </div>
+
+          <div className="grid grid-cols-1 gap-8">
+            <Card className="card-depth border-none h-fit">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <CardTitle className="flex items-center text-base">
+                      <Settings className="w-5 h-5 mr-2 text-slate-600" />
+                      Tax Rates Management
+                    </CardTitle>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => document.getElementById('add-tax-trigger')?.click()}>
+                    Add Tax Rate
+                  </Button>
+                </div>
+                <CardDescription>Configure specific tax rates and their ZIMRA mapping.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <TaxTypesManager companyId={companyId} />
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         {/* COMMUNICATION TAB */}
@@ -505,6 +543,62 @@ export default function SettingsPage() {
                   Access Audit Logs
                 </Button>
               </Link>
+            </CardContent>
+          </Card>
+
+          <Card className="card-depth border-none max-w-md">
+            <CardHeader>
+              <CardTitle className="flex items-center text-base">
+                <Key className="w-5 h-5 mr-2 text-violet-600" />
+                API Access
+              </CardTitle>
+              <CardDescription>
+                Manage API keys for accessing Swagger documentation and external integrations.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {currentCompany.apiKey ? (
+                <div className="space-y-2">
+                  <Label className="text-xs">Current API Key</Label>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Input
+                        value={currentCompany.apiKey}
+                        readOnly
+                        type="password"
+                        className="pr-10 bg-slate-50 font-mono text-xs"
+                      />
+                    </div>
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      onClick={() => {
+                        navigator.clipboard.writeText(currentCompany.apiKey!);
+                        toast({ title: "Copied", description: "API Key copied to clipboard" });
+                      }}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="bg-amber-50 p-3 rounded border border-amber-100 text-[11px] text-amber-800">
+                    <p>Use this key to authenticate requests to the API. Keep it secret.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-slate-50 p-4 rounded-lg border border-slate-100 text-center">
+                  <p className="text-sm text-slate-500 mb-4">No API Key generated yet.</p>
+                </div>
+              )}
+
+              <Button
+                variant={currentCompany.apiKey ? "outline" : "default"}
+                className="w-full"
+                disabled={isGeneratingKey}
+                onClick={() => generateApiKey()}
+              >
+                {isGeneratingKey && <RefreshCw className="w-4 h-4 mr-2 animate-spin" />}
+                {currentCompany.apiKey ? "Regenerate API Key" : "Generate API Key"}
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>

@@ -807,12 +807,17 @@ export async function registerRoutes(
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ message: "Company not found" });
 
+      // Determine Base URL based on Company Environment
+      const baseUrl = company.zimraEnvironment === 'production'
+        ? 'https://fdmsapi.zimra.co.zw'
+        : 'https://fdmsapitest.zimra.co.zw';
+
       // Instantiate device just for registration (no keys yet)
       const device = new ZimraDevice({
         deviceId,
         deviceSerialNo,
         activationKey,
-        baseUrl: 'https://fdmsapitest.zimra.co.zw' // Default to test for now
+        baseUrl: baseUrl
       }, getZimraLogger(companyId));
 
       const keys = await device.registerDevice();
@@ -846,12 +851,19 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Missing required ZIMRA fields: deviceId, activationKey, deviceSerialNo" });
       }
 
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ message: "Company not found" });
+
+      const baseUrl = company.zimraEnvironment === 'production'
+        ? 'https://fdmsapi.zimra.co.zw'
+        : 'https://fdmsapitest.zimra.co.zw';
+
       // Instantiate device with provided credentials (not yet saved)
       const device = new ZimraDevice({
         deviceId,
         deviceSerialNo,
         activationKey,
-        baseUrl: 'https://fdmsapitest.zimra.co.zw' // Default to test
+        baseUrl: baseUrl
       }, getZimraLogger(companyId));
 
       const taxpayerInfo = await device.verifyTaxpayerInformation();

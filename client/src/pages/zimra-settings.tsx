@@ -74,6 +74,7 @@ function ZimraDeviceConfig({ company }: { company: any }) {
   const [verificationResult, setVerificationResult] = useState<any>(null);
   const [connectivityResult, setConnectivityResult] = useState<any>(null);
   const [showConnectivityDialog, setShowConnectivityDialog] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
 
   const isRegistered = !!company.fdmsDeviceId && !!company.zimraCertificate;
 
@@ -117,6 +118,7 @@ function ZimraDeviceConfig({ company }: { company: any }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
+      setIsEditing(false); // Exit edit mode on success
       toast({ title: "Device Registered Successfully!", className: "bg-green-100 text-green-900" });
     },
     onError: (err: any) => {
@@ -258,7 +260,7 @@ function ZimraDeviceConfig({ company }: { company: any }) {
             value={deviceId}
             onChange={(e) => setDeviceId(e.target.value)}
             placeholder="1234567890"
-            disabled={isRegistered}
+            disabled={isRegistered && !isEditing}
           />
         </div>
         <div className="space-y-2">
@@ -268,7 +270,7 @@ function ZimraDeviceConfig({ company }: { company: any }) {
             onChange={(e) => setActivationKey(e.target.value)}
             type="password"
             placeholder="xxxxxxxx"
-            disabled={isRegistered}
+            disabled={isRegistered && !isEditing}
           />
         </div>
         <div className="space-y-2 md:col-span-2">
@@ -290,7 +292,7 @@ function ZimraDeviceConfig({ company }: { company: any }) {
       )}
 
       <div className="flex items-center gap-4 pt-2">
-        {!isRegistered ? (
+        {!isRegistered || isEditing ? (
           <>
             <Button
               variant="outline"
@@ -303,17 +305,29 @@ function ZimraDeviceConfig({ company }: { company: any }) {
               onClick={() => registerDeviceMutation.mutate()}
               disabled={registerDeviceMutation.isPending || !deviceId || !activationKey}
             >
-              {registerDeviceMutation.isPending ? "Registering..." : "2. Register Device"}
+              {registerDeviceMutation.isPending ? "Registering..." : isRegistered ? "Update & Re-Register" : "2. Register Device"}
             </Button>
+            {isEditing && (
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setIsEditing(false);
+                  setDeviceId(company.fdmsDeviceId || "");
+                  setActivationKey(company.fdmsApiKey || "");
+                }}
+              >
+                Cancel
+              </Button>
+            )}
           </>
         ) : (
-          <div className={`flex items-center gap-2 px-4 py-2 rounded-md w-full border ${isOnline ? 'text-green-700 bg-green-50 border-green-200' : 'text-red-700 bg-red-50 border-red-200'}`}>
+          <div className="flex items-center gap-2 px-4 py-2 rounded-md w-full border text-slate-700 bg-slate-50 border-slate-200">
             {isPinging ? (
               <RefreshCw className="w-5 h-5 animate-spin text-slate-400" />
             ) : isOnline ? (
-              <Wifi className="w-5 h-5" />
+              <Wifi className="w-5 h-5 text-green-500" />
             ) : (
-              <WifiOff className="w-5 h-5" />
+              <WifiOff className="w-5 h-5 text-red-500" />
             )}
             <div className="flex flex-col">
               <span className="font-semibold text-sm">
@@ -323,8 +337,8 @@ function ZimraDeviceConfig({ company }: { company: any }) {
                 {company.fiscalDayOpen ? `Day ${company.currentFiscalDayNo || '?'}` : 'No Active Day'}
               </span>
             </div>
-            <Button variant="ghost" size="sm" className="ml-auto" onClick={() => setDeviceId("") /* Reset for edit */}>
-              Re-configure
+            <Button variant="ghost" size="sm" className="ml-auto" onClick={() => setIsEditing(true)}>
+              Edit Configuration
             </Button>
           </div>
         )}

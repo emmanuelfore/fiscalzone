@@ -180,9 +180,10 @@ function ZimraDeviceConfig({ company }: { company: any }) {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
+      const env = data.currentEnvironment || "unknown";
       toast({
         title: "Environment Switched",
-        description: `Now using ZIMRA ${data.environment.toUpperCase()} endpoint.`,
+        description: `Now using ZIMRA ${env.toUpperCase()} endpoint.`,
         className: "bg-blue-600 text-white"
       });
     },

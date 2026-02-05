@@ -403,12 +403,17 @@ export class ZimraDevice {
         const url = `/Public/v1/${this.config.deviceId}/VerifyTaxpayerInformation`;
         console.log(`Verifying Taxpayer for DeviceID: ${this.config.deviceId}`);
 
-        return this.wrapRequest<TaxpayerInfo>('VerifyTaxpayerInformation', () =>
-            this.axiosInstance.post(url, {
+        return this.wrapRequest<TaxpayerInfo>('VerifyTaxpayerInformation', async () => {
+            const response = await this.axiosInstance.post(url, {
                 activationKey: this.config.activationKey,
                 deviceSerialNo: this.config.deviceSerialNo
-            })
-        );
+            });
+
+            if (this.logger) {
+                this.logger.log(null, 'Verify Taxpayer', { deviceId: this.config.deviceId, deviceSerialNo: this.config.deviceSerialNo }, response.data, response.status);
+            }
+            return response;
+        });
     }
 
     /**
@@ -439,6 +444,10 @@ export class ZimraDevice {
                 activationKey: this.config.activationKey,
                 certificateRequest: csrPem,
             });
+
+            if (this.logger) {
+                this.logger.log(null, 'Device Registration', { deviceId: this.config.deviceId, deviceSerialNo: this.config.deviceSerialNo }, response.data, response.status);
+            }
 
             if (response.status === 200 && response.data.certificate) {
                 return {

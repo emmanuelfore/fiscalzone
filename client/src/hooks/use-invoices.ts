@@ -4,16 +4,32 @@ import { type CreateInvoiceRequest } from "@shared/schema";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 
-export function useInvoices(companyId: number) {
+export interface InvoiceFilters {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: string;
+  type?: string;
+  dateFrom?: Date;
+  dateTo?: Date;
+}
+
+export function useInvoices(companyId: number, filters: InvoiceFilters = {}) {
   return useQuery({
-    queryKey: [api.invoices.list.path, companyId],
+    queryKey: [api.invoices.list.path, companyId, filters],
     queryFn: async () => {
-      const url = buildUrl(api.invoices.list.path, { companyId });
+      const queryParams: any = { companyId, ...filters };
+      // Convert dates to strings
+      if (filters.dateFrom) queryParams.dateFrom = filters.dateFrom.toISOString();
+      if (filters.dateTo) queryParams.dateTo = filters.dateTo.toISOString();
+
+      const url = buildUrl(api.invoices.list.path, queryParams);
       const res = await apiFetch(url);
       if (!res.ok) throw new Error("Failed to fetch invoices");
-      return api.invoices.list.responses[200].parse(await res.json());
+      return await res.json();
     },
     enabled: !!companyId,
+    placeholderData: (previousData) => previousData, // keepPreviousData logic
   });
 }
 

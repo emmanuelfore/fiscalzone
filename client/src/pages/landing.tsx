@@ -27,6 +27,7 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { motion, useScroll, useTransform } from "framer-motion";
 import { ContactForm } from "@/components/contact-form";
+import { WhatsAppBubble } from "@/components/ui/whatsapp-bubble";
 
 export default function LandingPage() {
     const [, setLocation] = useLocation();
@@ -72,7 +73,7 @@ export default function LandingPage() {
                                 <Button variant="ghost" className="font-medium hover:bg-violet-50 hover:text-violet-700" onClick={() => setLocation("/auth")}>
                                     Sign In
                                 </Button>
-                                <Button onClick={() => setLocation("/onboarding")} className="btn-gradient rounded-full px-6">
+                                <Button onClick={() => setLocation("/auth?mode=signup")} className="btn-gradient rounded-full px-6">
                                     Get Started
                                 </Button>
                             </div>
@@ -95,7 +96,7 @@ export default function LandingPage() {
                             </a>
                         ))}
                         <div className="pt-8 grid gap-4">
-                            <Button size="lg" className="w-full btn-gradient" onClick={() => setLocation("/onboarding")}>Get Started</Button>
+                            <Button size="lg" className="w-full btn-gradient" onClick={() => setLocation("/auth?mode=signup")}>Get Started</Button>
                             <Button size="lg" variant="outline" className="w-full" onClick={() => setLocation("/auth")}>Sign In</Button>
                         </div>
                     </div>
@@ -141,7 +142,7 @@ export default function LandingPage() {
                             </p>
 
                             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-                                <Button size="lg" className="h-14 px-8 rounded-full text-lg btn-gradient border-none transition-transform hover:scale-105" onClick={() => setLocation("/onboarding")}>
+                                <Button size="lg" className="h-14 px-8 rounded-full text-lg btn-gradient border-none transition-transform hover:scale-105" onClick={() => setLocation("/auth?mode=signup")}>
                                     Start Free Trial <ArrowRight className="ml-2 w-5 h-5" />
                                 </Button>
                                 <Button size="lg" variant="outline" className="h-14 px-8 rounded-full text-lg border-2 hover:bg-white bg-white/50 backdrop-blur-sm" onClick={() => setContactFormOpen(true)}>
@@ -193,14 +194,14 @@ export default function LandingPage() {
                             <motion.div
                                 animate={{ y: [0, -10, 0] }}
                                 transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                                className="absolute top-10 right-0 bg-white p-4 rounded-2xl shadow-lg border border-slate-100 z-10 flex items-center gap-2"
+                                className="absolute top-10 right-0 bg-white p-4 rounded-2xl shadow-lg border border-slate-100 z-40 flex items-center gap-2"
                             >
                                 <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600">
                                     <Cloud className="w-5 h-5" />
                                 </div>
                                 <div>
-                                    <div className="text-[10px] uppercase font-bold text-slate-400">Connected</div>
-                                    <div className="font-bold text-sm text-slate-800">ZIMRA Cloud</div>
+                                    <div className="text-[10px] uppercase font-bold text-slate-400">FDMS</div>
+                                    <div className="font-bold text-sm text-slate-800">Connected</div>
                                 </div>
                                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse ml-2" />
                             </motion.div>
@@ -221,27 +222,26 @@ export default function LandingPage() {
                                 />
 
                                 {/* Invoice Header */}
-                                <div className="bg-slate-50 p-6 border-b border-slate-100 flex justify-between items-start">
-                                    <div className="flex gap-4">
-                                        <div className="w-12 h-12 bg-slate-900 rounded-lg flex items-center justify-center text-white">
-                                            <div className="w-6 h-6 border-2 border-white rounded-full" />
+                                <div className="bg-slate-900 p-6 border-b border-slate-800 flex justify-between items-start text-white">
+                                    <div className="flex gap-4 items-center">
+                                        <div className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center">
+                                            <div className="w-5 h-5 border-2 border-white rounded-full" />
                                         </div>
                                         <div>
-                                            <div className="font-bold text-slate-900">TechSolutions Ltd</div>
-                                            <div className="text-xs text-slate-500">VAT: 123456789</div>
+                                            <div className="font-bold text-base">TechSolutions Ltd</div>
+                                            <div className="text-xs text-slate-400">VAT: 123456789</div>
                                         </div>
                                     </div>
                                     <div className="text-right">
-                                        <div className="text-xs text-slate-500 uppercase font-bold">Invoice</div>
-                                        <div className="text-lg font-mono text-slate-900">#INV-2024-001</div>
+                                        <div className="text-sm font-mono text-slate-300">#INV-2024-001</div>
                                     </div>
                                 </div>
 
                                 {/* Invoice Body */}
-                                <div className="p-6 space-y-4">
+                                <div className="p-6 space-y-5 bg-white">
                                     {/* Line Items */}
                                     <div className="space-y-3">
-                                        <div className="flex justify-between text-xs font-semibold text-slate-400 uppercase border-b border-slate-100 pb-2">
+                                        <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-2">
                                             <span>Description</span>
                                             <span>Amount</span>
                                         </div>
@@ -257,8 +257,8 @@ export default function LandingPage() {
                                                 transition={{ delay: 0.8 + (i * 0.2) }}
                                                 className="flex justify-between text-sm py-1"
                                             >
-                                                <span className="text-slate-700 font-medium">{item.desc}</span>
-                                                <span className="text-slate-900 font-bold">{item.price}</span>
+                                                <span className="text-slate-700">{item.desc}</span>
+                                                <span className="text-slate-900 font-bold font-mono">{item.price}</span>
                                             </motion.div>
                                         ))}
                                     </div>
@@ -267,24 +267,22 @@ export default function LandingPage() {
                                     <div className="pt-4 border-t border-slate-100 space-y-2">
                                         <div className="flex justify-between text-sm">
                                             <span className="text-slate-500">Subtotal</span>
-                                            <span className="text-slate-900 font-medium">$2,450.00</span>
+                                            <span className="text-slate-700 font-mono">$2,450.00</span>
                                         </div>
                                         <div className="flex justify-between text-sm">
                                             <span className="text-slate-500">VAT (15%)</span>
-                                            <span className="text-slate-900 font-medium">$367.50</span>
+                                            <span className="text-slate-700 font-mono">$367.50</span>
                                         </div>
-                                        <div className="flex justify-between text-lg font-bold pt-2 border-t border-slate-100 text-violet-600">
-                                            <span>Total</span>
-                                            <span>$2,817.50</span>
+                                        <div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-100">
+                                            <span className="text-slate-900 font-bold text-sm">Total</span>
+                                            <span className="text-violet-600 font-bold text-lg font-mono">$2,817.50</span>
                                         </div>
                                     </div>
 
                                     {/* Footer / QR / Stamp */}
-                                    <div className="flex justify-between items-center pt-4">
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-12 h-12 bg-slate-900 text-white flex items-center justify-center rounded-lg">
-                                                <QrCode className="w-8 h-8" />
-                                            </div>
+                                    <div className="flex justify-between items-center pt-2">
+                                        <div className="flex items-center gap-3">
+                                            <QrCode className="w-10 h-10 text-slate-800" />
                                             <div className="text-[10px] text-slate-400 leading-tight">
                                                 Scan to verify<br />Fiscal Signature
                                             </div>
@@ -293,8 +291,8 @@ export default function LandingPage() {
                                         <motion.div
                                             initial={{ scale: 3, opacity: 0 }}
                                             animate={{ scale: 1, opacity: 1 }}
-                                            transition={{ delay: 2, type: "spring", stiffness: 300, damping: 20 }}
-                                            className="px-3 py-1 border-2 border-green-500 text-green-600 rounded-md font-bold uppercase text-xs tracking-widest transform -rotate-12"
+                                            transition={{ delay: 2, type: "spring", stiffness: 200, damping: 15 }}
+                                            className="px-3 py-1 border-2 border-green-600 text-green-700 rounded-md font-bold uppercase text-xs tracking-wider transform -rotate-6 bg-green-50"
                                         >
                                             Fiscalized
                                         </motion.div>
@@ -399,7 +397,7 @@ export default function LandingPage() {
                                         </li>
                                     ))}
                                 </ul>
-                                <Button className={`w-full h-12 rounded-xl font-bold ${plan.popular ? 'btn-gradient' : 'bg-slate-900 text-white hover:bg-slate-800'}`} onClick={() => setLocation("/onboarding")}>
+                                <Button className={`w-full h-12 rounded-xl font-bold ${plan.popular ? 'btn-gradient' : 'bg-slate-900 text-white hover:bg-slate-800'}`} onClick={() => setLocation("/auth?mode=signup")}>
                                     Get Started
                                 </Button>
                             </motion.div>
@@ -541,6 +539,9 @@ export default function LandingPage() {
 
             {/* Contact Form Modal */}
             <ContactForm isOpen={contactFormOpen} onClose={() => setContactFormOpen(false)} />
+
+            {/* WhatsApp Floating Bubble */}
+            <WhatsAppBubble />
         </div>
     );
 }

@@ -48,10 +48,6 @@ export async function registerRoutes(
   const requireOwner = async (req: any, res: any, next: any) => {
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
 
-    // PERMISSION BYPASS: All users have permission to do everything
-    return next();
-
-    /* ORIGINAL LOGIC
     if (req.user?.isSuperAdmin) return next();
 
     // Resolve companyId strictly
@@ -75,7 +71,6 @@ export async function registerRoutes(
       return res.status(403).json({ message: "Owner permission required" });
     }
     next();
-    */
   };
 
   const requireAuth = async (req: any, res: any, next: any) => {
@@ -84,10 +79,6 @@ export async function registerRoutes(
 
     if (!isAuth) return res.status(401).json({ message: "Unauthorized" });
 
-    // PERMISSION BYPASS: All users have permission to do everything
-    return next();
-
-    /* ORIGINAL LOGIC
     if (req.user?.isSuperAdmin) return next();
 
     // Resolve companyId strictly
@@ -107,12 +98,11 @@ export async function registerRoutes(
     const users = await storage.getCompanyUsers(companyId);
     const me = users.find(u => u.id === req.user.id);
 
-    if (!me || (me.role !== 'owner' && me.role !== 'staff' && me.role !== 'admin')) {
+    if (!me || (me.role !== 'owner' && me.role !== 'staff' && me.role !== 'admin' && me.role !== 'member')) {
       console.log(`[requireAuth] 403 FORBIDDEN: User ${req.user.id} not in company ${companyId} or insufficient role`);
       return res.status(403).json({ message: "Insufficient permissions" });
     }
     next();
-    */
   };
 
   const requireAuthOrApiKey = async (req: any, res: any, next: any) => {
@@ -606,6 +596,24 @@ export async function registerRoutes(
   app.get(api.companies.list.path, requireAuth, async (req, res) => {
     const companies = await storage.getCompanies((req as any).user?.id);
     res.json(companies);
+  });
+
+  app.post("/api/companies/:companyId/api-key", requireOwner, async (req, res) => {
+    const companyId = parseInt(req.params.companyId);
+    // Generate a secure random API key
+    const apiKey = await import("crypto").then(c => c.randomBytes(32).toString("hex"));
+
+    const updatedCompany = await storage.updateCompany(companyId, { apiKey });
+    // Log the action for security audit
+    await logAction(
+      req.user!.id,
+      companyId,
+      "UPDATE_COMPANY_SETTINGS",
+      "Using Settings",
+      { action: "generated_api_key" }
+    );
+
+    res.json({ apiKey });
   });
 
   app.post(api.companies.create.path, requireAuth, async (req, res) => {
@@ -2462,10 +2470,63 @@ export async function registerRoutes(
     }
   });
 
+  // --- Tax Types Management ---
+
+  app.get("/api/tax-types", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    const companyId = req.query.companyId ? parseInt(req.query.companyId as string) : undefined;
+    // Allow seeing system defaults even if companyId is provided (logic inside storage)
+    const taxes = await storage.getTaxTypes(companyId);
+    res.json(taxes);
+  });
+
+  app.post("/api/tax-types", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    const data = insertTaxTypeSchema.parse(req.body);
+    const companyId = req.body.companyId; // Should be passed or derived from context
+
+    // Basic validation
+    if (!companyId) return res.status(400).json({ message: "Company ID is required" });
+
+    const newTax = await storage.createTaxType({ ...data, companyId });
+    res.json(newTax);
+  });
+
+  app.put("/api/tax-types/:id", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    const id = parseInt(req.params.id);
+    const companyId = req.body.companyId;
+
+    if (!companyId) return res.status(400).json({ message: "Company ID is required for verification" });
+
+    // We use partial update
+    const updated = await storage.updateTaxType(id, companyId, req.body);
+    if (!updated) return res.status(404).json({ message: "Tax Type not found" });
+
+    res.json(updated);
+  });
+
   // Invoice Routes
   app.get(api.invoices.list.path, requireAuth, async (req, res) => {
-    const invoices = await storage.getInvoices(Number(req.params.companyId));
-    res.json(invoices);
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const search = req.query.search as string | undefined;
+    const status = req.query.status as string | undefined;
+    const type = req.query.type as string | undefined;
+    const dateFrom = req.query.dateFrom ? new Date(req.query.dateFrom as string) : undefined;
+    const dateTo = req.query.dateTo ? new Date(req.query.dateTo as string) : undefined;
+
+    const result = await storage.getInvoicesPaginated(
+      Number(req.params.companyId),
+      page,
+      limit,
+      search,
+      status,
+      type,
+      dateFrom,
+      dateTo
+    );
+    res.json(result);
   });
 
   app.post(api.invoices.create.path, requireAuth, async (req, res) => {
@@ -2698,13 +2759,37 @@ export async function registerRoutes(
         }
 
         let taxID = 0;
-        const itemTaxTypeId = (item as any).taxTypeId;
 
-        // Primary: Use stored taxTypeId if available
-        if (itemTaxTypeId) {
-          const matchedTax = dbTaxTypes.find(t => t.id === itemTaxTypeId);
-          if (matchedTax && matchedTax.zimraTaxId) {
-            taxID = parseInt(matchedTax.zimraTaxId);
+        // ROBUST TAX ID RESOLUTION 
+        // Priority 1: Product Config (Master Data)
+        // Priority 2: Item Config (Transactional Data)
+        const effectiveTaxTypeId = (item as any).product?.taxTypeId || (item as any).taxTypeId;
+
+        if (effectiveTaxTypeId) {
+          const matchedTax = dbTaxTypes.find(t => t.id === effectiveTaxTypeId);
+          if (matchedTax) {
+            // 1. Explicit ZIMRA Mapping
+            if (matchedTax.zimraTaxId) {
+              taxID = parseInt(matchedTax.zimraTaxId);
+            }
+            // 2. Name-based resolution (Case-insensitive)
+            else {
+              const name = matchedTax.name.toLowerCase();
+              if (name.includes('exempt')) {
+                taxID = 1;
+              } else if (name.includes('zero') || name.includes('0%')) {
+                taxID = 2;
+              } else if (name.includes('standard') || name.includes('vat')) {
+                taxID = 3;
+              }
+            }
+
+            // 3. Fallback based on Rate if still 0
+            if (taxID === 0) {
+              const rate = Number(matchedTax.rate);
+              if (rate === 0) taxID = 2; // Default to Zero Rated for 0%
+              else taxID = 3; // Default to Standard for >0%
+            }
           }
         }
 
@@ -2989,7 +3074,7 @@ export async function registerRoutes(
       }
 
       const updatedInvoice = await storage.fiscalizeInvoice(invoiceId, {
-        fiscalCode: result.hash,
+        fiscalCode: result.verificationCode || result.hash,
         fiscalSignature: result.signature,
         qrCodeData: qrCode,
         fiscalDayNo: company.currentFiscalDayNo ?? undefined,
@@ -3223,6 +3308,10 @@ export async function registerRoutes(
       // Get Company Settings for API Key
       const company = await storage.getCompany(invoice.companyId);
       const emailSettings = company?.emailSettings as any; // Cast jsonb to any or specific interface
+
+      console.log("[DEBUG] Email Route - Company ID:", invoice.companyId);
+      console.log("[DEBUG] Email Route - Email Settings:", JSON.stringify(emailSettings, null, 2));
+      console.log("[DEBUG] Email Route - Target Email:", email);
 
       await sendInvoiceEmail(email, invoice.invoiceNumber, pdfBuffer, emailSettings);
 

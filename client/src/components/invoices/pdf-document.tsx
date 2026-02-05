@@ -407,8 +407,10 @@ export const InvoicePDF = ({ invoice, company, customer, qrCodeUrl, taxTypes }: 
 
                         // ZIMRA Spec: "Price" column. Is it Unit Price? Yes usually.
                         const matchingTax = taxTypes?.find(t => t.id == item.taxTypeId);
-                        const isZeroRated = matchingTax?.zimraTaxId == 2 || matchingTax?.zimraTaxId == "2" || matchingTax?.zimraCode === 'D' || matchingTax?.name?.toLowerCase().includes('zero rated');
-                        const isExempt = matchingTax?.zimraTaxId == 1 || matchingTax?.zimraTaxId == "1" || matchingTax?.zimraCode === 'C' || matchingTax?.zimraCode === 'E' || matchingTax?.name?.toLowerCase().includes('exempt') || (taxRate === 0 && !isZeroRated);
+
+                        // Strict check for Exempt vs Zero Rated
+                        const isExempt = matchingTax?.zimraTaxId == 1 || matchingTax?.zimraTaxId == "1" || matchingTax?.name?.toLowerCase().includes('exempt');
+                        const isZeroRated = matchingTax?.zimraTaxId == 2 || matchingTax?.zimraTaxId == "2" || matchingTax?.name?.toLowerCase().includes('zero rated') || (!isExempt && taxRate === 0);
 
                         return (
                             <View key={i} style={styles.tableRow}>
@@ -419,7 +421,7 @@ export const InvoicePDF = ({ invoice, company, customer, qrCodeUrl, taxTypes }: 
                                         <Text style={styles.colExQty}>{qty}</Text>
                                         <Text style={styles.colExPrice}>{displayPrice.toFixed(2)}</Text>
                                         <Text style={styles.colExAmt}>{displayAmtExcl.toFixed(2)}</Text>
-                                        <Text style={styles.colExVat}>{isExempt ? "" : (isZeroRated || vatAmt === 0 ? "0.00" : vatAmt.toFixed(2))}</Text>
+                                        <Text style={styles.colExVat}>{isExempt ? "-" : (isZeroRated || vatAmt === 0 ? "0.00" : vatAmt.toFixed(2))}</Text>
                                         <Text style={styles.colExTotal}>{displayTotalIncl.toFixed(2)}</Text>
                                     </>
                                 ) : (
@@ -428,7 +430,7 @@ export const InvoicePDF = ({ invoice, company, customer, qrCodeUrl, taxTypes }: 
                                         <Text style={styles.colDesc}>{item.description}</Text>
                                         <Text style={styles.colQty}>{qty}</Text>
                                         <Text style={styles.colPrice}>{displayPrice.toFixed(2)}</Text>
-                                        <Text style={styles.colVat}>{isExempt ? "" : (isZeroRated || vatAmt === 0 ? "0.00" : vatAmt.toFixed(2))}</Text>
+                                        <Text style={styles.colVat}>{isExempt ? "-" : (isZeroRated || vatAmt === 0 ? "0.00" : vatAmt.toFixed(2))}</Text>
                                         <Text style={styles.colTotal}>{displayTotalIncl.toFixed(2)}</Text>
                                     </>
                                 )}
@@ -443,7 +445,7 @@ export const InvoicePDF = ({ invoice, company, customer, qrCodeUrl, taxTypes }: 
                     <View style={styles.taxTable}>
                         <Text style={[styles.sectionTitle, { marginBottom: 4, borderBottomWidth: 0 }]}>Tax Analysis</Text>
                         <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderColor: '#e2e8f0', paddingBottom: 2 }}>
-                            <Text style={{ fontSize: 8, width: '25%', color: '#64748b' }}></Text>
+                            <Text style={{ fontSize: 8, width: '25%', color: '#64748b' }}>VAT %</Text>
                             <Text style={{ fontSize: 8, width: '25%', textAlign: 'right', color: '#64748b' }}>Net.Amt</Text>
                             <Text style={{ fontSize: 8, width: '25%', textAlign: 'right', color: '#64748b' }}>VAT</Text>
                             <Text style={{ fontSize: 8, width: '25%', textAlign: 'right', color: '#64748b' }}>Amount</Text>
@@ -505,19 +507,19 @@ export const InvoicePDF = ({ invoice, company, customer, qrCodeUrl, taxTypes }: 
                                 <View key={key} style={{ flexDirection: 'row', paddingTop: 2 }}>
                                     <Text style={{ fontSize: 8, width: '25%' }}>{(() => {
                                         const mTax = taxTypes?.find(t => t.id == data.taxTypeId);
-                                        const isZeroRated = mTax?.zimraTaxId == 2 || mTax?.zimraTaxId == "2" || mTax?.zimraCode === 'D' || mTax?.name?.toLowerCase().includes('zero rated');
-                                        const isExempt = mTax?.zimraTaxId == 1 || mTax?.zimraTaxId == "1" || mTax?.zimraCode === 'C' || mTax?.zimraCode === 'E' || mTax?.name?.toLowerCase().includes('exempt') || (data.taxRate === 0 && !isZeroRated);
+                                        const isExempt = mTax?.zimraTaxId == 1 || mTax?.zimraTaxId == "1" || mTax?.name?.toLowerCase().includes('exempt');
+                                        const isZeroRated = mTax?.zimraTaxId == 2 || mTax?.zimraTaxId == "2" || mTax?.name?.toLowerCase().includes('zero rated') || (!isExempt && data.taxRate === 0);
 
                                         if (isExempt) return mTax?.name || "Exempt";
-                                        if (isZeroRated) return "VAT 0.00%";
-                                        return mTax?.name || "VAT";
+                                        return `${Number(data.taxRate).toFixed(2)}%`;
                                     })()}</Text>
                                     <Text style={{ fontSize: 8, width: '25%', textAlign: 'right' }}>{data.netAmount.toFixed(2)}</Text>
                                     <Text style={{ fontSize: 8, width: '25%', textAlign: 'right' }}>{(() => {
                                         const mTax = taxTypes?.find(t => t.id == data.taxTypeId);
-                                        const isZeroRated = mTax?.zimraTaxId == 2 || mTax?.zimraTaxId == "2" || mTax?.zimraCode === 'D' || mTax?.name?.toLowerCase().includes('zero rated');
-                                        const isExempt = mTax?.zimraTaxId == 1 || mTax?.zimraTaxId == "1" || mTax?.zimraCode === 'C' || mTax?.zimraCode === 'E' || mTax?.name?.toLowerCase().includes('exempt') || (data.taxRate === 0 && !isZeroRated);
-                                        return isExempt ? "" : (isZeroRated || data.taxAmount === 0 ? "0.00" : data.taxAmount.toFixed(2));
+                                        const isExempt = mTax?.zimraTaxId == 1 || mTax?.zimraTaxId == "1" || mTax?.name?.toLowerCase().includes('exempt');
+                                        const isZeroRated = mTax?.zimraTaxId == 2 || mTax?.zimraTaxId == "2" || mTax?.name?.toLowerCase().includes('zero rated') || (!isExempt && data.taxRate === 0);
+
+                                        return isExempt ? "-" : (isZeroRated || data.taxAmount === 0 ? "0.00" : data.taxAmount.toFixed(2));
                                     })()}</Text>
                                     <Text style={{ fontSize: 8, width: '25%', textAlign: 'right' }}>{data.totalAmount.toFixed(2)}</Text>
                                 </View>

@@ -46,7 +46,8 @@ export default function Dashboard() {
   const { user } = useAuth();
   const { activeCompany, isLoading: isLoadingCompany } = useActiveCompany();
   const selectedCompany = activeCompany;
-  const { data: invoices, isLoading } = useInvoices(selectedCompany?.id || 0);
+  const { data: invoicesResult, isLoading } = useInvoices(selectedCompany?.id || 0, { limit: 5 });
+  const invoices = invoicesResult?.data;
   const [, setLocation] = useLocation();
 
   const { data: summary, isLoading: isLoadingSummary } = useQuery({

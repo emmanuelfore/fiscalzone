@@ -1140,6 +1140,11 @@ export default function CreateInvoicePage() {
                           totalAmt = lineVal + vatAmt;
                         }
 
+                        // Determine Tax Status
+                        const matchingType = taxTypes.data?.find((t: any) => t.id == item.taxTypeId);
+                        const isExempt = matchingType?.zimraTaxId == 1 || matchingType?.zimraTaxId == "1" || matchingType?.zimraCode === 'C' || matchingType?.zimraCode === 'E' || matchingType?.name?.toLowerCase().includes('exempt');
+                        const isZeroRated = matchingType?.zimraTaxId == 2 || matchingType?.zimraTaxId == "2" || matchingType?.zimraCode === 'D' || matchingType?.name?.toLowerCase().includes('zero rated') || (!isExempt && item.taxRate === 0);
+
                         return (
                           <motion.tr
                             key={item.localId}
@@ -1438,7 +1443,7 @@ export default function CreateInvoicePage() {
                 <div className="bg-slate-50 rounded-lg p-3 border border-slate-200 my-4">
                   <h4 className="text-[10px] font-bold text-slate-700 uppercase mb-2 text-center">Tax Analysis</h4>
                   <div className="grid grid-cols-4 gap-2 text-[9px] font-bold text-slate-500 uppercase mb-1 border-b border-slate-200 pb-1">
-                    <div></div>
+                    <div className="text-left font-bold text-slate-500 uppercase">VAT %</div>
                     <div className="text-right">Net.Amt</div>
                     <div className="text-right">VAT</div>
                     <div className="text-right">Amount</div>
@@ -1446,19 +1451,21 @@ export default function CreateInvoicePage() {
                   <div className="space-y-1">
                     {Object.entries(taxBreakdown).map(([key, vals]) => {
                       const mTax = taxTypes.data?.find((t: any) => t.id == vals.taxTypeId);
-                      const isZeroRated = mTax?.zimraTaxId == 2 || mTax?.zimraTaxId == "2" || mTax?.zimraCode === 'D' || mTax?.name?.toLowerCase().includes('zero rated');
-                      const isExempt = mTax?.zimraTaxId == 1 || mTax?.zimraTaxId == "1" || mTax?.zimraCode === 'C' || mTax?.zimraCode === 'E' || mTax?.name?.toLowerCase().includes('exempt') || (vals.rate === 0 && !isZeroRated);
+                      // Strict check for Exempt first
+                      const isExempt = mTax?.zimraTaxId == 1 || mTax?.zimraTaxId == "1" || mTax?.zimraCode === 'C' || mTax?.zimraCode === 'E' || mTax?.name?.toLowerCase().includes('exempt');
+                      // If not explicitly exempt, and rate is 0, default to Zero Rated (matches backend)
+                      const isZeroRated = mTax?.zimraTaxId == 2 || mTax?.zimraTaxId == "2" || mTax?.zimraCode === 'D' || mTax?.name?.toLowerCase().includes('zero rated') || (!isExempt && vals.rate === 0);
 
                       return (
                         <div key={key} className="grid grid-cols-4 gap-2 text-[10px] items-center py-1 border-b border-slate-100 last:border-0">
                           <div className="text-slate-600 truncate">
-                            {isExempt ? (mTax?.name || "Exempt") : (isZeroRated ? "0.00%" : (mTax?.name || "VAT"))}
+                            {isExempt ? (mTax?.name || "Exempt") : `${Number(vals.rate).toFixed(2)}%`}
                           </div>
                           <div className="text-right font-mono text-slate-700">
                             {vals.net.toFixed(2)}
                           </div>
                           <div className="text-right font-mono text-slate-700">
-                            {isExempt ? "" : vals.tax.toFixed(2)}
+                            {isExempt ? "-" : vals.tax.toFixed(2)}
                           </div>
                           <div className="text-right font-mono font-bold text-slate-900">
                             {(vals.net + vals.tax).toFixed(2)}
@@ -1656,6 +1663,6 @@ export default function CreateInvoicePage() {
           </div>
         </DialogContent>
       </Dialog>
-    </Layout>
+    </Layout >
   );
 }

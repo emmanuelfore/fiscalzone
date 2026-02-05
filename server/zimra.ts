@@ -378,6 +378,22 @@ export class ZimraDevice {
         }
     }
 
+    public calculateVerificationCode(signatureBase64: string): string {
+        try {
+            // 1. Decode Base64
+            const buf = Buffer.from(signatureBase64, 'base64');
+            // 2. Convert to Hex (Upper case)
+            const hex = buf.toString('hex').toUpperCase();
+            // 3. MD5 Hash
+            const md5 = crypto.createHash('md5').update(hex).digest('hex').toUpperCase();
+            // 4. Format: XXXX-XXXX-XXXX-XXXX
+            return `${md5.slice(0, 4)}-${md5.slice(4, 8)}-${md5.slice(8, 12)}-${md5.slice(12, 16)}`;
+        } catch (e) {
+            console.error("Failed to generate verification code:", e);
+            return "";
+        }
+    }
+
     // --- Public Methods ---
 
     /**
@@ -628,6 +644,7 @@ export class ZimraDevice {
         response: any;
         signature: string;
         hash: string;
+        verificationCode: string;
         synced: boolean;
         validationResult?: ReceiptValidationResult;
     }> {
@@ -695,17 +712,20 @@ export class ZimraDevice {
 
             // Check if the response contains validation errors
             const validationResult = this.parseValidationResponse(response);
+            const verificationCode = this.calculateVerificationCode(signature);
+
             if (!validationResult.valid) {
                 return {
                     response,
                     signature,
                     hash,
+                    verificationCode,
                     synced: true,
                     validationResult
                 };
             }
 
-            return { response, signature, hash, synced: true };
+            return { response, signature, hash, verificationCode, synced: true };
         } catch (error) {
             if (allowOffline && error instanceof ZimraOfflineError) {
                 console.info("Offline Fallback: Returning generated signatures for local record.");
@@ -713,6 +733,7 @@ export class ZimraDevice {
                     response: null,
                     signature,
                     hash,
+                    verificationCode: this.calculateVerificationCode(signature),
                     synced: false
                 };
             }
@@ -1020,8 +1041,8 @@ export class ZimraDevice {
         const signatureBytes = Buffer.from(result.signature, 'base64');
         // 2. Convert to Hex
         const hexStr = signatureBytes.toString('hex').toLowerCase();
-        // 3. MD5 Hash
-        const md5Hash = crypto.createHash('md5').update(hexStr).digest('hex').toLowerCase();
+        // 3. MD5 Hash of RAW BYTES (not hex string)
+        const md5Hash = crypto.createHash('md5').update(signatureBytes).digest('hex').toUpperCase();
         // 4. First 16 chars
         const verificationCode = md5Hash.substring(0, 16).toUpperCase();
 
@@ -1050,8 +1071,9 @@ export class ZimraDevice {
 
         try {
             const signatureBytes = Buffer.from(signature, 'base64');
-            const hexStr = signatureBytes.toString('hex').toLowerCase(); // ZIMRA expects lowercase hex
-            const md5Hash = crypto.createHash('md5').update(hexStr).digest('hex').toLowerCase();
+            const hexStr = signatureBytes.toString('hex').toLowerCase(); // Keep for debug if needed, but hash bytes
+            // MD5 Hash of RAW BYTES
+            const md5Hash = crypto.createHash('md5').update(signatureBytes).digest('hex').toUpperCase();
             const finalHash = md5Hash.substring(0, 16);
 
             // 2. Build String

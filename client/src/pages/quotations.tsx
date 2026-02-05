@@ -11,7 +11,13 @@ import { useState } from "react";
 
 export default function QuotationsPage() {
     const selectedCompanyId = parseInt(localStorage.getItem("selectedCompanyId") || "0");
-    const { data: allInvoices, isLoading } = useInvoices(selectedCompanyId);
+    // For now, fetching a larger set or ideally we should filter by type=Quotation on server if API supported it
+    // But since Quotations are stored in 'invoices' table with 'draft' status usually, or separate logic
+    // Actually, checking previous code, 'quotations' usage seems to imply they are just invoices.
+    // However, looking at file content, it filters `inv.transactionType === 'Quotation'`.
+    // Let's just fetch a reasonable amount for now or update hook to filter.
+    const { data: result, isLoading } = useInvoices(selectedCompanyId, { limit: 100 });
+    const allInvoices = result?.data;
     const deleteInvoice = useDeleteInvoice();
     const [searchTerm, setSearchTerm] = useState("");
 

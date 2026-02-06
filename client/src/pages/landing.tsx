@@ -23,11 +23,12 @@ import {
     ChevronDown,
     HelpCircle
 } from "lucide-react";
-import { useState } from "react";
+import { useState, lazy, Suspense } from "react";
 import { useLocation } from "wouter";
 import { motion, useScroll, useTransform } from "framer-motion";
-import { ContactForm } from "@/components/contact-form";
 import { WhatsAppBubble } from "@/components/ui/whatsapp-bubble";
+
+const ContactForm = lazy(() => import("@/components/contact-form").then(module => ({ default: module.ContactForm })));
 
 export default function LandingPage() {
     const [, setLocation] = useLocation();
@@ -214,12 +215,9 @@ export default function LandingPage() {
                                 style={{ y: y2 }}
                                 className="relative w-full max-w-md bg-white rounded-xl shadow-2xl border border-slate-100 overflow-hidden z-20"
                             >
-                                {/* Scanner Beam */}
-                                <motion.div
-                                    animate={{ top: ["0%", "100%", "0%"] }}
-                                    transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
-                                    className="absolute left-0 right-0 h-16 bg-gradient-to-b from-transparent via-cyan-400/20 to-transparent z-30 pointer-events-none"
-                                />
+                                {
+                                    /* Scanner Beam Removed */
+                                }
 
                                 {/* Invoice Header */}
                                 <div className="bg-slate-900 p-6 border-b border-slate-800 flex justify-between items-start text-white">
@@ -538,7 +536,11 @@ export default function LandingPage() {
             </footer>
 
             {/* Contact Form Modal */}
-            <ContactForm isOpen={contactFormOpen} onClose={() => setContactFormOpen(false)} />
+            {contactFormOpen && (
+                <Suspense fallback={null}>
+                    <ContactForm isOpen={contactFormOpen} onClose={() => setContactFormOpen(false)} />
+                </Suspense>
+            )}
 
             {/* WhatsApp Floating Bubble */}
             <WhatsAppBubble />

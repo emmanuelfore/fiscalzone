@@ -1,5 +1,5 @@
 
-import { pgTable, text, serial, integer, boolean, timestamp, decimal, jsonb, primaryKey, uuid, date, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, decimal, jsonb, primaryKey, uuid, date, unique, index } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -90,6 +90,11 @@ export const companyUsers = pgTable("company_users", {
   userId: uuid("user_id").references(() => users.id).notNull(),
   companyId: integer("company_id").references(() => companies.id).notNull(),
   role: text("role").default("member"), // owner, admin, member
+}, (table) => {
+  return {
+    userIdIdx: index("company_users_user_id_idx").on(table.userId),
+    companyIdIdx: index("company_users_company_id_idx").on(table.companyId),
+  };
 });
 
 export const companyUsersRelations = relations(companyUsers, ({ one }) => ({
@@ -117,6 +122,10 @@ export const customers = pgTable("customers", {
   isActive: boolean("is_active").default(true),
   currency: text("currency").default("USD"),
   createdAt: timestamp("created_at").defaultNow(),
+}, (table) => {
+  return {
+    companyIdIdx: index("customers_company_id_idx").on(table.companyId),
+  };
 });
 
 export const customersRelations = relations(customers, ({ one, many }) => ({
@@ -205,6 +214,10 @@ export const products = pgTable("products", {
   taxCategoryId: integer("tax_category_id").references(() => taxCategories.id),
   taxTypeId: integer("tax_type_id").references(() => taxTypes.id),
   createdAt: timestamp("created_at").defaultNow(),
+}, (table) => {
+  return {
+    companyIdIdx: index("products_company_id_idx").on(table.companyId),
+  };
 });
 
 export const productsRelations = relations(products, ({ one }) => ({
@@ -271,6 +284,12 @@ export const invoices = pgTable("invoices", {
   invoiceTemplate: text("invoice_template").default("modern"),
 
   createdAt: timestamp("created_at").defaultNow(),
+}, (table) => {
+  return {
+    companyIdIdx: index("invoices_company_id_idx").on(table.companyId),
+    customerIdIdx: index("invoices_customer_id_idx").on(table.customerId),
+    invoiceNumberIdx: index("invoices_invoice_number_idx").on(table.invoiceNumber),
+  };
 });
 
 
@@ -286,7 +305,12 @@ export const invoiceItems = pgTable("invoice_items", {
   taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).notNull(),
   lineTotal: decimal("line_total", { precision: 10, scale: 2 }).notNull(),
   taxTypeId: integer("tax_type_id").references(() => taxTypes.id),
+}, (table) => {
+  return {
+    invoiceIdIdx: index("invoice_items_invoice_id_idx").on(table.invoiceId),
+  };
 });
+
 
 export const invoiceItemsRelations = relations(invoiceItems, ({ one }) => ({
   invoice: one(invoices, { fields: [invoiceItems.invoiceId], references: [invoices.id] }),
@@ -320,7 +344,7 @@ export const insertUserSchema = createInsertSchema(users).omit({ createdAt: true
 export const insertCompanySchema = createInsertSchema(companies).omit({ id: true, createdAt: true });
 export const insertCustomerSchema = createInsertSchema(customers).omit({ id: true, createdAt: true }).extend({
   tin: z.string().regex(/^\d{10}$/, "TIN must be exactly 10 digits").or(z.string().length(0)).nullable().optional(),
-  vatNumber: z.string().regex(/^\d{9}$/, "VAT number must be exactly 9 digits").or(z.string().length(0)).nullable().optional(),
+  vatNumber: z.string().regex(/^\d{9,10}$/, "VAT number must be 9 or 10 digits").or(z.string().length(0)).nullable().optional(),
   bpNumber: z.string().regex(/^\d{10}$/, "BP number must be exactly 10 digits").or(z.string().length(0)).nullable().optional(),
 });
 export const insertProductSchema = createInsertSchema(products).omit({ id: true, createdAt: true }).extend({

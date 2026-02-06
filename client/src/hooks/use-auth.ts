@@ -17,6 +17,9 @@ export function useAuth() {
       if (session) {
         queryClient.invalidateQueries({ queryKey: ["/api/user"] });
       }
+    }).catch((err) => {
+      console.error("Supabase Session Error:", err);
+      setIsSupabaseLoading(false);
     });
 
     const {

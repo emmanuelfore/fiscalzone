@@ -60,13 +60,20 @@ export default function AuthPage() {
     try {
       setError(null);
       setIsLoggingIn(true);
-      await registerWithPassword({
+      const data = await registerWithPassword({
         email: signupData.email,
         password: signupData.password,
         name: signupData.name
       });
 
-      setSuccessMsg("Account created! Logging you in...");
+      if (data?.session) {
+        setSuccessMsg("Account created! Logging you in...");
+      } else if (data?.user && !data?.session) {
+        setSuccessMsg("Account created! Please check your email to verify your account before logging in.");
+        setIsLoggingIn(false); // Stop loading spinner so they can read it
+      } else {
+        setSuccessMsg("Account created! Redirecting...");
+      }
     } catch (error: any) {
       console.error("Signup failed:", error);
       setError(error.message || "Registration failed");
@@ -162,6 +169,8 @@ export default function AuthPage() {
                   <Input
                     id="email"
                     type="email"
+                    name="email"
+                    autoComplete="email"
                     placeholder="name@company.com"
                     value={loginData.email}
                     onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
@@ -178,6 +187,8 @@ export default function AuthPage() {
                   <Input
                     id="password"
                     type="password"
+                    name="password"
+                    autoComplete="current-password"
                     value={loginData.password}
                     onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
                     required
@@ -208,6 +219,8 @@ export default function AuthPage() {
                   <Label htmlFor="name">Full Name</Label>
                   <Input
                     id="name"
+                    name="name"
+                    autoComplete="name"
                     placeholder="John Doe"
                     value={signupData.name}
                     onChange={(e) => setSignupData({ ...signupData, name: e.target.value })}
@@ -219,6 +232,8 @@ export default function AuthPage() {
                   <Input
                     id="signup-email"
                     type="email"
+                    name="email"
+                    autoComplete="email"
                     placeholder="name@company.com"
                     value={signupData.email}
                     onChange={(e) => setSignupData({ ...signupData, email: e.target.value })}
@@ -230,6 +245,8 @@ export default function AuthPage() {
                   <Input
                     id="signup-password"
                     type="password"
+                    name="password"
+                    autoComplete="new-password"
                     value={signupData.password}
                     onChange={(e) => setSignupData({ ...signupData, password: e.target.value })}
                     required
@@ -241,6 +258,8 @@ export default function AuthPage() {
                   <Input
                     id="confirm-password"
                     type="password"
+                    name="confirmPassword"
+                    autoComplete="new-password"
                     value={signupData.confirmPassword}
                     onChange={(e) => setSignupData({ ...signupData, confirmPassword: e.target.value })}
                     required

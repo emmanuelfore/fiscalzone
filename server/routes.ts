@@ -1729,7 +1729,7 @@ export async function registerRoutes(
 
       const response = formatRevMaxResponse("1", "Success", {
         TIN: company.tin || "",
-        BPN: company.bpn || "",
+        BPN: company.bpNumber || "",
         VAT: company.vatNumber || "",
         COMPANYNAME: company.name || "",
         ADDRESS: company.address || "",
@@ -2092,8 +2092,7 @@ export async function registerRoutes(
 
         await storage.updateCompany(companyId, {
           fiscalDayOpen: false,
-          lastFiscalDayStatus: 'FiscalDayClosed',
-          fiscalDayClosedAt: new Date()
+          lastFiscalDayStatus: 'FiscalDayClosed'
         });
 
         // Get Z-Report data

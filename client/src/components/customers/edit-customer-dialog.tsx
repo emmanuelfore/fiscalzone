@@ -169,7 +169,7 @@ export function EditCustomerDialog({ customer, trigger }: Props) {
                             <div className="grid grid-cols-3 gap-4 p-4 bg-slate-50 rounded-lg border">
                                 <div className="col-span-3 font-medium text-sm text-slate-700 mb-2 flex items-center justify-between">
                                     <span>Business Details</span>
-                                    <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">ZIMRA Requirement: 10 Digits</span>
+                                    <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">ZIMRA Requirement: TIN/BP 10 Digits, VAT 9 Digits</span>
                                 </div>
                                 <FormField
                                     control={form.control}

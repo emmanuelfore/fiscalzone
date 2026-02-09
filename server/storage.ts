@@ -180,9 +180,9 @@ export class DatabaseStorage implements IStorage {
         },
         {
           companyId: newCompany.id,
-          code: "ZIG",
+          code: "ZWG",
           name: "Zimbabwe Gold",
-          symbol: "ZiG",
+          symbol: "ZWG",
           exchangeRate: "13.500000",
           isBase: false,
           isActive: true
@@ -428,6 +428,7 @@ export class DatabaseStorage implements IStorage {
 
       return invoice;
     });
+
   }
 
   async updateInvoice(id: number, data: Partial<InsertInvoice> & { items?: any[] }): Promise<Invoice> {
@@ -739,11 +740,20 @@ export class DatabaseStorage implements IStorage {
         return sum + amount;
       }, 0);
 
+    // Calculate Pending Credit Notes (Issued but not paid/cancelled) to subtract from Pending Amount
+    const pendingCNs = companyInvoices
+      .filter(i => i.status === 'issued' && i.transactionType === 'CreditNote')
+      .reduce((sum, inv) => {
+        const amount = Number(inv.total) / Number(inv.exchangeRate || 1);
+        return sum + amount;
+      }, 0);
+
     const finalRevenue = totalRevenue - totalCNs;
+    const finalPending = pendingAmount - pendingCNs;
 
     return {
       totalRevenue: Math.round(finalRevenue * 100) / 100,
-      pendingAmount: Math.round(pendingAmount * 100) / 100,
+      pendingAmount: Math.round(finalPending * 100) / 100,
       invoicesCount: companyInvoices.filter(i => i.status !== 'cancelled' && i.status !== 'draft' && i.transactionType !== 'CreditNote').length,
       customersCount: companyCustomers.length
     };
@@ -790,13 +800,19 @@ export class DatabaseStorage implements IStorage {
     const countersMap = new Map<string, any>();
 
     const getCounter = (key: string, type: string, currency: string, taxPercent: number, taxID: number, moneyType: string | null = null) => {
+      // Determine distinct "Exempt" status via DB lookup or fallback
+      const isExempt = dbTaxTypes.some(t =>
+        t.zimraTaxId && parseInt(t.zimraTaxId) === taxID && t.name.toLowerCase().includes('exempt')
+      );
+
       if (!countersMap.has(key)) {
         countersMap.set(key, {
           fiscalCounterType: type,
           fiscalCounterCurrency: currency,
-          fiscalCounterTaxPercent: taxPercent,
+          // Correct Fix: Only include fiscalCounterTaxPercent if NOT Exempt (by name)
+          ...(!isExempt ? { fiscalCounterTaxPercent: taxPercent } : {}),
           fiscalCounterTaxID: taxID,
-          fiscalCounterMoneyType: moneyType,
+          ...(moneyType ? { fiscalCounterMoneyType: moneyType } : {}), // Only include if present
           fiscalCounterValue: 0
         });
       }
@@ -814,22 +830,45 @@ export class DatabaseStorage implements IStorage {
       const currency = inv.currency || "USD";
       const taxPercent = Number(item.taxRate);
 
-      // Look up taxID from database taxTypes
-      const matchingTax = dbTaxTypes.find(t =>
-        Math.abs(Number(t.rate) - taxPercent) < 0.01
-      );
+      // Look up taxID from database taxTypes using strict ID match first
+      let matchingTax: TaxType | undefined;
 
-      // ZIMRA Tax ID Mapping
-      let taxID = 3; // Default to Standard
+      if (item.taxTypeId) {
+        matchingTax = dbTaxTypes.find(t => t.id === item.taxTypeId);
+      }
+
+      // Fallback to rate matching if not found by ID
+      if (!matchingTax) {
+        matchingTax = dbTaxTypes.find(t =>
+          Math.abs(Number(t.rate) - taxPercent) < 0.01
+        );
+      }
+
+      // ZIMRA Tax ID Mapping - Dynamic Lookup
+      let taxID = 0;
+
       if (matchingTax?.zimraTaxId) {
         taxID = parseInt(matchingTax.zimraTaxId);
-      } else if (taxPercent === 0) {
-        // Fallback or explicit check for "Exempt" name
-        if (matchingTax?.name?.toLowerCase().includes('exempt')) {
-          taxID = 1;
+      } else {
+        // Fallback by Name if ID is missing
+        const name = matchingTax?.name?.toLowerCase() || '';
+        if (name.includes('exempt')) {
+          const exemptTax = dbTaxTypes.find(t => t.name.toLowerCase().includes('exempt') && t.zimraTaxId);
+          if (exemptTax) taxID = parseInt(exemptTax.zimraTaxId!);
+        } else if (name.includes('zero') || name.includes('0%')) {
+          const zeroTax = dbTaxTypes.find(t => (t.name.toLowerCase().includes('zero') || t.name.includes('0%')) && t.zimraTaxId);
+          if (zeroTax) taxID = parseInt(zeroTax.zimraTaxId!);
         } else {
-          taxID = 2; // Zero Rated
+          // Standard matches
+          const stdTax = dbTaxTypes.find(t => (t.name.toLowerCase().includes('standard') || t.name.toLowerCase().includes('vat')) && t.zimraTaxId);
+          if (stdTax) taxID = parseInt(stdTax.zimraTaxId!);
         }
+      }
+
+      // Final safety fallback (should rarely happen if DB is seeded)
+      if (taxID === 0) {
+        if (taxPercent === 0) taxID = 2; // Assume Zero Rated
+        else taxID = 3; // Assume Standard
       }
 
       const type = inv.transactionType || "FiscalInvoice";
@@ -861,27 +900,27 @@ export class DatabaseStorage implements IStorage {
       }
 
       if (type === 'FiscalInvoice' || type === 'Invoice') {
-        const keySale = `SaleByTax-${currency}-${taxPercent}`;
+        const keySale = `SaleByTax-${currency}-${taxPercent}-${taxID}`;
         const cSale = getCounter(keySale, 'SaleByTax', currency, taxPercent, taxID);
         cSale.fiscalCounterValue += amountWithTax;
 
-        const keyTax = `SaleTaxByTax-${currency}-${taxPercent}`;
+        const keyTax = `SaleTaxByTax-${currency}-${taxPercent}-${taxID}`;
         const cTax = getCounter(keyTax, 'SaleTaxByTax', currency, taxPercent, taxID);
         cTax.fiscalCounterValue += taxAmt;
       } else if (type === 'CreditNote') {
-        const keySale = `CreditNoteByTax-${currency}-${taxPercent}`;
+        const keySale = `CreditNoteByTax-${currency}-${taxPercent}-${taxID}`;
         const cSale = getCounter(keySale, 'CreditNoteByTax', currency, taxPercent, taxID);
         cSale.fiscalCounterValue += amountWithTax;
 
-        const keyTax = `CreditNoteTaxByTax-${currency}-${taxPercent}`;
+        const keyTax = `CreditNoteTaxByTax-${currency}-${taxPercent}-${taxID}`;
         const cTax = getCounter(keyTax, 'CreditNoteTaxByTax', currency, taxPercent, taxID);
         cTax.fiscalCounterValue += taxAmt;
       } else if (type === 'DebitNote') {
-        const keySale = `DebitNoteByTax-${currency}-${taxPercent}`;
+        const keySale = `DebitNoteByTax-${currency}-${taxPercent}-${taxID}`;
         const cSale = getCounter(keySale, 'DebitNoteByTax', currency, taxPercent, taxID);
         cSale.fiscalCounterValue += amountWithTax;
 
-        const keyTax = `DebitNoteTaxByTax-${currency}-${taxPercent}`;
+        const keyTax = `DebitNoteTaxByTax-${currency}-${taxPercent}-${taxID}`;
         const cTax = getCounter(keyTax, 'DebitNoteTaxByTax', currency, taxPercent, taxID);
         cTax.fiscalCounterValue += taxAmt;
       }
@@ -895,14 +934,14 @@ export class DatabaseStorage implements IStorage {
     for (const inv of uniqueInvoices.values()) {
       const currency = inv.currency || "USD";
       const method = (inv.paymentMethod || "CASH").toUpperCase();
-      let moneyType = "Cash";
+      let moneyType = "Other"; // Default to Other
+
       if (['CARD', 'SWIPE', 'POS'].includes(method)) moneyType = "Card";
-      else if (['ECOCASH', 'MOBILE', 'MOBILEWALLET', 'ONE_MONEY', 'TELE_CASH'].includes(method)) moneyType = "MobileWallet";
+      else if (['ECOCASH', 'MOBILE', 'MOBILEWALLET', 'ONE_MONEY', 'TELE_CASH', 'INNBUCKS'].includes(method)) moneyType = "MobileWallet";
       else if (['EFT', 'RTGS', 'TRANSFER', 'ZIPIT', 'BANKTRANSFER'].includes(method)) moneyType = "BankTransfer";
-      else moneyType = "Other";
+      else if (method === 'CASH') moneyType = "Cash";
       const keyBal = `BalanceByMoneyType-${currency}-${moneyType}`;
-      // MoneyType counter should not have taxPercent/ID theoretically but schema might require structure.
-      // Spec: fiscalCounterTaxPercent is nullable.
+      // Fix: Ensure we correctly create the counter for this money type
       const cBal = getCounter(keyBal, 'BalanceByMoneyType', currency, 0, 0, moneyType);
 
       let amount = Number(inv.total);

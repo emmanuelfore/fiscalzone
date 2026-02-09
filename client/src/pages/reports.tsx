@@ -55,7 +55,25 @@ export default function ReportsPage() {
     });
 
     const { data: currencies } = useCurrencies(companyId);
-    const [consolidatedCode, setConsolidatedCode] = useState<string>("ZiG");
+    const [consolidatedCode, setConsolidatedCode] = useState<string>("USD"); // Changed from ZWG to USD
+
+    // Ef: Automatically select base currency as default for consolidation
+    useEffect(() => {
+        console.log('[Reports] Currencies loaded:', currencies);
+        if (currencies && currencies.length > 0) {
+            const base = currencies.find(c => c.isBase);
+            console.log('[Reports] Base currency found:', base);
+            if (base) {
+                console.log('[Reports] Setting consolidated code to:', base.code);
+                setConsolidatedCode(base.code);
+            } else {
+                // Fallback to USD or first available if no base found
+                const fallback = currencies.find(c => c.code === 'USD')?.code || currencies[0].code;
+                console.log('[Reports] No base found, using fallback:', fallback);
+                setConsolidatedCode(fallback);
+            }
+        }
+    }, [currencies]);
 
     const consolidatedCurrency = currencies?.find(c => c.code === consolidatedCode) || currencies?.find(c => c.code === 'USD');
     const consolidatedRate = Number(consolidatedCurrency?.exchangeRate || 1);
@@ -237,7 +255,8 @@ export default function ReportsPage() {
                             title="Total Invoices"
                             value={summary?.invoicesCount}
                             isLoading={isLoadingSummary}
-                            prefix=""
+                            symbol=""
+                            decimals={0}
                             icon={FileText}
                             color="text-blue-600"
                             bg="bg-blue-100"
@@ -246,7 +265,8 @@ export default function ReportsPage() {
                             title="Total Customers"
                             value={summary?.customersCount}
                             isLoading={isLoadingSummary}
-                            prefix=""
+                            symbol=""
+                            decimals={0}
                             icon={Users}
                             color="text-violet-600"
                             bg="bg-violet-100"
@@ -427,7 +447,7 @@ export default function ReportsPage() {
     );
 }
 
-function StatsCard({ title, value, isLoading, symbol = "$", icon: Icon, color, bg }: any) {
+function StatsCard({ title, value, isLoading, symbol = "$", decimals = 2, icon: Icon, color, bg }: any) {
     return (
         <Card className="card-depth border-none">
             <CardContent className="p-6">
@@ -438,7 +458,7 @@ function StatsCard({ title, value, isLoading, symbol = "$", icon: Icon, color, b
                             <div className="h-8 w-24 bg-slate-100 animate-pulse rounded"></div>
                         ) : (
                             <h3 className="text-2xl font-bold font-display text-slate-900">
-                                {symbol}{Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                {symbol}{Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}
                             </h3>
                         )}
                     </div>

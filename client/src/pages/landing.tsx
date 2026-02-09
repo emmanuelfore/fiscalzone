@@ -56,7 +56,7 @@ export default function LandingPage() {
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex justify-between items-center h-20">
                         <div className="flex items-center gap-2">
-                            <img src="/fiscalstack-logo.svg" alt="FiscalStack" className="h-10" />
+                            <img src="/fiscalstack-logo.png" alt="FiscalStack" className="h-10" />
                         </div>
 
                         <div className="hidden md:flex items-center space-x-8">
@@ -522,7 +522,7 @@ export default function LandingPage() {
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex flex-col md:flex-row justify-between items-center gap-6">
                         <div className="flex items-center gap-2">
-                            <img src="/fiscalstack-logo.svg" alt="FiscalStack" className="h-8" />
+                            <img src="/fiscalstack-logo.png" alt="FiscalStack" className="h-8" />
                         </div>
                         <p className="text-sm text-slate-500">© 2026 FiscalStack. Made with ❤️ in Zimbabwe.</p>
                     </div>

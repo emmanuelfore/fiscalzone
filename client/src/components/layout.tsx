@@ -122,7 +122,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <aside className="w-64 bg-white border-r border-slate-200 flex flex-col fixed inset-y-0 z-50">
         <div className="p-6 border-b border-slate-100/50">
           <div className="flex items-center gap-3 mb-6">
-            <img src="/fiscalstack-logo.svg" alt="FiscalStack" className="h-10" />
+            <img src="/fiscalstack-logo.png" alt="FiscalStack" className="h-10" />
           </div>
 
           <DropdownMenu>

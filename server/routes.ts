@@ -16,7 +16,7 @@ import { supabaseAdmin } from "./supabase.js";
 import { parse } from "csv-parse/sync";
 import { parseStringPromise } from "xml2js";
 import { logAction } from "./audit.js";
-import { seedCompanyDefaults } from "./lib/seeding.js";
+import { seedCompanyDefaults } from "./lib/seeding";
 import {
   insertQuotationSchema,
   insertQuotationItemSchema,

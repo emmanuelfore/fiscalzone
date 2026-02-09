@@ -218,6 +218,37 @@ export class DatabaseStorage implements IStorage {
     return company;
   }
 
+  async generateNextDeviceSerial(companyId: number): Promise<string> {
+    // Get the current company's device serial number if it exists
+    const existingCompanies = await db
+      .select({ fdmsDeviceSerialNo: companies.fdmsDeviceSerialNo })
+      .from(companies)
+      .where(
+        and(
+          eq(companies.id, companyId),
+          sql`${companies.fdmsDeviceSerialNo} IS NOT NULL AND ${companies.fdmsDeviceSerialNo} != ''`
+        )
+      );
+
+    // Extract numbers from existing serials (format: FS-00001)
+    let maxNumber = 0;
+    for (const company of existingCompanies) {
+      if (company.fdmsDeviceSerialNo) {
+        const match = company.fdmsDeviceSerialNo.match(/FS-(\d+)/);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > maxNumber) {
+            maxNumber = num;
+          }
+        }
+      }
+    }
+
+    // Generate next serial number
+    const nextNumber = maxNumber + 1;
+    const serial = `FS-${nextNumber.toString().padStart(5, '0')}`;
+    return serial;
+  }
   async getCustomers(companyId: number): Promise<Customer[]> {
     return await db.select().from(customers).where(eq(customers.companyId, companyId));
   }

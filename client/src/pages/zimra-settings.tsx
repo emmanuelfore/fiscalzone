@@ -83,7 +83,7 @@ function ZimraDeviceConfig({ company }: { company: any }) {
     mutationFn: async () => {
       const res = await apiFetch(`/api/companies/${company.id}/zimra/verify-taxpayer`, {
         method: "POST",
-        body: JSON.stringify({ deviceId, activationKey, deviceSerialNo })
+        body: JSON.stringify({ deviceId, activationKey, deviceSerialNo: company.fdmsDeviceSerialNo || deviceSerialNo })
       });
       if (!res.ok) {
         throw await res.json();
@@ -274,14 +274,15 @@ function ZimraDeviceConfig({ company }: { company: any }) {
             disabled={isRegistered && !isEditing}
           />
         </div>
-        <div className="space-y-2 md:col-span-2">
-          <Label>Device Serial Number (For Verification)</Label>
-          <Input
-            value={deviceSerialNo}
-            onChange={(e) => setDeviceSerialNo(e.target.value)}
-            placeholder="SN-12345"
-          />
-        </div>
+        {company.fdmsDeviceSerialNo && (
+          <div className="space-y-2 md:col-span-2">
+            <Label>Device Serial Number</Label>
+            <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-md">
+              <Badge className="bg-blue-600 text-white font-mono text-sm px-3 py-1">{company.fdmsDeviceSerialNo}</Badge>
+              <span className="text-xs text-slate-500">Auto-generated</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {verificationResult && (
@@ -298,7 +299,7 @@ function ZimraDeviceConfig({ company }: { company: any }) {
             <Button
               variant="outline"
               onClick={() => verifyTaxpayerMutation.mutate()}
-              disabled={verifyTaxpayerMutation.isPending || !deviceId || !activationKey || !deviceSerialNo}
+              disabled={verifyTaxpayerMutation.isPending || !deviceId || !activationKey}
             >
               {verifyTaxpayerMutation.isPending ? "Verifying..." : "1. Verify Taxpayer"}
             </Button>
@@ -334,9 +335,15 @@ function ZimraDeviceConfig({ company }: { company: any }) {
               <span className="font-semibold text-sm">
                 {isPinging ? "Checking Connectivity..." : (isOnline ? 'Online & Registered' : 'Offline / Connection Failed')}
               </span>
-              <span className="text-xs opacity-75">
-                {company.fiscalDayOpen ? `Day ${company.currentFiscalDayNo || '?'}` : 'No Active Day'}
-              </span>
+              <div className="flex items-center gap-2 text-xs opacity-75">
+                {company.fdmsDeviceSerialNo && (
+                  <>
+                    <span className="font-mono font-semibold text-blue-600">{company.fdmsDeviceSerialNo}</span>
+                    <span>•</span>
+                  </>
+                )}
+                <span>{company.fiscalDayOpen ? `Day ${company.currentFiscalDayNo || '?'}` : 'No Active Day'}</span>
+              </div>
             </div>
             <Button variant="ghost" size="sm" className="ml-auto" onClick={() => setIsEditing(true)}>
               Edit Configuration
@@ -420,7 +427,7 @@ function ZimraDeviceConfig({ company }: { company: any }) {
                 variant="outline"
                 size="sm"
                 onClick={() => verifyTaxpayerMutation.mutate()}
-                disabled={verifyTaxpayerMutation.isPending || !deviceSerialNo}
+                disabled={verifyTaxpayerMutation.isPending}
               >
                 <Server className="w-4 h-4 mr-2" />
                 {verifyTaxpayerMutation.isPending ? "Verifying..." : "Verify Taxpayer Info"}

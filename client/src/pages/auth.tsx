@@ -60,6 +60,10 @@ export default function AuthPage() {
     try {
       setError(null);
       setIsLoggingIn(true);
+
+      // Clear any stale company selection before signup
+      localStorage.removeItem("selectedCompanyId");
+
       const data = await registerWithPassword({
         email: signupData.email,
         password: signupData.password,

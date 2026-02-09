@@ -11,11 +11,20 @@ export function useActiveCompany() {
 
     useEffect(() => {
         if (!isLoading && companies && companies.length > 0) {
-            // If no company is selected, or the selected company is no longer available
-            if (!activeCompanyId || !companies.find(c => c.id === activeCompanyId)) {
+            // Validate that the stored company ID actually belongs to this user
+            const storedCompany = companies.find(c => c.id === activeCompanyId);
+
+            if (!storedCompany) {
+                // Stored company doesn't exist for this user, select the first available
                 const firstId = companies[0].id;
                 setActiveCompanyId(firstId);
                 localStorage.setItem("selectedCompanyId", firstId.toString());
+            }
+        } else if (!isLoading && companies && companies.length === 0) {
+            // User has no companies, clear any stale localStorage value
+            if (activeCompanyId !== null) {
+                setActiveCompanyId(null);
+                localStorage.removeItem("selectedCompanyId");
             }
         }
     }, [companies, isLoading, activeCompanyId]);

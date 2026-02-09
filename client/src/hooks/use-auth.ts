@@ -92,6 +92,8 @@ export function useAuth() {
   const logout = async () => {
     await supabase.auth.signOut();
     queryClient.setQueryData(["/api/user"], null);
+    // Clear company selection to prevent stale data across user sessions
+    localStorage.removeItem("selectedCompanyId");
     setLocation("/auth");
   };
 

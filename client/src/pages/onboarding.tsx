@@ -23,22 +23,18 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Textarea } from "@/components/ui/textarea";
 import { useCreateCompany } from "@/hooks/use-companies";
 import { useLocation } from "wouter";
-import { Loader2, Building2, User, Lock, Mail, ImagePlus, ArrowRight, ArrowLeft, UploadCloud } from "lucide-react";
+import { Loader2, Building2, User, Lock, Mail, ImagePlus, ArrowRight, ArrowLeft, UploadCloud, CheckCircle, AlertCircle } from "lucide-react";
 import { insertCompanySchema } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { useState, useEffect } from "react";
 import { apiFetch } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
-
-// Registration Schema
-const registerSchema = z.object({
-    name: z.string().min(2, "Name is required"),
-    email: z.string().email("Invalid email address"),
-    password: z.string().min(6, "Password must be at least 6 characters"),
-});
+import { cn } from "@/lib/utils";
 
 // Company Onboarding Schema
 const companySchema = insertCompanySchema.pick({
@@ -59,34 +55,19 @@ const companySchema = insertCompanySchema.pick({
     fdmsApiKey: z.string().optional(),
 });
 
-type RegisterFormValues = z.infer<typeof registerSchema>;
 type CompanyFormValues = z.infer<typeof companySchema>;
 
 export default function OnboardingPage() {
     const [, setLocation] = useLocation();
     const { toast } = useToast();
-    const { user, registerWithPassword } = useAuth();
+    const { user } = useAuth();
     const createCompany = useCreateCompany();
 
-    // Steps: 0 = Register Details, 1 = Company Basics, 2 = Tax Details
-    // If user is already logged in, we skip step 0.
-    const [currentStep, setCurrentStep] = useState(user ? 1 : 0);
-
-    // State to hold registration data until final submission
-    const [registerData, setRegisterData] = useState<RegisterFormValues | null>(null);
+    // Steps: 1 = Company Basics, 2 = Tax Details
+    const [currentStep, setCurrentStep] = useState(1);
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
-
-    // Registration Form
-    const registerForm = useForm<RegisterFormValues>({
-        resolver: zodResolver(registerSchema),
-        defaultValues: {
-            name: "",
-            email: "",
-            password: "",
-        }
-    });
 
     // Company Form
     const companyForm = useForm<CompanyFormValues>({
@@ -158,37 +139,18 @@ export default function OnboardingPage() {
         }
     }, [user, companies, setLocation]);
 
-    // Step 0: Validate User Details and Move to Next
-    const onRegisterNext = (data: RegisterFormValues) => {
-        setRegisterData(data); // Store for later
-        setCurrentStep(1);
-    };
-
-    // Final Submission: Register User (if needed) -> Create Company
+    // Final Submission: Create Company
     const onFinalSubmit = async (companyData: CompanyFormValues) => {
         setIsSubmitting(true);
         try {
-            // 1. If we have registration data and no user, register first
-            if (registerData && !user) {
-                try {
-                    const authRes = await registerWithPassword(registerData);
-
-                    // Allow small delay for session propagation
-                    await new Promise(r => setTimeout(r, 1000));
-                } catch (regError: any) {
-                    throw new Error(`Registration failed: ${regError.message}`);
-                }
-            }
-
-            // 2. Validate Session
+            // 1. Validate Session
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) {
                 toast({
-                    title: "Verification Required",
-                    description: "Account created! Please check your email to verify your account.",
-                    variant: "default"
+                    title: "Session Expired",
+                    description: "Please sign in again to complete setup.",
+                    variant: "destructive"
                 });
-                // Redirect to auth to wait for verification or sign in
                 setLocation("/auth");
                 return;
             }
@@ -204,7 +166,7 @@ export default function OnboardingPage() {
 
             toast({
                 title: "Setup Complete!",
-                description: "Your account and organization have been created.",
+                description: "Your organization has been created.",
             });
 
             setLocation("/dashboard");
@@ -225,323 +187,299 @@ export default function OnboardingPage() {
                 description: errorMessage,
                 variant: "destructive",
             });
-
-            // If it failed at company creation but user was created... 
-            // The user is technically logged in now. They can retry just the company part.
-            // We stay on the current step.
-
         } finally {
             setIsSubmitting(false);
         }
     };
 
-    // If user logs in externally (e.g. while on this page), auto-advance
-    if (user && currentStep === 0) {
-        setCurrentStep(1);
-    }
+    const StepIndicator = ({ step, label, current }: { step: number; label: string; current: number }) => (
+        <div className="flex flex-col items-center gap-2 flex-1">
+            <div className={cn(
+                "w-10 h-10 rounded-full flex items-center justify-center font-bold border-2 transition-all duration-300",
+                step === current ? "bg-primary text-white border-primary shadow-lg scale-110" :
+                    step < current ? "bg-green-500 border-green-500 text-white" : "border-slate-200 text-slate-400 bg-white"
+            )}>
+                {step < current ? <CheckCircle className="w-6 h-6" /> : step}
+            </div>
+            <span className={cn(
+                "text-xs font-medium uppercase tracking-wider whitespace-nowrap",
+                step === current ? "text-primary" : "text-slate-400"
+            )}>{label}</span>
+        </div>
+    );
 
     return (
         <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+            <Card className="w-full max-w-2xl shadow-xl border-none">
+                <CardHeader className="text-center space-y-2 pb-8">
+                    <CardTitle className="text-3xl font-bold bg-gradient-to-r from-primary to-indigo-600 bg-clip-text text-transparent">
+                        Complete Your Setup
+                    </CardTitle>
+                    <CardDescription className="text-lg">
+                        Let's get your company ready for ZIMRA compliance
+                    </CardDescription>
 
-            {/* Step 0: Registration View */}
-            {currentStep === 0 && (
-                <Card className="w-full max-w-md shadow-xl border-t-4 border-t-primary">
-                    <CardHeader className="text-center pb-6">
-                        <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-                            <User className="w-6 h-6 text-primary" />
-                        </div>
-                        <CardTitle className="text-2xl font-bold text-slate-900">Create Account</CardTitle>
-                        <CardDescription>Start your ZIMRA compliant journey today</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <Form {...registerForm}>
-                            <form onSubmit={registerForm.handleSubmit(onRegisterNext)} className="space-y-4">
-                                <FormField
-                                    control={registerForm.control}
-                                    name="name"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormControl>
-                                                <div className="relative">
-                                                    <User className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                                                    <Input className="pl-9" placeholder="Full Name" {...field} />
-                                                </div>
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    control={registerForm.control}
-                                    name="email"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormControl>
-                                                <div className="relative">
-                                                    <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                                                    <Input className="pl-9" type="email" placeholder="Email Address" {...field} />
-                                                </div>
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    control={registerForm.control}
-                                    name="password"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormControl>
-                                                <div className="relative">
-                                                    <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                                                    <Input className="pl-9" type="password" placeholder="Password" {...field} />
-                                                </div>
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <Button type="submit" className="w-full h-11">
-                                    Next: Company Details <ArrowRight className="ml-2 w-4 h-4" />
-                                </Button>
-                                <div className="text-center text-sm text-gray-500 mt-4">
-                                    Already have an account? <span className="text-primary font-semibold cursor-pointer hover:underline" onClick={() => setLocation("/auth")}>Sign In</span>
-                                </div>
-                            </form>
-                        </Form>
-                    </CardContent>
-                </Card>
-            )}
+                    {/* Step Progress */}
+                    <div className="flex justify-between items-center w-full mt-8 relative">
+                        {/* Connecting Lines */}
+                        <div className="absolute top-5 left-0 w-full h-0.5 bg-slate-100 -z-10" />
+                        <div className={cn(
+                            "absolute top-5 left-0 h-0.5 bg-primary transition-all duration-500 -z-10",
+                            currentStep === 1 ? "w-0" : "w-full"
+                        )} />
 
-            {/* Step 1 & 2: Company Wizard */}
-            {currentStep > 0 && (
-                <Card className="w-full max-w-3xl shadow-xl overflow-hidden">
-                    <div className="bg-slate-900 p-6 text-white flex justify-between items-center">
-                        <div>
-                            <h2 className="text-xl font-bold">Setup Organization</h2>
-                            <p className="text-slate-400 text-sm">Step {currentStep} of 2</p>
-                        </div>
-                        <div className="flex gap-2">
-                            {/* Indicator Logic: If step 1, show 1 active. If step 2, show 1 and 2 active. */}
-                            <div className={`w-3 h-3 rounded-full ${currentStep >= 1 ? 'bg-primary' : 'bg-slate-700'}`} />
-                            <div className={`w-3 h-3 rounded-full ${currentStep >= 2 ? 'bg-primary' : 'bg-slate-700'}`} />
-                        </div>
+                        <StepIndicator step={1} label="Company Details" current={currentStep} />
+                        <StepIndicator step={2} label="Tax & Compliance" current={currentStep} />
                     </div>
+                </CardHeader>
 
-                    <CardContent className="p-8">
+                <CardContent className="pt-4 px-8 min-h-[400px]">
+                    {/* STEP 1: COMPANY BASICS */}
+                    {currentStep === 1 && (
                         <Form {...companyForm}>
-                            <form onSubmit={companyForm.handleSubmit(onFinalSubmit)} className="space-y-6">
-
-                                {/* Step 1: Company Profile (Basics + Logo + Currency) */}
-                                <div className={currentStep === 1 ? "block" : "hidden"}>
-                                    <div className="space-y-6">
-                                        <h3 className="text-lg font-semibold text-slate-900 border-b pb-2">Company Profile</h3>
-                                        <div className="grid md:grid-cols-2 gap-6">
-                                            <FormField
-                                                control={companyForm.control}
-                                                name="name"
-                                                render={({ field }) => (
-                                                    <FormItem>
-                                                        <FormLabel>Registered Company Name</FormLabel>
-                                                        <FormControl><Input placeholder="Acme Holdings Pvt Ltd" {...field} /></FormControl>
-                                                        <FormMessage />
-                                                    </FormItem>
-                                                )}
+                            <form className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                {/* Logo Upload */}
+                                <div className="flex flex-col items-center justify-center mb-8 bg-slate-50/50 rounded-2xl p-6 border-2 border-dashed border-slate-200 hover:border-primary/50 transition-colors group relative cursor-pointer overflow-hidden">
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                                        onChange={handleFileUpload}
+                                        disabled={isUploading}
+                                    />
+                                    {companyForm.watch("logoUrl") ? (
+                                        <div className="relative w-24 h-24 rounded-xl overflow-hidden shadow-md">
+                                            <img
+                                                src={companyForm.watch("logoUrl")}
+                                                alt="Logo"
+                                                className="w-full h-full object-cover"
                                             />
-                                            <FormField
-                                                control={companyForm.control}
-                                                name="tradingName"
-                                                render={({ field }) => (
-                                                    <FormItem>
-                                                        <FormLabel>Trading Name (Optional)</FormLabel>
-                                                        <FormControl><Input placeholder="Acme Inc." {...field} /></FormControl>
-                                                        <FormMessage />
-                                                    </FormItem>
-                                                )}
-                                            />
-                                            <FormField
-                                                control={companyForm.control}
-                                                name="email"
-                                                render={({ field }) => (
-                                                    <FormItem>
-                                                        <FormLabel>Company Email</FormLabel>
-                                                        <FormControl><Input placeholder="billing@acme.com" {...field} /></FormControl>
-                                                        <FormMessage />
-                                                    </FormItem>
-                                                )}
-                                            />
-                                            <FormField
-                                                control={companyForm.control}
-                                                name="phone"
-                                                render={({ field }) => (
-                                                    <FormItem>
-                                                        <FormLabel>Phone Number</FormLabel>
-                                                        <FormControl><Input placeholder="+263 7..." {...field} /></FormControl>
-                                                        <FormMessage />
-                                                    </FormItem>
-                                                )}
-                                            />
-                                            <FormField
-                                                control={companyForm.control}
-                                                name="address"
-                                                render={({ field }) => (
-                                                    <FormItem className="col-span-2">
-                                                        <FormLabel>Physical Address</FormLabel>
-                                                        <FormControl><Input placeholder="123 Samora Machel Ave" {...field} /></FormControl>
-                                                        <FormMessage />
-                                                    </FormItem>
-                                                )}
-                                            />
-                                            <FormField
-                                                control={companyForm.control}
-                                                name="city"
-                                                render={({ field }) => (
-                                                    <FormItem>
-                                                        <FormLabel>City</FormLabel>
-                                                        <FormControl><Input placeholder="Harare" {...field} /></FormControl>
-                                                        <FormMessage />
-                                                    </FormItem>
-                                                )}
-                                            />
-                                            <FormField
-                                                control={companyForm.control}
-                                                name="currency"
-                                                render={({ field }) => (
-                                                    <FormItem>
-                                                        <FormLabel>Base Currency</FormLabel>
-                                                        <Select onValueChange={field.onChange} defaultValue={field.value || undefined}>
-                                                            <FormControl>
-                                                                <SelectTrigger>
-                                                                    <SelectValue placeholder="Select Currency" />
-                                                                </SelectTrigger>
-                                                            </FormControl>
-                                                            <SelectContent>
-                                                                <SelectItem value="USD">USD - US Dollar</SelectItem>
-                                                                <SelectItem value="ZWG">ZWG - Zimbabwe Gold</SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
-                                                        <FormMessage />
-                                                    </FormItem>
-                                                )}
-                                            />
-                                            <FormField
-                                                control={companyForm.control}
-                                                name="logoUrl"
-                                                render={({ field }) => (
-                                                    <FormItem>
-                                                        <FormLabel>Company Logo</FormLabel>
-                                                        <FormControl>
-                                                            <div className="flex items-center gap-4">
-                                                                {field.value && (
-                                                                    <div className="w-16 h-16 relative border rounded-lg overflow-hidden shrink-0">
-                                                                        <img src={field.value} alt="Logo" className="w-full h-full object-cover" />
-                                                                    </div>
-                                                                )}
-                                                                <div className="relative flex-1">
-                                                                    <Button
-                                                                        type="button"
-                                                                        variant="outline"
-                                                                        className="w-full"
-                                                                        onClick={() => document.getElementById('logo-upload')?.click()}
-                                                                        disabled={isUploading}
-                                                                    >
-                                                                        {isUploading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <UploadCloud className="w-4 h-4 mr-2" />}
-                                                                        {field.value ? "Change Logo" : "Upload Logo"}
-                                                                    </Button>
-                                                                    <Input
-                                                                        id="logo-upload"
-                                                                        type="file"
-                                                                        className="hidden"
-                                                                        accept="image/*"
-                                                                        onChange={handleFileUpload}
-                                                                    />
-                                                                </div>
-                                                            </div>
-                                                        </FormControl>
-                                                        <FormDescription>Upload your company logo (JPG, PNG)</FormDescription>
-                                                        <FormMessage />
-                                                    </FormItem>
-                                                )}
-                                            />
+                                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <ImagePlus className="w-6 h-6 text-white" />
+                                            </div>
                                         </div>
-                                        <div className="flex justify-end pt-4">
-                                            {/* Validate step 1 before moving to step 2 */}
-                                            <Button
-                                                type="button"
-                                                onClick={async () => {
-                                                    const isValid = await companyForm.trigger(["name", "email", "phone", "address", "city", "currency", "logoUrl"]);
-                                                    if (isValid) setCurrentStep(2);
-                                                }}
-                                                className="w-full md:w-auto"
-                                            >
-                                                Next Step <ArrowRight className="ml-2 w-4 h-4" />
-                                            </Button>
+                                    ) : (
+                                        <div className="w-20 h-20 rounded-2xl bg-white border border-slate-200 flex items-center justify-center shadow-sm group-hover:shadow-md transition-all">
+                                            {isUploading ? (
+                                                <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                                            ) : (
+                                                <UploadCloud className="w-8 h-8 text-slate-400 group-hover:text-primary transition-colors" />
+                                            )}
                                         </div>
+                                    )}
+                                    <div className="mt-4 text-center">
+                                        <p className="text-sm font-semibold text-slate-700">Company Logo</p>
+                                        <p className="text-xs text-slate-400 mt-1">Recommended: 400x400px PNG/JPG</p>
                                     </div>
                                 </div>
 
-                                {/* Step 2: Tax Details */}
-                                <div className={currentStep === 2 ? "block" : "hidden"}>
-                                    <div className="space-y-6">
-                                        <h3 className="text-lg font-semibold text-slate-900 border-b pb-2">Tax & Compliance Details</h3>
-                                        <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 text-sm text-blue-700 mb-6">
-                                            These details will appear on your fiscal invoices and are required for ZIMRA compliance.
-                                        </div>
-                                        <div className="grid md:grid-cols-2 gap-6">
-                                            <FormField
-                                                control={companyForm.control}
-                                                name="tin"
-                                                render={({ field }) => (
-                                                    <FormItem>
-                                                        <FormLabel>TIN (Tax Identification Number)</FormLabel>
-                                                        <FormControl><Input placeholder="2000200020" {...field} /></FormControl>
-                                                        <FormDescription>Your 10-digit tax number.</FormDescription>
-                                                        <FormMessage />
-                                                    </FormItem>
-                                                )}
-                                            />
-                                            <FormField
-                                                control={companyForm.control}
-                                                name="vatNumber"
-                                                render={({ field }) => (
-                                                    <FormItem>
-                                                        <FormLabel>VAT Number</FormLabel>
-                                                        <FormControl><Input placeholder="123456789" {...field} value={field.value || ""} /></FormControl>
-                                                        <FormDescription>Required for fiscalization.</FormDescription>
-                                                        <FormMessage />
-                                                    </FormItem>
-                                                )}
-                                            />
-                                            <FormField
-                                                control={companyForm.control}
-                                                name="bpNumber"
-                                                render={({ field }) => (
-                                                    <FormItem>
-                                                        <FormLabel>BP Number (Optional)</FormLabel>
-                                                        <FormControl><Input placeholder="0200123456" {...field} /></FormControl>
-                                                        <FormDescription>Business Partner Number</FormDescription>
-                                                        <FormMessage />
-                                                    </FormItem>
-                                                )}
-                                            />
-                                        </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <FormField
+                                        control={companyForm.control}
+                                        name="name"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel className="text-slate-700 font-semibold">Company Registered Name</FormLabel>
+                                                <FormControl>
+                                                    <Input placeholder="Acme Logistics (Pvt) Ltd" {...field} className="h-11" />
+                                                </FormControl>
+                                                <FormMessage className="text-red-500" />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={companyForm.control}
+                                        name="tradingName"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel className="text-slate-700 font-semibold">Trading Name (Optional)</FormLabel>
+                                                <FormControl>
+                                                    <Input placeholder="Acme Express" {...field} className="h-11" />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={companyForm.control}
+                                        name="email"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel className="text-slate-700 font-semibold">Company Email</FormLabel>
+                                                <FormControl>
+                                                    <Input type="email" placeholder="billing@acme.com" {...field} className="h-11" />
+                                                </FormControl>
+                                                <FormMessage className="text-red-500" />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={companyForm.control}
+                                        name="phone"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel className="text-slate-700 font-semibold">Phone Number</FormLabel>
+                                                <FormControl>
+                                                    <Input placeholder="+263 7..." {...field} className="h-11" />
+                                                </FormControl>
+                                                <FormMessage className="text-red-500" />
+                                            </FormItem>
+                                        )}
+                                    />
+                                </div>
 
-                                        <div className="flex gap-4 pt-4">
-                                            <Button type="button" variant="outline" onClick={() => setCurrentStep(1)} className="flex-1 md:flex-none">
-                                                <ArrowLeft className="mr-2 w-4 h-4" /> Back
-                                            </Button>
-                                            <Button type="submit" size="lg" className="flex-1" disabled={isSubmitting}>
-                                                {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Building2 className="mr-2 w-4 h-4" />}
-                                                Complete Setup
-                                            </Button>
-                                        </div>
-                                    </div>
+                                <FormField
+                                    control={companyForm.control}
+                                    name="address"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className="text-slate-700 font-semibold">Physical Address</FormLabel>
+                                            <FormControl>
+                                                <Textarea placeholder="123 Samora Machel Ave" {...field} className="min-h-[80px]" />
+                                            </FormControl>
+                                            <FormMessage className="text-red-500" />
+                                        </FormItem>
+                                    )}
+                                />
+
+                                <FormField
+                                    control={companyForm.control}
+                                    name="city"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className="text-slate-700 font-semibold">City</FormLabel>
+                                            <FormControl>
+                                                <Input placeholder="Harare" {...field} className="h-11" />
+                                            </FormControl>
+                                            <FormMessage className="text-red-500" />
+                                        </FormItem>
+                                    )}
+                                />
+
+                                <div className="flex justify-end pt-4">
+                                    <Button
+                                        type="button"
+                                        size="lg"
+                                        className="h-12 px-8 font-bold shadow-md hover:shadow-lg transition-all"
+                                        onClick={async () => {
+                                            const isValid = await companyForm.trigger(["name", "email", "phone", "address", "city"]);
+                                            if (isValid) setCurrentStep(2);
+                                        }}
+                                    >
+                                        Next: Tax Details <ArrowRight className="w-5 h-5 ml-2" />
+                                    </Button>
                                 </div>
                             </form>
                         </Form>
-                    </CardContent>
-                </Card>
-            )}
+                    )}
+
+                    {/* STEP 2: TAX DETAILS */}
+                    {currentStep === 2 && (
+                        <Form {...companyForm}>
+                            <form onSubmit={companyForm.handleSubmit(onFinalSubmit)} className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+                                <Alert className="bg-amber-50 border-amber-200 text-amber-800">
+                                    <AlertCircle className="h-5 w-5 text-amber-600" />
+                                    <AlertTitle className="font-bold">Compliance Information</AlertTitle>
+                                    <AlertDescription>
+                                        Please ensure your TIN and VAT numbers match your ZIMRA registration documents exactly.
+                                    </AlertDescription>
+                                </Alert>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <FormField
+                                        control={companyForm.control}
+                                        name="tin"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel className="text-slate-700 font-semibold">Company TIN</FormLabel>
+                                                <FormControl>
+                                                    <Input placeholder="10XXXXXX" {...field} className="h-11 font-mono tracking-widest" />
+                                                </FormControl>
+                                                <FormDescription>10-digit Taxpayer Identification Number</FormDescription>
+                                                <FormMessage className="text-red-500" />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={companyForm.control}
+                                        name="vatNumber"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel className="text-slate-700 font-semibold">VAT Number (Optional)</FormLabel>
+                                                <FormControl>
+                                                    <Input placeholder="9XXXXXX" {...field} className="h-11 font-mono tracking-widest" />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={companyForm.control}
+                                        name="bpNumber"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel className="text-slate-700 font-semibold">BP Number (Optional)</FormLabel>
+                                                <FormControl>
+                                                    <Input placeholder="10XXXXXX" {...field} className="h-11 font-mono tracking-widest" />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={companyForm.control}
+                                        name="currency"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel className="text-slate-700 font-semibold">Default Currency</FormLabel>
+                                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                                    <FormControl>
+                                                        <SelectTrigger className="h-11">
+                                                            <SelectValue placeholder="Select Base Currency" />
+                                                        </SelectTrigger>
+                                                    </FormControl>
+                                                    <SelectContent>
+                                                        <SelectItem value="USD">USD - United States Dollar</SelectItem>
+                                                        <SelectItem value="ZWG">ZWG - Zimbabwe Gold</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                </div>
+
+                                <div className="flex justify-between gap-4 pt-6">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="lg"
+                                        className="h-12 px-8 font-semibold"
+                                        onClick={() => setCurrentStep(1)}
+                                    >
+                                        Back
+                                    </Button>
+                                    <Button
+                                        type="submit"
+                                        size="lg"
+                                        className="h-12 px-12 font-bold shadow-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-all flex-1 md:flex-none"
+                                        disabled={isSubmitting}
+                                    >
+                                        {isSubmitting ? (
+                                            <>
+                                                <Loader2 className="w-5 h-5 mr-3 animate-spin" />
+                                                Creating Organization...
+                                            </>
+                                        ) : (
+                                            "Complete Onboarding"
+                                        )}
+                                    </Button>
+                                </div>
+                            </form>
+                        </Form>
+                    )}
+                </CardContent>
+            </Card>
         </div>
     );
 }

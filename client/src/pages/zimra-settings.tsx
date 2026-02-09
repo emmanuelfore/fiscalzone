@@ -334,9 +334,15 @@ function ZimraDeviceConfig({ company }: { company: any }) {
               <span className="font-semibold text-sm">
                 {isPinging ? "Checking Connectivity..." : (isOnline ? 'Online & Registered' : 'Offline / Connection Failed')}
               </span>
-              <span className="text-xs opacity-75">
-                {company.fiscalDayOpen ? `Day ${company.currentFiscalDayNo || '?'}` : 'No Active Day'}
-              </span>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-xs opacity-75">
+                  SN: <span className="font-mono font-bold text-blue-600">{company.fdmsDeviceSerialNo || 'Pending'}</span>
+                </span>
+                <span className="text-[10px] opacity-50">|</span>
+                <span className="text-xs opacity-75">
+                  {company.fiscalDayOpen ? `Day ${company.currentFiscalDayNo || '?'}` : 'No Active Day'}
+                </span>
+              </div>
             </div>
             <Button variant="ghost" size="sm" className="ml-auto" onClick={() => setIsEditing(true)}>
               Edit Configuration

@@ -807,7 +807,7 @@ export async function registerRoutes(
       const { deviceId, activationKey, deviceSerialNo } = req.body;
 
       if (!deviceId || !activationKey || !deviceSerialNo) {
-        return res.status(400).json({ message: "Missing required ZIMRA fields" });
+        return res.status(400).json({ message: "Missing required ZIMRA fields: deviceId, activationKey, deviceSerialNo" });
       }
 
       const company = await storage.getCompany(companyId);

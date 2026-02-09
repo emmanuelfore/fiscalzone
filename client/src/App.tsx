@@ -38,13 +38,28 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   const { data: companies, isLoading: isLoadingCompanies } = useCompanies(!!user);
   const [, setLocation] = useLocation();
 
-  useEffect(() => {
-    if (user && !isLoading && !isLoadingCompanies) {
-      if (!companies || companies.length === 0) {
-        setLocation("/onboarding");
-      }
-    }
-  }, [user, companies, isLoading, isLoadingCompanies, setLocation]);
+  if (isLoading || isLoadingCompanies) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Redirect to="/auth" />;
+  }
+
+  if (!companies || companies.length === 0) {
+    return <Redirect to="/onboarding" />;
+  }
+
+  return <Component />;
+}
+
+function OnboardingRoute() {
+  const { user, isLoading } = useAuth();
+  const { data: companies, isLoading: isLoadingCompanies } = useCompanies(!!user);
 
   if (isLoading || isLoadingCompanies) {
     return (
@@ -55,14 +70,14 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   }
 
   if (!user) {
-    return <AuthPage />;
+    return <Redirect to="/auth" />;
   }
 
-  if (!companies || companies.length === 0) {
-    return null;
+  if (companies && companies.length > 0) {
+    return <Redirect to="/dashboard" />;
   }
 
-  return <Component />;
+  return <OnboardingPage />;
 }
 
 function Router() {
@@ -73,12 +88,7 @@ function Router() {
       <Route path="/" component={LandingPage} />
       <Route path="/auth" component={AuthPage} />
 
-      <Route path="/onboarding">
-        {() => {
-          if (isLoading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
-          return <OnboardingPage />;
-        }}
-      </Route>
+      <Route path="/onboarding" component={OnboardingRoute} />
 
       <Route path="/dashboard">
         {() => <ProtectedRoute component={Dashboard} />}

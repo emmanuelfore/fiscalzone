@@ -4,19 +4,31 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-
 import { Redirect } from "wouter";
 import { Loader2 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useLocation } from "wouter";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+
+const signupSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters"),
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  confirmPassword: z.string().min(6, "Password must be at least 6 characters"),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords do not match",
+  path: ["confirmPassword"],
+});
+
+type SignupForm = z.infer<typeof signupSchema>;
 
 export default function AuthPage() {
-  const { user, isLoading, loginWithPassword, registerWithPassword } = useAuth();
-  const { data: companies, isLoading: isLoadingCompanies } = useCompanies(!!user);
+  const { user, loginWithPassword, registerWithPassword } = useAuth();
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [, setLocation] = useLocation();
-  // We need to parse the search params manually since useLocation returns only path in wouter sometimes,
-  // or use basic window.location.search
+
   const getInitialMode = () => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -26,15 +38,17 @@ export default function AuthPage() {
   };
 
   const [mode, setMode] = useState<"login" | "signup">(getInitialMode);
+  const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   // Login State
   const [loginData, setLoginData] = useState({ email: "", password: "" });
 
-  // Signup State
-  const [signupData, setSignupData] = useState({ name: "", email: "", password: "", confirmPassword: "" });
-
-  const [error, setError] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  // Signup Form
+  const signupForm = useForm<SignupForm>({
+    resolver: zodResolver(signupSchema),
+    defaultValues: { name: "", email: "", password: "", confirmPassword: "" }
+  });
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,14 +63,7 @@ export default function AuthPage() {
     }
   };
 
-  const handleSignup = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (signupData.password !== signupData.confirmPassword) {
-      setError("Passwords do not match");
-      return;
-    }
-
+  const handleSignup = async (values: SignupForm) => {
     try {
       setError(null);
       setIsLoggingIn(true);
@@ -65,48 +72,39 @@ export default function AuthPage() {
       localStorage.removeItem("selectedCompanyId");
 
       const data = await registerWithPassword({
-        email: signupData.email,
-        password: signupData.password,
-        name: signupData.name
+        email: values.email,
+        password: values.password,
+        name: values.name
       });
 
       if (data?.session) {
-        setSuccessMsg("Account created! Logging you in...");
+        setSuccessMsg("Account created! Redirecting to onboarding...");
+        setTimeout(() => setLocation("/onboarding"), 1500);
       } else if (data?.user && !data?.session) {
         setSuccessMsg("Account created! Please check your email to verify your account before logging in.");
-        setIsLoggingIn(false); // Stop loading spinner so they can read it
+        setIsLoggingIn(false);
       } else {
         setSuccessMsg("Account created! Redirecting...");
+        setTimeout(() => setLocation("/onboarding"), 1500);
       }
-    } catch (error: any) {
-      console.error("Signup failed:", error);
-      setError(error.message || "Registration failed");
+    } catch (err: any) {
+      console.error("Signup failed:", err);
+
+      // Specifically handle unique email constraint from Supabase
+      if (err.message?.toLowerCase().includes("user already registered")) {
+        signupForm.setError("email", {
+          type: "manual",
+          message: "This email is already registered. Please sign in or use a different email."
+        });
+      } else {
+        setError(err.message || "Registration failed. Please try again.");
+      }
       setIsLoggingIn(false);
     }
   };
 
-  // ... (useEffect and loading checks remain same, omitted for brevity) ...
-
-  useEffect(() => {
-    if (user && !isLoading && !isLoadingCompanies) {
-      if (companies && companies.length > 0) {
-        setLocation("/dashboard");
-      } else {
-        setLocation("/onboarding");
-      }
-    }
-  }, [user, companies, isLoading, isLoadingCompanies, setLocation]);
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-50">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
   if (user) {
-    return <Redirect to={companies && companies.length > 0 ? "/dashboard" : "/onboarding"} />;
+    return <Redirect to="/dashboard" />;
   }
 
   return (
@@ -218,57 +216,59 @@ export default function AuthPage() {
                 </div>
               </form>
             ) : (
-              <form onSubmit={handleSignup} className="space-y-4">
+              <form onSubmit={signupForm.handleSubmit(handleSignup)} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="name">Full Name</Label>
                   <Input
                     id="name"
-                    name="name"
+                    {...signupForm.register("name")}
                     autoComplete="name"
                     placeholder="John Doe"
-                    value={signupData.name}
-                    onChange={(e) => setSignupData({ ...signupData, name: e.target.value })}
                     required
                   />
+                  {signupForm.formState.errors.name && (
+                    <p className="text-xs text-red-500">{signupForm.formState.errors.name.message}</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="signup-email">Email Address</Label>
                   <Input
                     id="signup-email"
                     type="email"
-                    name="email"
+                    {...signupForm.register("email")}
                     autoComplete="email"
                     placeholder="name@company.com"
-                    value={signupData.email}
-                    onChange={(e) => setSignupData({ ...signupData, email: e.target.value })}
                     required
                   />
+                  {signupForm.formState.errors.email && (
+                    <p className="text-xs text-red-500">{signupForm.formState.errors.email.message}</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="signup-password">Password</Label>
                   <Input
                     id="signup-password"
                     type="password"
-                    name="password"
+                    {...signupForm.register("password")}
                     autoComplete="new-password"
-                    value={signupData.password}
-                    onChange={(e) => setSignupData({ ...signupData, password: e.target.value })}
                     required
-                    minLength={6}
                   />
+                  {signupForm.formState.errors.password && (
+                    <p className="text-xs text-red-500">{signupForm.formState.errors.password.message}</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="confirm-password">Confirm Password</Label>
                   <Input
                     id="confirm-password"
                     type="password"
-                    name="confirmPassword"
+                    {...signupForm.register("confirmPassword")}
                     autoComplete="new-password"
-                    value={signupData.confirmPassword}
-                    onChange={(e) => setSignupData({ ...signupData, confirmPassword: e.target.value })}
                     required
-                    minLength={6}
                   />
+                  {signupForm.formState.errors.confirmPassword && (
+                    <p className="text-xs text-red-500">{signupForm.formState.errors.confirmPassword.message}</p>
+                  )}
                 </div>
                 <Button type="submit" className="w-full h-11" disabled={isLoggingIn}>
                   {isLoggingIn ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}

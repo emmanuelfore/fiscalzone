@@ -219,22 +219,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   async generateNextDeviceSerial(companyId: number): Promise<string> {
-    // Get the current company's device serial number if it exists
-    const existingCompanies = await db
+    // Get the highest device serial number across ALL companies to ensure global uniqueness (or per company if preferred)
+    // The user requested "starting with FS-00001 going upwards" which implies a global or incremental sequence.
+    // However, usually serial numbers are unique identifiers. Let's find the max FS- number in the system.
+    const allSerials = await db
       .select({ fdmsDeviceSerialNo: companies.fdmsDeviceSerialNo })
       .from(companies)
       .where(
         and(
-          eq(companies.id, companyId),
-          sql` IS NOT NULL AND  != ''`
+          sql`${companies.fdmsDeviceSerialNo} IS NOT NULL`,
+          sql`${companies.fdmsDeviceSerialNo} != ''`
         )
       );
 
-    // Extract numbers from existing serials (format: FS-00001)
     let maxNumber = 0;
-    for (const company of existingCompanies) {
-      if (company.fdmsDeviceSerialNo) {
-        const match = company.fdmsDeviceSerialNo.match(/FS-(\d+)/);
+    for (const item of allSerials) {
+      if (item.fdmsDeviceSerialNo) {
+        const match = item.fdmsDeviceSerialNo.match(/FS-(\d+)/);
         if (match) {
           const num = parseInt(match[1], 10);
           if (num > maxNumber) {
@@ -244,10 +245,8 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    // Generate next serial number
     const nextNumber = maxNumber + 1;
-    const serial = `FS-`;
-    return serial;
+    return `FS-${nextNumber.toString().padStart(5, '0')}`;
   }
   async getCustomers(companyId: number): Promise<Customer[]> {
     return await db.select().from(customers).where(eq(customers.companyId, companyId));

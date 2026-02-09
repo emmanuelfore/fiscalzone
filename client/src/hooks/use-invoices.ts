@@ -138,6 +138,10 @@ export function useFiscalizeInvoice() {
       }
     },
     onError: (err: any) => {
+      // Invalidate queries so UI updates with "Failed" status and validation errors
+      queryClient.invalidateQueries({ queryKey: [api.invoices.get.path] }); // Invalidate all invoice details
+      queryClient.invalidateQueries({ queryKey: [api.invoices.list.path] });
+
       const zimraErr = getZimraErrorMessage(err.zimraErrorCode);
       toast({
         title: zimraErr.title,

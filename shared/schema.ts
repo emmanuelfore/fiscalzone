@@ -327,7 +327,7 @@ export const currencies = pgTable("currencies", {
   companyId: integer("company_id").references(() => companies.id).notNull(),
   code: text("code").notNull(), // USD, ZWG, ZAR
   name: text("name").notNull(), // US Dollar, Zimbabwe Gold
-  symbol: text("symbol").notNull(), // $, ZiG, R
+  symbol: text("symbol").notNull(), // $, ZWG, R
   exchangeRate: decimal("exchange_rate", { precision: 10, scale: 6 }).notNull().default("1.000000"),
   isBase: boolean("is_base").default(false),
   isActive: boolean("is_active").default(true),

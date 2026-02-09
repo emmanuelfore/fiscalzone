@@ -554,60 +554,57 @@ export class ZimraDevice {
 
         const moneyTypeMapping: Record<number, string> = { 0: "Cash", 1: "Card", 2: "MobileWallet", 3: "Coupon", 4: "Credit", 5: "BankTransfer", 6: "Other" };
 
-        // Sort counters (Priority: Type -> TaxID/MoneyType -> Currency)
+        // Sort counters (Priority: Type -> Currency -> TaxID/MoneyType)
         const sortedCounters = activeCounters.sort((a, b) => {
             // 1. Sort by Fiscal Counter Type Priority
             const typePriority = (type: string) => {
                 const map: Record<string, number> = {
-                    'SaleByTax': 1,
-                    'SaleTaxByTax': 2,
-                    'CreditNoteByTax': 3,
-                    'CreditNoteTaxByTax': 4,
-                    'DebitNoteByTax': 5,
-                    'DebitNoteTaxByTax': 6,
-                    'BalanceByMoneyType': 7
+                    'SaleByTax': 0,
+                    'SaleTaxByTax': 1,
+                    'CreditNoteByTax': 2,
+                    'CreditNoteTaxByTax': 3,
+                    'DebitNoteByTax': 4,
+                    'DebitNoteTaxByTax': 5,
+                    'BalanceByMoneyType': 6
                 };
-                return map[type] || 99;
+                return map[type] !== undefined ? map[type] : 99;
             };
 
             const pa = typePriority(a.fiscalCounterType);
             const pb = typePriority(b.fiscalCounterType);
             if (pa !== pb) return pa - pb;
 
-            // 2. Sort by Feature Key (TaxID or MoneyType)
-            const getFeatureKey = (obj: any) => {
+            // 2. Sort by Currency (Alphabetical Ascending) - PRIORITY OVER FEATURE
+            const currencyCompare = (a.fiscalCounterCurrency || "").localeCompare(b.fiscalCounterCurrency || "");
+            if (currencyCompare !== 0) return currencyCompare;
+
+            // 3. Sort by Feature Key (TaxID or MoneyType ID) - Ascending
+            const getFeatureKey = (obj: any): number => {
                 if (obj.fiscalCounterTaxID !== undefined && obj.fiscalCounterTaxID !== null) {
                     return obj.fiscalCounterTaxID; // Number
                 }
-                if (obj.fiscalCounterTaxPercent !== undefined && obj.fiscalCounterTaxPercent !== null) {
-                    return obj.fiscalCounterTaxPercent; // Number
-                }
                 if (obj.fiscalCounterMoneyType !== undefined && obj.fiscalCounterMoneyType !== null) {
-                    // Spec example shows CASH before CARD, implying specific order or ID-based sorting
-                    const mType = String(obj.fiscalCounterMoneyType).toUpperCase();
-                    if (mType === 'CASH') return 0;
-                    if (mType === 'CARD') return 1;
-                    if (mType === 'MOBILEWALLET' || mType === 'MOBILE') return 2;
-                    if (mType === 'COUPON') return 3;
-                    if (mType === 'CREDIT') return 4;
-                    if (mType === 'BANKTRANSFER' || mType === 'EFT') return 5;
-                    return 6;
+                    // MoneyType ID mapping
+                    // Cash 0, Card 1, MobileWallet 2, Coupon 3, Credit 4, BankTransfer 5, Other 6
+                    const mType = String(obj.fiscalCounterMoneyType).toLowerCase();
+                    if (mType === 'cash') return 0;
+                    if (mType === 'card') return 1;
+                    if (mType === 'mobilewallet' || mType === 'mobile' || mType.includes('mobile')) return 2;
+                    if (mType === 'coupon') return 3;
+                    if (mType === 'credit') return 4;
+                    if (mType === 'banktransfer' || mType === 'eft' || mType.includes('transfer')) return 5;
+                    return 6; // Other
                 }
-                return 0;
+                return 0; // Fallback
             };
 
             const ka = getFeatureKey(a);
             const kb = getFeatureKey(b);
 
-            if (ka !== kb) {
-                if (typeof ka === 'number' && typeof kb === 'number') return ka - kb;
-                return String(ka).localeCompare(String(kb));
-            }
-
-            // 3. Sort by Currency (Alphabetical Ascending)
-            return (a.fiscalCounterCurrency || "").localeCompare(b.fiscalCounterCurrency || "");
+            return ka - kb;
         });
 
+        console.log("Step 1 - Convert fiscalDayCounters:");
         const concatenatedCounters = sortedCounters.map((c: any) => {
             const type = c.fiscalCounterType.toUpperCase();
             const currency = c.fiscalCounterCurrency.toUpperCase();
@@ -616,8 +613,10 @@ export class ZimraDevice {
             let field3 = ""; // Either taxPercent or moneyType
 
             if (type.includes('BYTAX')) {
-                // Spec: Exempt (ID 1) should use empty value in signature
-                if (c.fiscalCounterTaxID !== 1 && c.fiscalCounterTaxPercent !== undefined && c.fiscalCounterTaxPercent !== null) {
+                // Spec: "In case of exempt which does not send tax percent value, empty value should be used in signature."
+                // We rely on the presence of fiscalCounterTaxPercent. If undefined (Exempt), send empty string.
+                if (c.fiscalCounterTaxPercent !== undefined && c.fiscalCounterTaxPercent !== null) {
+                    // "In case taxPercent is an integer there should be value of tax percent, dot and two zeros sent."
                     field3 = c.fiscalCounterTaxPercent.toFixed(2);
                 }
             } else if (type.includes('BYMONEYTYPE')) {
@@ -626,11 +625,21 @@ export class ZimraDevice {
                 }
             }
 
-            return `${type}${currency}${field3}${valueInCents}`;
+            const line = `${type}${currency}${field3}${valueInCents}`;
+            console.log(line);
+            return line;
         }).join("");
 
         const stringToSign = `${deviceId}${fiscalDayNo}${fiscalDayDate}${concatenatedCounters}`;
+
+        console.log("Step 2 - Concatenate all fields:");
+        console.log(stringToSign);
+
         const hash = this.getHash(stringToSign);
+
+        console.log("Step 3 - Hash with SHA-256:");
+        console.log(hash);
+
         const signature = this.signData(stringToSign);
 
         console.log(`[ZIMRA] CloseDay Signature Base: ${stringToSign}`);
@@ -1013,8 +1022,9 @@ export class ZimraDevice {
         const receiptData: ReceiptData = {
             receiptType: 'FiscalInvoice', // Default, logic below can adjust
             receiptCurrency: invoice.currency || 'USD',
-            receiptCounter: (company.dailyReceiptCount || 0) + 1,
-            receiptGlobalNo: (company.lastReceiptGlobalNo || 0) + 1,
+            // Use existing counters if passed (resubmission) or generate new ones
+            receiptCounter: invoice.receiptCounter || ((company.dailyReceiptCount || 0) + 1),
+            receiptGlobalNo: invoice.receiptGlobalNo || ((company.lastReceiptGlobalNo || 0) + 1),
             invoiceNo: invoice.invoiceNumber,
             receiptDate: new Date().toISOString().slice(0, 19),
             receiptLines: invoice.items.map((item: any, index: number) => ({

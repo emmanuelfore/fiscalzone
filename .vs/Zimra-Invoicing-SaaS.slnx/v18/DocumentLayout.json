@@ -36,7 +36,7 @@
               "RelativeDocumentMoniker": "launch.vs.json",
               "ToolTip": "C:\\Users\\Emmanuel\\Downloads\\Zimra-Invoicing-SaaS\\Zimra-Invoicing-SaaS\\launch.vs.json",
               "RelativeToolTip": "launch.vs.json",
-              "ViewState": "AgIAAAMAAAAAAAAAAAAiwAYAAAAVAAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAgAAAAhAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
               "WhenOpened": "2026-01-20T13:11:17.608Z",
               "EditorCaption": ""
@@ -49,7 +49,7 @@
               "RelativeDocumentMoniker": "FDMS SPECIFICATION.md",
               "ToolTip": "C:\\Users\\Emmanuel\\Downloads\\Zimra-Invoicing-SaaS\\Zimra-Invoicing-SaaS\\FDMS SPECIFICATION.md",
               "RelativeToolTip": "FDMS SPECIFICATION.md",
-              "ViewState": "AgIAABsIAAAAAAAAAAAuwCwIAAAIAAAAAAAAAA==",
+              "ViewState": "AgIAABsIAAAAAAAAAAAuwCIIAAALAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
               "WhenOpened": "2026-01-20T07:47:37.718Z",
               "EditorCaption": ""
@@ -64,8 +64,7 @@
               "RelativeToolTip": "client\\index.html",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001512|",
-              "WhenOpened": "2026-01-20T07:47:26.7Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-01-20T07:47:26.7Z"
             },
             {
               "$type": "Document",
@@ -77,12 +76,7 @@
               "RelativeToolTip": "ALL_FIXED_FINAL.md",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
-              "WhenOpened": "2026-01-20T07:46:44.945Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Bookmark",
-              "Name": "ST:0:0:{cce594b6-0c39-4442-ba28-10c64ac7e89f}"
+              "WhenOpened": "2026-01-20T07:46:44.945Z"
             }
           ]
         }

@@ -100,7 +100,7 @@ export default function Dashboard() {
   }, [selectedCompany?.fdmsDeviceId]);
 
   const { data: currencies } = useCurrencies(selectedCompany?.id || 0);
-  const [reportCurrencyCode, setReportCurrencyCode] = React.useState<string>("ZiG");
+  const [reportCurrencyCode, setReportCurrencyCode] = React.useState<string>("ZWG");
 
   const consolidatedCurrency = currencies?.find(c => c.code === reportCurrencyCode) || currencies?.find(c => c.code === 'USD');
   const consolidatedRate = Number(consolidatedCurrency?.exchangeRate || 1);
@@ -367,7 +367,7 @@ export default function Dashboard() {
             <div className="space-y-3">
               {isLoading ? (
                 <div className="text-sm text-slate-500 text-center py-8">Loading activity...</div>
-              ) : invoices?.slice(0, 5).map((inv) => (
+              ) : invoices?.slice(0, 5).map((inv: any) => (
                 <Link key={inv.id} href={`/invoices/${inv.id}`}>
                   <div className="flex items-center justify-between p-3 rounded-xl bg-white hover:bg-slate-50 transition-all cursor-pointer border border-slate-100 hover:border-violet-100 shadow-sm group">
                     <div className="flex items-center gap-3">

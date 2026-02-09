@@ -177,7 +177,7 @@ export default function CustomerDetailsPage() {
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="USD">USD</SelectItem>
-                                            <SelectItem value="ZiG">ZiG</SelectItem>
+                                            <SelectItem value="ZWG">ZWG</SelectItem>
                                         </SelectContent>
                                     </Select>
                                     <Popover>

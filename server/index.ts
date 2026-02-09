@@ -7,11 +7,13 @@ import { setupSwagger } from "./swagger.js";
 import { startRecurringInvoiceWorker } from "./jobs.js";
 
 import cors from "cors";
+import compression from "compression";
 
 // ... imports
 
 const app = express();
 app.use(cors()); // Allow all origins for dev simplicity // Allow all origins for dev simplicity
+app.use(compression());
 const httpServer = createServer(app);
 
 declare module "http" {

@@ -40,6 +40,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { SmartFixDialog } from "@/components/smart-fix-dialog";
+import { useQuery } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/api";
+import { Clock, TrendingUp, AlertCircle } from "lucide-react";
+import { useCurrencies } from "@/hooks/use-currencies";
 
 export default function InvoicesPage() {
   const [, setLocation] = useLocation();
@@ -61,7 +65,30 @@ export default function InvoicesPage() {
     type: typeFilter,
     dateFrom: dateRange?.from,
     dateTo: dateRange?.to
+
   });
+
+  const { data: currencies } = useCurrencies(selectedCompanyId);
+  const baseCurrency = currencies?.find(c => c.code === 'USD'); // Assuming USD base for now or first
+  const currentSymbol = baseCurrency?.symbol || '$';
+
+  // Fetch Stats Summary
+  const { data: summary } = useQuery({
+    queryKey: ["stats", "summary", selectedCompanyId],
+    queryFn: async () => {
+      if (!selectedCompanyId) return null;
+      const res = await apiFetch(`/api/companies/${selectedCompanyId}/stats/summary`);
+      if (!res.ok) return null;
+      return await res.json();
+    },
+    enabled: !!selectedCompanyId
+  });
+
+  const stats = {
+    total: summary?.totalRevenue || 0,
+    pending: summary?.pendingAmount || 0,
+    overdue: summary?.overdueAmount || 0 // Hopeful matching
+  };
 
   const invoices = result?.data;
   const totalPages = result?.pages || 0;
@@ -182,6 +209,34 @@ export default function InvoicesPage() {
         </div>
       </div>
 
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <Card className="card-depth border-none bg-white/50 backdrop-blur-sm">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between space-y-0 pb-2">
+              <p className="text-sm font-medium text-slate-500">Total Revenue</p>
+              <TrendingUp className="h-4 w-4 text-emerald-600" />
+            </div>
+            <div className="text-2xl font-bold text-slate-900">{currentSymbol}{stats.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+            <p className="text-xs text-slate-500 mt-1">
+              Across all issued invoices
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="card-depth border-none bg-white/50 backdrop-blur-sm">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between space-y-0 pb-2">
+              <p className="text-sm font-medium text-slate-500">Outstanding</p>
+              <Clock className="h-4 w-4 text-amber-600" />
+            </div>
+            <div className="text-2xl font-bold text-slate-900">{currentSymbol}{stats.pending.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+            <p className="text-xs text-amber-600 mt-1 font-medium">
+              Pending payments
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
       <Card className="card-depth border-none overflow-hidden">
         <div className="p-4 border-b border-slate-100 bg-white">
           <div className="flex flex-col md:flex-row gap-4">
@@ -209,7 +264,6 @@ export default function InvoicesPage() {
                 <SelectItem value="issued">Issued</SelectItem>
                 <SelectItem value="paid">Paid</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="overdue">Overdue</SelectItem>
                 <SelectItem value="cancelled">Cancelled</SelectItem>
               </SelectContent>
             </Select>
@@ -530,6 +584,6 @@ export default function InvoicesPage() {
           </div>
         </CardContent>
       </Card>
-    </Layout>
+    </Layout >
   );
 }

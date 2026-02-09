@@ -19,17 +19,20 @@ export function StatusBadge({
     quote: "bg-indigo-100 text-indigo-700 border-indigo-200",
     fiscalized: "bg-green-100 text-green-700 border-green-200",
     "pending-sync": "bg-orange-100 text-orange-700 border-orange-200 animate-pulse",
+    failed: "bg-red-100 text-red-700 border-red-200",
   };
 
   const style = styles[status.toLowerCase()] || styles.draft;
 
   return (
-    <span className={cn(
-      "px-2.5 py-0.5 rounded-full text-xs font-medium border uppercase tracking-wide",
-      style,
-      className
-    )}>
+    <span className={
+      cn(
+        "px-2.5 py-0.5 rounded-full text-xs font-medium border uppercase tracking-wide",
+        style,
+        className
+      )
+    } >
       {children || status}
-    </span>
+    </span >
   );
 }

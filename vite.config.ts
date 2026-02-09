@@ -31,6 +31,14 @@ export default defineConfig({
   build: {
     outDir: path.resolve(process.cwd(), "dist", "public"),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ["react", "react-dom", "framer-motion", "wouter"],
+          ui: ["@radix-ui/react-dialog", "@radix-ui/react-popover", "@radix-ui/react-select"],
+        },
+      },
+    },
   },
   server: {
     fs: {

@@ -45,7 +45,11 @@ export function DayManagementControls({ company, variant = 'light' }: DayManagem
         enabled: isRegistered
     });
 
-    const isOpen = zimraStatusQuery.data?.fiscalDayStatus === 'FiscalDayOpened' || (!zimraStatusQuery.data && company.fiscalDayOpen);
+    const zimraStatus = zimraStatusQuery.data?.fiscalDayStatus;
+    const isCloseFailed = zimraStatus === 'FiscalDayCloseFailed';
+    // Treat 'FiscalDayCloseFailed' as effectively OPEN so we can retry closing it.
+    const isOpen = zimraStatus === 'FiscalDayOpened' || isCloseFailed || (!zimraStatusQuery.data && company.fiscalDayOpen);
+
     const fiscalDayNo = zimraStatusQuery.data?.lastFiscalDayNo || company.currentFiscalDayNo || "N/A";
 
     // Close Day Mutation
@@ -121,15 +125,15 @@ export function DayManagementControls({ company, variant = 'light' }: DayManagem
                 <div className="text-center sm:text-left">
                     <p className={`text-xs uppercase tracking-wider font-semibold ${subTextColor}`}>Fiscal Day {fiscalDayNo}</p>
                     <div className="flex items-center gap-2 mt-1">
-                        <p className={`text-xl font-bold ${textColor}`}>
-                            {isOpen ? "Status: OPEN" : "Status: CLOSED"}
+                        <p className={`text-xl font-bold ${isCloseFailed ? "text-red-500" : textColor}`}>
+                            {isCloseFailed ? "Status: CLOSE FAILED" : (isOpen ? "Status: OPEN" : "Status: CLOSED")}
                         </p>
                         {zimraStatusQuery.isLoading && <RefreshCw className="w-3 h-3 animate-spin text-slate-400" />}
                     </div>
                 </div>
 
                 <div className="flex flex-wrap gap-2 justify-center">
-                    {/* X-Report (Only when open) */}
+                    {/* X-Report (Only when open or failed close) */}
                     {isOpen && <XReportButton companyId={company.id} variant={variant} />}
 
                     {/* Z-Report (For closed days or after successful closure) */}
@@ -148,7 +152,7 @@ export function DayManagementControls({ company, variant = 'light' }: DayManagem
                             disabled={closeDayMutation.isPending}
                         >
                             {closeDayMutation.isPending ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : null}
-                            Close Fiscal Day
+                            {isCloseFailed ? "Retry Close Day" : "Close Fiscal Day"}
                         </Button>
                     ) : (
                         <Button

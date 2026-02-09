@@ -806,24 +806,12 @@ export async function registerRoutes(
       const companyId = Number(req.params.id);
       const { deviceId, activationKey, deviceSerialNo } = req.body;
 
-      if (!deviceId || !activationKey) {
+      if (!deviceId || !activationKey || !deviceSerialNo) {
         return res.status(400).json({ message: "Missing required ZIMRA fields" });
       }
 
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ message: "Company not found" });
-
-      // Auto-generate or preserve device serial number
-      let finalDeviceSerialNo = deviceSerialNo;
-      if (!finalDeviceSerialNo) {
-        // Check if company already has a serial (re-registration)
-        if (company.fdmsDeviceSerialNo) {
-          finalDeviceSerialNo = company.fdmsDeviceSerialNo;
-        } else {
-          // Generate new serial for first-time registration
-          finalDeviceSerialNo = await storage.generateNextDeviceSerial(companyId);
-        }
-      }
 
       // Determine Base URL based on Company Environment
       const baseUrl = company.zimraEnvironment === 'production'
@@ -833,7 +821,7 @@ export async function registerRoutes(
       // Instantiate device just for registration (no keys yet)
       const device = new ZimraDevice({
         deviceId,
-        deviceSerialNo: finalDeviceSerialNo,
+        deviceSerialNo,
         activationKey,
         baseUrl: baseUrl
       }, getZimraLogger(companyId));
@@ -843,7 +831,7 @@ export async function registerRoutes(
       // Save keys and device info to DB
       await storage.updateCompany(companyId, {
         fdmsDeviceId: deviceId,
-        fdmsDeviceSerialNo: finalDeviceSerialNo, // ZIMRA Field [21] - Auto-generated or preserved
+        fdmsDeviceSerialNo: deviceSerialNo, // ZIMRA Field [21]
         fdmsApiKey: activationKey,
         zimraPrivateKey: keys.privateKey,
         zimraCertificate: keys.certificate

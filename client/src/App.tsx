@@ -35,7 +35,7 @@ import { useEffect } from "react";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
-  const { data: companies, isLoading: isLoadingCompanies } = useCompanies();
+  const { data: companies, isLoading: isLoadingCompanies } = useCompanies(!!user);
   const [, setLocation] = useLocation();
 
   useEffect(() => {

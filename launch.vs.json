@@ -3,11 +3,14 @@
   "defaults": {},
   "configurations": [
     {
-      "name": "Run npm dev (launch & attach)",
+      "name": "Debug Server (npm run dev)",
       "type": "node",
       "request": "launch",
       "runtimeExecutable": "npm",
-      "args": [ "run", "dev" ],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "cwd": "${workspaceFolder}",
       "env": {
         "NODE_OPTIONS": "--inspect=9229"
@@ -15,6 +18,19 @@
       "console": "integratedTerminal",
       "stopOnEntry": false,
       "autoAttachChildProcesses": true
+    },
+    {
+      "name": "Debug Current File (TSX)",
+      "type": "node",
+      "request": "launch",
+      "program": "${file}",
+      "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/tsx",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "NODE_ENV": "development"
+      },
+      "console": "integratedTerminal"
     },
     {
       "name": "Attach to Node (9229)",

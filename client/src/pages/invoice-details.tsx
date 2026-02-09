@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
 import { useLocation, useRoute } from "wouter";
-import { ArrowLeft, Printer, Send, ShieldCheck, Loader2, Download, Undo2, ClipboardList, MessageCircle } from "lucide-react";
+import { ArrowLeft, Printer, Send, ShieldCheck, Loader2, Download, Undo2, ClipboardList, MessageCircle, MoreVertical, Mail, Share2, CreditCard } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { PDFDownloadLink } from "@react-pdf/renderer";
 import { InvoicePDF } from "@/components/invoices/pdf-document";
@@ -21,6 +21,14 @@ import { useTaxConfig } from "@/hooks/use-tax-config";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ValidationErrorsDisplay } from "@/components/invoices/validation-errors-display";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function InvoiceDetailsPage() {
   const [, params] = useRoute("/invoices/:id");
@@ -275,112 +283,40 @@ export default function InvoiceDetailsPage() {
 
   return (
     <Layout>
-      <div className="mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <Button
             variant="ghost"
             onClick={() => setLocation(invoice?.status === 'quote' ? "/quotations" : "/invoices")}
-            className="mb-2 pl-0 text-slate-500 hover:text-slate-900"
+            className="mb-1 pl-0 text-slate-500 hover:text-slate-900 h-auto py-1"
           >
             <ArrowLeft className="w-4 h-4 mr-2" /> Back to {invoice?.status === 'quote' ? "Quotations" : "Invoices"}
           </Button>
           <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-display font-bold text-slate-900">
+            <h1 className="text-2xl font-display font-bold text-slate-900">
               {invoice.status === 'quote' ? "Quotation" : (isCreditNote ? "Credit Note" : "Invoice")} {invoice.invoiceNumber}
             </h1>
-            <StatusBadge status={invoice.status!} />
+            <StatusBadge status={
+              (invoice.fdmsStatus === 'failed' || invoice.validationStatus === 'red') ? 'failed' : invoice.status!
+            }>
+              {(invoice.fdmsStatus === 'failed' || invoice.validationStatus === 'red') ? "Fiscalised with Errors" : undefined}
+            </StatusBadge>
           </div>
         </div>
 
-        <div className="flex gap-2">
-          {/* PDF Download - Wait for QR Code if fiscalized */}
-          {["issued", "paid", "fiscalized"].includes(invoice.status || "") && invoice && company && (!invoice.fiscalCode || qrCodeDataUrl) && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                className="bg-white text-green-600 hover:text-green-700 hover:bg-green-50 border-green-200"
-                onClick={handleShareWhatsapp}
-              >
-                <MessageCircle className="w-4 h-4 mr-2" />
-                WhatsApp
-              </Button>
+        <div className="flex items-center gap-2">
+          {/* PRIMARY ACTIONS: Fiscalize & Pay */}
 
-              <Button
-                variant="outline"
-                size="sm"
-                className="bg-white"
-                onClick={() => setShowEmailDialog(true)}
-              >
-                <Send className="w-4 h-4 mr-2" />
-                Email
-              </Button>
-
-              <PDFDownloadLink
-                document={
-                  <InvoicePDF
-                    invoice={invoice}
-                    company={company}
-                    customer={invoice.customer}
-                    qrCodeUrl={qrCodeDataUrl}
-                    taxTypes={taxTypes.data}
-                  />
-                }
-                fileName={`${isCreditNote ? "CreditNote" : "Invoice"}-${invoice.invoiceNumber}.pdf`}
-              >
-                {({ loading }) => (
-                  <Button variant="outline" size="sm" className="bg-white" disabled={loading}>
-                    {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
-                    Download PDF
-                  </Button>
-                )}
-              </PDFDownloadLink>
-            </>
-          )}
-
-          {/* Issue Credit Note - For Issued, Paid, or Fiscalized */}
-          {!isCreditNote && !isDebitNote && ["issued", "paid", "fiscalized"].includes(invoice.status || "") && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 border-red-200"
-              onClick={handleCreateCreditNote}
-              disabled={createCreditNote.isPending || isCreatingCN || createDebitNote.isPending || isCreatingDN}
-            >
-              {createCreditNote.isPending || isCreatingCN ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Undo2 className="w-4 h-4 mr-2" />}
-              Issue Credit Note
-            </Button>
-          )}
-
-          {/* Issue Debit Note - For Issued, Paid, or Fiscalized */}
-          {!isCreditNote && !isDebitNote && ["issued", "paid", "fiscalized"].includes(invoice.status || "") && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-700 border-blue-200"
-              onClick={handleCreateDebitNote}
-              disabled={createDebitNote.isPending || isCreatingDN || createCreditNote.isPending || isCreatingCN}
-            >
-              {createDebitNote.isPending || isCreatingDN ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />}
-              Issue Debit Note
-            </Button>
-          )}
-
-          {/* Record Payment - For Issued or Fiscalized (if not paid) */}
-          {!isPaid && ["issued", "fiscalized"].includes(invoice.status || "") && (
-            <Button
-              variant="outline"
-              className="bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-200"
-              onClick={() => setShowPaymentModal(true)}
-            >
-              Record Payment
-            </Button>
-          )}
-
-          {/* Fiscalize - For Issued or Paid (not yet fiscalized) */}
+          {/* Fiscalize - Top Priority for Issued/Paid */}
           {["issued", "paid"].includes(invoice.status || "") && !invoice.fiscalCode && (
             <Button
-              className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/20"
+              size="sm"
+              className={cn(
+                "shadow-sm text-white",
+                (invoice.fdmsStatus === 'failed' || invoice.validationStatus === 'red')
+                  ? "bg-red-600 hover:bg-red-700"
+                  : "bg-emerald-600 hover:bg-emerald-700"
+              )}
               onClick={() => {
                 if (isFiscalizing) return;
                 setIsFiscalizing(true);
@@ -391,67 +327,154 @@ export default function InvoiceDetailsPage() {
               disabled={fiscalize.isPending || isFiscalizing}
             >
               {fiscalize.isPending || isFiscalizing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <ShieldCheck className="w-4 h-4 mr-2" />}
-              Fiscalize {isCreditNote ? "Credit Note" : "Invoice"}
+              {(invoice.fdmsStatus === 'failed' || invoice.validationStatus === 'red') ? "Result" : "Fiscalize"}
             </Button>
           )}
 
-          {/* Quotation Actions */}
-          {invoice.status === "quote" && (
-            <>
-              <Button
-                variant="outline"
-                className="bg-white"
-                onClick={() => setLocation(`/quotations/new?edit=${invoiceId}`)}
-              >
-                Edit Quotation
-              </Button>
-              <Button
-                className="bg-primary hover:bg-primary/90"
-                onClick={() => convertQuotation.mutate(invoiceId)}
-                disabled={convertQuotation.isPending}
-              >
-                {convertQuotation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <ClipboardList className="w-4 h-4 mr-2" />}
-                Convert to Invoice
-              </Button>
-            </>
+          {/* Record Payment - Primary for Issued/Fiscalized */}
+          {!isPaid && ["issued", "fiscalized"].includes(invoice.status || "") && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200"
+              onClick={() => setShowPaymentModal(true)}
+            >
+              <CreditCard className="w-4 h-4 mr-2" />
+              Pay
+            </Button>
           )}
 
-          {/* Draft Actions */}
+          {/* Issue - Primary for Draft */}
           {invoice.status === "draft" && (
-            <>
-              <Button
-                variant="outline"
-                onClick={() => setLocation(`/invoices/new?edit=${invoiceId}`)}
-              >
-                Edit Draft
-              </Button>
-              <Button
-                className="bg-primary hover:bg-primary/90"
-                onClick={handleIssue}
-                disabled={updateInvoice.isPending || isIssuing}
-              >
-                {updateInvoice.isPending || isIssuing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />}
-                Issue {isCreditNote ? "Credit Note" : "Invoice"}
-              </Button>
-            </>
+            <Button
+              className="bg-primary hover:bg-primary/90"
+              size="sm"
+              onClick={handleIssue}
+              disabled={updateInvoice.isPending || isIssuing}
+            >
+              {updateInvoice.isPending || isIssuing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />}
+              Issue
+            </Button>
           )}
+
+          {/* Convert - Primary for Quote */}
+          {invoice.status === "quote" && (
+            <Button
+              className="bg-primary hover:bg-primary/90 hidden sm:flex"
+              size="sm"
+              onClick={() => convertQuotation.mutate(invoiceId)}
+              disabled={convertQuotation.isPending}
+            >
+              {convertQuotation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <ClipboardList className="w-4 h-4 mr-2" />}
+              Convert to Invoice
+            </Button>
+          )}
+
+          {/* SECONDARY ACTIONS GROUPED */}
+
+          {/* Share Menu */}
+          {["issued", "paid", "fiscalized"].includes(invoice.status || "") && invoice && company && (!invoice.fiscalCode || qrCodeDataUrl) && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" className="h-9 w-9">
+                  <Share2 className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>Share Invoice</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleShareWhatsapp}>
+                  <MessageCircle className="w-4 h-4 mr-2" /> WhatsApp
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setShowEmailDialog(true)}>
+                  <Mail className="w-4 h-4 mr-2" /> Email
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
+          {/* Download Button (Icon only on mobile, text on desktop if space) */}
+          {["issued", "paid", "fiscalized"].includes(invoice.status || "") && invoice && company && (!invoice.fiscalCode || qrCodeDataUrl) && (
+            <PDFDownloadLink
+              document={
+                <InvoicePDF
+                  invoice={invoice}
+                  company={company}
+                  customer={invoice.customer}
+                  qrCodeUrl={qrCodeDataUrl}
+                  taxTypes={taxTypes.data}
+                />
+              }
+              fileName={`${isCreditNote ? "CreditNote" : "Invoice"}-${invoice.invoiceNumber}.pdf`}
+            >
+              {({ loading }) => (
+                <Button variant="outline" size="icon" className="h-9 w-9" disabled={loading}>
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                </Button>
+              )}
+            </PDFDownloadLink>
+          )}
+
+          {/* More Actions Menu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-9 w-9">
+                <MoreVertical className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Actions</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+
+              {/* Edit based on status */}
+              {invoice.status === "draft" && (
+                <DropdownMenuItem onClick={() => setLocation(`/invoices/new?edit=${invoiceId}`)}>
+                  Edit Draft
+                </DropdownMenuItem>
+              )}
+              {invoice.status === "quote" && (
+                <>
+                  <DropdownMenuItem onClick={() => setLocation(`/quotations/new?edit=${invoiceId}`)}>
+                    Edit Quotation
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="sm:hidden" onClick={() => convertQuotation.mutate(invoiceId)}>
+                    Convert to Invoice
+                  </DropdownMenuItem>
+                </>
+              )}
+
+              {/* Credit/Debit Notes - Allowed on ALL issued/fiscalized types including other CN/DNs */}
+              {["issued", "paid", "fiscalized"].includes(invoice.status || "") && (
+                <>
+                  <DropdownMenuItem
+                    onClick={handleCreateCreditNote}
+                    disabled={createCreditNote.isPending || isCreatingCN || createDebitNote.isPending || isCreatingDN}
+                  >
+                    <Undo2 className="w-4 h-4 mr-2" /> Issue Credit Note
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={handleCreateDebitNote}
+                    disabled={createDebitNote.isPending || isCreatingDN || createCreditNote.isPending || isCreatingCN}
+                  >
+                    <Send className="w-4 h-4 mr-2" /> Issue Debit Note
+                  </DropdownMenuItem>
+                </>
+              )}
+
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => window.print()}>
+                <Printer className="w-4 h-4 mr-2" /> Print View
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
       {/* Validation Errors Display */}
-      {invoice?.validationErrors && invoice.validationErrors.length > 0 && (
+      {(invoice as any)?.validationErrors && (invoice as any).validationErrors.length > 0 && (
         <div className="max-w-4xl mx-auto mb-6">
           <ValidationErrorsDisplay
-            errors={invoice.validationErrors}
-            onResubmit={() => {
-              if (isFiscalizing) return;
-              setIsFiscalizing(true);
-              fiscalize.mutate(invoiceId, {
-                onSettled: () => setIsFiscalizing(false)
-              });
-            }}
-            onEdit={() => setLocation(`/invoices/new?edit=${invoiceId}`)}
-            isResubmitting={fiscalize.isPending || isFiscalizing}
+            errors={(invoice as any).validationErrors}
           />
         </div>
       )}
@@ -502,14 +525,14 @@ export default function InvoiceDetailsPage() {
 
       <div className="max-w-4xl mx-auto">
         <Card className="border-none shadow-xl bg-white overflow-hidden print:shadow-none print:border">
-          <CardContent className="p-10 font-mono text-sm">
+          <CardContent className="p-6 font-mono text-sm">
 
             {/* 1. Verification Block */}
             {invoice.fiscalCode && (
-              <div className="text-center border-b-2 border-slate-100 pb-6 mb-8 bg-slate-50/50 -mx-10 -mt-10 pt-10 px-10">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Verification Code</p>
-                <p className="font-bold text-lg tracking-wider font-mono text-emerald-600 mb-2">{verificationCode}</p>
-                <p className="text-xs text-slate-500">
+              <div className="text-center border-b border-slate-100 pb-4 mb-6 bg-slate-50/50 -mx-6 -mt-6 pt-6 px-6">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Verification Code</p>
+                <p className="font-bold text-base tracking-wider font-mono text-emerald-600 mb-1">{verificationCode}</p>
+                <p className="text-[10px] text-slate-500">
                   Verify at <a href={company?.qrUrl || "https://receipt.zimra.org"} target="_blank" className="underline hover:text-emerald-600">{company?.qrUrl || "https://receipt.zimra.org"}</a>
                 </p>
               </div>
@@ -600,7 +623,7 @@ export default function InvoiceDetailsPage() {
             </div>
 
             {/* 3. Header Info */}
-            <div className="bg-slate-50 rounded-lg p-6 mb-10 border border-slate-100">
+            <div className="bg-slate-50 rounded-lg p-4 mb-6 border border-slate-100">
               <div className="grid grid-cols-2 gap-y-6 gap-x-12">
                 <div className="space-y-4">
                   <div className="space-y-2">
@@ -686,7 +709,7 @@ export default function InvoiceDetailsPage() {
             {/* 4. Line Items */}
             <table className="w-full mb-8">
               <thead>
-                <tr className="border-b-2 border-slate-900 text-xs uppercase tracking-wider">
+                <tr className="border-b border-slate-900 text-xs uppercase tracking-wider">
                   <th className="text-left py-3 font-bold text-slate-900 w-16">HS Code</th>
                   <th className="text-left py-3 font-bold text-slate-900">Description</th>
                   <th className="text-center py-3 font-bold text-slate-900 w-16">Qty</th>
@@ -726,8 +749,9 @@ export default function InvoiceDetailsPage() {
                       {!invoice.taxInclusive && <td className="py-3 text-right text-slate-700">{lineTotal.toFixed(2)}</td>}
                       <td className="py-3 text-right text-slate-500 text-xs">{(() => {
                         const matchingType = taxTypes.data?.find((t: any) => t.id == item.taxTypeId);
-                        const isExempt = matchingType?.zimraTaxId == 1 || matchingType?.zimraTaxId == "1" || matchingType?.zimraCode === 'C' || matchingType?.zimraCode === 'E' || matchingType?.name?.toLowerCase().includes('exempt');
-                        const isZeroRated = matchingType?.zimraTaxId == 2 || matchingType?.zimraTaxId == "2" || matchingType?.zimraCode === 'D' || matchingType?.name?.toLowerCase().includes('zero rated') || (!isExempt && taxRate === 0);
+                        const zimraTaxIdRaw = matchingType?.zimraTaxId;
+                        const isExempt = zimraTaxIdRaw == "1" || zimraTaxIdRaw == 1 || matchingType?.zimraCode === 'C' || matchingType?.zimraCode === 'E' || matchingType?.name?.toLowerCase().includes('exempt');
+                        const isZeroRated = zimraTaxIdRaw == "2" || zimraTaxIdRaw == 2 || matchingType?.zimraCode === 'D' || matchingType?.name?.toLowerCase().includes('zero rated') || (!isExempt && taxRate === 0);
                         return isExempt ? "-" : vatAmt.toFixed(2);
                       })()}</td>
                       <td className="py-3 text-right font-bold text-slate-900">{displayTotal.toFixed(2)}</td>
@@ -755,8 +779,9 @@ export default function InvoiceDetailsPage() {
                     {Object.entries(taxSummary).map(([key, data]) => {
                       const summary = data as { taxRate: number; taxTypeId: number; netAmount: number; taxAmount: number; totalAmount: number };
                       const matchingType = taxTypes.data?.find((t: any) => t.id == summary.taxTypeId);
-                      const isExempt = matchingType?.zimraTaxId == 1 || matchingType?.zimraTaxId == "1" || matchingType?.zimraCode === 'C' || matchingType?.zimraCode === 'E' || matchingType?.name?.toLowerCase().includes('exempt');
-                      const isZeroRated = matchingType?.zimraTaxId == 2 || matchingType?.zimraTaxId == "2" || matchingType?.zimraCode === 'D' || matchingType?.name?.toLowerCase().includes('zero rated') || (!isExempt && summary.taxRate === 0);
+                      const zimraTaxIdRaw = matchingType?.zimraTaxId;
+                      const isExempt = zimraTaxIdRaw == "1" || zimraTaxIdRaw == 1 || matchingType?.zimraCode === 'C' || matchingType?.zimraCode === 'E' || matchingType?.name?.toLowerCase().includes('exempt');
+                      const isZeroRated = zimraTaxIdRaw == "2" || zimraTaxIdRaw == 2 || matchingType?.zimraCode === 'D' || matchingType?.name?.toLowerCase().includes('zero rated') || (!isExempt && summary.taxRate === 0);
 
                       return (
                         <div key={key} className="grid grid-cols-4 gap-4 text-sm border-b border-slate-200 pb-2 last:border-0">

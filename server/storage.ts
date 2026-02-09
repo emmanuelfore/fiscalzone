@@ -226,7 +226,7 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(companies.id, companyId),
-          sql`${companies.fdmsDeviceSerialNo} IS NOT NULL AND ${companies.fdmsDeviceSerialNo} != ''`
+          sql` IS NOT NULL AND  != ''`
         )
       );
 
@@ -246,7 +246,7 @@ export class DatabaseStorage implements IStorage {
 
     // Generate next serial number
     const nextNumber = maxNumber + 1;
-    const serial = `FS-${nextNumber.toString().padStart(5, '0')}`;
+    const serial = `FS-`;
     return serial;
   }
   async getCustomers(companyId: number): Promise<Customer[]> {

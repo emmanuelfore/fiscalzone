@@ -1,0 +1,75 @@
+{
+  "taxTypes": [
+    {
+      "code": "NON",
+      "name": "NON",
+      "description": "",
+      "rate": "0.00",
+      "zimra_code": "N",
+      "zimra_tax_id": "2",
+      "calculation_method": "INCLUSIVE"
+    },
+    {
+      "code": "EXE",
+      "name": "EXEMPT",
+      "description": "",
+      "rate": "0.00",
+      "zimra_code": "E",
+      "zimra_tax_id": "1",
+      "calculation_method": "INCLUSIVE"
+    },
+    {
+      "code": "VAT",
+      "name": "VAT",
+      "description": "",
+      "rate": "15.50",
+      "zimra_code": "V",
+      "zimra_tax_id": "517",
+      "calculation_method": "INCLUSIVE"
+    }
+  ],
+  "products": [
+    {
+      "name": "TEST VATABLE PRODCT",
+      "description": "",
+      "sku": "PRO-VAT",
+      "price": "10.00",
+      "tax_rate": "15.50",
+      "product_type": "good",
+      "hs_code": "99001000",
+      "tax_type_id": 21
+    },
+    {
+      "name": "TEST NON-VATABLE PRODUCT",
+      "description": "",
+      "sku": "PRO-NON",
+      "price": "20.00",
+      "tax_rate": "0.00",
+      "product_type": "good",
+      "hs_code": "99002000",
+      "tax_type_id": 22
+    },
+    {
+      "name": "TEST EXEMPT PRODUCT",
+      "description": "",
+      "sku": "PRO-EXE",
+      "price": "45.00",
+      "tax_rate": "0.00",
+      "product_type": "good",
+      "hs_code": "99003000",
+      "tax_type_id": 23
+    }
+  ],
+  "customers": [
+    {
+      "name": "TEST CUSTOMER",
+      "email": "test@gmail.com",
+      "phone": "+263783341752",
+      "tin": "2000000000",
+      "vat_number": "220000000",
+      "customer_type": "business",
+      "currency": "USD",
+      "address": "1 Test Address Road\nHarare"
+    }
+  ]
+}

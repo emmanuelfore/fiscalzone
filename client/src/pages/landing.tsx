@@ -56,12 +56,7 @@ export default function LandingPage() {
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex justify-between items-center h-20">
                         <div className="flex items-center gap-2">
-                            <div className="w-10 h-10 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-violet-500/20 text-white">
-                                <LayoutDashboard className="w-6 h-6" />
-                            </div>
-                            <span className="text-xl font-display font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-700">
-                                Fisc<span className="text-violet-600">Zim</span>
-                            </span>
+                            <img src="/fiscalstack-logo.svg" alt="FiscalStack" className="h-10" />
                         </div>
 
                         <div className="hidden md:flex items-center space-x-8">
@@ -131,15 +126,15 @@ export default function LandingPage() {
                             </motion.div>
 
                             <h1 className="text-5xl sm:text-6xl lg:text-7xl font-display font-bold text-slate-900 leading-[1.1] mb-8 tracking-tight">
-                                Invoicing made <br />
-                                <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-600 via-fuchsia-500 to-orange-500 animate-gradient-x">
-                                    Immaculate.
+                                ZIMRA Compliant <br />
+                                <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 via-cyan-500 to-violet-500 animate-gradient-x">
+                                    Invoicing Platform
                                 </span>
                             </h1>
 
                             <p className="text-xl text-slate-600 mb-10 leading-relaxed max-w-2xl mx-auto lg:mx-0">
-                                The most colorful way to manage your finances.
-                                Seamless fiscalization, automated compliance, and elegant reporting for modern businesses.
+                                Automate your tax compliance with real-time FDMS integration.
+                                Create fiscalized invoices, manage multi-currency transactions, and stay compliant with Zimbabwe's tax regulations—all in one powerful platform.
                             </p>
 
                             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
@@ -420,7 +415,7 @@ export default function LandingPage() {
                             Frequently Asked <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-600 to-cyan-500">Questions</span>
                         </h2>
                         <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-                            Everything you need to know about FiscZim and ZIMRA compliance.
+                            Everything you need to know about FiscalStack and ZIMRA compliance.
                         </p>
                     </div>
 
@@ -428,14 +423,14 @@ export default function LandingPage() {
                         {[
                             {
                                 question: "What is ZIMRA compliance and why do I need it?",
-                                answer: "ZIMRA (Zimbabwe Revenue Authority) compliance requires all businesses to fiscalize their invoices through approved systems. FiscZim ensures your invoices meet all ZIMRA requirements, including proper tax calculations, fiscal signatures, and QR codes for verification. Non-compliance can result in penalties and legal issues."
+                                answer: "ZIMRA (Zimbabwe Revenue Authority) compliance requires all businesses to fiscalize their invoices through approved systems. FiscalStack ensures your invoices meet all ZIMRA requirements, including proper tax calculations, fiscal signatures, and QR codes for verification. Non-compliance can result in penalties and legal issues."
                             },
                             {
                                 question: "How does the FDMS integration work?",
                                 answer: "Our Fiscal Device Management System (FDMS) integration connects directly with ZIMRA's servers in real-time. Every invoice you create is automatically fiscalized, receives a unique fiscal signature, and is registered with ZIMRA. This happens seamlessly in the background, so you can focus on your business."
                             },
                             {
-                                question: "Can I try FiscZim before committing to a paid plan?",
+                                question: "Can I try FiscalStack before committing to a paid plan?",
                                 answer: "Absolutely! Our Starter plan is completely free and allows you to create up to 10 invoices per month. This is perfect for freelancers or small businesses just getting started. You can upgrade to Pro or Enterprise at any time as your business grows."
                             },
                             {
@@ -447,7 +442,7 @@ export default function LandingPage() {
                                 answer: "Security is our top priority. We use bank-level encryption (AES-256) for all data at rest and in transit. Our infrastructure is hosted on secure cloud servers with regular backups, DDoS protection, and 24/7 monitoring. We're also fully compliant with ZIMRA's security requirements."
                             },
                             {
-                                question: "Can I use FiscZim for multiple businesses?",
+                                question: "Can I use FiscalStack for multiple businesses?",
                                 answer: "Yes! Our Pro and Enterprise plans support multiple company profiles under one account. You can easily switch between businesses, and each company maintains its own invoices, customers, and reports. This is perfect for accountants or entrepreneurs managing multiple ventures."
                             },
                             {
@@ -456,7 +451,7 @@ export default function LandingPage() {
                             },
                             {
                                 question: "Can I customize my invoice templates?",
-                                answer: "Yes! FiscZim allows you to customize invoice templates with your company logo, brand colors, and custom fields. You can create multiple templates for different types of invoices or clients. All customizations maintain ZIMRA compliance automatically."
+                                answer: "Yes! FiscalStack allows you to customize invoice templates with your company logo, brand colors, and custom fields. You can create multiple templates for different types of invoices or clients. All customizations maintain ZIMRA compliance automatically."
                             }
                         ].map((faq, index) => (
                             <motion.div
@@ -527,10 +522,9 @@ export default function LandingPage() {
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex flex-col md:flex-row justify-between items-center gap-6">
                         <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center text-white font-bold">F</div>
-                            <span className="font-display font-bold text-xl text-slate-900">FiscZim</span>
+                            <img src="/fiscalstack-logo.svg" alt="FiscalStack" className="h-8" />
                         </div>
-                        <p className="text-sm text-slate-500">© 2026 FiscZim. Made with ❤️ in Zimbabwe.</p>
+                        <p className="text-sm text-slate-500">© 2026 FiscalStack. Made with ❤️ in Zimbabwe.</p>
                     </div>
                 </div>
             </footer>

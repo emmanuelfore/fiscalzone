@@ -1,0 +1,11 @@
+<svg width="1024" height="200" viewBox="0 0 1024 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Stacked layers icon -->
+  <g transform="translate(10, 10)">
+    <path d="M10 20 L170 20 Q180 20 180 30 L180 50 Q180 60 170 60 L10 60 Q0 60 0 50 L0 30 Q0 20 10 20 Z" fill="#2563EB" opacity="0.9"/>
+    <path d="M10 70 L170 70 Q180 70 180 80 L180 100 Q180 110 170 110 L10 110 Q0 110 0 100 L0 80 Q0 70 10 70 Z" fill="#2563EB" opacity="0.9"/>
+    <path d="M10 120 L170 120 Q180 120 180 130 L180 150 Q180 160 170 160 L10 160 Q0 160 0 150 L0 130 Q0 120 10 120 Z" fill="#2563EB" opacity="0.9"/>
+  </g>
+  
+  <!-- FiscalStack text -->
+  <text x="210" y="110" font-family="Arial, sans-serif" font-size="72" font-weight="bold" fill="#2563EB">FiscalStack</text>
+</svg>

@@ -1,5 +1,5 @@
 {
-  "name": "rest-express",
+  "name": "fiscal-stack",
   "version": "1.0.0",
   "type": "module",
   "license": "MIT",
@@ -48,6 +48,7 @@
     "@tailwindcss/typography": "^0.5.15",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/react-query": "^5.60.5",
+    "@types/compression": "^1.8.1",
     "@types/node-forge": "^1.3.14",
     "@types/swagger-jsdoc": "^6.0.4",
     "@types/swagger-ui-express": "^4.1.8",
@@ -57,6 +58,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
+    "compression": "^1.8.1",
     "connect-pg-simple": "^10.0.0",
     "cors": "^2.8.5",
     "csv-parse": "^6.1.0",

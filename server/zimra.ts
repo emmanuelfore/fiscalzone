@@ -892,6 +892,19 @@ export class ZimraDevice {
         // receipt.receiptDate must be YYYY-MM-DDTHH:MM:SS
         // Assuming input is valid or ISO string
 
+        // 5. Credit/Debit Note Population (RCPT015, RCPT034)
+        if (receipt.receiptType === 'CreditNote' || receipt.receiptType === 'DebitNote') {
+            // Ensure creditDebitNote object exists
+            if (!receipt.creditDebitNote) {
+                receipt.creditDebitNote = {};
+            }
+
+            // Mandatory Note (RCPT034)
+            if (!receipt.receiptNotes || receipt.receiptNotes.trim() === "") {
+                receipt.receiptNotes = "Correction of data entry error"; // Default reason
+            }
+        }
+
         return receipt;
     }
 
@@ -1044,12 +1057,26 @@ export class ZimraDevice {
                 paymentAmount: parseFloat(invoice.total)
             }],
             receiptTotal: parseFloat(invoice.total),
-            receiptLinesTaxInclusive: true // Assuming inclusive for now
+            receiptLinesTaxInclusive: invoice.taxInclusive ?? true,
+            receiptNotes: invoice.notes || undefined,
         };
 
-        // Determine Receipt Type based on invoice properties if needed
-        if (invoice.total < 0) {
+        // Determine Receipt Type based on invoice properties
+        if (invoice.transactionType === 'CreditNote' || invoice.total < 0) {
             receiptData.receiptType = 'CreditNote';
+        } else if (invoice.transactionType === 'DebitNote') {
+            receiptData.receiptType = 'DebitNote';
+        }
+
+        // If this is a CreditNote or DebitNote, and we have related invoice info, populate creditDebitNote
+        if (receiptData.receiptType !== 'FiscalInvoice' && invoice.relatedInvoice) {
+            const related = invoice.relatedInvoice;
+            receiptData.creditDebitNote = {
+                receiptNumber: related.invoiceNumber,
+                receiptDate: related.issueDate ? new Date(related.issueDate).toISOString().slice(0, 19) : undefined,
+                receiptFiscalCode: related.fiscalCode,
+                receiptDeviceID: parseInt(related.fdmsDeviceId || this.config.deviceId)
+            };
         }
 
         // Submit to ZIMRA

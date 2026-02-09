@@ -454,16 +454,10 @@ export default function CreateInvoicePage() {
       })
     };
 
-    // Credit Note / Debit Note Validation: Notes are mandatory
+    // Credit Note / Debit Note: A reason is required by ZIMRA.
     const isCnDn = existingInvoice?.transactionType === "CreditNote" || existingInvoice?.transactionType === "DebitNote";
     if (isCnDn && !notes?.trim()) {
-      toast({
-        title: "Notes Required",
-        description: `Please provide a reason/notes for this ${existingInvoice?.transactionType === "CreditNote" ? "Credit Note" : "Debit Note"}.`,
-        variant: "destructive",
-      });
-      setLoadingAction(null);
-      return;
+      console.log("No notes provided for CN/DN draft, using system default.");
     }
 
     try {
@@ -540,16 +534,10 @@ export default function CreateInvoicePage() {
       })
     };
 
-    // Credit Note / Debit Note Validation: Notes are mandatory
+    // Credit Note / Debit Note: A reason is required by ZIMRA.
     const isCnDn = existingInvoice?.transactionType === "CreditNote" || existingInvoice?.transactionType === "DebitNote";
     if (isCnDn && !notes?.trim()) {
-      toast({
-        title: "Notes Required",
-        description: `Please provide a reason/notes for this ${existingInvoice?.transactionType === "CreditNote" ? "Credit Note" : "Debit Note"}.`,
-        variant: "destructive",
-      });
-      setLoadingAction(null);
-      return;
+      console.log("No notes provided for CN/DN quotation, using system default.");
     }
 
     try {
@@ -696,15 +684,12 @@ export default function CreateInvoicePage() {
       })
     };
 
-    // Credit Note / Debit Note Validation: Notes are mandatory
+    // Credit Note / Debit Note: A reason is required by ZIMRA.
     if (isCnDn && !notes?.trim()) {
       toast({
-        title: "Notes Required",
-        description: `Please provide a reason/notes for this ${existingInvoice?.transactionType === "CreditNote" ? "Credit Note" : "Debit Note"}.`,
-        variant: "destructive",
+        title: "Default Reason Used",
+        description: `No reason was provided. A default reason ("Correction of data entry error") will be used for this ${existingInvoice?.transactionType === "CreditNote" ? "Credit Note" : "Debit Note"}.`,
       });
-      setLoadingAction(null);
-      return;
     }
 
     try {

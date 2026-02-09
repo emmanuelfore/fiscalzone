@@ -84,6 +84,7 @@ export interface IStorage {
 
   // Utils
   getNextInvoiceNumber(companyId: number, prefix: string): Promise<string>;
+  generateNextDeviceSerial(companyId: number): Promise<string>;
 
   // Payments
   createPayment(payment: InsertPayment): Promise<Payment>;

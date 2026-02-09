@@ -3150,7 +3150,7 @@ export async function registerRoutes(
         creditDebitNote: creditDebitNote,
         receiptNotes: invoice.notes
           ? (creditDebitNote ? `${invoice.notes} (Ref: ${originalInvoice?.invoiceNumber || 'Original'})` : invoice.notes)
-          : (receiptType !== 'FiscalInvoice' ? `Reversal of ${originalInvoice?.invoiceNumber || 'original invoice'}` : undefined)
+          : (receiptType !== 'FiscalInvoice' ? `Correction of data entry error (Ref: ${originalInvoice?.invoiceNumber || 'Original'})` : undefined)
       };
 
       console.log(`[Fiscalize] Prepared Receipt Data for Invoice ${invoiceId} (Date: ${receiptData.receiptDate}):`, JSON.stringify(receiptData, null, 2));

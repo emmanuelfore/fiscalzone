@@ -19,7 +19,9 @@ import {
   UserCog,
   BarChart3,
   Activity,
-  RefreshCw
+  RefreshCw,
+  AlertTriangle,
+  CreditCard
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -102,6 +104,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         { icon: Server, label: "ZIMRA Device", href: "/zimra-settings" },
         { icon: ClipboardList, label: "Transaction Logs", href: "/zimra-logs" },
         { icon: Activity, label: "FDMS Test", href: "/fdms-test" },
+        { icon: CreditCard, label: "Subscription", href: "/subscription" },
       ]
     },
     {
@@ -280,6 +283,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </div>
           )}
           {selectedCompanyId && <DeviceStatusWidget companyId={selectedCompanyId} />}
+          {selectedCompany?.subscriptionStatus !== 'active' && (
+            <Link href="/subscription">
+              <div className="flex items-center gap-2 bg-red-50 border border-red-200 px-3 py-1.5 rounded-full shadow-sm hover:bg-red-100 transition-colors cursor-pointer">
+                <AlertTriangle className="w-3.5 h-3.5 text-red-600" />
+                <span className="text-[10px] font-bold text-red-700 uppercase tracking-widest">
+                  Subscription {selectedCompany?.subscriptionStatus || 'Inactive'}
+                </span>
+              </div>
+            </Link>
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="h-10 w-10 rounded-full p-0 border border-slate-200 hover:bg-slate-100 transition-colors">

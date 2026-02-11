@@ -9,15 +9,31 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
-import { Building2, Settings, Server, CheckCircle2, AlertTriangle, RefreshCw, Activity, Wifi, WifiOff, Loader2, Zap, ShieldCheck, CreditCard, Cpu, AlertCircle, Globe } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
+import { Building2, Settings, Server, CheckCircle2, AlertTriangle, RefreshCw, Activity, Wifi, WifiOff, Loader2, Zap, ShieldCheck, CreditCard, Cpu, AlertCircle, Globe, UserCog } from "lucide-react";
 
 export default function SubscriptionPage() {
+    const { user } = useAuth();
     const { activeCompany, isLoading: loadingCompany } = useActiveCompany();
     const { toast } = useToast();
     const [targetSerialNo, setTargetSerialNo] = useState("");
     const [macAddress, setMacAddress] = useState("");
     const [email, setEmail] = useState("");
     const [pollReference, setPollReference] = useState<string | null>(null);
+
+    // Manual Activation State (Super Admin)
+    const [manualAmount, setManualAmount] = useState("150");
+    const [manualNotes, setManualNotes] = useState("");
+    const [manualSerialNo, setManualSerialNo] = useState("");
+    const [manualMacAddress, setManualMacAddress] = useState("");
+
+    // Set initial manual values when company data is available
+    useEffect(() => {
+        if (activeCompany) {
+            setManualSerialNo(activeCompany.fdmsDeviceSerialNo || "");
+            setManualMacAddress(activeCompany.registeredMacAddress || macAddress || "");
+        }
+    }, [activeCompany, macAddress]);
 
     const { data: subscriptions = [], isLoading: loadingSubs, refetch: refetchSubs } = useQuery({
         queryKey: [`/api/companies/${activeCompany?.id}/subscriptions`],
@@ -71,6 +87,31 @@ export default function SubscriptionPage() {
         },
         onError: (err: any) => {
             toast({ title: "Failed to initiate payment", description: err.message, variant: "destructive" });
+        }
+    });
+
+    const manualActivateMutation = useMutation({
+        mutationFn: async () => {
+            const res = await apiFetch(`/api/admin/subscriptions/manual`, {
+                method: "POST",
+                body: JSON.stringify({
+                    companyId: activeCompany?.id,
+                    serialNo: manualSerialNo,
+                    macAddress: manualMacAddress,
+                    amount: manualAmount,
+                    notes: manualNotes
+                })
+            });
+            if (!res.ok) throw await res.json();
+            return await res.json();
+        },
+        onSuccess: () => {
+            refetchSubs();
+            toast({ title: "Success", description: "Subscription activated manually!" });
+            setManualNotes("");
+        },
+        onError: (err: any) => {
+            toast({ title: "Error", description: err.message || "Failed to activate subscription manually", variant: "destructive" });
         }
     });
 
@@ -279,6 +320,70 @@ export default function SubscriptionPage() {
                             </div>
                         </CardContent>
                     </Card>
+
+                    {/* Super Admin Manual Activation */}
+                    {user?.isSuperAdmin && (
+                        <Card className="border-none shadow-sm bg-amber-50 border-amber-200">
+                            <CardHeader>
+                                <CardTitle className="text-sm flex items-center gap-2 text-amber-900">
+                                    <UserCog className="w-4 h-4" />
+                                    Super Admin: Manual Activation
+                                </CardTitle>
+                                <CardDescription className="text-amber-800/70">Record a cash payment and activate immediately.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="manualSerial" className="text-amber-900">Device Serial</Label>
+                                        <Input
+                                            id="manualSerial"
+                                            value={manualSerialNo}
+                                            onChange={(e) => setManualSerialNo(e.target.value)}
+                                            className="bg-white border-amber-200"
+                                            placeholder="FDMS000000"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="manualMac" className="text-amber-900">MAC Address</Label>
+                                        <Input
+                                            id="manualMac"
+                                            value={manualMacAddress}
+                                            onChange={(e) => setManualMacAddress(e.target.value)}
+                                            className="bg-white border-amber-200"
+                                            placeholder="00:00:00:00:00:00"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="manualAmount" className="text-amber-900">Amount (USD)</Label>
+                                    <Input
+                                        id="manualAmount"
+                                        value={manualAmount}
+                                        onChange={(e) => setManualAmount(e.target.value)}
+                                        className="bg-white border-amber-200"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="manualNotes" className="text-amber-900">Internal Notes</Label>
+                                    <Input
+                                        id="manualNotes"
+                                        placeholder="e.g. Received $150 cash at office"
+                                        value={manualNotes}
+                                        onChange={(e) => setManualNotes(e.target.value)}
+                                        className="bg-white border-amber-200"
+                                    />
+                                </div>
+                                <Button
+                                    className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold"
+                                    onClick={() => manualActivateMutation.mutate()}
+                                    disabled={manualActivateMutation.isPending || !manualMacAddress || !manualSerialNo}
+                                >
+                                    {manualActivateMutation.isPending && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                                    Activate {manualSerialNo || "Device"} Manually
+                                </Button>
+                            </CardContent>
+                        </Card>
+                    )}
                 </div>
             </div>
         </Layout>

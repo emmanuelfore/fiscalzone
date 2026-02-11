@@ -185,7 +185,12 @@ export default function Dashboard() {
                   )}
                 </div>
                 <div>
-                  <div className="text-lg font-bold text-slate-900">{selectedCompany.name}</div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-lg font-bold text-slate-900">{selectedCompany.name}</div>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider ${selectedCompany.zimraEnvironment === 'production' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                      {selectedCompany.zimraEnvironment === 'production' ? 'Production' : 'Test'}
+                    </span>
+                  </div>
                   <div className="text-xs text-slate-500 font-medium bg-slate-100 px-2 py-0.5 rounded-full w-fit mt-1 group-hover:bg-violet-100 group-hover:text-violet-700 transition-colors">
                     {selectedCompany.city}, Zimbabwe
                   </div>

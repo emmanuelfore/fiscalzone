@@ -28,6 +28,7 @@ import QuotationsPage from "@/pages/quotations";
 import CreateQuotationPage from "@/pages/create-quotation";
 import RecurringInvoicesPage from "@/pages/recurring-invoices";
 import ZimraLogsPage from "@/pages/zimra-logs";
+import SubscriptionPage from "@/pages/subscription";
 import { useAuth } from "@/hooks/use-auth";
 import { useCompanies } from "@/hooks/use-companies";
 import { Loader2 } from "lucide-react";
@@ -149,6 +150,9 @@ function Router() {
       </Route>
       <Route path="/recurring">
         {() => <ProtectedRoute component={RecurringInvoicesPage} />}
+      </Route>
+      <Route path="/subscription">
+        {() => <ProtectedRoute component={SubscriptionPage} />}
       </Route>
 
       <Route component={NotFound} />

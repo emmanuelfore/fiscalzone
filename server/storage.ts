@@ -11,7 +11,8 @@ import {
   recurringInvoices, type RecurringInvoice, type InsertRecurringInvoice,
   quotations, quotationItems, type Quotation, type QuotationItem, type InsertQuotation, type InsertQuotationItem,
   zimraLogs, type ZimraLog, type InsertZimraLog,
-  validationErrors, type ValidationError, type InsertValidationError
+  validationErrors, type ValidationError, type InsertValidationError,
+  subscriptions, type Subscription, type InsertSubscription
 } from "../shared/schema.js";
 import { db } from "./db.js";
 import { eq, and, desc, lte, or, isNull, sql, ilike, count } from "drizzle-orm";
@@ -127,6 +128,15 @@ export interface IStorage {
   // ZIMRA Helpers
   resolveGreyErrors(companyId: number, fiscalDayNo: number, skipInvoiceId?: number): Promise<void>;
   getInvoicesByFiscalDay(companyId: number, fiscalDayNo: number): Promise<Invoice[]>;
+
+  // Subscriptions
+  createSubscription(data: InsertSubscription): Promise<Subscription>;
+  getSubscription(id: number): Promise<Subscription | undefined>;
+  getSubscriptionByReference(reference: string): Promise<Subscription | undefined>;
+  updateSubscription(id: number, data: Partial<Subscription>): Promise<Subscription>;
+  getActiveSubscriptionByDevice(companyId: number, deviceSerialNo: string, macAddress: string): Promise<Subscription | undefined>;
+  getSubscriptionsByCompany(companyId: number): Promise<Subscription[]>;
+  hasActiveSubscriptionByMac(companyId: number, macAddress: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -579,6 +589,44 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateCompany(id: number, data: Partial<InsertCompany>): Promise<Company> {
+    // Check if we are switching environment to production
+    if (data.zimraEnvironment === 'production') {
+      const current = await this.getCompany(id);
+      if (current && current.zimraEnvironment !== 'production') {
+        console.log(`[ZIMRA] Environment switch to PRODUCTION for company ${id}. Performing full cleanup.`);
+
+        // 1. Reset global counters
+        data.lastReceiptGlobalNo = 0;
+        data.dailyReceiptCount = 0;
+        data.lastFiscalHash = null;
+
+        // 2. Delete all test data associated with the company
+        try {
+          // Get all invoice IDs for this company
+          const companyInvoices = await db
+            .select({ id: invoices.id })
+            .from(invoices)
+            .where(eq(invoices.companyId, id));
+
+          const invoiceIds = companyInvoices.map(inv => inv.id);
+
+          if (invoiceIds.length > 0) {
+            // Delete related records first due to foreign key constraints
+            await db.delete(invoiceItems).where(sql`${invoiceItems.invoiceId} IN ${invoiceIds}`);
+            await db.delete(validationErrors).where(sql`${validationErrors.invoiceId} IN ${invoiceIds}`);
+            await db.delete(payments).where(sql`${payments.invoiceId} IN ${invoiceIds}`);
+
+            // Finally delete the invoices themselves
+            await db.delete(invoices).where(eq(invoices.companyId, id));
+            console.log(`[ZIMRA] Successfully deleted ${invoiceIds.length} test invoices and related data for company ${id}.`);
+          }
+        } catch (cleanupErr) {
+          console.error(`[ZIMRA] Error during production cleanup for company ${id}:`, cleanupErr);
+          // We continue with the update even if cleanup fails, but log the error
+        }
+      }
+    }
+
     const [updated] = await db
       .update(companies)
       .set(data)
@@ -826,7 +874,11 @@ export class DatabaseStorage implements IStorage {
       })
       .from(invoices)
       .leftJoin(invoiceItems, eq(invoices.id, invoiceItems.invoiceId))
-      .where(and(eq(invoices.companyId, companyId), eq(invoices.fiscalDayNo, fiscalDayNo)));
+      .where(and(
+        eq(invoices.companyId, companyId),
+        eq(invoices.fiscalDayNo, fiscalDayNo),
+        eq(invoices.syncedWithFdms, true) // ONLY COUNT SYNCED INVOICES!
+      ));
 
     const countersMap = new Map<string, any>();
 
@@ -837,13 +889,14 @@ export class DatabaseStorage implements IStorage {
       );
 
       if (!countersMap.has(key)) {
+        const isBalanceCounter = type === 'BalanceByMoneyType';
         countersMap.set(key, {
           fiscalCounterType: type,
           fiscalCounterCurrency: currency,
-          // Correct Fix: Only include fiscalCounterTaxPercent if NOT Exempt (by name)
-          ...(!isExempt ? { fiscalCounterTaxPercent: taxPercent } : {}),
-          fiscalCounterTaxID: taxID,
-          ...(moneyType ? { fiscalCounterMoneyType: moneyType } : {}), // Only include if present
+          // Only include tax percent/ID for non-balance counters
+          ...(!isExempt && !isBalanceCounter ? { fiscalCounterTaxPercent: taxPercent } : {}),
+          ...(!isBalanceCounter ? { fiscalCounterTaxID: taxID } : {}),
+          ...(moneyType ? { fiscalCounterMoneyType: moneyType } : {}),
           fiscalCounterValue: 0
         });
       }
@@ -922,13 +975,10 @@ export class DatabaseStorage implements IStorage {
       amountWithTax = Math.round(amountWithTax * 100) / 100;
 
       // Handle sign based on transaction type
-      if (type === 'CreditNote') {
-        amountWithTax = -Math.abs(amountWithTax);
-        taxAmt = -Math.abs(taxAmt);
-      } else {
-        amountWithTax = Math.abs(amountWithTax);
-        taxAmt = Math.abs(taxAmt);
-      }
+      // ZIMRA counters should ALWAYS BE POSITIVE ACCUMULATORS!
+      // Even Credit/Debit notes are reported as positive quantities of those types.
+      amountWithTax = Math.abs(amountWithTax);
+      taxAmt = Math.abs(taxAmt);
 
       if (type === 'FiscalInvoice' || type === 'Invoice') {
         const keySale = `SaleByTax-${currency}-${taxPercent}-${taxID}`;
@@ -1445,6 +1495,75 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  async getInvoicesByFiscalDay(companyId: number, fiscalDayNo: number): Promise<Invoice[]> {
+    return await db.select().from(invoices).where(and(eq(invoices.companyId, companyId), eq(invoices.fiscalDayNo, fiscalDayNo)));
+  }
+
+  // Subscriptions implementation
+  async createSubscription(data: InsertSubscription): Promise<Subscription> {
+    const [subscription] = await db.insert(subscriptions).values(data).returning();
+    return subscription;
+  }
+
+  async getSubscription(id: number): Promise<Subscription | undefined> {
+    const [subscription] = await db.select().from(subscriptions).where(eq(subscriptions.id, id));
+    return subscription;
+  }
+
+  async getSubscriptionByReference(reference: string): Promise<Subscription | undefined> {
+    const [subscription] = await db.select().from(subscriptions).where(eq(subscriptions.paynowReference, reference));
+    return subscription;
+  }
+
+  async updateSubscription(id: number, data: Partial<Subscription>): Promise<Subscription> {
+    const [updated] = await db.update(subscriptions).set({ ...data, updatedAt: new Date() }).where(eq(subscriptions.id, id)).returning();
+    return updated;
+  }
+
+  async getActiveSubscriptionByDevice(companyId: number, deviceSerialNo: string, macAddress: string): Promise<Subscription | undefined> {
+    const now = new Date();
+    const [subscription] = await db
+      .select()
+      .from(subscriptions)
+      .where(
+        and(
+          eq(subscriptions.companyId, companyId),
+          eq(subscriptions.deviceSerialNo, deviceSerialNo),
+          eq(subscriptions.deviceMacAddress, macAddress),
+          eq(subscriptions.status, "paid"),
+          lte(subscriptions.startDate, now),
+          sql`${subscriptions.endDate} >= ${now}`
+        )
+      )
+      .limit(1);
+    return subscription;
+  }
+
+  async getSubscriptionsByCompany(companyId: number): Promise<Subscription[]> {
+    return await db
+      .select()
+      .from(subscriptions)
+      .where(eq(subscriptions.companyId, companyId))
+      .orderBy(sql`${subscriptions.createdAt} desc`);
+  }
+
+  async hasActiveSubscriptionByMac(companyId: number, macAddress: string): Promise<boolean> {
+    const now = new Date();
+    const [subscription] = await db
+      .select({ id: subscriptions.id })
+      .from(subscriptions)
+      .where(
+        and(
+          eq(subscriptions.companyId, companyId),
+          eq(subscriptions.deviceMacAddress, macAddress),
+          eq(subscriptions.status, "paid"),
+          lte(subscriptions.startDate, now),
+          sql`${subscriptions.endDate} >= ${now}`
+        )
+      )
+      .limit(1);
+    return !!subscription;
+  }
 }
 
 export const storage = new DatabaseStorage();

@@ -145,6 +145,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     </div>
                     <p className="text-sm font-bold text-slate-900 truncate flex items-center gap-1">
                       {selectedCompany ? selectedCompany.name : "Setup Required"}
+                      {selectedCompany && (
+                        <span className={`text-[8px] px-1 rounded font-bold uppercase ${selectedCompany.zimraEnvironment === 'production' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                          {selectedCompany.zimraEnvironment === 'production' ? 'PROD' : 'TEST'}
+                        </span>
+                      )}
                       <ChevronDown className="w-3 h-3 text-slate-400 group-hover:text-slate-600 transition-colors" />
                     </p>
                   </div>

@@ -201,3 +201,45 @@
         Calculated NextGlobalNo: 47
         Calculated NextReceiptCounter: 1
         --------------------------------
+[2026-02-10T11:21:49.102Z] Invoice 205
+        Existing GlobalNo: null
+        Existing ReceiptCounter: null
+        ZimraSync: {"nextGlobalNo":48,"nextReceiptCounter":1}
+        Calculated NextGlobalNo: 48
+        Calculated NextReceiptCounter: 1
+        --------------------------------
+[2026-02-10T13:12:21.229Z] Invoice 208
+        Existing GlobalNo: null
+        Existing ReceiptCounter: null
+        ZimraSync: {"nextGlobalNo":49,"nextReceiptCounter":1}
+        Calculated NextGlobalNo: 49
+        Calculated NextReceiptCounter: 1
+        --------------------------------
+[2026-02-10T13:23:10.403Z] Invoice 209
+        Existing GlobalNo: null
+        Existing ReceiptCounter: null
+        ZimraSync: {"nextGlobalNo":50,"nextReceiptCounter":1}
+        Calculated NextGlobalNo: 50
+        Calculated NextReceiptCounter: 1
+        --------------------------------
+[2026-02-10T13:39:02.666Z] Invoice 211
+        Existing GlobalNo: null
+        Existing ReceiptCounter: null
+        ZimraSync: {"nextGlobalNo":51,"nextReceiptCounter":1}
+        Calculated NextGlobalNo: 51
+        Calculated NextReceiptCounter: 1
+        --------------------------------
+[2026-02-10T13:39:25.015Z] Invoice 212
+        Existing GlobalNo: null
+        Existing ReceiptCounter: null
+        ZimraSync: {"nextGlobalNo":52,"nextReceiptCounter":2}
+        Calculated NextGlobalNo: 52
+        Calculated NextReceiptCounter: 2
+        --------------------------------
+[2026-02-10T18:36:41.500Z] Invoice 200
+        Existing GlobalNo: null
+        Existing ReceiptCounter: null
+        ZimraSync: {"nextGlobalNo":107,"nextReceiptCounter":1}
+        Calculated NextGlobalNo: 107
+        Calculated NextReceiptCounter: 1
+        --------------------------------

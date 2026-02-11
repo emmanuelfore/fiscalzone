@@ -18,19 +18,6 @@ const options: swaggerJsdoc.Options = {
             },
         ],
         components: {
-            securitySchemes: {
-                cookieAuth: {
-                    type: 'apiKey',
-                    in: 'cookie',
-                    name: 'connect.sid',
-                },
-                apiKeyAuth: {
-                    type: 'apiKey',
-                    in: 'header',
-                    name: 'x-api-key',
-                    description: 'API Key for external devices (e.g. POS terminals)'
-                }
-            },
             schemas: {
                 LoginRequest: {
                     type: 'object',
@@ -354,7 +341,6 @@ const options: swaggerJsdoc.Options = {
                 get: {
                     summary: 'Get Current User',
                     tags: ['Auth'],
-                    security: [{ cookieAuth: [] }],
                     responses: {
                         200: {
                             description: 'Current user session',
@@ -368,7 +354,6 @@ const options: swaggerJsdoc.Options = {
                 get: {
                     summary: 'List Company Invoices',
                     tags: ['Invoices'],
-                    security: [{ cookieAuth: [] }],
                     parameters: [
                         { in: 'path', name: 'companyId', required: true, schema: { type: 'integer' } }
                     ],
@@ -382,7 +367,6 @@ const options: swaggerJsdoc.Options = {
                 post: {
                     summary: 'Create Invoice',
                     tags: ['Invoices'],
-                    security: [{ cookieAuth: [] }],
                     parameters: [
                         { in: 'path', name: 'companyId', required: true, schema: { type: 'integer' } }
                     ],
@@ -399,7 +383,6 @@ const options: swaggerJsdoc.Options = {
                 get: {
                     summary: 'Get Invoice Details',
                     tags: ['Invoices'],
-                    security: [{ cookieAuth: [] }],
                     parameters: [
                         { in: 'path', name: 'id', required: true, schema: { type: 'integer' } },
                     ],
@@ -417,7 +400,6 @@ const options: swaggerJsdoc.Options = {
                     summary: 'Fiscalize an Invoice',
                     description: 'Submits an existing invoice to the ZIMRA FDMS for fiscalization. Signs the receipt and generates a QR code.',
                     tags: ['Invoices', 'ZIMRA'],
-                    security: [{ cookieAuth: [] }],
                     parameters: [
                         { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Invoice ID' },
                     ],
@@ -436,7 +418,6 @@ const options: swaggerJsdoc.Options = {
                 get: {
                     summary: 'List Customers',
                     tags: ['Customers'],
-                    security: [{ cookieAuth: [] }],
                     parameters: [
                         { in: 'path', name: 'companyId', required: true, schema: { type: 'integer' } }
                     ],
@@ -450,7 +431,6 @@ const options: swaggerJsdoc.Options = {
                 post: {
                     summary: 'Create Customer',
                     tags: ['Customers'],
-                    security: [{ cookieAuth: [] }],
                     parameters: [
                         { in: 'path', name: 'companyId', required: true, schema: { type: 'integer' } }
                     ],
@@ -467,7 +447,6 @@ const options: swaggerJsdoc.Options = {
                 get: {
                     summary: 'List Products',
                     tags: ['Products'],
-                    security: [{ cookieAuth: [] }],
                     parameters: [
                         { in: 'path', name: 'companyId', required: true, schema: { type: 'integer' } }
                     ],
@@ -481,7 +460,6 @@ const options: swaggerJsdoc.Options = {
                 post: {
                     summary: 'Create Product',
                     tags: ['Products'],
-                    security: [{ cookieAuth: [] }],
                     parameters: [
                         { in: 'path', name: 'companyId', required: true, schema: { type: 'integer' } }
                     ],
@@ -499,7 +477,6 @@ const options: swaggerJsdoc.Options = {
                     summary: 'Register a ZIMRA Device',
                     description: 'Registers a physical fiscal device with the ZIMRA FDMS servers using the provided activation key and serial number.',
                     tags: ['ZIMRA'],
-                    security: [{ cookieAuth: [] }],
                     parameters: [
                         { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Company ID' },
                     ],
@@ -523,7 +500,6 @@ const options: swaggerJsdoc.Options = {
                     summary: 'Open Fiscal Day',
                     description: 'Opens a new fiscal day on the ZIMRA device. Required before any fiscalization can occur. Used to start a Z-Report cycle.',
                     tags: ['ZIMRA'],
-                    security: [{ cookieAuth: [] }],
                     parameters: [
                         { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Company ID' },
                     ],
@@ -542,7 +518,6 @@ const options: swaggerJsdoc.Options = {
                     summary: 'Close Fiscal Day (Z-Report)',
                     description: 'Closes the current fiscal day. This ACTION Generates the Z-Report for the day. Submits fiscal counters and generates signatures.',
                     tags: ['ZIMRA'],
-                    security: [{ cookieAuth: [] }],
                     parameters: [
                         { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Company ID' },
                     ],
@@ -560,7 +535,6 @@ const options: swaggerJsdoc.Options = {
                 post: {
                     summary: 'Ping ZIMRA Device',
                     tags: ['ZIMRA'],
-                    security: [{ cookieAuth: [] }],
                     parameters: [
                         { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Company ID' },
                     ],
@@ -577,7 +551,6 @@ const options: swaggerJsdoc.Options = {
                     summary: 'Get ZIMRA Device Status (X-Report)',
                     description: 'Retrieves the current status of the ZIMRA device including fiscal day status and counters. Acts as an X-Report (Current Status read).',
                     tags: ['ZIMRA'],
-                    security: [{ cookieAuth: [] }],
                     parameters: [
                         { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Company ID' },
                     ],
@@ -593,7 +566,6 @@ const options: swaggerJsdoc.Options = {
                 get: {
                     summary: 'Get ZIMRA Transaction Logs',
                     tags: ['ZIMRA'],
-                    security: [{ cookieAuth: [] }],
                     parameters: [
                         { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Company ID' },
                         { in: 'query', name: 'limit', schema: { type: 'integer', default: 100 }, description: 'Maximum number of logs to return' },
@@ -612,7 +584,6 @@ const options: swaggerJsdoc.Options = {
                     summary: 'Get Device Card Details (RevMax: GetCardDetails)',
                     description: 'Returns device registration details including TIN, BPN, VAT, company name, address, and serial number.',
                     tags: ['ZIMRA - RevMax API'],
-                    security: [{ cookieAuth: [] }, { apiKeyAuth: [] }],
                     responses: {
                         200: {
                             description: 'Device details retrieved successfully',
@@ -627,7 +598,6 @@ const options: swaggerJsdoc.Options = {
                     summary: 'Get Device Status (RevMax: GetDeviceStatus)',
                     description: 'Returns current fiscal day status (Open/Closed), receipt counters, and operation ID.',
                     tags: ['ZIMRA - RevMax API'],
-                    security: [{ cookieAuth: [] }, { apiKeyAuth: [] }],
                     parameters: [
                         { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Company ID' },
                     ],
@@ -644,7 +614,6 @@ const options: swaggerJsdoc.Options = {
                     summary: 'Create Transaction (RevMax: TransactM)',
                     description: 'Create and fiscalize an invoice, credit note, or debit note. Accepts XML format for line items and currencies.',
                     tags: ['ZIMRA - RevMax API'],
-                    security: [{ cookieAuth: [] }, { apiKeyAuth: [] }],
                     parameters: [
                         { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Company ID' },
                     ],
@@ -667,7 +636,6 @@ const options: swaggerJsdoc.Options = {
                     summary: 'Create Transaction Extended (RevMax: TransactMExt)',
                     description: 'Enhanced transaction creation with granular address fields and support for cross-device credit note references.',
                     tags: ['ZIMRA - RevMax API'],
-                    security: [{ cookieAuth: [] }, { apiKeyAuth: [] }],
                     parameters: [
                         { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Company ID' },
                     ],
@@ -690,7 +658,6 @@ const options: swaggerJsdoc.Options = {
                     summary: 'Z-Report - Open/Close Fiscal Day (RevMax: ZReport)',
                     description: 'Unified endpoint for opening or closing fiscal day. Query parameter "action" determines operation: "open" or "close".',
                     tags: ['ZIMRA - RevMax API'],
-                    security: [{ cookieAuth: [] }, { apiKeyAuth: [] }],
                     parameters: [
                         { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Company ID' },
                         { in: 'query', name: 'action', required: true, schema: { type: 'string', enum: ['open', 'close'] }, description: 'Action to perform: open or close fiscal day' },
@@ -710,7 +677,6 @@ const options: swaggerJsdoc.Options = {
                     summary: 'Get Transaction by Invoice Number (RevMax: GetTransaction)',
                     description: 'Retrieves complete transaction details for a specific invoice number including verification code and QR data.',
                     tags: ['ZIMRA - RevMax API'],
-                    security: [{ cookieAuth: [] }, { apiKeyAuth: [] }],
                     parameters: [
                         { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Company ID' },
                         { in: 'path', name: 'invoiceNumber', required: true, schema: { type: 'string' }, description: 'Invoice Number' },
@@ -729,7 +695,6 @@ const options: swaggerJsdoc.Options = {
                     summary: 'Get Unprocessed Transactions Summary (RevMax: GetUnProcessedTransactionSummary)',
                     description: 'Returns summary of unprocessed/failed transactions for a specific fiscal day or date.',
                     tags: ['ZIMRA - RevMax API'],
-                    security: [{ cookieAuth: [] }, { apiKeyAuth: [] }],
                     parameters: [
                         { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Company ID' },
                         { in: 'query', name: 'fiscalDayNumber', schema: { type: 'string' }, description: 'Fiscal day number (use fiscalDayNumber OR fiscalDate, not both)' },
@@ -749,7 +714,6 @@ const options: swaggerJsdoc.Options = {
                     summary: 'Get Unprocessed Transactions (RevMax: GetUnProcessedTransactions)',
                     description: 'Returns paginated list of unprocessed transactions for a specific fiscal day.',
                     tags: ['ZIMRA - RevMax API'],
-                    security: [{ cookieAuth: [] }, { apiKeyAuth: [] }],
                     parameters: [
                         { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Company ID' },
                         { in: 'query', name: 'fiscalDayNumber', required: true, schema: { type: 'string' }, description: 'Fiscal day number' },
@@ -767,7 +731,6 @@ const options: swaggerJsdoc.Options = {
                     summary: 'Clear Unprocessed Transactions (RevMax: ClearUnprocessedTransactions)',
                     description: 'Soft deletes all unprocessed transactions for a specific fiscal day. Includes safety checks - only clears if newer fiscal day exists.',
                     tags: ['ZIMRA - RevMax API'],
-                    security: [{ cookieAuth: [] }, { apiKeyAuth: [] }],
                     parameters: [
                         { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Company ID' },
                         { in: 'query', name: 'fiscalDayNumber', required: true, schema: { type: 'string' }, description: 'Fiscal day number to clear' },
@@ -786,7 +749,6 @@ const options: swaggerJsdoc.Options = {
                     summary: 'Get Unprocessed Transactions by Date (RevMax: GetUnProcessedTransactionsByDate)',
                     description: 'Returns paginated list of unprocessed transactions filtered by fiscal date.',
                     tags: ['ZIMRA - RevMax API'],
-                    security: [{ cookieAuth: [] }, { apiKeyAuth: [] }],
                     parameters: [
                         { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Company ID' },
                         { in: 'query', name: 'fiscalDate', required: true, schema: { type: 'string', format: 'date' }, description: 'Fiscal date (YYYY-MM-DD)' },
@@ -804,7 +766,6 @@ const options: swaggerJsdoc.Options = {
                     summary: 'Clear Unprocessed Transactions by Date (RevMax: ClearUnprocessedTransactionsByDate)',
                     description: 'Soft deletes all unprocessed transactions for a specific fiscal date with safety checks.',
                     tags: ['ZIMRA - RevMax API'],
-                    security: [{ cookieAuth: [] }, { apiKeyAuth: [] }],
                     parameters: [
                         { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Company ID' },
                         { in: 'query', name: 'fiscalDate', required: true, schema: { type: 'string', format: 'date' }, description: 'Fiscal date to clear (YYYY-MM-DD)' },

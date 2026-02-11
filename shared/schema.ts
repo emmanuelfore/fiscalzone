@@ -45,6 +45,7 @@ export const companies = pgTable("companies", {
   fdmsDeviceSerialNo: text("fdms_device_serial_no"), // ZIMRA Field [21] - Device Serial Number
   fdmsApiKey: text("fdms_api_key"),
   apiKey: text("api_key").unique(), // For external device authentication
+  apiKeyCreatedAt: timestamp("api_key_created_at"),
   zimraPrivateKey: text("zimra_private_key"),
   zimraCertificate: text("zimra_certificate"),
   zimraEnvironment: text("zimra_environment").default("test"), // 'test' or 'production'
@@ -74,6 +75,9 @@ export const companies = pgTable("companies", {
   emailSettings: jsonb("email_settings"),
   lastReceiptAt: timestamp("last_receipt_at"),
 
+  subscriptionEndDate: timestamp("subscription_end_date"),
+  subscriptionStatus: text("subscription_status").default("inactive"), // active, inactive, expired
+  registeredMacAddress: text("registered_mac_address"), // Physical device binding
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -572,3 +576,28 @@ export const insertZimraLogSchema = createInsertSchema(zimraLogs).omit({ id: tru
 export type InsertZimraLog = z.infer<typeof insertZimraLogSchema>;
 export type ZimraLog = typeof zimraLogs.$inferSelect;
 
+// Subscriptions
+export const subscriptions = pgTable("subscriptions", {
+  id: serial("id").primaryKey(),
+  companyId: integer("company_id").references(() => companies.id).notNull(),
+  deviceSerialNo: text("device_serial_no").notNull(),
+  deviceMacAddress: text("device_mac_address"), // Physical device binding
+  paynowReference: text("paynow_reference").unique(), // Nullable for manual/cash payments
+  paymentMethod: text("payment_method").default("paynow"), // paynow, cash, bank_transfer
+  pollUrl: text("poll_url"),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  status: text("status").default("pending"), // pending, paid, failed, cancelled
+  startDate: timestamp("start_date"),
+  endDate: timestamp("end_date"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
+  company: one(companies, { fields: [subscriptions.companyId], references: [companies.id] }),
+}));
+
+export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({ id: true, createdAt: true, updatedAt: true });
+export type Subscription = typeof subscriptions.$inferSelect;
+export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;

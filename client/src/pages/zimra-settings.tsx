@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Building2, Settings, Server, CheckCircle2, AlertTriangle, RefreshCw, Activity, Wifi, WifiOff, Loader2 } from "lucide-react";
+import { Building2, Settings, Server, CheckCircle2, AlertTriangle, RefreshCw, Activity, Wifi, WifiOff, Loader2, Zap, ShieldCheck } from "lucide-react";
 import { useState, useEffect } from "react";
 import {
   Dialog,
@@ -15,7 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { DayManagementControls } from "@/components/zimra/day-management-controls";
@@ -224,7 +224,22 @@ function ZimraDeviceConfig({ company }: { company: any }) {
   }, []);
 
   const isOnline = testConnectivityMutation.data?.overallStatus === 'Online';
+  // Fetch subscriptions for precise machine-based check
+  const { data: subscriptions = [] } = useQuery({
+    queryKey: [`/api/companies/${company.id}/subscriptions`],
+    queryFn: async () => {
+      const res = await apiFetch(`/api/companies/${company.id}/subscriptions`);
+      return res.json();
+    }
+  });
+
   const isPinging = testConnectivityMutation.isPending;
+  const macAddress = company.registeredMacAddress || "";
+  const hasActiveSubForThisMachine = subscriptions.some((s: any) =>
+    s.status === "paid" &&
+    s.deviceMacAddress === macAddress &&
+    new Date(s.endDate) > new Date()
+  );
 
   return (
     <div className="space-y-6">
@@ -244,6 +259,16 @@ function ZimraDeviceConfig({ company }: { company: any }) {
           size="sm"
           className={`rounded-md px-4 h-8 text-xs font-bold ${company.zimraEnvironment === 'production' ? 'bg-red-600 hover:bg-red-700' : ''}`}
           onClick={() => {
+            // Check for general subscription status OR machine-specific one
+            // We allow switching if they have ANY active sub for their MAC, even if serial doesn't match yet
+            if (!hasActiveSubForThisMachine && company.subscriptionStatus !== 'active') {
+              toast({
+                title: "Subscription Required",
+                description: "An active subscription is required to switch to Production mode.",
+                variant: "destructive"
+              });
+              return;
+            }
             if (confirm("⚠️ CAUTION: You are about to switch to the ZIMRA PRODUCTION environment. Real fiscal data will be submitted. Are you sure?")) {
               switchEnvironmentMutation.mutate('production');
             }
@@ -252,6 +277,43 @@ function ZimraDeviceConfig({ company }: { company: any }) {
         >
           PRODUCTION
         </Button>
+      </div>
+
+      <div className="flex items-center justify-between mb-6 p-3 bg-slate-50 border rounded-lg">
+        <div className="flex items-center gap-3">
+          <div className={`p-2 rounded-full ${company.subscriptionStatus === 'active' ? 'bg-green-100' : 'bg-slate-100'}`}>
+            <Zap className={`w-4 h-4 ${company.subscriptionStatus === 'active' ? 'text-green-600' : 'text-slate-400'}`} />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-slate-700">Device Subscription</p>
+            <div className="flex items-center gap-2">
+              {company.subscriptionStatus === 'active' ? (
+                <Badge variant="outline" className="text-[10px] h-4 bg-green-50 text-green-700 border-green-200">
+                  <ShieldCheck className="w-2.5 h-2.5 mr-1" />
+                  ACTIVE
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-[10px] h-4 bg-slate-50 text-slate-500">
+                  INACTIVE
+                </Badge>
+              )}
+              {company.subscriptionEndDate && (
+                <span className="text-[10px] text-slate-400">
+                  Exp: {new Date(company.subscriptionEndDate).toLocaleDateString()}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+        <Link href="/subscription">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Manage device licenses</p>
+            <p className="text-[11px] text-slate-500">Enable production access ($150.00 / year)</p>
+          </div>
+          <Button variant="outline" size="sm" className="h-8 text-xs">
+            Manage
+          </Button>
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

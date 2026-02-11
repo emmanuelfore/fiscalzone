@@ -30,6 +30,8 @@ export function useAuth() {
         queryClient.invalidateQueries({ queryKey: ["/api/user"] });
       } else {
         queryClient.setQueryData(["/api/user"], null);
+        // Clear company selection on session loss
+        localStorage.removeItem("selectedCompanyId");
       }
     });
 

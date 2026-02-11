@@ -1,0 +1,9 @@
+[dotenv@17.2.3] injecting env (10) from .env -- tip: 📡 add observability to secrets: https://dotenvx.com/ops
+
+--- ZIMRA GAP FILLER (Company ID: 8) ---
+This script will bridge gaps in your sequence by submitting $0.01 Adjustment invoices.
+
+Checking ZIMRA Cloud Status...
+
+ZIMRA Error Response Status: 404
+ZIMRA Error Response Data: ""

@@ -55,6 +55,8 @@ export default function AuthPage() {
     try {
       setError(null);
       setIsLoggingIn(true);
+      // Clear any stale company selection before login
+      localStorage.removeItem("selectedCompanyId");
       await loginWithPassword({ email: loginData.email, password: loginData.password });
     } catch (error: any) {
       console.error("Login failed:", error);
@@ -116,8 +118,12 @@ export default function AuthPage() {
         <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-indigo-600/30 rounded-full blur-[100px] translate-y-1/2 -translate-x-1/2" />
 
         <div className="relative z-10 max-w-lg">
-          <div className="w-12 h-12 bg-white/10 backdrop-blur-md border border-white/20 rounded-xl mb-8 flex items-center justify-center text-white font-bold text-2xl shadow-xl">
-            Z
+          <div className="mb-8">
+            <img
+              src="/fiscalstack-logo.png"
+              alt="FiscalStack Logo"
+              className="h-10 w-auto object-contain brightness-0 invert"
+            />
           </div>
           <h1 className="text-4xl font-display font-bold mb-6 leading-tight text-white">
             Seamless ZIMRA Compliant Invoicing.
@@ -182,7 +188,7 @@ export default function AuthPage() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label htmlFor="password">Password</Label>
-                    <Button variant="link" className="p-0 h-auto text-xs text-primary" type="button">
+                    <Button variant="ghost" className="p-0 h-auto text-xs text-primary hover:bg-transparent" type="button">
                       Forgot password?
                     </Button>
                   </div>

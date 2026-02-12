@@ -884,9 +884,7 @@ export class DatabaseStorage implements IStorage {
 
     const getCounter = (key: string, type: string, currency: string, taxPercent: number, taxID: number, moneyType: string | null = null) => {
       // Determine distinct "Exempt" status via DB lookup or fallback
-      const isExempt = dbTaxTypes.some(t =>
-        t.zimraTaxId && parseInt(t.zimraTaxId) === taxID && t.name.toLowerCase().includes('exempt')
-      );
+      const isExempt = taxID === 1;
 
       if (!countersMap.has(key)) {
         const isBalanceCounter = type === 'BalanceByMoneyType';
@@ -894,6 +892,7 @@ export class DatabaseStorage implements IStorage {
           fiscalCounterType: type,
           fiscalCounterCurrency: currency,
           // Only include tax percent/ID for non-balance counters
+          //RCPT016: "In case of exempt which does not send tax percent value"
           ...(!isExempt && !isBalanceCounter ? { fiscalCounterTaxPercent: taxPercent } : {}),
           ...(!isBalanceCounter ? { fiscalCounterTaxID: taxID } : {}),
           ...(moneyType ? { fiscalCounterMoneyType: moneyType } : {}),
@@ -933,26 +932,42 @@ export class DatabaseStorage implements IStorage {
 
       if (matchingTax?.zimraTaxId) {
         taxID = parseInt(matchingTax.zimraTaxId);
+
+        // Refined check for 0% ambiguity (if matchedTax is not ID 1 but item might be exempt)
+        if (taxPercent === 0 && taxID !== 1) {
+          const isExemptIntent = (item.description || '').toLowerCase().includes('exempt');
+          if (isExemptIntent) {
+            const realExempt = dbTaxTypes.find(t => t.zimraTaxId === "1" || t.name.toLowerCase().includes('exempt'));
+            if (realExempt && realExempt.zimraTaxId) {
+              taxID = parseInt(realExempt.zimraTaxId);
+            }
+          }
+        }
       } else {
-        // Fallback by Name if ID is missing
+        // Fallback by Name if ID is missing from matchingTax or matchingTax itself is missing
         const name = matchingTax?.name?.toLowerCase() || '';
-        if (name.includes('exempt')) {
+        const desc = (item.description || '').toLowerCase();
+
+        if (name.includes('exempt') || desc.includes('exempt')) {
           const exemptTax = dbTaxTypes.find(t => t.name.toLowerCase().includes('exempt') && t.zimraTaxId);
           if (exemptTax) taxID = parseInt(exemptTax.zimraTaxId!);
-        } else if (name.includes('zero') || name.includes('0%')) {
+          else taxID = 1; // Direct fallback to ID 1 for Exempt
+        } else if (name.includes('zero') || name.includes('0%') || taxPercent === 0) {
           const zeroTax = dbTaxTypes.find(t => (t.name.toLowerCase().includes('zero') || t.name.includes('0%')) && t.zimraTaxId);
           if (zeroTax) taxID = parseInt(zeroTax.zimraTaxId!);
+          else taxID = 2; // Direct fallback to ID 2 for Zero Rated
         } else {
           // Standard matches
           const stdTax = dbTaxTypes.find(t => (t.name.toLowerCase().includes('standard') || t.name.toLowerCase().includes('vat')) && t.zimraTaxId);
           if (stdTax) taxID = parseInt(stdTax.zimraTaxId!);
+          else taxID = 3; // Direct fallback to ID 3 for Standard
         }
       }
 
-      // Final safety fallback (should rarely happen if DB is seeded)
+      // Final safety fallback
       if (taxID === 0) {
-        if (taxPercent === 0) taxID = 2; // Assume Zero Rated
-        else taxID = 3; // Assume Standard
+        if (taxPercent === 0) taxID = 2;
+        else taxID = 3;
       }
 
       const type = inv.transactionType || "FiscalInvoice";

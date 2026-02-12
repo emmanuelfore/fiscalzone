@@ -2132,14 +2132,37 @@ export async function registerRoutes(
 
       const invoice = await storage.createInvoice(invoiceData);
 
+      // Fetch tax types for resolution
+      const taxTypes = await storage.getTaxTypes(companyId);
+
       // Create line items
       for (const item of items) {
+        const taxRate = parseFloat(item.TAXR || "0");
+        const xmlTaxCode = item.TAXCODE;
+        const xmlTaxId = item.TAXID;
+
+        // Find matching tax type
+        let matchedTax = taxTypes.find(t =>
+          Math.abs(parseFloat(t.rate) - taxRate) < 0.01 &&
+          (xmlTaxCode ? t.zimraCode === xmlTaxCode : true) &&
+          (xmlTaxId ? t.zimraTaxId === xmlTaxId : true)
+        );
+
+        // Fallback for 0% ambiguity if multiple matches exist
+        if (!matchedTax && taxRate === 0) {
+          matchedTax = taxTypes.find(t =>
+            Math.abs(parseFloat(t.rate) - taxRate) < 0.01 &&
+            (xmlTaxCode === 'EXE' || (item.ITEMNAME1 || '').toLowerCase().includes('exempt') ? t.zimraTaxId === "1" : t.zimraTaxId === "2")
+          );
+        }
+
         await storage.createInvoiceItem({
           invoiceId: invoice.id,
           description: item.ITEMNAME1 || item.ITEMNAME2 || "Item",
           quantity: parseFloat(item.QTY || "1"),
           unitPrice: parseFloat(item.PRICE || "0"),
-          taxRate: parseFloat(item.TAXR || "0"),
+          taxRate: taxRate.toString(),
+          taxTypeId: matchedTax?.id,
           total: parseFloat(item.AMT || "0")
         });
       }
@@ -2162,8 +2185,6 @@ export async function registerRoutes(
       if (!fullInvoice) {
         throw new Error("Failed to retrieve created invoice");
       }
-
-      const taxTypes = await storage.getTaxTypes(companyId);
 
       const receiptData = await device.fiscalizeInvoice(fullInvoice as any, company as any, taxTypes);
 
@@ -2270,14 +2291,37 @@ export async function registerRoutes(
 
       const invoice = await storage.createInvoice(invoiceData);
 
+      // Fetch tax types for resolution
+      const taxTypes = await storage.getTaxTypes(companyId);
+
       // Create line items
       for (const item of items) {
+        const taxRate = parseFloat(item.TAXR || "0");
+        const xmlTaxCode = item.TAXCODE;
+        const xmlTaxId = item.TAXID;
+
+        // Find matching tax type
+        let matchedTax = taxTypes.find(t =>
+          Math.abs(parseFloat(t.rate) - taxRate) < 0.01 &&
+          (xmlTaxCode ? t.zimraCode === xmlTaxCode : true) &&
+          (xmlTaxId ? t.zimraTaxId === xmlTaxId : true)
+        );
+
+        // Fallback for 0% ambiguity
+        if (!matchedTax && taxRate === 0) {
+          matchedTax = taxTypes.find(t =>
+            Math.abs(parseFloat(t.rate) - taxRate) < 0.01 &&
+            (xmlTaxCode === 'EXE' || (item.ITEMNAME1 || '').toLowerCase().includes('exempt') ? t.zimraTaxId === "1" : t.zimraTaxId === "2")
+          );
+        }
+
         await storage.createInvoiceItem({
           invoiceId: invoice.id,
           description: item.ITEMNAME1 || item.ITEMNAME2 || "Item",
           quantity: parseFloat(item.QTY || "1"),
           unitPrice: parseFloat(item.PRICE || "0"),
-          taxRate: parseFloat(item.TAXR || "0"),
+          taxRate: taxRate.toString(),
+          taxTypeId: matchedTax?.id,
           total: parseFloat(item.AMT || "0")
         });
       }
@@ -2299,8 +2343,6 @@ export async function registerRoutes(
       if (!fullInvoice) {
         throw new Error("Failed to retrieve created invoice");
       }
-
-      const taxTypes = await storage.getTaxTypes(companyId);
 
       const receiptData = await device.fiscalizeInvoice(fullInvoice as any, company as any, taxTypes);
 
@@ -3158,28 +3200,44 @@ export async function registerRoutes(
           taxPercent = 0;
         }
 
-
         let taxID = 0;
 
         // PRIORITY 1: ZIMRA Live Config (most current, directly from API)
         if (zimraConfig?.applicableTaxes) {
-          // Match by percentage first (most accurate)
-          const matchingTax = zimraConfig.applicableTaxes.find((t: any) =>
-            t.taxPercent !== undefined && Math.abs(t.taxPercent - taxPercent) < 0.01
-          );
-          if (matchingTax) {
-            taxID = matchingTax.taxID;
+          const effectiveTaxTypeId = (item as any).product?.taxTypeId || (item as any).taxTypeId;
+          const dbTax = effectiveTaxTypeId ? dbTaxTypes.find(t => t.id === effectiveTaxTypeId) : null;
+
+          // Strategy: Match by {Percent, Name} combination which is more stable than IDs
+          const targetPercent = dbTax ? parseFloat(dbTax.rate) : taxPercent;
+          const targetNameHint = (dbTax?.name || item.description || '').toLowerCase();
+
+          // 1. Precise Match (Percent + Name keyword correlation)
+          let match = zimraConfig.applicableTaxes.find(t => {
+            const pctMatch = Math.abs((t.taxPercent || 0) - targetPercent) < 0.01;
+            if (!pctMatch) return false;
+
+            // For 0% rates, strictly disambiguate Exempt vs Zero Rated by name
+            if (targetPercent === 0) {
+              const isExempt = targetNameHint.includes('exempt');
+              const liveIsExempt = t.taxName?.toLowerCase().includes('exempt');
+              return isExempt === liveIsExempt;
+            }
+            return true; // For non-zero, percent is usually sufficient
+          });
+
+          // 2. Fallback: Match by Percent only if name match failed
+          if (!match) {
+            match = zimraConfig.applicableTaxes.find(t => Math.abs((t.taxPercent || 0) - targetPercent) < 0.01);
           }
 
-          // If 0%, try name-based matching for exempt vs zero-rated
-          if (taxID === 0 && taxPercent === 0) {
-            if (item.description.toLowerCase().includes('exempt')) {
-              const exemptTax = zimraConfig.applicableTaxes.find(t => t.taxName?.toLowerCase().includes('exempt'));
-              if (exemptTax) taxID = exemptTax.taxID;
-            } else {
-              const zeroTax = zimraConfig.applicableTaxes.find(t => t.taxName?.toLowerCase().includes('zero'));
-              if (zeroTax) taxID = zeroTax.taxID;
-            }
+          // 3. Fallback: Match by stored ZIMRA Tax ID from DB if all else fails
+          if (!match && dbTax?.zimraTaxId) {
+            const storedId = parseInt(dbTax.zimraTaxId);
+            match = zimraConfig.applicableTaxes.find(t => t.taxID === storedId);
+          }
+
+          if (match) {
+            taxID = match.taxID;
           }
         }
 
@@ -3574,7 +3632,7 @@ export async function registerRoutes(
         if (details.validationErrors && Array.isArray(details.validationErrors)) {
           try {
             parsedValidationErrors = details.validationErrors.map((e: any) => ({
-              invoiceId,
+              invoiceId: invoiceId,
               errorCode: e.validationErrorCode || 'UNKNOWN',
               errorMessage: e.validationErrorMessage || e.errorMessage || e.message || 'Unknown Error',
               errorColor: e.validationErrorColor || 'Red',

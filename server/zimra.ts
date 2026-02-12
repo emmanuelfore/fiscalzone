@@ -1064,15 +1064,41 @@ export class ZimraDevice {
                 const taxRate = parseFloat(item.taxRate);
                 let taxID = 3; // Default to Standard (15% or 15.5%)
 
-                if (taxTypes) {
-                    const matchedTax = taxTypes.find(t => Math.abs(parseFloat(t.rate) - taxRate) < 0.1);
+                // 1. Prioritize explicit taxTypeId if present
+                if (item.taxTypeId && taxTypes) {
+                    const matchedTax = taxTypes.find(t => t.id === item.taxTypeId);
                     if (matchedTax && matchedTax.zimraTaxId) {
                         taxID = parseInt(matchedTax.zimraTaxId);
                     }
+                }
+                // 2. Fallback to rate mapping with logic for 0% ambiguity (Exempt vs Zero Rated)
+                else if (taxTypes) {
+                    const matchedTax = taxTypes.find(t => Math.abs(parseFloat(t.rate) - taxRate) < 0.01);
+                    if (matchedTax && matchedTax.zimraTaxId) {
+                        taxID = parseInt(matchedTax.zimraTaxId);
+
+                        // Refined check for 0% ambiguity if the first match might be wrong
+                        if (taxRate === 0 && taxID !== 1) {
+                            // If it's 0% but we got something other than ID 1 (Exempt),
+                            // double check if there's an actual Exempt tax type that matches better by intent
+                            const isExemptIntent = item.taxCode === 'EXE' || (item.taxName && item.taxName.toLowerCase().includes('exempt'));
+                            if (isExemptIntent) {
+                                const realExempt = taxTypes.find(t => t.zimraTaxId === "1" || t.name.toLowerCase().includes('exempt'));
+                                if (realExempt && realExempt.zimraTaxId) {
+                                    taxID = parseInt(realExempt.zimraTaxId);
+                                }
+                            }
+                        }
+                    }
                 } else {
-                    // Fallback heuristic if taxTypes not provided
-                    if (taxRate === 0) taxID = 2; // Zero Rated
-                    else if (taxRate < 1) taxID = 1; // Exempt typically 0 but let's say ID 1
+                    // 3. Fallback heuristic if taxTypes not provided at all
+                    if (taxRate === 0) {
+                        // Check if description hints at exempt
+                        const desc = (item.description || '').toLowerCase();
+                        if (desc.includes('exempt')) taxID = 1;
+                        else taxID = 2; // Default to Zero Rated for 0%
+                    }
+                    else taxID = 3; // Default to Standard
                 }
 
                 return {

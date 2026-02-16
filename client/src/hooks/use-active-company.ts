@@ -16,9 +16,12 @@ export function useActiveCompany() {
 
             if (!storedCompany) {
                 // Stored company doesn't exist for this user or we are at first login
-                // Prefer a company where the user is a 'cashier' to ensure they land in the POS
+                // If there's a company where they are an owner/admin/member, prefer that (for dashboard)
+                const managementCompany = companies.find(c => ['owner', 'admin', 'member'].includes((c as any).role));
+                // Otherwise, if they only have cashier roles, pick a cashier company
                 const cashierCompany = companies.find(c => (c as any).role === 'cashier');
-                const defaultId = cashierCompany ? cashierCompany.id : companies[0].id;
+
+                const defaultId = managementCompany ? managementCompany.id : (cashierCompany ? cashierCompany.id : companies[0].id);
 
                 setActiveCompanyId(defaultId);
                 localStorage.setItem("selectedCompanyId", defaultId.toString());

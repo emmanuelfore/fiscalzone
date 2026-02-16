@@ -69,7 +69,8 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   const role = (activeCompany as any).role;
 
   const allowedCashierPaths = ["/pos", "/pos/my-sales"];
-  if (role === "cashier" && !allowedCashierPaths.includes(location)) {
+  // Redirection for Cashiers - SuperAdmins are ALWAYS exempt from forced POS view
+  if (!user.isSuperAdmin && role === "cashier" && !allowedCashierPaths.includes(location)) {
     return <Redirect to="/pos" />;
   }
 

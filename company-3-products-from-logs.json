@@ -1,0 +1,86 @@
+[
+  {
+    "name": "Balancing  Fan",
+    "price": 398.27,
+    "taxRate": 15.5,
+    "hsCode": "99001000",
+    "productType": "good"
+  },
+  {
+    "name": "Manufacturing & Fabrication of Fan Impellers",
+    "price": 0.01,
+    "taxRate": 15.5,
+    "hsCode": "99001000",
+    "productType": "good"
+  },
+  {
+    "name": "Vibration Analysis on process Equipment",
+    "price": 3750,
+    "taxRate": 15.5,
+    "hsCode": "99001000",
+    "productType": "good"
+  },
+  {
+    "name": "Laser Alignment Dopol & ESP Fan",
+    "price": 850,
+    "taxRate": 15.5,
+    "hsCode": "99001000",
+    "productType": "good"
+  },
+  {
+    "name": "Laser Alignment on Coal Mill Drive Train",
+    "price": 750,
+    "taxRate": 15.5,
+    "hsCode": "99001000",
+    "productType": "good"
+  },
+  {
+    "name": "Balancing Coal Mill Booster Fan",
+    "price": 750,
+    "taxRate": 15.5,
+    "hsCode": "99001000",
+    "productType": "good"
+  },
+  {
+    "name": "Balancing Main Circulation Fan",
+    "price": 750,
+    "taxRate": 15.5,
+    "hsCode": "99001000",
+    "productType": "good"
+  },
+  {
+    "name": "Balancing 5.5 HP FD Fan",
+    "price": 550,
+    "taxRate": 15.5,
+    "hsCode": "99001000",
+    "productType": "good"
+  },
+  {
+    "name": "Balancing 15HP 1475 ID Fan",
+    "price": 350,
+    "taxRate": 15.5,
+    "hsCode": "99001000",
+    "productType": "good"
+  },
+  {
+    "name": "Balancing  KOAF001 Fan",
+    "price": 550,
+    "taxRate": 15.5,
+    "hsCode": "99001000",
+    "productType": "good"
+  },
+  {
+    "name": "Balancing Fan",
+    "price": 398.27,
+    "taxRate": 15.5,
+    "hsCode": "99001000",
+    "productType": "good"
+  },
+  {
+    "name": "Balancing  fans on Aditec MIC 2400 Cooker 2",
+    "price": 225,
+    "taxRate": 15.5,
+    "hsCode": "99001000",
+    "productType": "good"
+  }
+]

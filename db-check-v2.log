@@ -1,0 +1,355 @@
+--- USERS ---
+[
+  {
+    "id": "cc6fd6d9-359e-4ba0-90c1-0b1add4e509a",
+    "email": "superadmin@GMAIL.COM",
+    "isSuperAdmin": false
+  },
+  {
+    "id": "f1f678a1-d654-4a79-9470-3109781da4a1",
+    "email": "emmanuelfore22@gmail.com",
+    "isSuperAdmin": false
+  },
+  {
+    "id": "709a04bf-c426-454d-bc97-4ad90e62f263",
+    "email": "manuchidovi@gmail.com",
+    "isSuperAdmin": false
+  },
+  {
+    "id": "ec7dd2ab-e231-435b-861e-ad3630fc19c8",
+    "email": "dynabalsolutions@gmail.com",
+    "isSuperAdmin": false
+  },
+  {
+    "id": "13e11656-fc16-4035-8f25-0f99a9da4bb6",
+    "email": "tawandattimire@gmail.com",
+    "isSuperAdmin": false
+  },
+  {
+    "id": "831d50f9-bbf5-4c92-8df6-1aaf43ed6044",
+    "email": "chidovikireni@gmail.com",
+    "isSuperAdmin": false
+  },
+  {
+    "id": "f086249f-0459-4185-85c4-a999c785bc3d",
+    "email": "munyaguveya@gmail.com",
+    "isSuperAdmin": false
+  },
+  {
+    "id": "049e7ec7-a8f8-4858-9500-91948cc64070",
+    "email": "jmunyemba@gmail.com",
+    "isSuperAdmin": false
+  },
+  {
+    "id": "5c617866-605c-4ef5-8bb1-a7d1c1625d58",
+    "email": "s82p84@gmail.com",
+    "isSuperAdmin": false
+  },
+  {
+    "id": "c7293d42-fcb7-4e27-bde1-e45b3fe4837e",
+    "email": "hillend205@gmail.com",
+    "isSuperAdmin": false
+  },
+  {
+    "id": "9482b181-9109-4012-8d65-291488268746",
+    "email": "manuchidovi3@gmail.com",
+    "isSuperAdmin": false
+  },
+  {
+    "id": "fd70e344-f450-474a-9e5d-1dfb94aa7ea8",
+    "email": "manuchidovi6@gmail.com",
+    "isSuperAdmin": false
+  },
+  {
+    "id": "2b210a05-1958-47ef-9edb-811aab089648",
+    "email": "mqanuchidovi3@gmail.com",
+    "isSuperAdmin": false
+  },
+  {
+    "id": "b9708480-a766-4ed4-8557-72d0a04f2d44",
+    "email": "abc@gmail.com",
+    "isSuperAdmin": false
+  },
+  {
+    "id": "ae4d9e4d-e109-47e0-81ed-9130bf407df0",
+    "email": "batiraishemunongerwa@gmail.com",
+    "isSuperAdmin": false
+  },
+  {
+    "id": "f8914d8f-fd64-483f-8e14-0d46359451d5",
+    "email": "manuchidovi7@gmail.com",
+    "isSuperAdmin": false
+  },
+  {
+    "id": "34380e67-df49-43c7-bd4d-0687f4806e3d",
+    "email": "lucibuoy@gmail.com",
+    "isSuperAdmin": false
+  },
+  {
+    "id": "b72d80ae-31c4-4484-b517-564c7cd3cef1",
+    "email": "admin@fiscalstake.co.zw",
+    "isSuperAdmin": true
+  },
+  {
+    "id": "49601b15-077b-4e74-b500-7e07b2deb47e",
+    "email": "kevivemgt@gmail.com",
+    "isSuperAdmin": false
+  },
+  {
+    "id": "68f7c0d2-a0cd-4015-9c2d-1bf6a721bc9f",
+    "email": "admin@zimra.co.zw",
+    "isSuperAdmin": true
+  },
+  {
+    "id": "843ebcf2-3dfe-43e1-aeb1-bc59eb922383",
+    "email": "georgeshambira@gmail.com",
+    "isSuperAdmin": false
+  },
+  {
+    "id": "501c46a9-2023-496d-8307-d1480a029b0f",
+    "email": "demo@zimra.com",
+    "isSuperAdmin": false
+  },
+  {
+    "id": "9699e9d3-5777-45ef-888c-7bcf957480d2",
+    "email": "foreemmanuel@gmail.com",
+    "isSuperAdmin": false
+  },
+  {
+    "id": "e54191c5-4ca7-4e84-88ce-22d332eaeb7b",
+    "email": "cashier@store.com",
+    "isSuperAdmin": false
+  },
+  {
+    "id": "7c6c1810-adb8-49b8-9414-dfb6c432b72d",
+    "email": "eman@gmail.com",
+    "isSuperAdmin": false
+  },
+  {
+    "id": "8de27280-db5a-4a14-bbf2-81adbd3f84df",
+    "email": "doe@gmail.com",
+    "isSuperAdmin": false
+  }
+]
+Roles for superadmin@GMAIL.COM (cc6fd6d9-359e-4ba0-90c1-0b1add4e509a):
+[]
+Roles for emmanuelfore22@gmail.com (f1f678a1-d654-4a79-9470-3109781da4a1):
+[
+  {
+    "companyId": 2,
+    "role": "owner"
+  }
+]
+Roles for manuchidovi@gmail.com (709a04bf-c426-454d-bc97-4ad90e62f263):
+[
+  {
+    "companyId": 1,
+    "role": "member"
+  }
+]
+Roles for dynabalsolutions@gmail.com (ec7dd2ab-e231-435b-861e-ad3630fc19c8):
+[
+  {
+    "companyId": 3,
+    "role": "owner"
+  }
+]
+Roles for tawandattimire@gmail.com (13e11656-fc16-4035-8f25-0f99a9da4bb6):
+[
+  {
+    "companyId": 6,
+    "role": "owner"
+  }
+]
+Roles for chidovikireni@gmail.com (831d50f9-bbf5-4c92-8df6-1aaf43ed6044):
+[
+  {
+    "companyId": 7,
+    "role": "owner"
+  }
+]
+Roles for munyaguveya@gmail.com (f086249f-0459-4185-85c4-a999c785bc3d):
+[
+  {
+    "companyId": 8,
+    "role": "owner"
+  }
+]
+Roles for jmunyemba@gmail.com (049e7ec7-a8f8-4858-9500-91948cc64070):
+[]
+Roles for s82p84@gmail.com (5c617866-605c-4ef5-8bb1-a7d1c1625d58):
+[
+  {
+    "companyId": 9,
+    "role": "owner"
+  }
+]
+Roles for hillend205@gmail.com (c7293d42-fcb7-4e27-bde1-e45b3fe4837e):
+[
+  {
+    "companyId": 12,
+    "role": "owner"
+  }
+]
+Roles for manuchidovi3@gmail.com (9482b181-9109-4012-8d65-291488268746):
+[]
+Roles for manuchidovi6@gmail.com (fd70e344-f450-474a-9e5d-1dfb94aa7ea8):
+[]
+Roles for mqanuchidovi3@gmail.com (2b210a05-1958-47ef-9edb-811aab089648):
+[
+  {
+    "companyId": 13,
+    "role": "owner"
+  }
+]
+Roles for abc@gmail.com (b9708480-a766-4ed4-8557-72d0a04f2d44):
+[
+  {
+    "companyId": 16,
+    "role": "owner"
+  }
+]
+Roles for batiraishemunongerwa@gmail.com (ae4d9e4d-e109-47e0-81ed-9130bf407df0):
+[
+  {
+    "companyId": 19,
+    "role": "owner"
+  }
+]
+Roles for manuchidovi7@gmail.com (f8914d8f-fd64-483f-8e14-0d46359451d5):
+[
+  {
+    "companyId": 20,
+    "role": "owner"
+  }
+]
+Roles for lucibuoy@gmail.com (34380e67-df49-43c7-bd4d-0687f4806e3d):
+[
+  {
+    "companyId": 21,
+    "role": "owner"
+  }
+]
+Roles for admin@fiscalstake.co.zw (b72d80ae-31c4-4484-b517-564c7cd3cef1):
+[]
+Roles for kevivemgt@gmail.com (49601b15-077b-4e74-b500-7e07b2deb47e):
+[
+  {
+    "companyId": 22,
+    "role": "owner"
+  }
+]
+Roles for admin@zimra.co.zw (68f7c0d2-a0cd-4015-9c2d-1bf6a721bc9f):
+[
+  {
+    "companyId": 5,
+    "role": "owner"
+  }
+]
+Roles for georgeshambira@gmail.com (843ebcf2-3dfe-43e1-aeb1-bc59eb922383):
+[
+  {
+    "companyId": 11,
+    "role": "owner"
+  }
+]
+Roles for demo@zimra.com (501c46a9-2023-496d-8307-d1480a029b0f):
+[
+  {
+    "companyId": 1,
+    "role": "owner"
+  }
+]
+Roles for foreemmanuel@gmail.com (9699e9d3-5777-45ef-888c-7bcf957480d2):
+[
+  {
+    "companyId": 18,
+    "role": "owner"
+  },
+  {
+    "companyId": 2,
+    "role": "cashier"
+  }
+]
+Roles for cashier@store.com (e54191c5-4ca7-4e84-88ce-22d332eaeb7b):
+[]
+Roles for eman@gmail.com (7c6c1810-adb8-49b8-9414-dfb6c432b72d):
+[]
+Roles for doe@gmail.com (8de27280-db5a-4a14-bbf2-81adbd3f84df):
+[
+  {
+    "companyId": 18,
+    "role": "cashier"
+  }
+]
+--- COMPANIES ---
+[
+  {
+    "id": 11,
+    "name": "George Test Company"
+  },
+  {
+    "id": 2,
+    "name": "Rhymy Digital"
+  },
+  {
+    "id": 3,
+    "name": "Dynabal Solutions"
+  },
+  {
+    "id": 16,
+    "name": "Emmanuel Fore"
+  },
+  {
+    "id": 1,
+    "name": "Demo Enterprises Pvt Ltd"
+  },
+  {
+    "id": 5,
+    "name": "Test"
+  },
+  {
+    "id": 6,
+    "name": "TEST COMPANY"
+  },
+  {
+    "id": 9,
+    "name": "simba"
+  },
+  {
+    "id": 13,
+    "name": "Emmanuel Fore"
+  },
+  {
+    "id": 19,
+    "name": "Bati Test Company"
+  },
+  {
+    "id": 20,
+    "name": "Test 4"
+  },
+  {
+    "id": 7,
+    "name": "Flawless Beauty"
+  },
+  {
+    "id": 22,
+    "name": "Kevive Management Consultants"
+  },
+  {
+    "id": 8,
+    "name": "LIPVIEW INVESTMENTS"
+  },
+  {
+    "id": 21,
+    "name": "National Cartridge Manufacturing "
+  },
+  {
+    "id": 12,
+    "name": "Hillend Trading"
+  },
+  {
+    "id": 18,
+    "name": "FiscalStack Solutions"
+  }
+]

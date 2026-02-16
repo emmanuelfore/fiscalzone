@@ -57,19 +57,55 @@ export async function registerRoutes(
 
 
 
-  const requireOwner = async (req: any, res: any, next: any) => {
-    // Authentication disabled for Swagger/Dev
-    return next();
+  const requireAuth = async (req: any, res: any, next: any) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized: Authenticaton required" });
+    }
+    next();
   };
 
-  const requireAuth = async (req: any, res: any, next: any) => {
-    // Authentication disabled for Swagger/Dev
-    return next();
+  const requireOwner = async (req: any, res: any, next: any) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized: Authentication required" });
+    }
+
+    // If it's a superadmin, they have owner permissions globally
+    if (req.user.isSuperAdmin) {
+      return next();
+    }
+
+    // For specific company check, would need companyId from params or body
+    // but at minimum check if they are logged in.
+    // Refinement: If companyId is present, we should check their role in that company
+    const companyId = req.params.companyId || req.body.companyId || req.query.companyId;
+    if (companyId) {
+      const companies = await storage.getCompanies(req.user.id);
+      const userCompany = companies.find(c => c.id === Number(companyId));
+      if (!userCompany || userCompany.role !== 'owner') {
+        return res.status(403).json({ message: "Forbidden: Owner access required for this company" });
+      }
+    }
+
+    next();
   };
 
   const requireAuthOrApiKey = async (req: any, res: any, next: any) => {
-    // Authentication disabled for Swagger/Dev
-    return next();
+    // API Key check logic
+    const apiKey = req.headers['x-api-key'];
+    if (apiKey) {
+      const company = await db.query.companies.findFirst({
+        where: eq(companies.apiKey, apiKey as string)
+      });
+      if (company) {
+        req.company = company;
+        return next();
+      }
+    }
+
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    next();
   };
 
   const requireSuperAdmin = async (req: any, res: any, next: any) => {
@@ -595,17 +631,28 @@ export async function registerRoutes(
 
   app.post("/api/product-categories", requireAuth, async (req: any, res) => {
     try {
-      const data = insertProductCategorySchema.parse(req.body);
+      const result = insertProductCategorySchema.safeParse(req.body);
+
+      if (!result.success) {
+        console.error(`[ROUTES] Category validation failed:`, result.error.format());
+        return res.status(400).json({
+          message: "Validation failed",
+          errors: result.error.format()
+        });
+      }
+
       const category = await storage.createProductCategory({
-        ...data,
-        companyId: req.user?.companyId || data.companyId
+        ...result.data,
+        companyId: req.user?.companyId || result.data.companyId
       });
+
       res.status(201).json(category);
     } catch (err: any) {
+      console.error(`[ROUTES] Category creation error: ${err.message}`, err);
       if (err.code === "23505") {
         return res.status(409).json({ message: "Category already exists" });
       }
-      res.status(400).json({ message: err.message });
+      res.status(500).json({ message: err.message || "Internal server error" });
     }
   });
 

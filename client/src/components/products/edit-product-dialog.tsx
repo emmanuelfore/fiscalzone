@@ -36,6 +36,9 @@ import { Switch } from "@/components/ui/switch";
 import { Pencil, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 
+import { useQuery } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/api";
+
 interface Props {
     product: any;
     trigger?: React.ReactNode;
@@ -46,6 +49,16 @@ export function EditProductDialog({ product, trigger }: Props) {
     const updateProduct = useUpdateProduct();
     const { taxCategories, taxTypes } = useTaxConfig(product.companyId);
     const { toast } = useToast();
+
+    const { data: categories } = useQuery({
+        queryKey: ["product-categories", product.companyId],
+        queryFn: async () => {
+            const res = await apiFetch(`/api/product-categories?companyId=${product.companyId}`);
+            if (!res.ok) throw new Error("Failed to fetch categories");
+            return res.json();
+        },
+        enabled: open
+    });
 
     const isService = product.productType === "service";
 
@@ -156,6 +169,38 @@ export function EditProductDialog({ product, trigger }: Props) {
                                     <FormControl>
                                         <Input placeholder={isService ? "e.g. Consulting, Labor" : "e.g. Widget X"} {...field} />
                                     </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+
+                        <FormField
+                            control={form.control}
+                            name="category"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Category</FormLabel>
+                                    <Select
+                                        onValueChange={field.onChange}
+                                        defaultValue={field.value || undefined}
+                                        value={field.value || undefined}
+                                    >
+                                        <FormControl>
+                                            <SelectTrigger className="bg-white">
+                                                <SelectValue placeholder="Select Category" />
+                                            </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                            {categories?.map((cat: any) => (
+                                                <SelectItem key={cat.id} value={cat.name}>
+                                                    {cat.name}
+                                                </SelectItem>
+                                            ))}
+                                            {!categories?.some((c: any) => c.name === product.category) && product.category && (
+                                                <SelectItem value={product.category}>{product.category}</SelectItem>
+                                            )}
+                                        </SelectContent>
+                                    </Select>
                                     <FormMessage />
                                 </FormItem>
                             )}

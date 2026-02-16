@@ -23,7 +23,7 @@ export const pool = new Pool({
   connectionTimeoutMillis: 5000
 });
 
-export const db = drizzle(pool, { schema });
+export const db = drizzle(pool, { schema, logger: true });
 
 // Supabase client for auth and real-time features (optional for now)
 export const supabase = (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)

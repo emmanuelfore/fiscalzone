@@ -29,7 +29,8 @@ export function useAuth() {
       if (session) {
         queryClient.invalidateQueries({ queryKey: ["/api/user"] });
       } else {
-        queryClient.setQueryData(["/api/user"], null);
+        // Clear EVERYTHING on session loss
+        queryClient.clear();
         // Clear company selection on session loss
         localStorage.removeItem("selectedCompanyId");
       }
@@ -93,7 +94,7 @@ export function useAuth() {
 
   const logout = async () => {
     await supabase.auth.signOut();
-    queryClient.setQueryData(["/api/user"], null);
+    queryClient.clear();
     // Clear company selection to prevent stale data across user sessions
     localStorage.removeItem("selectedCompanyId");
     setLocation("/auth");

@@ -679,6 +679,24 @@ export class ZimraDevice {
         return this.makeRequest('POST', 'CloseDay', payload);
     }
 
+    public static getTaxID(taxPercent: number): number {
+        const absPercent = Math.abs(taxPercent);
+        if (absPercent === 0) return 2; // Zero Rated
+        if (absPercent === 15.5 || absPercent === 15) return 3; // Standard
+        if (absPercent === 5) return 1; // Deprecated Exempt fallback
+        return 3; // Default Standard
+    }
+
+    public static getTaxCode(taxID: number): string {
+        switch (taxID) {
+            case 3: return 'A'; // Standard
+            case 2: return 'B'; // Zero Rated
+            case 1: return 'C'; // Exempt
+            case 4: return 'E'; // Other
+            default: return 'A';
+        }
+    }
+
     public async submitReceipt(receiptData: ReceiptData, previousReceiptHash: string | null = null, allowOffline = false): Promise<{
         response: any;
         signature: string;
@@ -813,6 +831,16 @@ export class ZimraDevice {
                 if (lineTotal > 0) lineTotal = -lineTotal;
             }
 
+            // Mapping taxID to taxCode (Zimbabwe common mapping)
+            let taxCode = line.taxCode;
+            if (!taxCode) {
+                if (taxID === 3) taxCode = 'A'; // Standard
+                else if (taxID === 2) taxCode = 'B'; // Zero Rated
+                else if (taxID === 1) taxCode = 'C'; // Exempt
+                else if (taxID === 4) taxCode = 'E'; // Other?
+                else taxCode = 'A'; // Fallback
+            }
+
             const result: ReceiptLine = {
                 ...line,
                 receiptLineType: line.receiptLineType || 'Sale',
@@ -821,7 +849,8 @@ export class ZimraDevice {
                 receiptLinePrice: linePrice,
                 receiptLineTotal: lineTotal,
                 taxID,
-                taxPercent: line.taxPercent
+                taxPercent: line.taxPercent,
+                taxCode
             };
 
             // "In case of exempt which does not send tax percent value"

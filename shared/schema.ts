@@ -12,6 +12,7 @@ export const users = pgTable("users", {
   name: text("name"),
   username: text("username").unique(),
   passwordChanged: boolean("password_changed").default(false),
+  pin: text("pin"), // Encrypted PIN for POS overrides
   createdAt: timestamp("created_at").defaultNow(),
   isSuperAdmin: boolean("is_super_admin").default(false),
 });
@@ -19,6 +20,15 @@ export const users = pgTable("users", {
 export const usersRelations = relations(users, ({ many }) => ({
   companyUsers: many(companyUsers),
 }));
+
+export const resetTokens = pgTable("reset_tokens", {
+  id: serial("id").primaryKey(),
+  userId: uuid("user_id").references(() => users.id).notNull(),
+  token: text("token").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  used: boolean("used").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
 
 // Companies (Tenants)
 export const companies = pgTable("companies", {
@@ -73,6 +83,7 @@ export const companies = pgTable("companies", {
   branchCode: text("branch_code"),
   vatRegistered: boolean("vat_registered").default(true),
   emailSettings: jsonb("email_settings"),
+  posSettings: jsonb("pos_settings"), // Stores receipt header/footer, auto-print defaults etc.
   lastReceiptAt: timestamp("last_receipt_at"),
 
   subscriptionEndDate: timestamp("subscription_end_date"),
@@ -228,6 +239,29 @@ export const productsRelations = relations(products, ({ one }) => ({
   company: one(companies, { fields: [products.companyId], references: [companies.id] }),
 }));
 
+// Product Categories
+export const productCategories = pgTable("product_categories", {
+  id: serial("id").primaryKey(),
+  companyId: integer("company_id").references(() => companies.id).notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => {
+  return {
+    companyIdIdx: index("product_categories_company_id_idx").on(table.companyId),
+    companyNameUnique: unique("product_categories_company_name_idx").on(table.companyId, table.name),
+  };
+});
+
+export const productCategoriesRelations = relations(productCategories, ({ one }) => ({
+  company: one(companies, { fields: [productCategories.companyId], references: [companies.id] }),
+}));
+
+export const insertProductCategorySchema = createInsertSchema(productCategories).omit({ id: true, createdAt: true });
+export type ProductCategory = typeof productCategories.$inferSelect;
+export type InsertProductCategory = z.infer<typeof insertProductCategorySchema>;
+
 // Validation Errors
 export const validationErrors = pgTable("validation_errors", {
   id: serial("id").primaryKey(),
@@ -257,6 +291,8 @@ export const invoices = pgTable("invoices", {
   // Status
   status: text("status").default("draft"), // draft, issued, paid, cancelled
   taxInclusive: boolean("tax_inclusive").default(false),
+  isPos: boolean("is_pos").default(false),
+  discountAmount: decimal("discount_amount", { precision: 10, scale: 2 }).default("0.00"),
 
   // Locking
   lockedBy: uuid("locked_by").references(() => users.id),
@@ -287,6 +323,7 @@ export const invoices = pgTable("invoices", {
   notes: text("notes"),
   invoiceTemplate: text("invoice_template").default("modern"),
 
+  createdBy: uuid("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => {
   return {
@@ -306,6 +343,7 @@ export const invoiceItems = pgTable("invoice_items", {
   description: text("description").notNull(),
   quantity: decimal("quantity", { precision: 10, scale: 2 }).notNull(),
   unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
+  discountAmount: decimal("discount_amount", { precision: 10, scale: 2 }).default("0.00"),
   taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).notNull(),
   lineTotal: decimal("line_total", { precision: 10, scale: 2 }).notNull(),
   taxTypeId: integer("tax_type_id").references(() => taxTypes.id),
@@ -345,6 +383,7 @@ export const currenciesRelations = relations(currencies, ({ one }) => ({
 // SCHEMAS
 
 export const insertUserSchema = createInsertSchema(users).omit({ createdAt: true });
+export const insertResetTokenSchema = createInsertSchema(resetTokens).omit({ id: true, createdAt: true });
 export const insertCompanySchema = createInsertSchema(companies).omit({ id: true, createdAt: true });
 export const insertCustomerSchema = createInsertSchema(customers).omit({ id: true, createdAt: true }).extend({
   tin: z.string().regex(/^\d{10}$/, "TIN must be exactly 10 digits").or(z.string().length(0)).nullable().optional(),
@@ -377,7 +416,10 @@ export const insertInvoiceItemSchema = createInsertSchema(invoiceItems).omit({ i
 // TYPES
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
-export type Company = typeof companies.$inferSelect;
+
+export type ResetToken = typeof resetTokens.$inferSelect;
+export type InsertResetToken = z.infer<typeof insertResetTokenSchema>;
+
 export type InsertCompany = z.infer<typeof insertCompanySchema>;
 export type Customer = typeof customers.$inferSelect;
 export type InsertCustomer = z.infer<typeof insertCustomerSchema>;
@@ -430,6 +472,7 @@ export const paymentsRelations = relations(payments, ({ one }) => ({
 export const invoicesRelations = relations(invoices, ({ one, many }) => ({
   company: one(companies, { fields: [invoices.companyId], references: [companies.id] }),
   customer: one(customers, { fields: [invoices.customerId], references: [customers.id] }),
+  creator: one(users, { fields: [invoices.createdBy], references: [users.id] }),
   items: many(invoiceItems),
   payments: many(payments),
   validationErrors: many(validationErrors),
@@ -601,3 +644,76 @@ export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
 export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({ id: true, createdAt: true, updatedAt: true });
 export type Subscription = typeof subscriptions.$inferSelect;
 export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
+
+// POS Shifts
+export const posShifts = pgTable("pos_shifts", {
+  id: serial("id").primaryKey(),
+  companyId: integer("company_id").references(() => companies.id).notNull(),
+  userId: uuid("user_id").references(() => users.id).notNull(),
+  startTime: timestamp("start_time").defaultNow().notNull(),
+  endTime: timestamp("end_time"),
+  openingBalance: decimal("opening_balance", { precision: 10, scale: 2 }).notNull(),
+  closingBalance: decimal("closing_balance", { precision: 10, scale: 2 }),
+  status: text("status").default("open"), // open, closed
+  notes: text("notes"),
+
+  // Reconciliation data
+  actualCash: decimal("actual_cash", { precision: 10, scale: 2 }),
+  reconciledAt: timestamp("reconciled_at"),
+  reconciledBy: uuid("reconciled_by").references(() => users.id),
+  reconciliationNotes: text("reconciliation_notes"),
+  reconciliationStatus: text("reconciliation_status"), // reconciled, minor_discrepancy, major_discrepancy, critical_discrepancy, pending
+
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const posShiftsRelations = relations(posShifts, ({ one }) => ({
+  company: one(companies, { fields: [posShifts.companyId], references: [companies.id] }),
+  user: one(users, { fields: [posShifts.userId], references: [users.id] }),
+}));
+
+// POS Holds (Parked Sales)
+export const posHolds = pgTable("pos_holds", {
+  id: serial("id").primaryKey(),
+  companyId: integer("company_id").references(() => companies.id).notNull(),
+  userId: uuid("user_id").references(() => users.id).notNull(),
+  customerId: integer("customer_id").references(() => customers.id),
+  holdName: text("hold_name"),
+  cartData: jsonb("cart_data").notNull(), // Array of cart items
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const posHoldsRelations = relations(posHolds, ({ one }) => ({
+  company: one(companies, { fields: [posHolds.companyId], references: [companies.id] }),
+  user: one(users, { fields: [posHolds.userId], references: [users.id] }),
+  customer: one(customers, { fields: [posHolds.customerId], references: [customers.id] }),
+}));
+
+export const insertPosShiftSchema = createInsertSchema(posShifts).omit({ id: true, createdAt: true });
+export type PosShift = typeof posShifts.$inferSelect;
+export type InsertPosShift = z.infer<typeof insertPosShiftSchema>;
+
+export const insertPosHoldSchema = createInsertSchema(posHolds).omit({ id: true, createdAt: true });
+export type PosHold = typeof posHolds.$inferSelect;
+export type InsertPosHold = z.infer<typeof insertPosHoldSchema>;
+
+// POS Shift Transactions (Cash Drops / Payouts)
+export const posShiftTransactions = pgTable("pos_shift_transactions", {
+  id: serial("id").primaryKey(),
+  shiftId: integer("shift_id").references(() => posShifts.id).notNull(),
+  items: jsonb("items").notNull(), // Array of { description, amount } or similar if needed, or just simple
+  type: text("type").notNull(), // 'DROP', 'PAYOUT'
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  reason: text("reason"),
+  userId: uuid("user_id").references(() => users.id).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const posShiftTransactionsRelations = relations(posShiftTransactions, ({ one }) => ({
+  shift: one(posShifts, { fields: [posShiftTransactions.shiftId], references: [posShifts.id] }),
+  user: one(users, { fields: [posShiftTransactions.userId], references: [users.id] }),
+}));
+
+export const insertPosShiftTransactionSchema = createInsertSchema(posShiftTransactions).omit({ id: true, createdAt: true });
+export type PosShiftTransaction = typeof posShiftTransactions.$inferSelect;
+export type InsertPosShiftTransaction = z.infer<typeof insertPosShiftTransactionSchema>;

@@ -110,6 +110,15 @@
   @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-blue-600;
 }
 
+/* Global Print Adjustments */
+@media print {
+
+  [role="status"],
+  ol[tabindex="-1"] {
+    display: none !important;
+  }
+}
+
 /* Force number inputs to show text - CRITICAL FIX */
 input[type="number"] {
   color: inherit !important;

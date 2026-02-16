@@ -1,0 +1,464 @@
+[
+  {
+    "id": 66,
+    "name": "TEST EXEMPT PRODUCT",
+    "companyId": 3,
+    "companyName": "Dynabal Solutions",
+    "createdAt": "2026-02-13T17:19:49.610Z"
+  },
+  {
+    "id": 65,
+    "name": "TEST NON-VATABLE PRODUCT",
+    "companyId": 3,
+    "companyName": "Dynabal Solutions",
+    "createdAt": "2026-02-13T17:19:49.147Z"
+  },
+  {
+    "id": 64,
+    "name": "TEST VATABLE PRODCT",
+    "companyId": 3,
+    "companyName": "Dynabal Solutions",
+    "createdAt": "2026-02-13T17:19:48.678Z"
+  },
+  {
+    "id": 63,
+    "name": "Test Product A",
+    "companyId": 2,
+    "companyName": "Rhymy Digital",
+    "createdAt": "2026-02-13T16:55:53.767Z"
+  },
+  {
+    "id": 62,
+    "name": "Test Product A",
+    "companyId": 2,
+    "companyName": "Rhymy Digital",
+    "createdAt": "2026-02-13T16:55:20.673Z"
+  },
+  {
+    "id": 61,
+    "name": "Test Product A",
+    "companyId": 2,
+    "companyName": "Rhymy Digital",
+    "createdAt": "2026-02-13T16:54:53.697Z"
+  },
+  {
+    "id": 60,
+    "name": "Test Product A",
+    "companyId": 2,
+    "companyName": "Rhymy Digital",
+    "createdAt": "2026-02-13T16:54:29.201Z"
+  },
+  {
+    "id": 59,
+    "name": "Test Product A",
+    "companyId": 2,
+    "companyName": "Rhymy Digital",
+    "createdAt": "2026-02-13T16:53:42.269Z"
+  },
+  {
+    "id": 58,
+    "name": "2.4m rooftop ridge 0.3mm",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:40.327Z"
+  },
+  {
+    "id": 57,
+    "name": "2.4m roof top ridge 0.4mm",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:40.308Z"
+  },
+  {
+    "id": 56,
+    "name": "2.4m flush gutter 0.4mm",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:40.288Z"
+  },
+  {
+    "id": 55,
+    "name": "2.4m flush gutter 0.3mm",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:40.261Z"
+  },
+  {
+    "id": 54,
+    "name": "3mm glass",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:40.241Z"
+  },
+  {
+    "id": 53,
+    "name": "tying wire 50kgs",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:40.221Z"
+  },
+  {
+    "id": 52,
+    "name": "tying wire 25kgs",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:40.202Z"
+  },
+  {
+    "id": 51,
+    "name": "tying wire 1kg",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:40.183Z"
+  },
+  {
+    "id": 50,
+    "name": "barbed wire 50kgs",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:40.163Z"
+  },
+  {
+    "id": 49,
+    "name": "barbed wire 25kgs",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:40.143Z"
+  },
+  {
+    "id": 48,
+    "name": "self drilling screws 90mm",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:40.123Z"
+  },
+  {
+    "id": 47,
+    "name": "self drilling screws 75mm",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:40.104Z"
+  },
+  {
+    "id": 46,
+    "name": "bolts and nuts 19mm",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:40.084Z"
+  },
+  {
+    "id": 45,
+    "name": "bolts and nuts 17mm",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:40.065Z"
+  },
+  {
+    "id": 44,
+    "name": "Hook nails",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:40.046Z"
+  },
+  {
+    "id": 43,
+    "name": "IBR nails",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:40.026Z"
+  },
+  {
+    "id": 42,
+    "name": "clout nails",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:40.005Z"
+  },
+  {
+    "id": 41,
+    "name": "u nails",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:39.983Z"
+  },
+  {
+    "id": 40,
+    "name": "wire nails",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:39.963Z"
+  },
+  {
+    "id": 39,
+    "name": "cornice glue",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:39.944Z"
+  },
+  {
+    "id": 38,
+    "name": "big cornice",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:39.923Z"
+  },
+  {
+    "id": 37,
+    "name": "small cornice",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:39.904Z"
+  },
+  {
+    "id": 36,
+    "name": "pvc corner joining strips",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:39.884Z"
+  },
+  {
+    "id": 35,
+    "name": "pvc panel",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:39.864Z"
+  },
+  {
+    "id": 34,
+    "name": "12mm flat edge trims",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:39.839Z"
+  },
+  {
+    "id": 33,
+    "name": "12mm round edge trims",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:39.819Z"
+  },
+  {
+    "id": 32,
+    "name": "10mm flat edge trims",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:39.799Z"
+  },
+  {
+    "id": 31,
+    "name": "10mm round edge trims",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:39.780Z"
+  },
+  {
+    "id": 30,
+    "name": "5litres bonding liquid",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:39.760Z"
+  },
+  {
+    "id": 29,
+    "name": "tile spacers(2mm)",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:39.741Z"
+  },
+  {
+    "id": 28,
+    "name": "20kgs tile adhesive porcelain",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:39.719Z"
+  },
+  {
+    "id": 27,
+    "name": "20kgs tile adhesive contractors",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:39.700Z"
+  },
+  {
+    "id": 26,
+    "name": "5kg grout",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:39.680Z"
+  },
+  {
+    "id": 25,
+    "name": "30x60 wall tiles",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:39.661Z"
+  },
+  {
+    "id": 24,
+    "name": "25x40 wall tiles",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:39.642Z"
+  },
+  {
+    "id": 23,
+    "name": "40x40floor tiles",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:39.620Z"
+  },
+  {
+    "id": 22,
+    "name": "60x60 floor tiles",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:39.600Z"
+  },
+  {
+    "id": 21,
+    "name": "0.27mm painted",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:39.578Z"
+  },
+  {
+    "id": 20,
+    "name": "0.3mm painted",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:39.556Z"
+  },
+  {
+    "id": 19,
+    "name": "0.4mm painted",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T12:12:39.527Z"
+  },
+  {
+    "id": 18,
+    "name": "Q GUN OIL",
+    "companyId": 21,
+    "companyName": "National Cartridge Manufacturing ",
+    "createdAt": "2026-02-13T11:29:32.294Z"
+  },
+  {
+    "id": 17,
+    "name": ".22H/V",
+    "companyId": 21,
+    "companyName": "National Cartridge Manufacturing ",
+    "createdAt": "2026-02-13T11:22:19.129Z"
+  },
+  {
+    "id": 16,
+    "name": ".22 STINGER",
+    "companyId": 21,
+    "companyName": "National Cartridge Manufacturing ",
+    "createdAt": "2026-02-13T11:17:43.615Z"
+  },
+  {
+    "id": 15,
+    "name": "9MMP",
+    "companyId": 21,
+    "companyName": "National Cartridge Manufacturing ",
+    "createdAt": "2026-02-13T11:12:37.523Z"
+  },
+  {
+    "id": 14,
+    "name": ".22 SPORT",
+    "companyId": 21,
+    "companyName": "National Cartridge Manufacturing ",
+    "createdAt": "2026-02-13T11:09:05.522Z"
+  },
+  {
+    "id": 13,
+    "name": "2 BATON BALL",
+    "companyId": 21,
+    "companyName": "National Cartridge Manufacturing ",
+    "createdAt": "2026-02-13T11:07:59.593Z"
+  },
+  {
+    "id": 12,
+    "name": "CANIK PISTOL",
+    "companyId": 21,
+    "companyName": "National Cartridge Manufacturing ",
+    "createdAt": "2026-02-13T10:53:01.101Z"
+  },
+  {
+    "id": 11,
+    "name": "Slug 12 Guage",
+    "companyId": 21,
+    "companyName": "National Cartridge Manufacturing ",
+    "createdAt": "2026-02-13T10:10:43.436Z"
+  },
+  {
+    "id": 10,
+    "name": "LG 12 Gauge",
+    "companyId": 21,
+    "companyName": "National Cartridge Manufacturing ",
+    "createdAt": "2026-02-13T10:10:43.416Z"
+  },
+  {
+    "id": 9,
+    "name": "SG 12 Gauge",
+    "companyId": 21,
+    "companyName": "National Cartridge Manufacturing ",
+    "createdAt": "2026-02-13T10:10:43.396Z"
+  },
+  {
+    "id": 8,
+    "name": "SSG 12 Guage",
+    "companyId": 21,
+    "companyName": "National Cartridge Manufacturing ",
+    "createdAt": "2026-02-13T10:10:43.376Z"
+  },
+  {
+    "id": 7,
+    "name": "AAA 12 Gauge",
+    "companyId": 21,
+    "companyName": "National Cartridge Manufacturing ",
+    "createdAt": "2026-02-13T10:10:43.350Z"
+  },
+  {
+    "id": 6,
+    "name": "no. 5 12 Gauge",
+    "companyId": 21,
+    "companyName": "National Cartridge Manufacturing ",
+    "createdAt": "2026-02-13T10:03:06.222Z"
+  },
+  {
+    "id": 5,
+    "name": "no. 4 12 G",
+    "companyId": 21,
+    "companyName": "National Cartridge Manufacturing ",
+    "createdAt": "2026-02-13T10:02:41.211Z"
+  },
+  {
+    "id": 4,
+    "name": "no.3 12 Gauge",
+    "companyId": 21,
+    "companyName": "National Cartridge Manufacturing ",
+    "createdAt": "2026-02-13T10:02:11.622Z"
+  },
+  {
+    "id": 3,
+    "name": "WIRE NAILS 1KG",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T08:08:42.443Z"
+  },
+  {
+    "id": 2,
+    "name": "BARBED WIRE 50KG",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T08:07:26.608Z"
+  },
+  {
+    "id": 1,
+    "name": "IBR NAILS KG",
+    "companyId": 12,
+    "companyName": "Hillend Trading",
+    "createdAt": "2026-02-13T07:56:34.390Z"
+  }
+]

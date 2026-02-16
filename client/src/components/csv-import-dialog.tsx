@@ -29,7 +29,7 @@ export function CsvImportDialog({ type, companyId, onSuccess, trigger }: CsvImpo
             return "Name,Email,Phone,Address,TIN,VAT Number,Type\nJohn Doe,john@example.com,0771234567,123 Street,100100100,12345678,Individual\nACME Corp,info@acme.com,0242123456,Industrial Site,200200200,87654321,Business";
         }
         if (type === "product") {
-            return "Name,Description,SKU,Price,Tax Rate,Type,Stock\nWidget A,High quality widget,WID-001,10.00,15.0,Good,100\nConsulting,Hourly rate,SVC-001,50.00,15.0,Service,0";
+            return "Name,Description,SKU,Price,Tax Rate,Type,Stock,HS Code,Category,Track Inventory\nWidget A,High quality widget,WID-001,10.00,15.5,Good,100,0000.00.00,General,Yes\nConsulting,Hourly rate,SVC-001,50.00,15.5,Service,0,,Services,No";
         }
         return "";
     };

@@ -187,6 +187,7 @@ export default function TeamSettingsPage() {
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="member">Member</SelectItem>
+                                            <SelectItem value="cashier">Cashier</SelectItem>
                                             <SelectItem value="admin">Admin</SelectItem>
                                             <SelectItem value="owner">Owner</SelectItem>
                                         </SelectContent>
@@ -254,6 +255,7 @@ export default function TeamSettingsPage() {
                                                 </SelectTrigger>
                                                 <SelectContent>
                                                     <SelectItem value="member">Member</SelectItem>
+                                                    <SelectItem value="cashier">Cashier</SelectItem>
                                                     <SelectItem value="admin">Admin</SelectItem>
                                                     <SelectItem value="owner">Owner</SelectItem>
                                                 </SelectContent>

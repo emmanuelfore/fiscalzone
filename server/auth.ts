@@ -34,11 +34,37 @@ export function setupAuth(app: Express) {
     if (!token) return next();
 
     try {
-      // Verify token with Supabase
-      const { data: { user: supabaseUser }, error } = await supabaseServer.auth.getUser(token);
+      // Verify token with Supabase with retry logic for network stability
+      let supabaseUser = null;
+      let authError = null;
+      let authRetries = 3;
 
-      if (error || !supabaseUser) {
-        console.log(`[AUTH] Supabase verification failed for ${req.path}: ${error?.message || 'No user'}`);
+      while (authRetries > 0) {
+        try {
+          const { data, error } = await supabaseServer.auth.getUser(token);
+          if (error) {
+            authError = error;
+            // If it's a 401/403 (invalid token), don't retry
+            if (error.status === 401 || error.status === 403) break;
+          } else {
+            supabaseUser = data.user;
+            authError = null;
+            break;
+          }
+        } catch (err: any) {
+          authError = err;
+          console.warn(`[AUTH] Supabase connection attempt failed (${4 - authRetries}/3):`, err.message || err);
+        }
+
+        authRetries--;
+        if (authRetries > 0) {
+          // Exponential backoff: 500ms, 1500ms
+          await new Promise(resolve => setTimeout(resolve, 500 * (4 - authRetries)));
+        }
+      }
+
+      if (authError || !supabaseUser) {
+        console.log(`[AUTH] Supabase verification failed for ${req.path}: ${authError?.message || 'No user'}`);
         return next();
       }
 

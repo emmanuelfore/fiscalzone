@@ -1,10 +1,11 @@
 import { useAuth } from "@/hooks/use-auth";
 import { useCompanies } from "@/hooks/use-companies";
+import { useActiveCompany } from "@/hooks/use-active-company";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Redirect } from "wouter";
+import { Redirect, Link } from "wouter";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useLocation } from "wouter";
@@ -26,6 +27,7 @@ type SignupForm = z.infer<typeof signupSchema>;
 
 export default function AuthPage() {
   const { user, loginWithPassword, registerWithPassword } = useAuth();
+  const { activeCompany, isLoading: isLoadingCompany } = useActiveCompany();
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [, setLocation] = useLocation();
 
@@ -106,6 +108,15 @@ export default function AuthPage() {
   };
 
   if (user) {
+    if (isLoadingCompany) {
+      return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
+    }
+
+    // Check if the user is a cashier in the active company
+    if (activeCompany?.role === 'cashier') {
+      return <Redirect to="/pos" />;
+    }
+
     return <Redirect to="/dashboard" />;
   }
 
@@ -188,8 +199,8 @@ export default function AuthPage() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label htmlFor="password">Password</Label>
-                    <Button variant="ghost" className="p-0 h-auto text-xs text-primary hover:bg-transparent" type="button">
-                      Forgot password?
+                    <Button variant="ghost" className="p-0 h-auto text-xs text-primary hover:bg-transparent" type="button" asChild>
+                      <Link href="/forgot-password">Forgot password?</Link>
                     </Button>
                   </div>
                   <Input

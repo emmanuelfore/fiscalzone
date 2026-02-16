@@ -6,6 +6,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import LandingPage from "@/pages/landing";
 import AuthPage from "@/pages/auth";
+import ForgotPasswordPage from "@/pages/forgot-password";
+import ResetPasswordPage from "@/pages/reset-password";
 import OnboardingPage from "@/pages/onboarding";
 import Dashboard from "@/pages/dashboard";
 import InvoicesPage from "@/pages/invoices";
@@ -21,13 +23,19 @@ import ZimraSettingsPage from "@/pages/zimra-settings";
 import FdmsTestPage from "@/pages/fdms-test";
 import CurrencySettingsPage from "@/pages/currency-settings";
 import TeamSettingsPage from "@/pages/team-settings";
-import ReportsPage from "@/pages/reports";
 import UserProfilePage from "@/pages/user-profile";
 import AuditLogsPage from "@/pages/audit-logs";
 import QuotationsPage from "@/pages/quotations";
 import CreateQuotationPage from "@/pages/create-quotation";
 import RecurringInvoicesPage from "@/pages/recurring-invoices";
 import ZimraLogsPage from "@/pages/zimra-logs";
+import POSPage from "@/pages/pos";
+import MySalesPage from "@/pages/my-sales";
+import PosReportsPage from "@/pages/pos-reports";
+import RecentSalesPage from "@/pages/recent-sales";
+import InventoryReportsPage from "@/pages/inventory-reports";
+import TaxReportsPage from "@/pages/tax-reports";
+import PosSettingsPage from "@/pages/pos-settings";
 import SubscriptionPage from "@/pages/subscription";
 import { useAuth } from "@/hooks/use-auth";
 import { useCompanies } from "@/hooks/use-companies";
@@ -37,7 +45,7 @@ import { useEffect } from "react";
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
   const { data: companies, isLoading: isLoadingCompanies } = useCompanies(!!user);
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
 
   if (isLoading || isLoadingCompanies) {
     return (
@@ -53,6 +61,16 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 
   if (!companies || companies.length === 0) {
     return <Redirect to="/onboarding" />;
+  }
+
+  // Role based redirection for Cashiers
+  const activeCompanyId = parseInt(localStorage.getItem("selectedCompanyId") || "0") || companies[0].id;
+  const activeCompany = companies.find(c => c.id === activeCompanyId) || companies[0];
+  const role = (activeCompany as any).role;
+
+  const allowedCashierPaths = ["/pos", "/pos/my-sales"];
+  if (role === "cashier" && !allowedCashierPaths.includes(location)) {
+    return <Redirect to="/pos" />;
   }
 
   return <Component />;
@@ -88,6 +106,8 @@ function Router() {
     <Switch>
       <Route path="/" component={LandingPage} />
       <Route path="/auth" component={AuthPage} />
+      <Route path="/forgot-password" component={ForgotPasswordPage} />
+      <Route path="/reset-password" component={ResetPasswordPage} />
 
       <Route path="/onboarding" component={OnboardingRoute} />
 
@@ -127,8 +147,17 @@ function Router() {
       <Route path="/team-settings">
         {() => <ProtectedRoute component={TeamSettingsPage} />}
       </Route>
+      <Route path="/reports/pos">
+        {() => <ProtectedRoute component={PosReportsPage} />}
+      </Route>
+      <Route path="/reports/inventory">
+        {() => <ProtectedRoute component={InventoryReportsPage} />}
+      </Route>
+      <Route path="/reports/tax">
+        {() => <ProtectedRoute component={TaxReportsPage} />}
+      </Route>
       <Route path="/reports">
-        {() => <ProtectedRoute component={ReportsPage} />}
+        {() => <Redirect to="/reports/pos" />}
       </Route>
       <Route path="/profile">
         {() => <ProtectedRoute component={UserProfilePage} />}
@@ -153,6 +182,21 @@ function Router() {
       </Route>
       <Route path="/subscription">
         {() => <ProtectedRoute component={SubscriptionPage} />}
+      </Route>
+      <Route path="/pos/my-sales">
+        {() => <ProtectedRoute component={MySalesPage} />}
+      </Route>
+      <Route path="/pos/reports">
+        {() => <Redirect to="/reports/pos" />}
+      </Route>
+      <Route path="/pos/all-sales">
+        {() => <ProtectedRoute component={RecentSalesPage} />}
+      </Route>
+      <Route path="/pos">
+        {() => <ProtectedRoute component={POSPage} />}
+      </Route>
+      <Route path="/pos-settings">
+        {() => <ProtectedRoute component={PosSettingsPage} />}
       </Route>
 
       <Route component={NotFound} />

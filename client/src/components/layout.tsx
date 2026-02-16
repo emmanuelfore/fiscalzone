@@ -21,7 +21,12 @@ import {
   Activity,
   RefreshCw,
   AlertTriangle,
-  CreditCard
+  CreditCard,
+  MonitorCheck,
+  TrendingUp,
+  ShieldCheck,
+  History,
+  Receipt
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -49,6 +54,11 @@ type NavItem = {
     icon: any;
     label: string;
     href: string;
+    children?: {
+      icon: any;
+      label: string;
+      href: string;
+    }[];
   }[];
 };
 
@@ -67,8 +77,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const selectedCompanyId = activeCompanyId;
   const selectedCompany = activeCompany;
 
-  const navItems: NavItem[] = [
+  const activeRole = (activeCompany as any)?.role;
+
+  const allNavItems: NavItem[] = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
+    {
+      icon: MonitorCheck,
+      label: "POS Terminal",
+      children: [
+        { icon: MonitorCheck, label: "View POS", href: "/pos" },
+        { icon: History, label: "My Sales History", href: "/pos/my-sales" }
+      ]
+    },
     {
       icon: Briefcase,
       label: "Sales & Billing",
@@ -90,9 +110,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
     },
     {
       icon: Building2,
-      label: "Finance",
+      label: "Finance & Reports",
       children: [
-        { icon: BarChart3, label: "Reports", href: "/reports" },
+        { icon: MonitorCheck, label: "POS Reports", href: "/reports/pos" },
+        { icon: History, label: "Recent Sales Ledger", href: "/pos/all-sales" },
+        { icon: Package, label: "Inventory Reports", href: "/reports/inventory" },
+        { icon: FileText, label: "Tax & ZIMRA", href: "/reports/tax" },
         { icon: Coins, label: "Currencies", href: "/currencies" },
         { icon: Calculator, label: "Tax Config", href: "/tax-config" },
       ]
@@ -113,9 +136,27 @@ export function Layout({ children }: { children: React.ReactNode }) {
       children: [
         { icon: UserCog, label: "Team", href: "/team-settings" },
         { icon: Settings, label: "Settings", href: "/settings" },
+        { icon: MonitorCheck, label: "POS Settings", href: "/pos-settings" },
       ]
     }
   ];
+
+  const isCashier = activeRole === 'cashier';
+
+  const navItems = isCashier
+    ? [
+      {
+        icon: MonitorCheck,
+        label: "POS Terminal",
+        href: "/pos"
+      },
+      {
+        icon: Receipt,
+        label: "My Sales History",
+        href: "/pos/my-sales"
+      }
+    ]
+    : allNavItems;
 
   if (!user) return null;
 

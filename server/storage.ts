@@ -12,11 +12,19 @@ import {
   quotations, quotationItems, type Quotation, type QuotationItem, type InsertQuotation, type InsertQuotationItem,
   zimraLogs, type ZimraLog, type InsertZimraLog,
   validationErrors, type ValidationError, type InsertValidationError,
-  subscriptions, type Subscription, type InsertSubscription
+  subscriptions, type Subscription, type InsertSubscription,
+  posShifts, type PosShift, type InsertPosShift,
+  posHolds, type PosHold, type InsertPosHold,
+  productCategories, type ProductCategory, type InsertProductCategory,
+  resetTokens, insertResetTokenSchema
 } from "../shared/schema.js";
 import { db } from "./db.js";
-import { eq, and, desc, lte, or, isNull, sql, ilike, count } from "drizzle-orm";
+import { eq, and, desc, lte, gte, ne, or, isNull, sql, ilike, count } from "drizzle-orm";
 import { type FiscalDayCounter } from "./zimra.js";
+import { scrypt, randomBytes } from "crypto";
+import { promisify } from "util";
+
+const scryptAsync = promisify(scrypt);
 
 export interface IStorage {
   // User & Auth
@@ -25,6 +33,13 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, user: Partial<User>): Promise<User>;
+  setUserPin(userId: string, pin: string): Promise<void>;
+  verifyUserPin(userId: string, pin: string): Promise<boolean>;
+
+  // Password Reset
+  createResetToken(userId: string): Promise<string>;
+  verifyResetToken(token: string): Promise<string | null>; // Returns userId if valid
+  consumeResetToken(token: string): Promise<void>;
 
   // Companies
   createCompany(company: InsertCompany, userId: string): Promise<Company>;
@@ -44,7 +59,7 @@ export interface IStorage {
   updateProduct(id: number, product: Partial<InsertProduct>): Promise<Product>;
 
   // Invoices
-  getInvoicesPaginated(companyId: number, page?: number, limit?: number, search?: string, status?: string, type?: string, dateFrom?: Date, dateTo?: Date): Promise<{ data: (Invoice & { customer?: Customer })[]; total: number; pages: number }>;
+  getInvoicesPaginated(companyId: number, page?: number, limit?: number, search?: string, status?: string, type?: string, dateFrom?: Date, dateTo?: Date, isPos?: boolean): Promise<{ data: (Invoice & { customer?: Customer })[]; total: number; pages: number }>;
   getInvoices(companyId: number): Promise<Invoice[]>;
   getInvoice(id: number): Promise<(Invoice & { items: (InvoiceItem & { product?: Product })[]; customer?: Customer; validationErrors?: any[]; relatedInvoiceNumber?: string; relatedInvoiceDate?: Date | null; relatedFiscalCode?: string; relatedReceiptGlobalNo?: number; relatedReceiptCounter?: number }) | undefined>;
   createInvoice(invoice: CreateInvoiceRequest): Promise<Invoice>;
@@ -70,9 +85,10 @@ export interface IStorage {
 
   // User Management
   getCompanyUsers(companyId: number): Promise<(User & { role: string })[]>;
-  addUserToCompany(userId: string, companyId: number, role: string): Promise<void>;
+  addCompanyUser(userId: string, companyId: number, role: string): Promise<void>;
   updateUserRole(userId: string, companyId: number, role: string): Promise<void>;
-  removeUserFromCompany(userId: string, companyId: number): Promise<void>;
+  removeCompanyUser(userId: string, companyId: number): Promise<void>;
+  getCompanyUserRole(userId: string, companyId: number): Promise<string | undefined>;
 
   // Analytics
   getCompanyStats(companyId: number): Promise<{ totalRevenue: number; pendingAmount: number; invoicesCount: number; customersCount: number }>;
@@ -99,7 +115,7 @@ export interface IStorage {
     closingBalance: number;
     transactions: any[];
   }>;
-  getSalesReport(companyId: number, startDate: Date, endDate: Date): Promise<Invoice[]>;
+  getSalesReport(companyId: number, startDate: Date, endDate: Date): Promise<any[]>;
   getPaymentsReport(companyId: number, startDate: Date, endDate: Date): Promise<Payment[]>;
 
   // Audit Logs
@@ -116,7 +132,9 @@ export interface IStorage {
   // Quotations
   getQuotations(companyId: number): Promise<Quotation[]>;
   getQuotation(id: number): Promise<(Quotation & { items: QuotationItem[]; customer?: Customer }) | undefined>;
+  getInvoice(id: number): Promise<(Invoice & { items: (InvoiceItem & { product?: Product })[]; customer?: Customer; validationErrors?: any[]; relatedInvoiceNumber?: string; relatedInvoiceDate?: Date | null; relatedFiscalCode?: string; relatedReceiptGlobalNo?: number; relatedReceiptCounter?: number }) | undefined>;
   createQuotation(data: InsertQuotation & { items: InsertQuotationItem[] }): Promise<Quotation>;
+
   updateQuotation(id: number, data: Partial<InsertQuotation> & { items?: InsertQuotationItem[] }): Promise<Quotation>;
   deleteQuotation(id: number): Promise<void>;
   getNextQuotationNumber(companyId: number): Promise<string>;
@@ -137,6 +155,26 @@ export interface IStorage {
   getActiveSubscriptionByDevice(companyId: number, deviceSerialNo: string, macAddress: string): Promise<Subscription | undefined>;
   getSubscriptionsByCompany(companyId: number): Promise<Subscription[]>;
   hasActiveSubscriptionByMac(companyId: number, macAddress: string): Promise<boolean>;
+
+  // POS
+  getPosHolds(companyId: number, userId: string): Promise<PosHold[]>;
+  createPosHold(data: InsertPosHold): Promise<PosHold>;
+  deletePosHold(id: number, userId: string): Promise<void>;
+  getPosShifts(companyId: number, userId: string): Promise<PosShift[]>;
+  getActivePosShift(companyId: number, userId: string): Promise<PosShift | undefined>;
+  getPosSales(companyId: number, startDate: Date, endDate: Date, cashierId?: string, paymentMethod?: string, status?: string, search?: string): Promise<any[]>;
+  createPosShift(data: InsertPosShift): Promise<PosShift>;
+  updatePosShift(id: number, userId: string, data: Partial<PosShift>): Promise<PosShift>;
+
+  // Product Categories
+  getProductCategories(companyId: number): Promise<ProductCategory[]>;
+  createProductCategory(data: InsertProductCategory & { companyId: number }): Promise<ProductCategory>;
+  deleteProductCategory(id: number, companyId: number): Promise<void>;
+
+  // Reports
+  getSalesByCategory(companyId: number, startDate: Date, endDate: Date): Promise<{ category: string; totalSales: number; count: number }[]>;
+  getSalesByUser(companyId: number, startDate: Date, endDate: Date): Promise<{ userId: string; userName: string; totalSales: number; count: number }[]>;
+  getProductPerformance(companyId: number, startDate: Date, endDate: Date, isPosOnly?: boolean): Promise<{ productId: number; productName: string; quantity: number; revenue: number }[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -167,6 +205,30 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, id))
       .returning();
     return user;
+  }
+
+  async setUserPin(userId: string, pin: string): Promise<void> {
+    const salt = randomBytes(16).toString("hex");
+    const buf = (await scryptAsync(pin, salt, 64)) as Buffer;
+    const hashedPin = `${buf.toString("hex")}.${salt}`;
+
+    await db.update(users)
+      .set({ pin: hashedPin })
+      .where(eq(users.id, userId));
+  }
+
+  async verifyUserPin(userId: string, pin: string): Promise<boolean> {
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    if (!user || !user.pin) return false;
+
+    const [hashed, salt] = user.pin.split(".");
+    const buf = (await scryptAsync(pin, salt, 64)) as Buffer;
+    const computed = buf.toString("hex");
+
+    // Console log for debugging
+    console.log(`[VERIFY] ID: ${userId}, Stored: ${hashed}, Computed: ${computed}`);
+
+    return computed === hashed;
   }
 
   async createCompany(company: InsertCompany, userId: string): Promise<Company> {
@@ -204,19 +266,82 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async getCompanies(userId: string): Promise<Company[]> {
+
+  async setUserPin(userId: string, pin: string): Promise<void> {
+    const salt = randomBytes(16).toString("hex");
+    const buf = (await scryptAsync(pin, salt, 64)) as Buffer;
+    const hash = `${buf.toString("hex")}.${salt}`;
+    await db.update(users).set({ pin: hash }).where(eq(users.id, userId));
+  }
+
+  async verifyUserPin(userId: string, pin: string): Promise<boolean> {
+    const user = await this.getUser(userId);
+    if (!user || !user.pin) return false;
+
+    const [salt, key] = user.pin.split(":");
+    if (!salt || !key) return false;
+
+    const derivedKey = (await scryptAsync(pin, salt, 64)) as Buffer;
+    return key === derivedKey.toString("hex");
+  }
+
+  async createResetToken(userId: string): Promise<string> {
+    const token = randomBytes(32).toString("hex");
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 1); // 1 hour expiry
+
+    await db.insert(resetTokens).values({
+      userId,
+      token,
+      expiresAt,
+      used: false,
+      createdAt: new Date()
+    });
+
+    return token;
+  }
+
+  async verifyResetToken(token: string): Promise<string | null> {
+    const [record] = await db
+      .select()
+      .from(resetTokens)
+      .where(eq(resetTokens.token, token));
+
+    if (!record) return null;
+    if (record.used) return null;
+    if (new Date() > record.expiresAt) return null;
+
+    return record.userId;
+  }
+
+  async consumeResetToken(token: string): Promise<void> {
+    await db
+      .update(resetTokens)
+      .set({ used: true })
+      .where(eq(resetTokens.token, token));
+  }
+
+  // Companies
+  async getCompanies(userId: string): Promise<(Company & { role: string })[]> {
     const user = await this.getUser(userId);
     if (user?.isSuperAdmin) {
-      return await db.select().from(companies);
+      const allCompanies = await db.select().from(companies);
+      return allCompanies.map(c => ({ ...c, role: "owner" }));
     }
 
     const result = await db
-      .select({ company: companies })
+      .select({
+        company: companies,
+        role: companyUsers.role
+      })
       .from(companyUsers)
       .innerJoin(companies, eq(companyUsers.companyId, companies.id))
       .where(eq(companyUsers.userId, userId));
 
-    return result.map(r => r.company);
+    return result.map(r => ({
+      ...r.company,
+      role: r.role || "member"
+    }));
   }
 
   async getCompany(id: number): Promise<Company | undefined> {
@@ -259,6 +384,7 @@ export class DatabaseStorage implements IStorage {
     const nextNumber = maxNumber + 1;
     return `FS-${nextNumber.toString().padStart(5, '0')}`;
   }
+
   async getCustomers(companyId: number): Promise<Customer[]> {
     return await db.select().from(customers).where(eq(customers.companyId, companyId));
   }
@@ -312,11 +438,17 @@ export class DatabaseStorage implements IStorage {
     status?: string,
     type?: string,
     dateFrom?: Date,
-    dateTo?: Date
+    dateTo?: Date,
+    isPos?: boolean
   ): Promise<{ data: (Invoice & { customer?: Customer })[]; total: number; pages: number }> {
     const offset = (page - 1) * limit;
 
     const filters = [eq(invoices.companyId, companyId)];
+
+    // Add POS filter if specified
+    if (isPos !== undefined) {
+      filters.push(eq(invoices.isPos, isPos));
+    }
 
     if (search) {
       const searchTerm = `%${search}%`;
@@ -379,7 +511,7 @@ export class DatabaseStorage implements IStorage {
     return { data, total, pages };
   }
 
-  async getInvoice(id: number): Promise<(Invoice & { items: (InvoiceItem & { product?: Product })[]; customer?: Customer; validationErrors?: any[]; relatedInvoiceNumber?: string; relatedInvoiceDate?: Date | null }) | undefined> {
+  async getInvoice(id: number): Promise<(Invoice & { items: (InvoiceItem & { product?: Product })[]; customer?: Customer; validationErrors?: any[]; relatedInvoiceNumber?: string; relatedInvoiceDate?: Date | null; relatedFiscalCode?: string; relatedReceiptGlobalNo?: number; relatedReceiptCounter?: number }) | undefined> {
     const [invoice] = await db.select().from(invoices).where(eq(invoices.id, id));
     if (!invoice) return undefined;
 
@@ -456,7 +588,6 @@ export class DatabaseStorage implements IStorage {
       const { items, ...invoiceData } = data;
       const [invoice] = await tx.insert(invoices).values({
         ...invoiceData,
-        ...invoiceData,
         invoiceNumber: await this.getNextInvoiceNumber(invoiceData.companyId, invoiceData.transactionType === 'CreditNote' ? 'CN' : (invoiceData.transactionType === 'DebitNote' ? 'DN' : 'INV')),
         dueDate: new Date(invoiceData.dueDate), // Ensure Date object
       }).returning();
@@ -465,11 +596,91 @@ export class DatabaseStorage implements IStorage {
         await tx.insert(invoiceItems).values(
           items.map(item => ({ ...item, invoiceId: invoice.id }))
         );
+
+        // Inventory Management: Deduct/Restore stock for tracked products
+        for (const item of items) {
+          if (item.productId) {
+            const [product] = await tx.select().from(products).where(eq(products.id, item.productId));
+            if (product && product.isTracked) {
+              const quantity = parseFloat(item.quantity.toString());
+              let stockChange = 0;
+
+              if (invoiceData.transactionType === 'CreditNote') {
+                stockChange = quantity; // Restore stock
+              } else {
+                stockChange = -quantity; // Deduct stock
+              }
+
+              const newStockLevel = (parseFloat(product.stockLevel || "0") + stockChange).toString();
+              await tx.update(products)
+                .set({ stockLevel: newStockLevel })
+                .where(eq(products.id, item.productId));
+            }
+          }
+        }
       }
 
-      return invoice;
-    });
+      // Manually construct the full invoice object using tx to avoid transaction visibility issues
+      // 1. Fetch Customer
+      let customer: Customer | undefined;
+      if (invoice.customerId) {
+        const [c] = await tx.select().from(customers).where(eq(customers.id, invoice.customerId));
+        customer = c;
+      }
 
+      // 2. Fetch Related Invoice Details
+      let relatedInvoiceNumber: string | undefined;
+      let relatedInvoiceDate: Date | null | undefined;
+      let relatedFiscalCode: string | undefined;
+      let relatedReceiptGlobalNo: number | undefined;
+      let relatedReceiptCounter: number | undefined;
+
+      if (invoice.relatedInvoiceId) {
+        const [related] = await tx.select({
+          invoiceNumber: invoices.invoiceNumber,
+          issueDate: invoices.issueDate,
+          fiscalCode: invoices.fiscalCode,
+          receiptGlobalNo: invoices.receiptGlobalNo,
+          receiptCounter: invoices.receiptCounter
+        }).from(invoices).where(eq(invoices.id, invoice.relatedInvoiceId));
+
+        if (related) {
+          relatedInvoiceNumber = related.invoiceNumber;
+          relatedInvoiceDate = related.issueDate;
+          relatedFiscalCode = related.fiscalCode || undefined;
+          relatedReceiptGlobalNo = related.receiptGlobalNo || undefined;
+          relatedReceiptCounter = related.receiptCounter || undefined;
+        }
+      }
+
+      // 3. Fetch Items with Products
+      // We inserted items, but we need the generated IDs and product details
+      const invoiceItemsRows = await tx
+        .select({
+          item: invoiceItems,
+          product: products
+        })
+        .from(invoiceItems)
+        .leftJoin(products, eq(invoiceItems.productId, products.id))
+        .where(eq(invoiceItems.invoiceId, invoice.id));
+
+      const fullItems = invoiceItemsRows.map(r => ({
+        ...r.item,
+        product: r.product || undefined
+      }));
+
+      return {
+        ...invoice,
+        items: fullItems,
+        customer,
+        validationErrors: [],
+        relatedInvoiceNumber,
+        relatedInvoiceDate,
+        relatedFiscalCode,
+        relatedReceiptGlobalNo,
+        relatedReceiptCounter
+      } as Invoice;
+    });
   }
 
   async updateInvoice(id: number, data: Partial<InsertInvoice> & { items?: any[] }): Promise<Invoice> {
@@ -516,7 +727,8 @@ export class DatabaseStorage implements IStorage {
     lastValidationAttempt?: Date;
   }): Promise<Invoice> {
     const { syncedWithFdms = true, fdmsStatus = "issued", validationStatus, lastValidationAttempt, submissionId, ...rest } = fiscalData;
-    const [updated] = await db
+
+    await db
       .update(invoices)
       .set({
         ...rest,
@@ -527,9 +739,13 @@ export class DatabaseStorage implements IStorage {
         lastValidationAttempt,
         status: syncedWithFdms ? "issued" : "draft"
       })
-      .where(eq(invoices.id, id))
-      .returning();
-    return updated;
+      .where(eq(invoices.id, id));
+
+
+    // Return full invoice with items for the receipt
+    const fullInvoice = await this.getInvoice(id);
+    if (!fullInvoice) throw new Error("Invoice not found after fiscalization");
+    return fullInvoice as Invoice;
   }
 
   async createValidationErrors(errors: Array<{ invoiceId: number; errorCode: string; errorMessage: string; errorColor: string; requiresPreviousReceipt: boolean }>): Promise<void> {
@@ -689,14 +905,16 @@ export class DatabaseStorage implements IStorage {
 
   // Currencies
   async getCurrencies(companyId: number): Promise<Currency[]> {
-    return await db.select().from(currencies).where(eq(currencies.companyId, companyId));
+    return await db.select().from(currencies).where(eq(currencies.companyId, companyId)).orderBy(currencies.id);
   }
 
   async createCurrency(currency: InsertCurrency): Promise<Currency> {
-    const [newCurrency] = await db.insert(currencies).values({
+    // Ensure exchangeRate is string for decimal column
+    const data = {
       ...currency,
-      exchangeRate: currency.exchangeRate?.toString()
-    }).returning();
+      exchangeRate: currency.exchangeRate ? String(currency.exchangeRate) : "1.000000"
+    }
+    const [newCurrency] = await db.insert(currencies).values(data).returning();
     return newCurrency;
   }
 
@@ -789,6 +1007,14 @@ export class DatabaseStorage implements IStorage {
     await db
       .delete(companyUsers)
       .where(and(eq(companyUsers.userId, userId), eq(companyUsers.companyId, companyId)));
+  }
+
+  async getCompanyUserRole(userId: string, companyId: number): Promise<string | undefined> {
+    const [result] = await db
+      .select({ role: companyUsers.role })
+      .from(companyUsers)
+      .where(and(eq(companyUsers.userId, userId), eq(companyUsers.companyId, companyId)));
+    return result?.role || undefined;
   }
 
   // Analytics
@@ -1578,6 +1804,363 @@ export class DatabaseStorage implements IStorage {
       )
       .limit(1);
     return !!subscription;
+  }
+
+  // POS Shifting & Parking
+  async getPosHolds(companyId: number, userId: string): Promise<PosHold[]> {
+    return await db
+      .select()
+      .from(posHolds)
+      .where(and(eq(posHolds.companyId, companyId), eq(posHolds.userId, userId)))
+      .orderBy(desc(posHolds.createdAt));
+  }
+
+  async createPosHold(data: InsertPosHold): Promise<PosHold> {
+    const [hold] = await db.insert(posHolds).values(data).returning();
+    return hold;
+  }
+
+  async deletePosHold(id: number, userId: string): Promise<void> {
+    await db.delete(posHolds).where(and(eq(posHolds.id, id), eq(posHolds.userId, userId)));
+  }
+
+  async getPosShifts(companyId: number, userId: string): Promise<PosShift[]> {
+    return await db
+      .select()
+      .from(posShifts)
+      .where(and(eq(posShifts.companyId, companyId), eq(posShifts.userId, userId)))
+      .orderBy(desc(posShifts.startTime));
+  }
+
+  async getActivePosShift(companyId: number, userId: string): Promise<PosShift | undefined> {
+    const [shift] = await db
+      .select()
+      .from(posShifts)
+      .where(
+        and(
+          eq(posShifts.companyId, companyId),
+          eq(posShifts.userId, userId),
+          eq(posShifts.status, "open")
+        )
+      )
+      .limit(1);
+    return shift;
+  }
+
+  async createPosShift(data: InsertPosShift): Promise<PosShift> {
+    const [shift] = await db.insert(posShifts).values(data).returning();
+    return shift;
+  }
+
+  async updatePosShift(id: number, userId: string, data: Partial<PosShift>): Promise<PosShift> {
+    const [updated] = await db
+      .update(posShifts)
+      .set(data)
+      .where(and(eq(posShifts.id, id), eq(posShifts.userId, userId)))
+      .returning();
+    return updated;
+  }
+  async getCompanyUsers(companyId: number): Promise<(User & { role: string })[]> {
+    const result = await db
+      .select({
+        ...users,
+        role: companyUsers.role,
+      })
+      .from(companyUsers)
+      .innerJoin(users, eq(companyUsers.userId, users.id))
+      .where(eq(companyUsers.companyId, companyId));
+
+    return result as (User & { role: string })[];
+  }
+
+  async addCompanyUser(userId: string, companyId: number, role: string): Promise<void> {
+    await db.insert(companyUsers).values({
+      userId,
+      companyId,
+      role
+    });
+  }
+
+  async removeCompanyUser(userId: string, companyId: number): Promise<void> {
+    await db.delete(companyUsers)
+      .where(and(
+        eq(companyUsers.userId, userId),
+        eq(companyUsers.companyId, companyId)
+      ));
+  }
+
+  // Reporting Implementations
+  async getReportSummary(companyId: number, startDate: Date, endDate: Date): Promise<any> {
+    const revenueResult = await db
+      .select({
+        total: sql<number>`sum(${invoices.total})`,
+        count: count(invoices.id)
+      })
+      .from(invoices)
+      .where(and(
+        eq(invoices.companyId, companyId),
+        gte(invoices.issueDate, startDate),
+        lte(invoices.issueDate, endDate),
+        ne(invoices.status, 'cancelled'),
+        ne(invoices.status, 'draft')
+      ));
+
+    const pendingResult = await db
+      .select({
+        total: sql<number>`sum(${invoices.total})`
+      })
+      .from(invoices)
+      .where(and(
+        eq(invoices.companyId, companyId),
+        eq(invoices.status, 'pending'),
+        gte(invoices.issueDate, startDate),
+        lte(invoices.issueDate, endDate)
+      ));
+
+    const customersResult = await db
+      .select({
+        count: count(customers.id)
+      })
+      .from(customers)
+      .where(eq(customers.companyId, companyId));
+
+    return {
+      totalRevenue: Number(revenueResult[0]?.total || 0),
+      invoicesCount: Number(revenueResult[0]?.count || 0),
+      pendingAmount: Number(pendingResult[0]?.total || 0),
+      customersCount: Number(customersResult[0]?.count || 0)
+    };
+  }
+
+  async getRevenueChart(companyId: number, startDate: Date, endDate: Date): Promise<{ name: string; total: number }[]> {
+    const result = await db
+      .select({
+        date: sql`date_trunc('day', ${invoices.issueDate})`,
+        total: sql<number>`sum(${invoices.total})`
+      })
+      .from(invoices)
+      .where(and(
+        eq(invoices.companyId, companyId),
+        gte(invoices.issueDate, startDate),
+        lte(invoices.issueDate, endDate),
+        ne(invoices.status, 'cancelled'),
+        ne(invoices.status, 'draft')
+      ))
+      .groupBy(sql`date_trunc('day', ${invoices.issueDate})`)
+      .orderBy(sql`date_trunc('day', ${invoices.issueDate})`);
+
+    return result.map(r => ({
+      name: format(new Date(r.date as string), 'MMM dd'),
+      total: Number(r.total || 0)
+    }));
+  }
+
+  async getSalesByPaymentMethod(companyId: number, startDate: Date, endDate: Date): Promise<{ method: string; total: number; count: number }[]> {
+    const result = await db
+      .select({
+        method: invoices.paymentMethod,
+        total: sql<number>`sum(${invoices.total})`,
+        count: count(invoices.id)
+      })
+      .from(invoices)
+      .where(and(
+        eq(invoices.companyId, companyId),
+        gte(invoices.issueDate, startDate),
+        lte(invoices.issueDate, endDate),
+        ne(invoices.status, 'cancelled'),
+        ne(invoices.status, 'draft')
+      ))
+      .groupBy(invoices.paymentMethod);
+
+    return result.map(r => ({
+      method: r.method || "CASH",
+      total: Number(r.total || 0),
+      count: Number(r.count || 0)
+    }));
+  }
+
+  async getSalesReport(companyId: number, startDate: Date, endDate: Date): Promise<any[]> {
+    const result = await db
+      .select({
+        invoice: invoices,
+        customerName: customers.name
+      })
+      .from(invoices)
+      .leftJoin(customers, eq(invoices.customerId, customers.id))
+      .where(and(
+        eq(invoices.companyId, companyId),
+        gte(invoices.issueDate, startDate),
+        lte(invoices.issueDate, endDate)
+      ))
+      .orderBy(desc(invoices.createdAt));
+
+    return result.map(r => ({
+      ...r.invoice,
+      customerName: r.customerName
+    }));
+  }
+
+
+  // Reporting Implementations
+  async getSalesByCategory(companyId: number, startDate: Date, endDate: Date): Promise<{ category: string; totalSales: number; count: number }[]> {
+    const result = await db
+      .select({
+        category: products.category,
+        totalSales: sql<number>`sum(${invoiceItems.lineTotal})`,
+        count: count(invoiceItems.id)
+      })
+      .from(invoiceItems)
+      .innerJoin(invoices, eq(invoiceItems.invoiceId, invoices.id))
+      .innerJoin(products, eq(invoiceItems.productId, products.id))
+      .where(and(
+        eq(invoices.companyId, companyId),
+        gte(invoices.issueDate, startDate),
+        lte(invoices.issueDate, endDate),
+        ne(invoices.status, 'cancelled'),
+        ne(invoices.status, 'draft')
+      ))
+      .groupBy(products.category)
+      .orderBy(desc(sql`sum(${invoiceItems.lineTotal})`));
+
+    return result.map(r => ({
+      category: r.category || "Uncategorized",
+      totalSales: Number(r.totalSales || 0),
+      count: Number(r.count || 0)
+    }));
+  }
+
+  async getSalesByUser(companyId: number, startDate: Date, endDate: Date): Promise<{ userId: string; userName: string; totalSales: number; count: number }[]> {
+    const result = await db
+      .select({
+        userId: invoices.createdBy,
+        userName: users.username,
+        totalSales: sql<number>`sum(${invoices.total})`,
+        count: count(invoices.id)
+      })
+      .from(invoices)
+      .leftJoin(users, eq(invoices.createdBy, users.id))
+      .where(and(
+        eq(invoices.companyId, companyId),
+        gte(invoices.issueDate, startDate),
+        lte(invoices.issueDate, endDate),
+        ne(invoices.status, 'cancelled'),
+        ne(invoices.status, 'draft')
+      ))
+      .groupBy(invoices.createdBy, users.username);
+
+    return result.map(r => ({
+      userId: r.userId || "system",
+      userName: r.userName || "System",
+      totalSales: Number(r.totalSales || 0),
+      count: Number(r.count || 0)
+    }));
+  }
+
+  async getProductPerformance(companyId: number, startDate: Date, endDate: Date, isPosOnly?: boolean): Promise<{ productId: number; productName: string; quantity: number; revenue: number }[]> {
+    const conditions = [
+      eq(invoices.companyId, companyId),
+      gte(invoices.issueDate, startDate),
+      lte(invoices.issueDate, endDate),
+      ne(invoices.status, 'cancelled'),
+      ne(invoices.status, 'draft')
+    ];
+
+    if (isPosOnly) {
+      conditions.push(eq(invoices.isPos, true));
+    }
+
+    const result = await db
+      .select({
+        productId: products.id,
+        productName: products.name,
+        quantity: sql<number>`sum(${invoiceItems.quantity})`,
+        revenue: sql<number>`sum(${invoiceItems.lineTotal})`
+      })
+      .from(invoiceItems)
+      .innerJoin(invoices, eq(invoiceItems.invoiceId, invoices.id))
+      .innerJoin(products, eq(invoiceItems.productId, products.id))
+      .where(and(...conditions))
+      .groupBy(products.id, products.name)
+      .orderBy(desc(sql`sum(${invoiceItems.lineTotal})`));
+
+    return result.map(r => ({
+      productId: r.productId,
+      productName: r.productName,
+      quantity: Number(r.quantity || 0),
+      revenue: Number(r.revenue || 0)
+    }));
+  }
+
+  async getPosSales(
+    companyId: number,
+    startDate: Date,
+    endDate: Date,
+    cashierId?: string,
+    paymentMethod?: string,
+    status?: string,
+    search?: string
+  ): Promise<any[]> {
+    const conditions = [
+      eq(invoices.companyId, companyId),
+      gte(invoices.issueDate, startDate),
+      lte(invoices.issueDate, endDate)
+    ];
+
+    if (cashierId && cashierId !== 'all') {
+      // Show sales created by this cashier, OR sales where createdBy is null 
+      // (to support historical data visibility for the primary user/admin)
+      conditions.push(or(eq(invoices.createdBy, cashierId), isNull(invoices.createdBy)) as any);
+    }
+
+    if (status && status !== 'all') {
+      if (status === 'fiscalized') {
+        conditions.push(eq(invoices.syncedWithFdms, true));
+      } else if (status === 'pending') {
+        conditions.push(eq(invoices.syncedWithFdms, false));
+      } else {
+        conditions.push(eq(invoices.status, status));
+      }
+    }
+
+    if (search) {
+      conditions.push(or(
+        ilike(invoices.invoiceNumber, `%${search}%`),
+        ilike(customers.name, `%${search}%`)
+      ) as any);
+    }
+
+    const query = db
+      .select({
+        invoice: invoices,
+        cashierName: users.username,
+        customerName: customers.name
+      })
+      .from(invoices)
+      .leftJoin(users, eq(invoices.createdBy, users.id))
+      .leftJoin(customers, eq(invoices.customerId, customers.id))
+      .where(and(...conditions))
+      .orderBy(desc(invoices.createdAt));
+
+    const results = await query;
+    return results.map(r => ({
+      ...r.invoice,
+      cashierName: r.cashierName,
+      customerName: r.customerName
+    }));
+  }
+
+  // Product Categories Implementation
+  async getProductCategories(companyId: number): Promise<ProductCategory[]> {
+    return await db.select().from(productCategories).where(eq(productCategories.companyId, companyId)).orderBy(productCategories.name);
+  }
+
+  async createProductCategory(data: InsertProductCategory & { companyId: number }): Promise<ProductCategory> {
+    const [category] = await db.insert(productCategories).values(data).returning();
+    return category;
+  }
+
+  async deleteProductCategory(id: number, companyId: number): Promise<void> {
+    await db.delete(productCategories).where(and(eq(productCategories.id, id), eq(productCategories.companyId, companyId)));
   }
 }
 

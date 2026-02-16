@@ -18,11 +18,19 @@ import { parse } from "csv-parse/sync";
 import { parseStringPromise } from "xml2js";
 import crypto from "crypto";
 import { logAction } from "./audit.js";
-import { seedCompanyDefaults } from "./lib/seeding";
+import { startPosShift, endPosShift, addPosTransaction, getOpenShift, getShiftTransactions } from "./lib/pos.js";
+import { seedCompanyDefaults } from "./lib/seeding.js";
+import { processInvoiceFiscalization } from "./lib/fiscalization.js";
+import { db } from "./db";
+import { eq, and, gte, lte, ne, desc } from "drizzle-orm";
+import { invoices, posShifts, posShiftTransactions } from "@shared/schema";
 import {
   insertQuotationSchema,
   insertQuotationItemSchema,
   insertRecurringInvoiceSchema,
+  insertPosShiftSchema,
+  insertPosHoldSchema,
+  insertProductCategorySchema,
   type InsertQuotation,
   type InsertRecurringInvoice
 } from "../shared/schema.js";
@@ -517,6 +525,9 @@ export async function registerRoutes(
           const typeHeader = findHeader(row, ['Type', 'Product Type', 'Item Type']);
           const stockHeader = findHeader(row, ['Stock', 'Quantity', 'Qty', 'Inventory']);
           const hsHeader = findHeader(row, ['HS Code', 'HSCode', 'Harmonized Code']);
+          const categoryHeader = findHeader(row, ['Category', 'Cat', 'Tax Category', 'Group']);
+
+          const trackHeader = findHeader(row, ['Track Inventory', 'Track', 'Inventory Tracking']);
 
           const name = nameHeader ? (row as any)[nameHeader] : null;
           if (!name) throw new Error("Missing 'Name' column");
@@ -524,18 +535,23 @@ export async function registerRoutes(
           const typeValue = typeHeader ? (row as any)[typeHeader].toLowerCase() : 'good';
           const type = typeValue.includes('service') ? 'service' : 'good';
 
+          // Parse Track Inventory: "Yes", "True", "1" -> true
+          const trackValue = trackHeader ? (row as any)[trackHeader].toString().toLowerCase() : "";
+          const isTracked = ["yes", "true", "1", "on"].includes(trackValue);
+
           const productData = {
             companyId: targetCompanyId,
             name: name,
             description: descHeader ? (row as any)[descHeader] : "",
             sku: skuHeader ? (row as any)[skuHeader] : `IMP-${Date.now()}-${index}`,
             price: priceHeader ? cleanNum((row as any)[priceHeader]).toString() : "0.00",
-            taxRate: taxHeader ? cleanNum((row as any)[taxHeader]).toString() : "15.00",
+            taxRate: taxHeader ? cleanNum((row as any)[taxHeader]).toString() : "15.5",
             productType: type,
             hsCode: hsHeader ? (row as any)[hsHeader] : "0000.00.00",
+            category: categoryHeader ? (row as any)[categoryHeader] : "General",
             isActive: true,
             stockLevel: stockHeader ? cleanNum((row as any)[stockHeader]).toString() : "0.00",
-            isTracked: !!stockHeader && type === 'good'
+            isTracked: trackHeader ? isTracked : (!!stockHeader && type === 'good')
           };
 
           // Validate via Zod
@@ -564,6 +580,45 @@ export async function registerRoutes(
     }
   });
 
+
+  // Product Categories
+  app.get("/api/product-categories", requireAuth, async (req: any, res) => {
+    try {
+      const companyId = req.query.companyId ? Number(req.query.companyId) : req.user?.companyId;
+      if (!companyId) return res.status(400).json({ message: "Company ID required" });
+      const categories = await storage.getProductCategories(companyId);
+      res.json(categories);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/product-categories", requireAuth, async (req: any, res) => {
+    try {
+      const data = insertProductCategorySchema.parse(req.body);
+      const category = await storage.createProductCategory({
+        ...data,
+        companyId: req.user?.companyId || data.companyId
+      });
+      res.status(201).json(category);
+    } catch (err: any) {
+      if (err.code === "23505") {
+        return res.status(409).json({ message: "Category already exists" });
+      }
+      res.status(400).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/product-categories/:id", requireAuth, async (req: any, res) => {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) return res.status(400).json({ message: "Authenticated session required" });
+      await storage.deleteProductCategory(Number(req.params.id), companyId);
+      res.sendStatus(204);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
 
   // Company Routes
   app.get(api.companies.list.path, requireAuth, async (req, res) => {
@@ -727,6 +782,39 @@ export async function registerRoutes(
   });
 
 
+
+
+  app.put("/api/companies/:id/users/:userId/pin", requireAuth, async (req, res) => {
+    try {
+      const companyId = parseInt(req.params.id);
+      // Verify admin/owner permission logic here if needed
+
+      const { pin } = req.body;
+      if (!pin || pin.length < 4) {
+        return res.status(400).json({ message: "PIN must be at least 4 digits" });
+      }
+
+      const userId = req.params.userId;
+
+      // Hash PIN
+      await storage.setUserPin(userId, pin);
+
+      // Log action
+      await logAction(
+        req.user!.id,
+        companyId,
+        "UPDATE_USER_PIN",
+        "User Management",
+        { targetUserId: userId }
+      );
+
+      res.json({ message: "PIN updated successfully" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+
   // Audit Logs
   app.get("/api/companies/:id/audit-logs", requireAuth, async (req, res) => {
     try {
@@ -784,6 +872,88 @@ export async function registerRoutes(
 
       console.error("Get Environment Error:", err);
       res.status(500).json({ message: "Failed to get environment: " + err.message });
+    }
+  });
+
+  // ============================================================================
+  // POS (SHIFTS & HOLDS)
+  // ============================================================================
+
+  app.get("/api/pos/holds", requireAuth, async (req, res) => {
+    try {
+      const companyId = (req.user as any).id ? (await storage.getCompanies((req.user as any).id))[0].id : req.body.companyId;
+      // Simplified: usually companyId is taken from user context or request
+      const targetCompanyId = req.query.companyId ? parseInt(req.query.companyId as string) : (req as any).user?.companyId;
+
+      const holds = await storage.getPosHolds(targetCompanyId, (req.user as any).id);
+      res.json(holds);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/pos/holds", requireAuth, async (req, res) => {
+    try {
+      const data = insertPosHoldSchema.parse({
+        ...req.body,
+        userId: (req.user as any).id
+      });
+      const hold = await storage.createPosHold(data);
+      res.status(201).json(hold);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/pos/holds/:id", requireAuth, async (req, res) => {
+    try {
+      await storage.deletePosHold(parseInt(req.params.id), (req.user as any).id);
+      res.sendStatus(204);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/pos/shifts/current", requireAuth, async (req, res) => {
+    try {
+      const companyId = req.query.companyId ? parseInt(req.query.companyId as string) : (req as any).user?.companyId;
+      const shift = await storage.getActivePosShift(companyId, (req.user as any).id);
+      res.json(shift || null);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/pos/shifts/open", requireAuth, async (req, res) => {
+    try {
+      const data = insertPosShiftSchema.parse({
+        ...req.body,
+        userId: (req.user as any).id,
+        status: "open"
+      });
+      const shift = await storage.createPosShift(data);
+      res.status(201).json(shift);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/pos/shifts/:id/close", requireAuth, async (req, res) => {
+    try {
+      const shiftId = parseInt(req.params.id);
+      const { actualCash, closingBalance, notes } = req.body;
+
+      // Support both naming conventions for compatibility
+      const cashAmount = actualCash !== undefined ? actualCash : closingBalance;
+
+      if (cashAmount === undefined || cashAmount === null) {
+        return res.status(400).json({ message: "Actual cash count is required to close shift." });
+      }
+
+      const shift = await endPosShift(shiftId, Number(cashAmount), notes);
+      res.json(shift);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
     }
   });
 
@@ -1191,10 +1361,18 @@ export async function registerRoutes(
 
       if (!email) return res.status(400).json({ message: "Email is required" });
 
+      // Validate role
+      const validRoles = ['owner', 'admin', 'member', 'cashier'];
+      if (role && !validRoles.includes(role)) {
+        return res.status(400).json({ message: "Invalid role" });
+      }
+
       // Permission check
       const companyUsersList = await storage.getCompanyUsers(companyId);
       const me = companyUsersList.find(u => u.id === userId);
-      if (!me || (me.role !== 'owner' && me.role !== 'admin')) {
+      const isSuperAdmin = (req as any).user?.isSuperAdmin;
+
+      if (!isSuperAdmin && (!me || (me.role !== 'owner' && me.role !== 'admin'))) {
         return res.status(403).json({ message: "Insufficient permissions" });
       }
 
@@ -1287,12 +1465,20 @@ export async function registerRoutes(
       const userId = (req as any).user.id;
       const { role } = req.body;
 
+      // Validate role
+      const validRoles = ['owner', 'admin', 'member', 'cashier'];
+      if (role && !validRoles.includes(role)) {
+        return res.status(400).json({ message: "Invalid role" });
+      }
+
       const users = await storage.getCompanyUsers(companyId);
       const me = users.find(u => u.id === userId);
+      const isSuperAdmin = (req as any).user?.isSuperAdmin;
 
-      if (!me || me.role !== 'owner') {
-        // Only owners can change roles? Or admins too? Let's say Owner only for safety or Admin
-        if (me?.role !== 'admin') return res.status(403).json({ message: "Insufficient permissions" });
+      if (!isSuperAdmin) {
+        if (!me || me.role !== 'owner') {
+          if (me?.role !== 'admin') return res.status(403).json({ message: "Insufficient permissions" });
+        }
       }
 
       await storage.updateUserRole(targetUserId, companyId, role);
@@ -1312,8 +1498,9 @@ export async function registerRoutes(
 
       const users = await storage.getCompanyUsers(companyId);
       const me = users.find(u => u.id === userId);
+      const isSuperAdmin = (req as any).user?.isSuperAdmin;
 
-      if (!me || (me.role !== 'owner' && me.role !== 'admin')) {
+      if (!isSuperAdmin && (!me || (me.role !== 'owner' && me.role !== 'admin'))) {
         return res.status(403).json({ message: "Insufficient permissions" });
       }
 
@@ -2770,6 +2957,76 @@ export async function registerRoutes(
     }
   });
 
+
+  // Import Routes
+  app.post("/api/import/products", requireAuth, (req, res, next) => {
+    csvUpload.single("file")(req, res, async (err) => {
+      if (err) return res.status(400).json({ message: err.message });
+      if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+
+      try {
+        const companyId = Number(req.body.companyId);
+        if (!companyId) return res.status(400).json({ message: "Company ID is required" });
+
+        const fileContent = req.file.buffer.toString("utf-8");
+        const records = parse(fileContent, {
+          columns: true,
+          skip_empty_lines: true,
+          trim: true
+        });
+
+        const results = {
+          success: 0,
+          failed: 0,
+          errors: [] as string[]
+        };
+
+        for (const [index, row] of records.entries()) {
+          try {
+            // Map CSV columns to Schema
+            // Expected: Name,Description,SKU,Price,Tax Rate,Type,Stock,HS Code,Category,Track Inventory
+
+            const name = row["Name"];
+            if (!name) throw new Error("Product Name is required");
+
+            const price = parseFloat(row["Price"] || "0");
+            const taxRate = row["Tax Rate"] || "15.00"; // Default standard
+            const stock = parseFloat(row["Stock"] || "0");
+            const isTracked = (row["Track Inventory"] || "").toLowerCase() === "yes";
+
+            const productType = (row["Type"] || "Good").toLowerCase() === "service" ? "service" : "good";
+
+            await storage.createProduct({
+              companyId,
+              name: name,
+              description: row["Description"] || "",
+              sku: row["SKU"] || undefined,
+              price: price.toString(),
+              taxRate: taxRate.toString(),
+              stockLevel: stock.toString(),
+              lowStockThreshold: "10", // Default
+              isActive: true,
+              productType: productType,
+              hsCode: row["HS Code"] || "0000.00.00",
+              category: row["Category"] || "General",
+              isTracked: isTracked
+            });
+
+            results.success++;
+          } catch (rowErr: any) {
+            results.failed++;
+            results.errors.push(`Row ${index + 2}: ${rowErr.message}`);
+          }
+        }
+
+        res.json(results);
+      } catch (err: any) {
+        console.error("Import Error:", err);
+        res.status(500).json({ message: "Import failed: " + err.message });
+      }
+    });
+  });
+
   // Product Routes
   app.get(api.products.list.path, requireAuth, async (req, res) => {
     const products = await storage.getProducts(Number(req.params.companyId));
@@ -2943,6 +3200,8 @@ export async function registerRoutes(
     const dateFrom = req.query.dateFrom ? new Date(req.query.dateFrom as string) : undefined;
     const dateTo = req.query.dateTo ? new Date(req.query.dateTo as string) : undefined;
 
+    const isPos = req.query.isPos === 'true' ? true : (req.query.isPos === 'false' ? false : undefined);
+
     const result = await storage.getInvoicesPaginated(
       Number(req.params.companyId),
       page,
@@ -2951,7 +3210,8 @@ export async function registerRoutes(
       status,
       type,
       dateFrom,
-      dateTo
+      dateTo,
+      isPos
     );
     res.json(result);
   });
@@ -2966,11 +3226,53 @@ export async function registerRoutes(
       };
 
       const input = api.invoices.create.input.parse(body);
-      const invoice = await storage.createInvoice({
+
+      // POS Shift Validation: Ensure shift is open before processing POS sales
+      if (input.isPos) {
+        const companyId = Number(req.params.companyId);
+        const userId = (req.user as any)?.id;
+
+        if (!userId) {
+          return res.status(401).json({
+            message: "User authentication required for POS sales"
+          });
+        }
+
+        const activeShift = await storage.getActivePosShift(companyId, userId);
+
+        if (!activeShift) {
+          return res.status(400).json({
+            message: "No active shift found. Please open a shift before processing POS sales.",
+            code: "NO_ACTIVE_SHIFT"
+          });
+        }
+      }
+
+      let invoice = await storage.createInvoice({
         ...input,
         items: input.items as any,
         companyId: Number(req.params.companyId)
       });
+
+      // ZIMRA Fiscalization Trigger for POS
+      if (input.isPos) {
+        try {
+          invoice = await processInvoiceFiscalization(
+            invoice.id,
+            invoice.companyId,
+            req.user?.id,
+            (req.user as any)?.isSuperAdmin,
+            undefined, // zimraSync
+            true // isPos
+          );
+        } catch (fiscalError) {
+          console.error("POS Fiscalization Failed:", fiscalError);
+          // We swallow the error here because the invoice is already created
+          // and the user will see the failure status on the invoice.
+          // The invoice will be returned with status 'draft' or 'failed'
+        }
+      }
+
       res.status(201).json(invoice);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -3028,689 +3330,36 @@ export async function registerRoutes(
         return res.status(403).json({ message: "You do not have permission to fiscalize for this company" });
       }
 
-      const company = await storage.getCompany(invoice.companyId);
-      if (!company || !company.zimraPrivateKey || !company.zimraCertificate || !company.fdmsDeviceId) {
-        return res.status(400).json({ message: "Company has not registered a ZIMRA device" });
-      }
-
-      // Initialize Device with Logger
-      const device = new ZimraDevice({
-        deviceId: company.fdmsDeviceId,
-        deviceSerialNo: company.fdmsDeviceSerialNo || "UNKNOWN",
-        activationKey: company.fdmsApiKey || "",
-        privateKey: company.zimraPrivateKey,
-        certificate: company.zimraCertificate,
-        baseUrl: company.zimraEnvironment === 'production' ? 'https://fdmsapi.zimra.co.zw' : 'https://fdmsapitest.zimra.co.zw'
-      }, getZimraLogger(company.id));
-
-      // Set invoice ID for logging
-      device.setInvoiceId(invoiceId);
-
-      let justOpened = false; // Fix: Declare variable in outer scope
-      let currentCompany = company;
-
-      try {
-        const status = await device.getStatus() as any;
-        console.log(`[ZIMRA] Check Status: ${status.fiscalDayStatus}, LastDay: ${status.lastFiscalDayNo}`);
-
-        const now = new Date();
-        const fiscalDayOpenedAt = company.fiscalDayOpenedAt ? new Date(company.fiscalDayOpenedAt) : null;
-        const oneDayMs = 24 * 60 * 60 * 1000;
-        const isStale = fiscalDayOpenedAt && (now.getTime() - fiscalDayOpenedAt.getTime() > oneDayMs);
-
-        if (isStale) console.log(`[ZIMRA] Day is Stale. OpenedAt: ${fiscalDayOpenedAt?.toISOString()}, Now: ${now.toISOString()}`);
-
-        // Auto-close if stale or explicitly reported by ZIMRA status
-        const statusStr = (status.fiscalDayStatus || "").toLowerCase();
-        console.log(`[ZIMRA] Status Check Normalized: '${statusStr}' vs 'fiscaldayopened'`);
-        //remove force close if|| isStale
-        if ((statusStr !== 'fiscaldayopened' && statusStr !== 'fiscaldayclosefailed')) {
-          if (isStale) {
-            console.log(`[ZIMRA] Fiscal Day ${company.currentFiscalDayNo} is stale (>24h). Auto-replacing...`);
-          } else {
-            console.log("[ZIMRA] Fiscal Day Closed (or invalid status). Auto-opening...");
-          }
-
-          // 1. Force close the current stale day (or retry failed closure) if it was still "open/failed" on ZIMRA side
-          if ((status.fiscalDayStatus === 'FiscalDayOpened' || status.fiscalDayStatus === 'FiscalDayCloseFailed') && isStale) {
-            try {
-              // Get current counters for closure
-              const receiptCounter = company.dailyReceiptCount || 0;
-              const invoicesToClose = await storage.getInvoicesByFiscalDay(company.id, company.currentFiscalDayNo || 0);
-              const counters = await storage.calculateFiscalCounters(company.id, company.currentFiscalDayNo || 0);
-
-              // Fix: Use Opening Date for Signature (from company record), fallback to today if missing (unlikely for open day)
-              let signDate = new Date().toLocaleDateString('sv-SE');
-              if (company.fiscalDayOpenedAt) {
-                signDate = new Date(company.fiscalDayOpenedAt).toLocaleDateString('sv-SE');
-              }
-
-              const closeResult = await device.closeDay(
-                company.currentFiscalDayNo || 0,
-                signDate,
-                receiptCounter,
-                counters
-              ) as any;
-              console.log(`[ZIMRA] Stale Day ${company.currentFiscalDayNo} closure attempt. Status: ${closeResult.fiscalDayStatus}`);
-
-              // Only proceed with OpenDay if ZIMRA confirms the day is actually closed
-              if (closeResult.fiscalDayStatus !== 'FiscalDayClosed' && closeResult.fiscalDayStatus !== 'FiscalDayCloseFailed') {
-                // If ZIMRA says it's still open or some other state, we can't reliably open a new one
-                console.warn(`[ZIMRA] Unexpected status after closeDay: ${closeResult.fiscalDayStatus}. Aborting auto-open.`);
-                return;
-              }
-
-              if (closeResult.fiscalDayStatus === 'FiscalDayCloseFailed') {
-                console.warn(`[ZIMRA] Day closure failed on ZIMRA side. Aborting auto-open to preserve sequence.`);
-                return;
-              }
-            } catch (closeErr) {
-              console.warn(`[ZIMRA] Failed to close stale day: ${closeErr}. Proceeding with OpenDay anyway.`);
-            }
-          }
-
-          const nextDayNo = (status.lastFiscalDayNo || 0) + 1;
-          const openResult = await device.openDay(nextDayNo) as any;
-
-          // Update company state
-          const openedAt = new Date();
-          await storage.updateCompany(company.id, {
-            currentFiscalDayNo: openResult.fiscalDayNo || nextDayNo,
-            fiscalDayOpen: true,
-            fiscalDayOpenedAt: openedAt,
-            lastFiscalDayStatus: 'FiscalDayOpened',
-            dailyReceiptCount: 0,
-            lastFiscalHash: null
-          });
-          console.log(`Fiscal Day Opened: ${openResult.fiscalDayNo} at ${openedAt.toISOString()}`);
-
-          // Re-fetch status to update local variables below
-          status.fiscalDayStatus = 'FiscalDayOpened';
-          status.lastFiscalDayNo = openResult.fiscalDayNo || nextDayNo;
-          justOpened = true;
-
-        } else {
-          // Ensure local state is synced if it was somehow out
-          if (!company.fiscalDayOpen) {
-            await storage.updateCompany(company.id, {
-              fiscalDayOpen: true,
-              currentFiscalDayNo: status.lastFiscalDayNo,
-              lastFiscalDayStatus: 'FiscalDayOpened'
-            });
-          }
-        }
-
-        // 2. SYNC COUNTERS FROM ZIMRA
-        const zimraGlobalNo = status.lastReceiptGlobalNo || 0;
-        let zimraDailyCount = status.lastReceiptCounter || 0;
-
-        // Fallback to summing quantities if lastReceiptCounter is not explicitly provided
-        if (zimraDailyCount === 0 && status.fiscalDayDocumentQuantities) {
-          zimraDailyCount = status.fiscalDayDocumentQuantities.reduce((sum: number, dq: any) => sum + (dq.receiptQuantity || 0), 0);
-        }
-
-        console.log(`[Fiscalize] ZIMRA Status Sync - GlobalNo: ${zimraGlobalNo}, DailyCount: ${zimraDailyCount}`);
-
-        // Update company state using Math.max to prevent regressions from stale ZIMRA status reports
-        // FIX: If justOpened, force daily count to 0 (don't sync with OLD day status)
-        await storage.updateCompany(company.id, {
-          lastReceiptGlobalNo: Math.max(company.lastReceiptGlobalNo || 0, zimraGlobalNo),
-          dailyReceiptCount: justOpened ? 0 : Math.max(company.dailyReceiptCount || 0, zimraDailyCount),
-          fiscalDayOpen: true,
-          currentFiscalDayNo: status.lastFiscalDayNo
-        });
-
-        // Re-fetch to get the resulting peaked counters
-        currentCompany = await storage.getCompany(company.id) || company;
-        const nextGlobalNo = (currentCompany.lastReceiptGlobalNo || 0) + 1;
-        const nextReceiptCounter = (currentCompany.dailyReceiptCount || 0) + 1;
-
-        console.log(`[Fiscalize] Calculated Next Sequence - GlobalNo: ${nextGlobalNo}, DailyCount: ${nextReceiptCounter}`);
-
-        // Pass these strictly to the submission logic
-        (req as any).zimraSync = { nextGlobalNo, nextReceiptCounter };
-
-      } catch (e: any) {
-        console.error("ZIMRA Status/Sync Failed:", e.message);
-        return res.status(500).json({ message: `Failed to sync with ZIMRA: ${e.message}` });
-      }
-
-      // 1. Get ZIMRA Config for correct Tax IDs
-      let zimraConfig: ZimraConfigResponse | undefined;
-      const dbTaxTypes = await storage.getTaxTypes(company.id);
-
-      try {
-        zimraConfig = await device.getConfig();
-        // Auto-update QR URL if missing or different/better
-        if (zimraConfig && zimraConfig.qrUrl && (!company.qrUrl || company.qrUrl !== zimraConfig.qrUrl)) {
-          console.log(`[ZIMRA] Auto-updating Company QR URL to: ${zimraConfig.qrUrl}`);
-          await storage.updateCompany(company.id, { qrUrl: zimraConfig.qrUrl });
-          company.qrUrl = zimraConfig.qrUrl; // Update local scope for usage this turn
-        }
-      } catch (e) {
-        console.warn("Failed to fetch ZIMRA config, falling back to database for tax mapping");
-      }
-
-      // Map Invoice to ReceiptData
-      const receiptLines = invoice.items.map((item, index) => {
-        let taxPercent = parseFloat(item.taxRate as any);
-
-        // Force 0% tax if company is not VAT registered
-        if (!company.vatRegistered) {
-          taxPercent = 0;
-        }
-
-        let taxID = 0;
-
-        // PRIORITY 1: ZIMRA Live Config (most current, directly from API)
-        if (zimraConfig?.applicableTaxes) {
-          const effectiveTaxTypeId = (item as any).product?.taxTypeId || (item as any).taxTypeId;
-          const dbTax = effectiveTaxTypeId ? dbTaxTypes.find(t => t.id === effectiveTaxTypeId) : null;
-
-          // Strategy: Match by {Percent, Name} combination which is more stable than IDs
-          const targetPercent = dbTax ? parseFloat(dbTax.rate) : taxPercent;
-          const targetNameHint = (dbTax?.name || item.description || '').toLowerCase();
-
-          // 1. Precise Match (Percent + Name keyword correlation)
-          let match = zimraConfig.applicableTaxes.find(t => {
-            const pctMatch = Math.abs((t.taxPercent || 0) - targetPercent) < 0.01;
-            if (!pctMatch) return false;
-
-            // For 0% rates, strictly disambiguate Exempt vs Zero Rated by name
-            if (targetPercent === 0) {
-              const isExempt = targetNameHint.includes('exempt');
-              const liveIsExempt = t.taxName?.toLowerCase().includes('exempt');
-              return isExempt === liveIsExempt;
-            }
-            return true; // For non-zero, percent is usually sufficient
-          });
-
-          // 2. Fallback: Match by Percent only if name match failed
-          if (!match) {
-            match = zimraConfig.applicableTaxes.find(t => Math.abs((t.taxPercent || 0) - targetPercent) < 0.01);
-          }
-
-          // 3. Fallback: Match by stored ZIMRA Tax ID from DB if all else fails
-          if (!match && dbTax?.zimraTaxId) {
-            const storedId = parseInt(dbTax.zimraTaxId);
-            match = zimraConfig.applicableTaxes.find(t => t.taxID === storedId);
-          }
-
-          if (match) {
-            taxID = match.taxID;
-          }
-        }
-
-        // PRIORITY 2: Database Tax Types (fallback when ZIMRA config unavailable)
-        // Priority 2a: Product/Item Config (Master Data)
-        if (taxID === 0) {
-          const effectiveTaxTypeId = (item as any).product?.taxTypeId || (item as any).taxTypeId;
-
-          if (effectiveTaxTypeId) {
-            const matchedTax = dbTaxTypes.find(t => t.id === effectiveTaxTypeId);
-            if (matchedTax) {
-              // 1. Explicit ZIMRA Mapping
-              if (matchedTax.zimraTaxId) {
-                taxID = parseInt(matchedTax.zimraTaxId);
-              }
-              // 2. Name-based resolution
-              else {
-                const name = matchedTax.name.toLowerCase();
-                let dbTaxMatch;
-
-                if (name.includes('exempt')) {
-                  dbTaxMatch = dbTaxTypes.find(t => t.name.toLowerCase().includes('exempt'));
-                } else if (name.includes('zero') || name.includes('0%') || name.includes('non')) {
-                  dbTaxMatch = dbTaxTypes.find(t => t.name.toLowerCase().includes('zero') || t.name.toLowerCase().includes('non'));
-                } else if (name.includes('standard') || name.includes('vat')) {
-                  dbTaxMatch = dbTaxTypes.find(t => t.name.toLowerCase().includes('standard') || t.name.toLowerCase().includes('vat'));
-                }
-
-                if (dbTaxMatch && dbTaxMatch.zimraTaxId) {
-                  taxID = parseInt(dbTaxMatch.zimraTaxId);
-                }
-              }
-            }
-          }
-        }
-
-        // Secondary fallback: Look in database synced tax types
-        if (taxID === 0) {
-          let dbMatchingTax;
-          if (taxPercent === 0 && item.description.toLowerCase().includes('exempt')) {
-            dbMatchingTax = dbTaxTypes.find(t => t.name.toLowerCase().includes('exempt'));
-          }
-
-          if (!dbMatchingTax) {
-            dbMatchingTax = dbTaxTypes.find(t => Math.abs(Number(t.rate) - taxPercent) < 0.01);
-          }
-
-          if (dbMatchingTax) {
-            taxID = dbMatchingTax.zimraTaxId ? parseInt(dbMatchingTax.zimraTaxId) : 0;
-          }
-        }
-
-        // Tertiary fallback for non-VAT or general 0% if still 0
-        if (taxID === 0 && taxPercent === 0) {
-          // Dynamic lookup for Exempt or Zero Rated
-          if (item.description.toLowerCase().includes('exempt')) {
-            const exemptTax = dbTaxTypes.find(t => t.name.toLowerCase().includes('exempt') && t.zimraTaxId);
-            if (exemptTax) taxID = parseInt(exemptTax.zimraTaxId!);
-          } else {
-            // Default to Zero Rated (search for "Zero" or "0%")
-            const zeroTax = dbTaxTypes.find(t => (t.name.toLowerCase().includes('zero') || t.name.includes('0%')) && t.zimraTaxId);
-            if (zeroTax) taxID = parseInt(zeroTax.zimraTaxId!);
-          }
-        }
-
-        // Fallback or auto-detect in device class if still 0
-        console.log(`[DEBUG] Item: ${item.description}, UnitPrice: ${item.unitPrice}, Type: ${invoice.transactionType}`);
-        return {
-          receiptLineType: ((invoice.transactionType || 'FiscalInvoice') !== 'CreditNote' && (invoice.transactionType || 'FiscalInvoice') !== 'DebitNote' && Number(item.unitPrice) < 0) ? 'Discount' : 'Sale',
-          receiptLineNo: index + 1,
-          receiptLineHSCode: (item.product?.hsCode || '04021099').trim(),
-          receiptLineName: (item.description || '').trim(),
-          receiptLinePrice: parseFloat(Number(item.unitPrice).toFixed(2)),
-          receiptLineQuantity: parseFloat(Number(item.quantity).toFixed(2)),
-          receiptLineTotal: parseFloat(Number(item.lineTotal).toFixed(2)),
-          taxPercent: taxPercent,
-          taxID: taxID,
-        };
-      });
-
-      let moneyTypeCode: 'Cash' | 'Card' | 'Other' | 'BankTransfer' | 'MobileWallet' = 'Cash';
-      const method = invoice.paymentMethod?.toUpperCase() || 'CASH';
-      if (['CASH'].includes(method)) moneyTypeCode = 'Cash';
-      else if (['CARD', 'SWIPE', 'POS'].includes(method)) moneyTypeCode = 'Card';
-      else if (['MOBILE', 'ECOCASH', 'ONE_MONEY', 'TELE_CASH', 'MOBILEWALLET'].includes(method)) moneyTypeCode = 'MobileWallet';
-      else if (['EFT', 'RTGS', 'TRANSFER', 'ZIPIT', 'BANKTRANSFER'].includes(method)) moneyTypeCode = 'BankTransfer';
-      else moneyTypeCode = 'Other';
-
-      const totalAmount = parseFloat(Number(invoice.total).toFixed(2));
-      const payments = [{
-        moneyTypeCode,
-        paymentAmount: totalAmount
-      }];
-
-      let buyerData = undefined;
-      let creditDebitNote = undefined;
-      const transactionType = invoice.transactionType || "FiscalInvoice";
-      let receiptType: any = "FiscalInvoice";
-
-      if (transactionType === "CreditNote") receiptType = "CreditNote";
-      if (transactionType === "DebitNote") receiptType = "DebitNote";
-
-      // If CN/DN, we need original invoice details
-      let originalInvoice = null;
-      if (receiptType !== "FiscalInvoice") {
-        if (!invoice.relatedInvoiceId) {
-          return res.status(400).json({ error: `${receiptType} requires a related original invoice.` });
-        }
-        originalInvoice = await storage.getInvoice(invoice.relatedInvoiceId);
-        if (!originalInvoice) {
-          return res.status(400).json({ error: `Original invoice for this ${receiptType} not found.` });
-        }
-        if (!originalInvoice.fiscalCode) {
-          return res.status(400).json({ error: `Original invoice must be fiscalized before a ${receiptType} can be issued.` });
-        }
-
-        // Spec 4.7: creditDebitNote: deviceID, receiptGlobalNo, fiscalDayNo
-        creditDebitNote = {
-          deviceID: parseInt(company.fdmsDeviceId),
-          receiptGlobalNo: originalInvoice.receiptGlobalNo || originalInvoice.id,
-          fiscalDayNo: originalInvoice.fiscalDayNo || 1,
-          receiptID: originalInvoice.submissionId ? parseInt(originalInvoice.submissionId) : undefined
-        };
-      }
-
-      // Construct Buyer Data - Only include fields that have actual data
-      if (invoice.customer) {
-        buyerData = {
-          buyerRegisterName: invoice.customer.name,
-          buyerTradeName: invoice.customer.name,
-        };
-
-        // Only include VAT number if it exists
-        if (invoice.customer.vatNumber && invoice.customer.vatNumber.trim()) {
-          buyerData.vatNumber = invoice.customer.vatNumber.trim();
-        }
-
-        // Only include TIN if it exists
-        if (invoice.customer.tin && invoice.customer.tin.trim()) {
-          buyerData.buyerTIN = invoice.customer.tin.trim();
-        }
-
-        // Only include contacts if at least one field has data
-        const hasPhone = invoice.customer.phone && invoice.customer.phone.trim();
-        const hasEmail = invoice.customer.email && invoice.customer.email.trim();
-
-        if (hasPhone || hasEmail) {
-          buyerData.buyerContacts = {};
-          if (hasPhone) buyerData.buyerContacts.phoneNo = invoice.customer.phone.trim();
-          if (hasEmail) buyerData.buyerContacts.email = invoice.customer.email.trim();
-        }
-
-        // Only include address if at least one field has data
-        const hasProvince = invoice.customer.city && invoice.customer.city.trim();
-        const hasCity = invoice.customer.city && invoice.customer.city.trim();
-        const hasStreet = invoice.customer.address && invoice.customer.address.trim();
-
-        if (hasProvince || hasCity || hasStreet) {
-          buyerData.buyerAddress = {};
-          if (hasProvince) buyerData.buyerAddress.province = invoice.customer.city.trim();
-          if (hasCity) buyerData.buyerAddress.city = invoice.customer.city.trim();
-          if (hasStreet) buyerData.buyerAddress.street = invoice.customer.address.trim();
-          // houseNo and district are optional and not used in our schema
-        }
-      }
-
-      const zimraSync = (req as any).zimraSync;
-      // Reuse existing numbers if present (retry scenario), otherwise generate new ones
-      console.log(`[Fiscalize] Invoice ${invoiceId} Existing GlobalNo: ${invoice.receiptGlobalNo}, Counter: ${invoice.receiptCounter}`);
-      console.log(`[Fiscalize] Company LastGlobalNo: ${company.lastReceiptGlobalNo}, DailyCount: ${company.dailyReceiptCount}`);
-
-      let nextGlobalNo = invoice.receiptGlobalNo || (zimraSync ? zimraSync.nextGlobalNo : ((company.lastReceiptGlobalNo || 0) + 1));
-      let nextReceiptCounter = invoice.receiptCounter || (zimraSync ? zimraSync.nextReceiptCounter : ((company.dailyReceiptCount || 0) + 1));
-
-      console.log(`[Fiscalize] Determined NextGlobalNo: ${nextGlobalNo}, NextReceiptCounter: ${nextReceiptCounter}`);
-
-      // DEBUG: Write to file
-      try {
-        const logData = `[${new Date().toISOString()}] Invoice ${invoiceId}
-        Existing GlobalNo: ${invoice.receiptGlobalNo}
-        Existing ReceiptCounter: ${invoice.receiptCounter}
-        ZimraSync: ${JSON.stringify(zimraSync)}
-        Calculated NextGlobalNo: ${nextGlobalNo}
-        Calculated NextReceiptCounter: ${nextReceiptCounter}
-        --------------------------------\n`;
-        fs.appendFileSync(path.join(process.cwd(), 'debug_fiscalize.log'), logData);
-      } catch (err) { console.error("Failed to write debug log", err); }
-
-      // ZIMRA Date Formatting & Sequentiality Guards [40, RCPT014, RCPT030]
-      const formatZimraDate = (date: Date) => {
-        const parts = new Intl.DateTimeFormat('en-GB', {
-          timeZone: 'Africa/Harare',
-          year: 'numeric', month: '2-digit', day: '2-digit',
-          hour: '2-digit', minute: '2-digit', second: '2-digit',
-          hour12: false
-        }).formatToParts(date);
-        const p = (t: string) => parts.find(x => x.type === t)?.value;
-        return `${p('year')}-${p('month')}-${p('day')}T${p('hour')}:${p('minute')}:${p('second')}`;
-      };
-
-      // Ensure receiptDate is after fiscalDayOpenedAt (RCPT014) and after lastReceiptAt (RCPT030)
-      let nowAtHarare = new Date();
-      const dayOpenedAt = company.fiscalDayOpenedAt ? new Date(company.fiscalDayOpenedAt) : null;
-      const lastRcptAt = company.lastReceiptAt ? new Date(company.lastReceiptAt) : null;
-
-      // Check against day opening
-      if (dayOpenedAt && nowAtHarare.getTime() <= dayOpenedAt.getTime()) {
-        console.log(`[ZIMRA] Guard: Current time (${nowAtHarare.toISOString()}) is before or equal to day opening (${dayOpenedAt.toISOString()}). Bumping timestamp.`);
-        nowAtHarare = new Date(dayOpenedAt.getTime() + 1000);
-      }
-
-      // Check against last receipt
-      if (lastRcptAt && nowAtHarare.getTime() <= lastRcptAt.getTime()) {
-        console.log(`[ZIMRA] Guard: Current time (${nowAtHarare.toISOString()}) is before or equal to last receipt (${lastRcptAt.toISOString()}). Bumping timestamp.`);
-        nowAtHarare = new Date(lastRcptAt.getTime() + 1000);
-      }
-
-      const receiptData: ReceiptData = {
-        receiptType: receiptType,
-        receiptCurrency: invoice.currency || 'USD',
-        receiptCounter: nextReceiptCounter,
-        receiptGlobalNo: nextGlobalNo,
-        invoiceNo: invoice.invoiceNumber,
-        receiptDate: formatZimraDate(nowAtHarare),
-        receiptLines: receiptLines as any,
-        receiptTaxes: [],
-        receiptPayments: payments as any,
-        receiptTotal: totalAmount,
-        receiptLinesTaxInclusive: invoice.taxInclusive || false,
-        buyerData: buyerData,
-        creditDebitNote: creditDebitNote,
-        receiptNotes: invoice.notes
-          ? (creditDebitNote ? `${invoice.notes} (Ref: ${originalInvoice?.invoiceNumber || 'Original'})` : invoice.notes)
-          : (receiptType !== 'FiscalInvoice' ? `Correction of data entry error (Ref: ${originalInvoice?.invoiceNumber || 'Original'})` : undefined)
-      };
-
-      console.log(`[Fiscalize] Prepared Receipt Data for Invoice ${invoiceId} (Date: ${receiptData.receiptDate}):`, JSON.stringify(receiptData, null, 2));
-
-      // Submit with previous hash for chaining (first receipt of day has no previous hash)
-      let prevHash = (nextReceiptCounter === 1) ? null : (company.lastFiscalHash || null);
-      let result;
-
-      try {
-        result = await device.submitReceipt(receiptData, prevHash, true);
-      } catch (submitErr: any) {
-        // Auto-Open Retry Logic: Catch "Day Closed" errors (typically code 310 or message containing "closed")
-        if (submitErr.message?.toLowerCase().includes('closed') || submitErr.toString().includes('310')) {
-          console.log("[ZIMRA] Auto-Open Retry: Fiscal Day reported closed during submission. Opening new day...");
-
-          try {
-            // 1. Open New Fiscal Day
-            const nextDay = (company.currentFiscalDayNo || 0) + 1;
-            await device.openDay(nextDay);
-
-            // 2. Update Local Company State
-            await storage.updateCompany(company.id, {
-              fiscalDayOpen: true,
-              currentFiscalDayNo: nextDay,
-              fiscalDayOpenedAt: new Date(), // Critical for RCPT014 validation
-              dailyReceiptCount: 0,
-              lastFiscalHash: null // Reset hash for new day
-            });
-
-            // 3. Reset Receipt Data for New Day (Counter = 1, PrevHash = null)
-            receiptData.receiptCounter = 1;
-            nextReceiptCounter = 1; // Update local variable for DB update later
-            prevHash = null;
-
-            console.log("[ZIMRA] Retry: Resubmitting receipt as first of new day...");
-            result = await device.submitReceipt(receiptData, prevHash, true);
-
-          } catch (retryErr: any) {
-            console.error("[ZIMRA] Retry Failed:", retryErr);
-            // Explicit error for user feedback
-            throw new Error(`Fiscal Day Closed. Automatic opening failed: ${retryErr.message}`);
-          }
-        } else {
-          throw submitErr;
-        }
-      }
-
-      console.log(`[Fiscalize] Result for Invoice ${invoiceId}:`, JSON.stringify(result, null, 2));
-
-      // Handle validation errors
-      const validationResult = result.validationResult;
-      let validationStatus = 'valid';
-      let validationErrors: any[] = [];
-
-      if (validationResult && !validationResult.valid) {
-        // Map ZIMRA validation colors
-        if (validationResult.errors.some(e => e.errorColor === 'Red')) {
-          validationStatus = 'red';
-        } else if (validationResult.errors.some(e => e.errorColor === 'Grey')) {
-          validationStatus = 'grey';
-        } else if (validationResult.errors.some(e => e.errorColor === 'Yellow')) {
-          validationStatus = 'yellow';
-        } else {
-          validationStatus = 'invalid';
-        }
-
-        // Store validation errors
-        validationErrors = validationResult.errors.map(error => ({
-          invoiceId,
-          errorCode: error.errorCode,
-          errorMessage: error.errorMessage,
-          errorColor: error.errorColor,
-          requiresPreviousReceipt: error.requiresPreviousReceipt
-        }));
-
-        // Save validation errors to database
-        if (validationErrors.length > 0) {
-          await storage.createValidationErrors(validationErrors);
-        }
-      }
-
-      // Generate QR Code (if successful and synced/signed - validation errors don't prevent signature)
-      let qrCode = '';
-      if (result.synced) {
-        qrCode = device.generateQrCode(result.signature, receiptData.receiptGlobalNo, receiptData.receiptDate);
-      }
-
-      const updatedInvoice = await storage.fiscalizeInvoice(invoiceId, {
-        fiscalCode: result.verificationCode || result.hash,
-        fiscalSignature: result.signature,
-        qrCodeData: qrCode,
-        fiscalDayNo: currentCompany.currentFiscalDayNo ?? company.currentFiscalDayNo ?? undefined,
-        receiptCounter: nextReceiptCounter,
-        receiptGlobalNo: nextGlobalNo,
-        submissionId: result.response?.receiptID?.toString(), // Capture ZIMRA receiptID
-        syncedWithFdms: result.synced,
-        fdmsStatus: result.synced ? 'issued' : 'pending',
-        validationStatus,
-        lastValidationAttempt: new Date()
-      });
-
-      // Update Company Counters and Hash if synced (regardless of validation errors)
-      // Per spec: signed receipts MUST increase counters and become part of the hash chain.
-      if (!invoice.receiptGlobalNo && result.synced) {
-        await storage.updateCompany(company.id, {
-          lastReceiptGlobalNo: nextGlobalNo,
-          dailyReceiptCount: nextReceiptCounter,
-          lastFiscalHash: result.hash,
-          lastReceiptAt: nowAtHarare // Save the timestamp used for sequentiality check
-        });
-
-        // Trigger Grey Error Resolution (Heal the chain locally)
-        if (company.currentFiscalDayNo) {
-          storage.resolveGreyErrors(company.id, company.currentFiscalDayNo, invoiceId).catch(err => {
-            console.error("[ZIMRA] Failed to resolve grey errors:", err);
-          });
-        }
-      }
-
-      // Return invoice with validation errors if any
-      const response = {
-        ...updatedInvoice,
-        validationErrors: validationErrors.length > 0 ? validationErrors : undefined
-      };
-
-      res.json(response);
+      console.log(`[Fiscalize] Processing Invoice ${invoiceId} for Company ${invoice.companyId}`);
+
+      // Call the centralized fiscalization logic
+      const updatedInvoice = await processInvoiceFiscalization(
+        invoiceId,
+        invoice.companyId,
+        req.user?.id,
+        isSuperAdmin
+      );
+
+      res.json(updatedInvoice);
     } catch (err: any) {
-      console.error(err);
+      console.error("Fiscalization Error:", err);
+      // Provide detailed error message if available
+      const message = err.message || "An unexpected error occurred during fiscalization.";
 
-      // --- START NEW LOGIC ---
-      // CRITICAL: Always lock the counters to this invoice on failure
-      // This ensures resubmission uses the same number, and next invoice gets a new one.
-      try {
-        console.log(`[Fiscalize] Exception Caught. Saving Lock: GlobalNo=${nextGlobalNo}, Counter=${nextReceiptCounter} to Invoice ${invoiceId}`);
-        await storage.updateInvoice(invoiceId, {
-          fdmsStatus: 'failed',
-          validationStatus: 'invalid',
-          lastValidationAttempt: new Date(),
-          receiptGlobalNo: nextGlobalNo,
-          receiptCounter: nextReceiptCounter
-        });
-
-        // Increment company counters
-        await storage.updateCompany(company.id, {
-          lastReceiptGlobalNo: nextGlobalNo,
-          dailyReceiptCount: nextReceiptCounter
-        });
-      } catch (lockErr) {
-        console.error("Failed to save lock counters:", lockErr);
-      }
-
-      // Handle ZIMRA API Errors
       if (err instanceof ZimraApiError) {
-        const details = err.details || {};
-        let parsedValidationErrors: any[] = [];
-        let hasRedErrors = false;
-
-        if (details.validationErrors && Array.isArray(details.validationErrors)) {
-          try {
-            parsedValidationErrors = details.validationErrors.map((e: any) => ({
-              invoiceId: invoiceId,
-              errorCode: e.validationErrorCode || 'UNKNOWN',
-              errorMessage: e.validationErrorMessage || e.errorMessage || e.message || 'Unknown Error',
-              errorColor: e.validationErrorColor || 'Red',
-              requiresPreviousReceipt: false
-            }));
-
-            if (parsedValidationErrors.length > 0) {
-              await storage.createValidationErrors(parsedValidationErrors);
-              hasRedErrors = parsedValidationErrors.some(e => e.errorColor === 'Red');
-            }
-          } catch (saveErr) {
-            console.error("Failed to save validation errors during exception handling:", saveErr);
-          }
-        }
-
-        if (hasRedErrors) {
-          try { await storage.updateInvoice(invoiceId, { validationStatus: 'red' }); }
-          catch (e) { console.error("Failed to update status to red", e); }
-        }
-
-        const msg = details.message || err.message;
-        return res.status(err.statusCode).json({
-          message: `ZIMRA Rejected: ${msg}`,
-          details: err.details,
-          validationErrors: parsedValidationErrors
+        return res.status(400).json({
+          message: `ZIMRA Error: ${message}`,
+          details: err.details
         });
       }
 
-      res.status(500).json({ message: "Fiscalization failed", error: err.message });
-    }
-    // --- END NEW LOGIC ---
-    /* --- OLD LOGIC DELETED ---
-
-    // CRITICAL: Always lock the counters to this invoice on failure
-    // This ensures resubmission uses the same number, and next invoice gets a new one.
-    try {
-      console.log(`[Fiscalize] Exception Caught. Saving Lock: GlobalNo=${nextGlobalNo}, Counter=${nextReceiptCounter} to Invoice ${invoiceId}`);
-      await storage.updateInvoice(invoiceId, {
-        fdmsStatus: 'failed', // Triggers Red "Resubmit" button
-        validationStatus: 'invalid', // Default to invalid (red/grey/yellow will overwrite if specific errors found)
-        lastValidationAttempt: new Date(),
-        receiptGlobalNo: nextGlobalNo,
-        receiptCounter: nextReceiptCounter
-      });
-
-      // Increment company counters to prevent re-issuing this number to ANOTHER invoice
-      await storage.updateCompany(company.id, {
-        lastReceiptGlobalNo: nextGlobalNo,
-        dailyReceiptCount: nextReceiptCounter
-      });
-    } catch (lockErr) {
-      console.error("Failed to save lock counters:", lockErr);
-    }
-
-    // Handle ZIMRA API Errors
-    if (err instanceof ZimraApiError) {
-      const details = err.details || {};
-
-      // If we have distinct validation errors, save them!
-      if (validationErrors.length > 0) {
-        await storage.createValidationErrors(validationErrors);
+      // Check for specific known errors or return 500
+      if (message.includes("Company has not registered")) {
+        return res.status(400).json({ message });
       }
-    } catch (saveErr) {
-      console.error("Failed to save validation errors during exception handling:", saveErr);
+
+      return res.status(500).json({ message });
     }
-  }
-
-    // Return a more useful message
-    const msg = details.message || err.message;
-  return res.status(err.statusCode).json({
-    message: `ZIMRA Rejected: ${msg}`,
-    details: err.details,
-    validationErrors: details.validationErrors
-  });
-}
-
-res.status(500).json({ message: "Fiscalization failed", error: err.message });
-} */
   });
 
   // Currency Routes
@@ -3780,7 +3429,8 @@ res.status(500).json({ message: "Fiscalization failed", error: err.message });
         fiscalCode: null,
         fiscalSignature: null,
         qrCodeData: null,
-        syncedWithFdms: false
+        syncedWithFdms: false,
+        createdBy: (req.user as any).id, // Set createdBy
       } as any);
 
       res.json(converted);
@@ -4253,7 +3903,604 @@ res.status(500).json({ message: "Fiscalization failed", error: err.message });
     }
   });
 
+  // PIN Management
+  // User Management
+  app.post("/api/auth/forgot-password", async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email) return res.status(400).json({ message: "Email is required" });
+
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        // Return success even if user not found to prevent enumeration
+        return res.json({ message: "If an account exists, a reset link has been sent." });
+      }
+
+      const token = await storage.createResetToken(user.id);
+
+      // Send Email (Mocked for now, or use sendInvoiceEmail helper if generic enough)
+      // In a real app, use Resend or similar
+      console.log(`[AUTH] Password Reset Token for ${email}: ${token}`);
+
+      // Construct Link: (Frontend URL)
+      const resetLink = `${req.protocol}://${req.get('host')}/reset-password?token=${token}`;
+      console.log(`[AUTH] Reset Link: ${resetLink}`);
+
+      // TODO: Integrate actual email sending here
+
+      res.json({ message: "If an account exists, a reset link has been sent." });
+    } catch (err: any) {
+      console.error("Forgot Password Error:", err);
+      res.status(500).json({ message: "Failed to process request" });
+    }
+  });
+
+  app.post("/api/auth/reset-password", async (req, res) => {
+    try {
+      const { token, newPassword } = req.body;
+      if (!token || !newPassword) return res.status(400).json({ message: "Token and password required" });
+
+      if (newPassword.length < 6) return res.status(400).json({ message: "Password must be at least 6 characters" });
+
+      const userId = await storage.verifyResetToken(token);
+      if (!userId) {
+        return res.status(400).json({ message: "Invalid or expired token" });
+      }
+
+      // Update Password via Supabase (if using Supabase Auth) OR Local
+      // Since we are hybrid, we might need to update local AND Supabase if possible.
+      // However, the `storage.updateUser` usually only updates local DB.
+      // If we rely on Supabase for auth, we should use Supabase's reset flow principally.
+      // But looking at `auth.ts`, we sync Supabase users to local.
+
+      // CRITICAL: We need to know if we are using Supabase Auth exclusively for login.
+      // `auth.ts` suggests we verify Supabase token.
+      // If so, we can't reset password purely locally if Supabase is the IdP.
+
+      // BUT: The roadmap says "Implement Password Reset Flow".
+      // If we are fully Supabase, we should use `supabase.auth.resetPasswordForEmail`.
+
+      // Let's check if we have the Supabase Admin client available in routes.ts.
+      // Yes, `import { supabaseAdmin } from "./supabase.js";` exists.
+
+      if (supabaseAdmin) {
+        const user = await storage.getUser(userId);
+        if (user && user.email) {
+          const { data, error } = await supabaseAdmin.auth.admin.updateUserById(
+            userId,
+            { password: newPassword }
+          );
+          if (error) throw error;
+        }
+      } else {
+        console.warn("Supabase Admin not configured, cannot reset Supabase password.");
+        // Fallback to local update if we supported local-only auth (which we might not fully)
+      }
+
+      await storage.consumeResetToken(token);
+      res.json({ message: "Password updated successfully" });
+
+    } catch (err: any) {
+      console.error("Reset Password Error:", err);
+      res.status(500).json({ message: "Failed to reset password: " + err.message });
+    }
+  });
+
+  app.post("/api/users/profile/pin", requireAuth, async (req, res) => {
+    try {
+      const { pin } = req.body;
+      if (!pin || pin.length < 4) return res.status(400).json({ message: "PIN must be at least 4 digits" });
+
+      const userId = req.user?.id;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+
+      await storage.setUserPin(userId, pin);
+      res.json({ message: "PIN updated successfully" });
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to update PIN: " + err.message });
+    }
+  });
+
+  app.post("/api/companies/:companyId/auth/verify-manager-pin", requireAuth, async (req, res) => {
+    try {
+      const { companyId } = req.params;
+      const { pin } = req.body;
+
+      if (!pin) return res.status(400).json({ message: "PIN is required" });
+
+      // Get all company users with admin/owner role
+      const users = await storage.getCompanyUsers(parseInt(companyId));
+      const managers = users.filter((u: any) => u.role === 'admin' || u.role === 'owner');
+
+      // Check PIN against each manager
+      for (const manager of managers) {
+        const isValid = await storage.verifyUserPin(manager.id, pin);
+        if (isValid) {
+          return res.json({
+            authorized: true,
+            manager: { id: manager.id, name: manager.name, role: manager.role }
+          });
+        }
+      }
+
+      res.status(401).json({ authorized: false, message: "Invalid Manager PIN" });
+
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Advanced Reporting Routes
+  app.get("/api/reports/summary/:id", requireAuth, async (req, res) => {
+    try {
+      const companyId = parseInt(req.params.id);
+      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date(0);
+      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+      endDate.setHours(23, 59, 59, 999);
+
+      const data = await storage.getReportSummary(companyId, startDate, endDate);
+      res.json(data);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/reports/charts/revenue/:id", requireAuth, async (req, res) => {
+    try {
+      const companyId = parseInt(req.params.id);
+      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date(0);
+      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+      endDate.setHours(23, 59, 59, 999);
+
+      const data = await storage.getRevenueChart(companyId, startDate, endDate);
+      res.json(data);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/reports/charts/sales-by-category/:id", requireAuth, async (req, res) => {
+    try {
+      const companyId = parseInt(req.params.id);
+      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date(0);
+      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+      endDate.setHours(23, 59, 59, 999);
+
+      const data = await storage.getSalesByCategory(companyId, startDate, endDate);
+      res.json(data);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/reports/charts/sales-by-payment-method/:id", requireAuth, async (req, res) => {
+    try {
+      const companyId = parseInt(req.params.id);
+      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date(0);
+      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+      endDate.setHours(23, 59, 59, 999);
+
+      const data = await storage.getSalesByPaymentMethod(companyId, startDate, endDate);
+      res.json(data);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/reports/charts/sales-by-user/:id", requireAuth, async (req, res) => {
+    try {
+      const companyId = parseInt(req.params.id);
+      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date(0);
+      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+      endDate.setHours(23, 59, 59, 999);
+
+      const data = await storage.getSalesByUser(companyId, startDate, endDate);
+      res.json(data);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/reports/sales/:id", requireAuth, async (req, res) => {
+    try {
+      const companyId = parseInt(req.params.id);
+      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date(0);
+      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+      endDate.setHours(23, 59, 59, 999);
+
+      const data = await storage.getSalesReport(companyId, startDate, endDate);
+      res.json(data);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Sales Analytics - Summary
+  app.get("/api/reports/summary/:id", requireAuth, async (req, res) => {
+    try {
+      const companyId = parseInt(req.params.id);
+      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date(0);
+      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+      endDate.setHours(23, 59, 59, 999);
+
+      const invoicesList = await db.query.invoices.findMany({
+        where: and(
+          eq(invoices.companyId, companyId),
+          gte(invoices.issueDate, startDate),
+          lte(invoices.issueDate, endDate),
+          ne(invoices.status, 'cancelled'),
+          ne(invoices.status, 'draft')
+        )
+      });
+
+      const customers = await db.query.customers.findMany({
+        where: eq(customers.companyId, companyId)
+      });
+
+      const totalRevenue = invoicesList.reduce((sum, inv) => sum + Number(inv.total), 0);
+      const pendingAmount = invoicesList.filter(inv => inv.status === 'pending').reduce((sum, inv) => sum + Number(inv.total), 0);
+
+      res.json({
+        totalRevenue,
+        pendingAmount,
+        invoicesCount: invoicesList.length,
+        customersCount: customers.length
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Sales Analytics - Revenue Chart
+  app.get("/api/reports/charts/revenue/:id", requireAuth, async (req, res) => {
+    try {
+      const companyId = parseInt(req.params.id);
+      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date(0);
+      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+      endDate.setHours(23, 59, 59, 999);
+
+      const invoicesList = await db.query.invoices.findMany({
+        where: and(
+          eq(invoices.companyId, companyId),
+          gte(invoices.issueDate, startDate),
+          lte(invoices.issueDate, endDate),
+          ne(invoices.status, 'cancelled'),
+          ne(invoices.status, 'draft')
+        ),
+        orderBy: [asc(invoices.issueDate)]
+      });
+
+      // Group by date
+      const revenueByDate: Record<string, number> = {};
+      invoicesList.forEach(inv => {
+        const date = format(new Date(inv.issueDate), 'MMM dd');
+        revenueByDate[date] = (revenueByDate[date] || 0) + Number(inv.total);
+      });
+
+      const chartData = Object.entries(revenueByDate).map(([name, total]) => ({ name, total }));
+      res.json(chartData);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+
+
+  // POS Transaction Routes
+  app.post("/api/pos/shifts/:id/transaction", requireAuth, async (req, res) => {
+    try {
+      const shiftId = Number(req.params.id);
+      const { type, amount, reason, items } = req.body;
+      const userId = (req.user as any).id;
+
+      const transaction = await addPosTransaction(shiftId, userId, type, amount, reason, items);
+      res.json(transaction);
+    } catch (err: any) {
+      console.error("POS Transaction Error:", err);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/pos/shifts/:id/transactions", requireAuth, async (req, res) => {
+    try {
+      const shiftId = Number(req.params.id);
+      const transactions = await getShiftTransactions(shiftId);
+      res.json(transactions);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/pos/reports/sales", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const companyId = parseInt(req.query.companyId as string) || user.companyId;
+      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date(0);
+      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+      endDate.setHours(23, 59, 59, 999);
+
+      const cashierId = req.query.cashierId ? parseInt(req.query.cashierId as string) : undefined;
+      const paymentMethod = req.query.paymentMethod as string | undefined;
+
+      const sales = await storage.getPosSales(companyId, startDate, endDate, cashierId, paymentMethod);
+      res.json(sales);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/pos/my-sales", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const companyId = parseInt(req.query.companyId as string) || user.companyId;
+
+      // Default to last 30 days
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      thirtyDaysAgo.setHours(0, 0, 0, 0);
+
+      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : thirtyDaysAgo;
+      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+      endDate.setHours(23, 59, 59, 999);
+
+      const cashierId = user.id;
+
+      const sales = await storage.getPosSales(companyId, startDate, endDate, cashierId);
+      res.json(sales);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/pos/all-sales", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const companyId = parseInt(req.query.companyId as string) || user.companyId;
+
+      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date(0);
+      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+      endDate.setHours(23, 59, 59, 999);
+
+      let cashierId = req.query.cashierId as string;
+      const status = req.query.status as string;
+      const search = req.query.search as string;
+
+      // Enforcement: Cashiers can ONLY see their own sales
+      const role = await storage.getCompanyUserRole(user.id, companyId);
+      if (role === 'cashier' || !user.isSuperAdmin && (role !== 'owner' && role !== 'admin')) {
+        cashierId = user.id;
+      }
+
+      const sales = await storage.getPosSales(companyId, startDate, endDate, cashierId, undefined, status, search);
+      res.json(sales);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Product Performance Report
+  app.get("/api/companies/:id/reports/product-performance", requireAuth, async (req, res) => {
+    try {
+      const companyId = parseInt(req.params.id);
+      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date(0);
+      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+      endDate.setHours(23, 59, 59, 999);
+      const isPosOnly = req.query.isPos === "true";
+
+      const products = await storage.getProductPerformance(companyId, startDate, endDate, isPosOnly);
+      res.json(products);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POS Sales Reports
+  app.get("/api/pos/reports/sales", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const companyId = parseInt(req.query.companyId as string) || user.companyId;
+      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date(0);
+      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+      endDate.setHours(23, 59, 59, 999);
+
+      const cashierId = req.query.cashierId as string;
+
+      const sales = await storage.getPosSales(companyId, startDate, endDate, cashierId);
+      res.json(sales);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // POS Shift Reports
+  app.get("/api/pos/reports/shifts", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const companyId = parseInt(req.query.companyId as string) || user.companyId;
+      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date(0);
+      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+      endDate.setHours(23, 59, 59, 999);
+
+      // Fetch shifts within date range
+      const shifts = await db.query.posShifts.findMany({
+        where: and(
+          eq(posShifts.companyId, companyId),
+          gte(posShifts.startTime, startDate),
+          lte(posShifts.startTime, endDate)
+        ),
+        with: {
+          user: true
+        },
+        orderBy: [desc(posShifts.startTime)]
+      });
+
+      // Calculate sales for each shift
+      const shiftsWithSales = await Promise.all(shifts.map(async (shift) => {
+        // Get all invoices created during this shift
+        const shiftStart = new Date(shift.startTime);
+        const shiftEnd = shift.endTime ? new Date(shift.endTime) : new Date();
+
+        const shiftInvoices = await db.query.invoices.findMany({
+          where: and(
+            eq(invoices.companyId, companyId),
+            eq(invoices.createdBy, shift.userId),
+            eq(invoices.isPos, true),
+            gte(invoices.createdAt, shiftStart),
+            lte(invoices.createdAt, shiftEnd),
+            ne(invoices.status, 'cancelled')
+          )
+        });
+
+        // Get shift transactions (drops and payouts)
+        const shiftTransactions = await db.query.posShiftTransactions.findMany({
+          where: eq(posShiftTransactions.shiftId, shift.id)
+        });
+
+        const totalSales = shiftInvoices.reduce((sum, inv) => sum + Number(inv.total), 0);
+        const transactionCount = shiftInvoices.length;
+
+        // Calculate CASH-ONLY sales
+        const cashSales = shiftInvoices
+          .filter(inv => inv.paymentMethod?.toUpperCase() === 'CASH')
+          .reduce((sum, inv) => sum + Number(inv.total), 0);
+
+        const cashTransactionCount = shiftInvoices
+          .filter(inv => inv.paymentMethod?.toUpperCase() === 'CASH').length;
+
+        // Calculate cash drops and payouts
+        const cashDrops = shiftTransactions
+          .filter(t => t.type === 'DROP')
+          .reduce((sum, t) => sum + Number(t.amount), 0);
+
+        const cashPayouts = shiftTransactions
+          .filter(t => t.type === 'PAYOUT')
+          .reduce((sum, t) => sum + Number(t.amount), 0);
+
+        // Expected cash in drawer
+        const expectedCash = Number(shift.openingBalance) + cashSales - cashDrops - cashPayouts;
+
+        // Calculate variance if shift is closed and has actual cash
+        const actualCash = shift.actualCash ? Number(shift.actualCash) : null;
+        const cashVariance = actualCash !== null ? actualCash - expectedCash : null;
+
+        // Calculate variance percentage
+        const variancePercentage = expectedCash > 0 && cashVariance !== null
+          ? (Math.abs(cashVariance) / expectedCash) * 100
+          : null;
+
+        return {
+          ...shift,
+          cashierName: shift.user?.username || shift.user?.email || 'Unknown',
+          totalSales,
+          transactionCount,
+          cashSales,
+          cashTransactionCount,
+          cashDrops,
+          cashPayouts,
+          expectedCash,
+          actualCash,
+          cashVariance,
+          variancePercentage,
+          reconciliationStatus: shift.reconciliationStatus || (shift.status === 'closed' && !actualCash ? 'pending' : null)
+        };
+      }));
+
+      res.json(shiftsWithSales);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Reconcile POS Shift
+  app.post("/api/pos/shifts/:id/reconcile", requireAuth, async (req, res) => {
+    try {
+      const shiftId = parseInt(req.params.id);
+      const { actualCash, notes } = req.body;
+      const user = req.user as any;
+
+      if (actualCash === undefined || actualCash === null) {
+        return res.status(400).json({ message: "Actual cash amount is required" });
+      }
+
+      // Get shift to calculate expected cash
+      const shift = await db.query.posShifts.findFirst({
+        where: eq(posShifts.id, shiftId)
+      });
+
+      if (!shift) {
+        return res.status(404).json({ message: "Shift not found" });
+      }
+
+      // Calculate expected cash (same logic as reports endpoint)
+      const shiftStart = new Date(shift.startTime);
+      const shiftEnd = shift.endTime ? new Date(shift.endTime) : new Date();
+
+      const shiftInvoices = await db.query.invoices.findMany({
+        where: and(
+          eq(invoices.companyId, shift.companyId),
+          eq(invoices.createdBy, shift.userId),
+          eq(invoices.isPos, true),
+          gte(invoices.createdAt, shiftStart),
+          lte(invoices.createdAt, shiftEnd),
+          ne(invoices.status, 'cancelled')
+        )
+      });
+
+      const shiftTransactions = await db.query.posShiftTransactions.findMany({
+        where: eq(posShiftTransactions.shiftId, shift.id)
+      });
+
+      const cashSales = shiftInvoices
+        .filter(inv => inv.paymentMethod?.toUpperCase() === 'CASH')
+        .reduce((sum, inv) => sum + Number(inv.total), 0);
+
+      const cashDrops = shiftTransactions
+        .filter(t => t.type === 'DROP')
+        .reduce((sum, t) => sum + Number(t.amount), 0);
+
+      const cashPayouts = shiftTransactions
+        .filter(t => t.type === 'PAYOUT')
+        .reduce((sum, t) => sum + Number(t.amount), 0);
+
+      const expectedCash = Number(shift.openingBalance) + cashSales - cashDrops - cashPayouts;
+      const variance = Number(actualCash) - expectedCash;
+      const variancePercentage = expectedCash > 0 ? (Math.abs(variance) / expectedCash) * 100 : 0;
+
+      // Determine reconciliation status based on variance percentage
+      let reconciliationStatus = 'reconciled';
+      if (variancePercentage > 5) {
+        reconciliationStatus = 'critical_discrepancy'; // >5% variance
+      } else if (variancePercentage > 2) {
+        reconciliationStatus = 'major_discrepancy'; // 2-5% variance
+      } else if (variancePercentage > 0.5) {
+        reconciliationStatus = 'minor_discrepancy'; // 0.5-2% variance
+      }
+
+      // Update shift with reconciliation data
+      const [updatedShift] = await db.update(posShifts)
+        .set({
+          actualCash: actualCash.toString(),
+          reconciledAt: new Date(),
+          reconciledBy: user.id,
+          reconciliationNotes: notes,
+          reconciliationStatus
+        })
+        .where(eq(posShifts.id, shiftId))
+        .returning();
+
+      res.json({
+        ...updatedShift,
+        expectedCash,
+        variance,
+        variancePercentage
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   return httpServer;
+
 }
 
 

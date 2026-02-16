@@ -15,10 +15,13 @@ export function useActiveCompany() {
             const storedCompany = companies.find(c => c.id === activeCompanyId);
 
             if (!storedCompany) {
-                // Stored company doesn't exist for this user, select the first available
-                const firstId = companies[0].id;
-                setActiveCompanyId(firstId);
-                localStorage.setItem("selectedCompanyId", firstId.toString());
+                // Stored company doesn't exist for this user or we are at first login
+                // Prefer a company where the user is a 'cashier' to ensure they land in the POS
+                const cashierCompany = companies.find(c => (c as any).role === 'cashier');
+                const defaultId = cashierCompany ? cashierCompany.id : companies[0].id;
+
+                setActiveCompanyId(defaultId);
+                localStorage.setItem("selectedCompanyId", defaultId.toString());
             }
         } else if (!isLoading && companies && companies.length === 0) {
             // User has no companies, clear any stale localStorage value

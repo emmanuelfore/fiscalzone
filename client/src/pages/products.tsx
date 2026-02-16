@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { CsvImportDialog } from "@/components/csv-import-dialog";
+import { ManageCategoriesDialog } from "@/components/products/manage-categories-dialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -97,6 +98,7 @@ export default function ProductsPage() {
           <p className="text-slate-500 mt-1">Inventory and goods</p>
         </div>
         <div className="flex gap-2">
+          <ManageCategoriesDialog companyId={companyId} />
           <CsvImportDialog
             type="product"
             companyId={companyId}
@@ -187,6 +189,7 @@ export default function ProductsPage() {
                 <th className="data-table-header p-4">Name</th>
                 <th className="data-table-header p-4">Code</th>
                 <th className="data-table-header p-4">Details</th>
+                <th className="data-table-header p-4">Category</th>
                 <th className="data-table-header p-4">Price</th>
                 <th className="data-table-header p-4">Stock</th>
                 <th className="data-table-header p-4">Tax Type</th>
@@ -243,6 +246,15 @@ export default function ProductsPage() {
                       <div className="flex flex-col gap-1">
                         {p.hsCode && <div className="text-xs text-slate-500 font-mono">HS: {p.hsCode}</div>}
                       </div>
+                    </td>
+                    <td className="data-table-cell p-4">
+                      {p.category ? (
+                        <Badge variant="secondary" className="bg-slate-100 text-slate-600 font-normal">
+                          {p.category}
+                        </Badge>
+                      ) : (
+                        <span className="text-slate-400 text-xs">—</span>
+                      )}
                     </td>
                     <td className="data-table-cell p-4 font-medium">${Number(p.price).toFixed(2)}</td>
                     <td className="data-table-cell p-4">

@@ -69,7 +69,7 @@ export const api = {
       method: 'GET' as const,
       path: '/api/user',
       responses: {
-        200: z.object({ id: z.number(), email: z.string(), name: z.string().nullable() }),
+        200: z.object({ id: z.string(), email: z.string(), name: z.string().nullable(), isSuperAdmin: z.boolean().optional() }),
         401: errorSchemas.unauthorized,
       }
     }
@@ -79,7 +79,7 @@ export const api = {
       method: 'GET' as const,
       path: '/api/companies',
       responses: {
-        200: z.array(z.custom<typeof companies.$inferSelect>()),
+        200: z.array(z.custom<typeof companies.$inferSelect & { role: string }>()),
       }
     },
     create: {

@@ -141,7 +141,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     }
   ];
 
-  const isCashier = activeRole === 'cashier';
+  const isCashier = !user?.isSuperAdmin && activeRole === 'cashier';
 
   const navItems = isCashier
     ? [

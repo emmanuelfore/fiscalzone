@@ -324,6 +324,7 @@ export class DatabaseStorage implements IStorage {
   // Companies
   async getCompanies(userId: string): Promise<(Company & { role: string })[]> {
     const user = await this.getUser(userId);
+
     if (user?.isSuperAdmin) {
       const allCompanies = await db.select().from(companies);
       return allCompanies.map(c => ({ ...c, role: "owner" }));

@@ -108,15 +108,6 @@ export default function AuthPage() {
   };
 
   if (user) {
-    if (isLoadingCompany) {
-      return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
-    }
-
-    // Check if the user is a cashier in the active company (and NOT a superadmin)
-    if (!user.isSuperAdmin && activeCompany?.role === 'cashier') {
-      return <Redirect to="/pos" />;
-    }
-
     return <Redirect to="/dashboard" />;
   }
 

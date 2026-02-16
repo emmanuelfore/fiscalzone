@@ -36,11 +36,24 @@ import { Switch } from "@/components/ui/switch";
 import { Plus, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 
+import { useQuery } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/api";
+
 export function CreateProductDialog({ companyId, defaultType = "good", triggerLabel = "Add Product" }: { companyId: number, defaultType?: "good" | "service", triggerLabel?: string }) {
     const [open, setOpen] = useState(false);
     const createProduct = useCreateProduct(companyId);
     const { taxCategories, taxTypes } = useTaxConfig(companyId);
     const { toast } = useToast();
+
+    const { data: categories } = useQuery({
+        queryKey: ["product-categories", companyId],
+        queryFn: async () => {
+            const res = await apiFetch(`/api/product-categories?companyId=${companyId}`);
+            if (!res.ok) throw new Error("Failed to fetch categories");
+            return res.json();
+        },
+        enabled: open
+    });
 
     const form = useForm<InsertProduct>({
         resolver: zodResolver(insertProductSchema),
@@ -130,6 +143,35 @@ export function CreateProductDialog({ companyId, defaultType = "good", triggerLa
                                     <FormControl>
                                         <Input placeholder={isService ? "e.g. Consulting, Labor" : "e.g. Widget X"} {...field} />
                                     </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+
+                        <FormField
+                            control={form.control}
+                            name="category"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Category</FormLabel>
+                                    <Select
+                                        onValueChange={field.onChange}
+                                        defaultValue={field.value || undefined}
+                                        value={field.value || undefined}
+                                    >
+                                        <FormControl>
+                                            <SelectTrigger className="bg-white">
+                                                <SelectValue placeholder="Select Category" />
+                                            </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                            {categories?.map((cat: any) => (
+                                                <SelectItem key={cat.id} value={cat.name}>
+                                                    {cat.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
                                     <FormMessage />
                                 </FormItem>
                             )}

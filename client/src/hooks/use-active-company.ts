@@ -15,16 +15,16 @@ export function useActiveCompany() {
             const storedCompany = companies.find(c => c.id === activeCompanyId);
 
             if (!storedCompany) {
-                // Stored company doesn't exist for this user or we are at first login
-                // If there's a company where they are an owner/admin/member, prefer that (for dashboard)
-                const managementCompany = companies.find(c => ['owner', 'admin', 'member'].includes((c as any).role));
-                // Otherwise, if they only have cashier roles, pick a cashier company
-                const cashierCompany = companies.find(c => (c as any).role === 'cashier');
+                // Stored company doesn't exist for this user, select the best available
+                // Priority: owner -> cashier -> member
+                const bestCompany =
+                    companies.find(c => c.role === "owner") ||
+                    companies.find(c => c.role === "cashier") ||
+                    companies[0];
 
-                const defaultId = managementCompany ? managementCompany.id : (cashierCompany ? cashierCompany.id : companies[0].id);
-
-                setActiveCompanyId(defaultId);
-                localStorage.setItem("selectedCompanyId", defaultId.toString());
+                const finalId = bestCompany.id;
+                setActiveCompanyId(finalId);
+                localStorage.setItem("selectedCompanyId", finalId.toString());
             }
         } else if (!isLoading && companies && companies.length === 0) {
             // User has no companies, clear any stale localStorage value

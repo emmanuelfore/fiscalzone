@@ -101,11 +101,12 @@ export function setupAuth(app: Express) {
       }
 
       if (user) {
-        console.log(`[AUTH] User ${user.email} authenticated for ${req.path}`);
+        console.log(`[AUTH] Authenticated: ${user.email} (isSuperAdmin: ${user.isSuperAdmin}) for ${req.method} ${req.path}`);
         req.user = user;
         req.isAuthenticated = () => true;
       } else {
         console.log(`[AUTH] No DB user for Supabase ID ${supabaseUser.id}`);
+        req.user = undefined;
       }
 
       next();

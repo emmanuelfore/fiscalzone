@@ -39,15 +39,17 @@ import PosSettingsPage from "@/pages/pos-settings";
 import SubscriptionPage from "@/pages/subscription";
 import { useAuth } from "@/hooks/use-auth";
 import { useCompanies } from "@/hooks/use-companies";
+import { useActiveCompany } from "@/hooks/use-active-company";
 import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
   const { data: companies, isLoading: isLoadingCompanies } = useCompanies(!!user);
+  const { activeCompany, isLoading: isLoadingActiveCompany } = useActiveCompany();
   const [location, setLocation] = useLocation();
 
-  if (isLoading || isLoadingCompanies) {
+  if (isLoading || isLoadingCompanies || isLoadingActiveCompany) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -64,14 +66,13 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   }
 
   // Role based redirection for Cashiers
-  const activeCompanyId = parseInt(localStorage.getItem("selectedCompanyId") || "0") || companies[0].id;
-  const activeCompany = companies.find(c => c.id === activeCompanyId) || companies[0];
-  const role = (activeCompany as any).role;
-
-  const allowedCashierPaths = ["/pos", "/pos/my-sales"];
-  // Redirection for Cashiers - SuperAdmins are ALWAYS exempt from forced POS view
-  if (!user.isSuperAdmin && role === "cashier" && !allowedCashierPaths.includes(location)) {
-    return <Redirect to="/pos" />;
+  if (activeCompany) {
+    const role = (activeCompany as any).role;
+    const allowedCashierPaths = ["/pos", "/pos/my-sales"];
+    // Redirection for Cashiers - SuperAdmins are ALWAYS exempt from forced POS view
+    if (!user?.isSuperAdmin && role === "cashier" && !allowedCashierPaths.includes(location)) {
+      return <Redirect to="/pos" />;
+    }
   }
 
   return <Component />;

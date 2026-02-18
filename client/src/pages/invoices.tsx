@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { useInvoices, useDeleteInvoice, useFiscalizeInvoice, useUpdateInvoice } from "@/hooks/use-invoices";
 import { useCreateRecurringInvoice } from "@/hooks/use-recurring";
 import { Button } from "@/components/ui/button";
-import { Plus, Search, FileText, Loader2, ShieldCheck, Send } from "lucide-react";
+import { Plus, Search, FileText, Loader2, ShieldCheck, Send, MoreHorizontal, Copy, RefreshCw, Eye, Edit, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { DeleteButton } from "@/components/delete-button";
 import { Input } from "@/components/ui/input";
@@ -28,12 +28,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  MoreHorizontal,
   Calendar as CalendarIcon,
-  Copy,
   Filter,
-  ClipboardList,
-  RefreshCw
+  ClipboardList
 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -45,7 +42,10 @@ import { apiFetch } from "@/lib/api";
 import { Clock, TrendingUp, AlertCircle } from "lucide-react";
 import { useCurrencies } from "@/hooks/use-currencies";
 
+import { useAuth } from "@/hooks/use-auth";
+
 export default function InvoicesPage() {
+  const { user } = useAuth();
   const [, setLocation] = useLocation();
   const selectedCompanyId = parseInt(localStorage.getItem("selectedCompanyId") || "0");
 
@@ -354,13 +354,14 @@ export default function InvoicesPage() {
                   <th className="data-table-header w-[140px] text-right">Amount</th>
                   <th className="data-table-header w-[100px] text-right">Tax</th>
                   <th className="data-table-header w-[120px]">Status</th>
+                  <th className="data-table-header">Notes</th>
                   <th className="data-table-header w-[60px] text-right"></th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan={9} className="p-8 text-center text-slate-500">
+                    <td colSpan={10} className="p-8 text-center text-slate-500">
                       <div className="flex flex-col items-center justify-center gap-2">
                         <Loader2 className="h-6 w-6 animate-spin text-primary" />
                         <p>Loading invoices...</p>
@@ -369,7 +370,7 @@ export default function InvoicesPage() {
                   </tr>
                 ) : invoices?.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="p-12 text-center text-slate-500">
+                    <td colSpan={10} className="p-12 text-center text-slate-500">
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mb-3">
                           <FileText className="w-6 h-6 text-slate-400" />
@@ -469,6 +470,9 @@ export default function InvoicesPage() {
                         )}
                       </div>
                     </td>
+                    <td className="data-table-cell text-slate-500 max-w-[120px] truncate text-[8px] leading-tight opacity-60" title={invoice.notes || ""}>
+                      {invoice.notes || "-"}
+                    </td>
                     <td className="data-table-cell text-right pr-4">
 
                       <DropdownMenu>
@@ -482,14 +486,14 @@ export default function InvoicesPage() {
                           <DropdownMenuLabel>Actions</DropdownMenuLabel>
                           <DropdownMenuItem asChild>
                             <Link href={`/invoices/${invoice.id}`} className="w-full cursor-pointer">
-                              View Details
+                              <Eye className="mr-2 h-4 w-4" /> View Details
                             </Link>
                           </DropdownMenuItem>
 
                           {invoice.status === 'draft' && (
                             <DropdownMenuItem asChild>
                               <Link href={`/invoices/new?edit=${invoice.id}`} className="w-full cursor-pointer">
-                                Edit Draft
+                                <Edit className="mr-2 h-4 w-4" /> Edit Draft
                               </Link>
                             </DropdownMenuItem>
                           )}
@@ -528,20 +532,24 @@ export default function InvoicesPage() {
                             <RefreshCw className="mr-2 h-4 w-4" /> Make Recurring
                           </DropdownMenuItem>
 
-                          {invoice.status === 'draft' && (
+                          {(invoice.status === 'draft' || user?.isSuperAdmin) && (
                             <>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 className="text-red-600 focus:text-red-600 cursor-pointer"
                                 onClick={async (e) => {
                                   e.preventDefault();
-                                  if (confirm("Are you sure you want to delete this draft?")) {
+                                  const confirmMsg = invoice.status === 'draft'
+                                    ? "Are you sure you want to delete this draft?"
+                                    : `WARNING: You are about to delete an ${invoice.status.toUpperCase()} invoice. This may cause accounting discrepancies. Continue?`;
+
+                                  if (confirm(confirmMsg)) {
                                     await deleteInvoice.mutateAsync(invoice.id);
                                     toast({ title: "Invoice deleted" });
                                   }
                                 }}
                               >
-                                Delete Draft
+                                <Trash2 className="mr-2 h-4 w-4" /> Delete {invoice.status !== 'draft' && `(${invoice.status})`}
                               </DropdownMenuItem>
                             </>
                           )}

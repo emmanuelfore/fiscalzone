@@ -3,29 +3,39 @@ import { ZimraDevice, ReceiptData, ZimraConfigResponse, ZimraApiError, ZimraLogg
 import { Invoice } from "../../shared/schema.js";
 import fs from "fs";
 import path from "path";
+import { storage } from "../storage.js";
 import { logAction } from "../audit.js";
 
-// Local implementation since it wasn't exported from zimra.ts
-function getZimraLogger(companyId: number): ZimraLogger {
-    return {
-        log: async (invoiceId, endpoint, request, response, statusCode, errorMessage) => {
-            const details = {
+// Exported to be shared across the server
+export const getZimraLogger = (companyId: number) => ({
+    log: async (invoiceId: number | null, endpoint: string, request: any, response: any, statusCode?: number, errorMessage?: string) => {
+        try {
+            await storage.createZimraLog({
+                companyId,
+                invoiceId: invoiceId || undefined,
                 endpoint,
-                request,
-                response,
+                requestPayload: request,
+                responsePayload: response,
                 statusCode,
-                errorMessage,
-                invoiceId
-            };
-            // Log specific errors
-            if (statusCode && statusCode >= 400) {
-                console.error(`[ZIMRA] Error ${statusCode} on ${endpoint}:`, errorMessage);
+                errorMessage
+            });
+
+            // Also log to general audit for major events
+            if (['OpenDay', 'CloseDay', 'SubmitReceipt'].includes(endpoint)) {
+                await logAction(
+                    companyId,
+                    "system",
+                    `ZIMRA_${endpoint.toUpperCase()}`,
+                    "ZimraAPI",
+                    invoiceId?.toString(),
+                    { statusCode, errorMessage, endpoint }
+                );
             }
-            // Use existing audit log
-            await logAction(companyId, "system", "zimra_api_call", "invoice", invoiceId ? String(invoiceId) : undefined, details);
+        } catch (error) {
+            console.error("Failed to create ZIMRA log:", error);
         }
-    };
-}
+    }
+});
 
 export const processInvoiceFiscalization = async (invoiceId: number, companyId: number, userId?: number | string, isSuperAdmin: boolean = false, zimraSync?: any, isPos: boolean = false) => {
     // Retrieve full invoice with line items
@@ -43,7 +53,7 @@ export const processInvoiceFiscalization = async (invoiceId: number, companyId: 
         if (!isMember && !isSuperAdmin) throw new Error("You do not have permission to fiscalize for this company");
     }
 
-    const company = await storage.getCompany(companyId);
+    let company = await storage.getCompany(companyId);
     if (!company || !company.zimraPrivateKey || !company.zimraCertificate || !company.fdmsDeviceId) {
         throw new Error("Company has not registered a ZIMRA device");
     }
@@ -125,10 +135,11 @@ export const processInvoiceFiscalization = async (invoiceId: number, companyId: 
 
             // Update company state
             const openedAt = new Date();
-            await storage.updateCompany(company.id, {
+            company = await storage.updateCompany(company.id, {
                 currentFiscalDayNo: openResult.fiscalDayNo || nextDayNo,
                 fiscalDayOpen: true,
                 fiscalDayOpenedAt: openedAt,
+                lastFiscalDayNo: openResult.fiscalDayNo || nextDayNo, // Added explicitly
                 lastFiscalDayStatus: 'FiscalDayOpened',
                 dailyReceiptCount: 0,
                 lastFiscalHash: null
@@ -143,9 +154,10 @@ export const processInvoiceFiscalization = async (invoiceId: number, companyId: 
         } else {
             // Ensure local state is synced if it was somehow out
             if (!company.fiscalDayOpen) {
-                await storage.updateCompany(company.id, {
+                company = await storage.updateCompany(company.id, {
                     fiscalDayOpen: true,
                     currentFiscalDayNo: status.lastFiscalDayNo,
+                    lastFiscalDayNo: status.lastFiscalDayNo, // Added explicitly
                     lastFiscalDayStatus: 'FiscalDayOpened'
                 });
             }
@@ -161,12 +173,21 @@ export const processInvoiceFiscalization = async (invoiceId: number, companyId: 
 
         console.log(`[Fiscalize] ZIMRA Status Sync - GlobalNo: ${zimraGlobalNo}, DailyCount: ${zimraDailyCount}`);
 
-        await storage.updateCompany(company.id, {
-            lastReceiptGlobalNo: Math.max(company.lastReceiptGlobalNo || 0, zimraGlobalNo),
-            dailyReceiptCount: justOpened ? 0 : Math.max(company.dailyReceiptCount || 0, zimraDailyCount),
-            fiscalDayOpen: true,
-            currentFiscalDayNo: status.lastFiscalDayNo
-        });
+        if (status.lastReceiptGlobalNo !== undefined || status.lastReceiptCounter !== undefined) {
+            const updateData: any = {};
+            // Force sync with ZIMRA's actual values to avoid RCPT011/RCPT012
+            if (status.lastReceiptGlobalNo !== undefined) {
+                updateData.lastReceiptGlobalNo = status.lastReceiptGlobalNo;
+            }
+            if (status.lastReceiptCounter !== undefined) {
+                updateData.dailyReceiptCount = status.lastReceiptCounter;
+            }
+
+            if (Object.keys(updateData).length > 0) {
+                console.log(`[ZIMRA] Syncing counters from ZIMRA status: Global=${status.lastReceiptGlobalNo}, Daily=${status.lastReceiptCounter}`);
+                company = await storage.updateCompany(company.id, updateData);
+            }
+        }
 
         // Re-fetch to get the resulting peaked counters
         currentCompany = await storage.getCompany(company.id) || company;
@@ -410,18 +431,15 @@ export const processInvoiceFiscalization = async (invoiceId: number, companyId: 
         }
 
         // Reuse existing numbers if present (retry scenario), otherwise generate new ones
-        console.log(`[Fiscalize] Invoice ${invoiceId} Existing GlobalNo: ${invoice.receiptGlobalNo}, Counter: ${invoice.receiptCounter}`);
-        console.log(`[Fiscalize] Company LastGlobalNo: ${company.lastReceiptGlobalNo}, DailyCount: ${company.dailyReceiptCount}`);
-
+        // Use latest counters from synced 'company' object
         if (zimraSync) {
             nextGlobalNo = zimraSync.nextGlobalNo;
             nextReceiptCounter = zimraSync.nextReceiptCounter;
         } else {
+            // Priority: Existing Locked Number > Last Global/Daily + 1
             nextGlobalNo = invoice.receiptGlobalNo || ((company.lastReceiptGlobalNo || 0) + 1);
             nextReceiptCounter = invoice.receiptCounter || ((company.dailyReceiptCount || 0) + 1);
         }
-
-        console.log(`[Fiscalize] Determined NextGlobalNo: ${nextGlobalNo}, NextReceiptCounter: ${nextReceiptCounter}`);
 
         // DEBUG: Write to file
         try {
@@ -469,6 +487,7 @@ export const processInvoiceFiscalization = async (invoiceId: number, companyId: 
             receiptCurrency: invoice.currency || 'USD',
             receiptCounter: nextReceiptCounter,
             receiptGlobalNo: nextGlobalNo,
+            fiscalDayNo: company.currentFiscalDayNo || status.lastFiscalDayNo, // Added Missing Property
             invoiceNo: invoice.invoiceNumber,
             receiptDate: formatZimraDate(nowAtHarare),
             receiptLines: receiptLines as any,
@@ -541,13 +560,13 @@ export const processInvoiceFiscalization = async (invoiceId: number, companyId: 
                     receiptCounter: nextReceiptCounter
                 });
 
-                // Increment company counters
-                await storage.updateCompany(company.id, {
-                    lastReceiptGlobalNo: nextGlobalNo,
-                    dailyReceiptCount: nextReceiptCounter
-                });
-            } catch (lockErr) {
-                console.error("Failed to save lock counters:", lockErr);
+                try {
+                    await storage.lockInvoice(invoiceId, userId?.toString() || "system");
+                } catch (lockError) {
+                    console.error("Failiure cleanup error:", lockError);
+                }
+            } catch (err2) {
+                console.error("Failure reporting error:", err2);
             }
 
             // Handle ZIMRA API Errors (Validation details)
@@ -626,12 +645,12 @@ export const processInvoiceFiscalization = async (invoiceId: number, companyId: 
 
         // Update Invoice & Company Counters
         const updatedInvoice = await storage.fiscalizeInvoice(invoiceId, {
-            fiscalCode: result.verificationCode || result.operationID,
+            fiscalCode: result.hash, // Corrected to SHA256 Hash for verification independently
             qrCodeData: qrCode,
             fiscalSignature: result.signature,
-            fiscalDayNo: result.fiscalDayNo,
-            receiptCounter: result.receiptCounter,
-            receiptGlobalNo: result.receiptGlobalNo,
+            fiscalDayNo: receiptData.fiscalDayNo,
+            receiptCounter: receiptData.receiptCounter,
+            receiptGlobalNo: receiptData.receiptGlobalNo,
             syncedWithFdms: result.synced,
             fdmsStatus: result.synced ? "Fiscalized" : "Failed",
             submissionId: result.operationID,
@@ -640,14 +659,15 @@ export const processInvoiceFiscalization = async (invoiceId: number, companyId: 
         });
 
         // Update Company Counters (Important!)
-        if (result.synced) {
-            await storage.updateCompany(company.id, {
-                lastReceiptGlobalNo: result.receiptGlobalNo,
-                dailyReceiptCount: result.receiptCounter,
-                lastFiscalHash: result.signature,
-                lastReceiptAt: new Date(receiptData.receiptDate)
-            });
-        }
+        // Always update if it was synced (ZIMRA received it and assigned a receipt ID), regardless of validation results.
+        // This ensures the local sequence follows ZIMRA's actual counter state.
+        // We also update if it was an offline submission (not synced) to maintain the local sequence.
+        await storage.updateCompany(company.id, {
+            lastReceiptGlobalNo: receiptData.receiptGlobalNo,
+            dailyReceiptCount: receiptData.receiptCounter,
+            lastFiscalHash: result.hash, // Chaining
+            lastReceiptAt: new Date(receiptData.receiptDate)
+        });
 
         return updatedInvoice;
 

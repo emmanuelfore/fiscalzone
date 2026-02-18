@@ -310,14 +310,23 @@ export const api = {
   }
 };
 
-export function buildUrl(path: string, params?: Record<string, string | number>): string {
+export function buildUrl(path: string, params?: Record<string, string | number | boolean | undefined | null>): string {
   let url = path;
+  const queryParams: Record<string, string> = {};
+
   if (params) {
     Object.entries(params).forEach(([key, value]) => {
-      if (url.includes(`:${key}`)) {
-        url = url.replace(`:${key}`, String(value));
+      if (value === undefined || value === null) return;
+
+      const placeholder = `:${key}`;
+      if (url.includes(placeholder)) {
+        url = url.replace(placeholder, encodeURIComponent(String(value)));
+      } else {
+        queryParams[key] = String(value);
       }
     });
   }
-  return url;
+
+  const queryString = new URLSearchParams(queryParams).toString();
+  return queryString ? `${url}?${queryString}` : url;
 }

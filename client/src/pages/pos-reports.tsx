@@ -601,6 +601,7 @@ export default function PosReportsPage() {
                                                             <TableRow className="hover:bg-transparent border-slate-100">
                                                                 <TableHead className="w-[150px] font-bold text-slate-500">Date/Time</TableHead>
                                                                 <TableHead className="font-bold text-slate-500">Invoice #</TableHead>
+                                                                <TableHead className="font-bold text-slate-500">Receipt #</TableHead>
                                                                 <TableHead className="font-bold text-slate-500">Cashier</TableHead>
                                                                 <TableHead className="font-bold text-slate-500">Customer</TableHead>
                                                                 <TableHead className="font-bold text-slate-500">Fiscal Status</TableHead>
@@ -646,6 +647,11 @@ export default function PosReportsPage() {
                                                                                 <code className="text-[11px] font-black bg-slate-100 px-2 py-0.5 rounded text-slate-600">
                                                                                     {sale.invoiceNumber}
                                                                                 </code>
+                                                                            </TableCell>
+                                                                            <TableCell>
+                                                                                <span className="text-[10px] font-bold text-slate-500">
+                                                                                    {sale.receiptCounter ? `${sale.receiptCounter}/${sale.receiptGlobalNo}` : "-"}
+                                                                                </span>
                                                                             </TableCell>
                                                                             <TableCell>
                                                                                 <div className="flex items-center gap-2">

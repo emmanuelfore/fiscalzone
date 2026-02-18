@@ -19,7 +19,7 @@ import {
   resetTokens, insertResetTokenSchema
 } from "../shared/schema.js";
 import { db } from "./db.js";
-import { eq, and, desc, lte, gte, ne, or, isNull, sql, ilike, count } from "drizzle-orm";
+import { eq, and, desc, lte, gte, lt, ne, or, isNull, sql, ilike, count } from "drizzle-orm";
 import { type FiscalDayCounter } from "./zimra.js";
 import { scrypt, randomBytes } from "crypto";
 import { promisify } from "util";
@@ -175,6 +175,9 @@ export interface IStorage {
   getSalesByCategory(companyId: number, startDate: Date, endDate: Date): Promise<{ category: string; totalSales: number; count: number }[]>;
   getSalesByUser(companyId: number, startDate: Date, endDate: Date): Promise<{ userId: string; userName: string; totalSales: number; count: number }[]>;
   getProductPerformance(companyId: number, startDate: Date, endDate: Date, isPosOnly?: boolean): Promise<{ productId: number; productName: string; quantity: number; revenue: number }[]>;
+
+  // Maintenance
+  clearTestInvoices(companyId: number): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -471,14 +474,14 @@ export class DatabaseStorage implements IStorage {
     }
 
     if (dateFrom) {
-      filters.push(sql`${invoices.issueDate} >= ${dateFrom.toISOString()}`);
+      filters.push(gte(invoices.issueDate, dateFrom));
     }
 
     if (dateTo) {
       // Add one day to include the end date fully
       const nextDay = new Date(dateTo);
       nextDay.setDate(nextDay.getDate() + 1);
-      filters.push(sql`${invoices.issueDate} < ${nextDay.toISOString()}`);
+      filters.push(lt(invoices.issueDate, nextDay));
     }
 
     const whereClause = and(...filters);
@@ -578,8 +581,21 @@ export class DatabaseStorage implements IStorage {
 
   async deleteInvoice(id: number): Promise<void> {
     await db.transaction(async (tx) => {
-      // Delete items first due to foreign key constraint
+      // 1. Delete items (Foreign Key Constraint)
       await tx.delete(invoiceItems).where(eq(invoiceItems.invoiceId, id));
+
+      // 2. Delete validation errors
+      await tx.delete(validationErrors).where(eq(validationErrors.invoiceId, id));
+
+      // 3. Delete payments
+      await tx.delete(payments).where(eq(payments.invoiceId, id));
+
+      // 4. Nullify zimra_logs references (preserve logs for audit, but break the link to deleted invoice)
+      await tx.update(zimraLogs)
+        .set({ invoiceId: null })
+        .where(eq(zimraLogs.invoiceId, id));
+
+      // 5. Finally delete the invoice
       await tx.delete(invoices).where(eq(invoices.id, id));
     });
   }
@@ -2162,6 +2178,46 @@ export class DatabaseStorage implements IStorage {
 
   async deleteProductCategory(id: number, companyId: number): Promise<void> {
     await db.delete(productCategories).where(and(eq(productCategories.id, id), eq(productCategories.companyId, companyId)));
+  }
+
+  async clearTestInvoices(companyId: number): Promise<number> {
+    return await db.transaction(async (tx) => {
+      // 1. Identify IDs of invoices to be deleted
+      // We look for qrCodeData containing 'fdmstest.zimra.co.zw'
+      const invoicesToDelete = await tx
+        .select({ id: invoices.id })
+        .from(invoices)
+        .where(
+          and(
+            eq(invoices.companyId, companyId),
+            ilike(invoices.qrCodeData, '%fdmstest.zimra.co.zw%')
+          )
+        );
+
+      if (invoicesToDelete.length === 0) return 0;
+
+      const ids = invoicesToDelete.map(inv => inv.id);
+
+      // 2. Delete from related tables
+      await tx.delete(invoiceItems).where(sql`${invoiceItems.invoiceId} IN (${sql.join(ids, sql`, `)})`);
+      await tx.delete(validationErrors).where(sql`${validationErrors.invoiceId} IN (${sql.join(ids, sql`, `)})`);
+      await tx.delete(payments).where(sql`${payments.invoiceId} IN (${sql.join(ids, sql`, `)})`);
+      await tx.delete(zimraLogs).where(sql`${zimraLogs.invoiceId} IN (${sql.join(ids, sql`, `)})`);
+
+      // 3. Nullify self-references (related_invoice_id)
+      await tx
+        .update(invoices)
+        .set({ relatedInvoiceId: null })
+        .where(sql`${invoices.relatedInvoiceId} IN (${sql.join(ids, sql`, `)})`);
+
+      // 4. Delete the invoices
+      const result = await tx
+        .delete(invoices)
+        .where(sql`${invoices.id} IN (${sql.join(ids, sql`, `)})`)
+        .returning({ id: invoices.id });
+
+      return result.length;
+    });
   }
 }
 

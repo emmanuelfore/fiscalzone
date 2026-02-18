@@ -12,7 +12,7 @@ export async function logAction(
     try {
         await storage.createAuditLog({
             companyId,
-            userId,
+            userId: userId === "system" ? null : userId,
             action,
             entityType,
             entityId,

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Settings, Users, ShieldCheck, Save, Printer, Key, UserPlus, Trash2 } from "lucide-react";
+import { Settings, Users, ShieldCheck, Save, Printer, Key, UserPlus, Trash2, Wrench, AlertTriangle } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
@@ -49,6 +49,8 @@ export default function PosSettingsPage() {
         allowSellOutOfStock: boolean;
         allowedPaymentMethods: string[];
         defaultCustomerId?: string; // Stored as string to match Select value, but implies ID
+        silentPrinting: boolean;
+        printServerUrl: string;
     }
 
     // POS Settings Form State
@@ -60,7 +62,9 @@ export default function PosSettingsPage() {
         showLogo: true,
         allowSellOutOfStock: false,
         allowedPaymentMethods: ["CASH", "CARD", "ECOCASH", "usd", "zig"],
-        defaultCustomerId: ""
+        defaultCustomerId: "",
+        silentPrinting: false,
+        printServerUrl: "http://localhost:12312"
     });
 
     const { data: customers } = useCustomers(companyId);
@@ -76,7 +80,9 @@ export default function PosSettingsPage() {
                 showLogo: settings.showLogo ?? true,
                 allowSellOutOfStock: settings.allowSellOutOfStock ?? false,
                 allowedPaymentMethods: settings.allowedPaymentMethods || ["CASH", "CARD", "ECOCASH", "usd", "zig"],
-                defaultCustomerId: settings.defaultCustomerId || ""
+                defaultCustomerId: settings.defaultCustomerId || "",
+                silentPrinting: settings.silentPrinting ?? false,
+                printServerUrl: settings.printServerUrl || "http://localhost:12312"
             });
         }
     }, [currentCompany]);
@@ -204,6 +210,32 @@ export default function PosSettingsPage() {
     });
 
 
+    // --- MAINTENANCE ---
+    const [isClearTestOpen, setIsClearTestOpen] = useState(false);
+    const clearTestInvoicesMutation = useMutation({
+        mutationFn: async () => {
+            const res = await apiFetch(`/api/companies/${companyId}/invoices/clear-test`, {
+                method: "POST"
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.message || "Failed to clear test invoices");
+            }
+            return await res.json();
+        },
+        onSuccess: (data: any) => {
+            queryClient.invalidateQueries({ queryKey: ["invoices", companyId] });
+            toast({
+                title: "Maintenance Complete",
+                description: data.message || `Successfully cleared test invoices.`
+            });
+            setIsClearTestOpen(false);
+        },
+        onError: (err: Error) => {
+            toast({ title: "Maintenance Error", description: err.message, variant: "destructive" });
+        }
+    });
+
     if (isLoadingCompany) return <Layout><div className="p-8">Loading...</div></Layout>;
 
     return (
@@ -222,6 +254,10 @@ export default function PosSettingsPage() {
                     <TabsTrigger value="cashiers" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
                         <Users className="w-4 h-4 mr-2" />
                         Cashiers & Access
+                    </TabsTrigger>
+                    <TabsTrigger value="maintenance" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                        <Wrench className="w-4 h-4 mr-2" />
+                        Maintenance
                     </TabsTrigger>
                 </TabsList>
 
@@ -319,6 +355,29 @@ export default function PosSettingsPage() {
                                         onCheckedChange={(checked) => setPosConfig({ ...posConfig, autoPrint: checked })}
                                     />
                                 </div>
+
+                                <div className="flex items-center justify-between border-t pt-4">
+                                    <div className="space-y-0.5">
+                                        <Label className="text-sm">Silent Printing (Proxy)</Label>
+                                        <p className="text-[10px] text-slate-500">Fast printing without browser dialog</p>
+                                    </div>
+                                    <Switch
+                                        checked={posConfig.silentPrinting}
+                                        onCheckedChange={(checked) => setPosConfig({ ...posConfig, silentPrinting: checked })}
+                                    />
+                                </div>
+
+                                {posConfig.silentPrinting && (
+                                    <div className="space-y-1 animate-in slide-in-from-top-2 duration-300">
+                                        <Label className="text-xs">Print Server URL</Label>
+                                        <Input
+                                            value={posConfig.printServerUrl}
+                                            onChange={(e) => setPosConfig({ ...posConfig, printServerUrl: e.target.value })}
+                                            placeholder="http://localhost:12312"
+                                        />
+                                        <p className="text-[10px] text-slate-500 italic">Requires middleware running at this address</p>
+                                    </div>
+                                )}
 
                                 <div className="flex items-center justify-between border-t pt-4">
                                     <div className="space-y-0.5">
@@ -495,6 +554,76 @@ export default function PosSettingsPage() {
                                     )}
                                 </TableBody>
                             </Table>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                <TabsContent value="maintenance" className="space-y-6">
+                    <Card className="card-depth border-none">
+                        <CardHeader>
+                            <CardTitle className="flex items-center text-red-600">
+                                <AlertTriangle className="w-5 h-5 mr-2" />
+                                Database Maintenance
+                            </CardTitle>
+                            <CardDescription>
+                                Advanced tools for managing your company data. Use with caution.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            <div className="flex flex-col md:flex-row md:items-center justify-between p-4 border border-red-100 bg-red-50/50 rounded-lg gap-4">
+                                <div className="space-y-1">
+                                    <h4 className="font-semibold text-slate-900">Clear Test Invoices</h4>
+                                    <p className="text-sm text-slate-500 max-w-md">
+                                        Permanently remove all invoices and related data (items, payments, logs) that were created using ZIMRA's test environment.
+                                        This is useful after a testing phase before going live.
+                                    </p>
+                                    <div className="flex items-center gap-1.5 mt-2">
+                                        <span className="px-1.5 py-0.5 bg-slate-200 text-slate-700 text-[10px] font-mono rounded">qr_code_data contains 'fdmstest'</span>
+                                    </div>
+                                </div>
+                                <Dialog open={isClearTestOpen} onOpenChange={setIsClearTestOpen}>
+                                    <DialogTrigger asChild>
+                                        <Button variant="destructive" className="flex items-center gap-2">
+                                            <Trash2 className="w-4 h-4" />
+                                            Clear Test Data
+                                        </Button>
+                                    </DialogTrigger>
+                                    <DialogContent>
+                                        <DialogHeader>
+                                            <DialogTitle className="flex items-center text-red-600">
+                                                <AlertTriangle className="w-5 h-5 mr-2" />
+                                                Confirm Permanent Deletion
+                                            </DialogTitle>
+                                            <DialogDescription className="pt-2 text-slate-900 font-medium">
+                                                This action is irreversible. All invoices identified as test data will be permanently deleted.
+                                            </DialogDescription>
+                                        </DialogHeader>
+                                        <div className="p-4 bg-red-50 rounded-md border border-red-100 space-y-3">
+                                            <p className="text-xs text-red-700 leading-relaxed">
+                                                The following related records will also be removed:
+                                            </p>
+                                            <ul className="text-xs text-red-700 list-disc list-inside space-y-1 ml-2">
+                                                <li>Invoice line items</li>
+                                                <li>Linked payment records</li>
+                                                <li>ZIMRA transaction logs</li>
+                                                <li>Fiscal validation errors</li>
+                                            </ul>
+                                        </div>
+                                        <DialogFooter className="mt-4 gap-2">
+                                            <Button variant="outline" onClick={() => setIsClearTestOpen(false)}>
+                                                Cancel
+                                            </Button>
+                                            <Button
+                                                variant="destructive"
+                                                onClick={() => clearTestInvoicesMutation.mutate()}
+                                                disabled={clearTestInvoicesMutation.isPending}
+                                            >
+                                                {clearTestInvoicesMutation.isPending ? "Clearing..." : "Yes, Delete Permanently"}
+                                            </Button>
+                                        </DialogFooter>
+                                    </DialogContent>
+                                </Dialog>
+                            </div>
                         </CardContent>
                     </Card>
                 </TabsContent>

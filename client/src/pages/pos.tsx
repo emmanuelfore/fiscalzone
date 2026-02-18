@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/lib/api";
 import { useState, useMemo, useEffect } from "react";
 import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, UserPlus, Loader2, Package, Tag, Pause, Play, History, Calculator, Printer, CheckCircle2, XCircle, ChevronRight, Fullscreen, HelpCircle, User, Settings as SettingsIcon, LogOut, FileText, Receipt, Clock } from "lucide-react";
@@ -75,7 +76,9 @@ export default function POSPage() {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [posSettings, setPosSettings] = useState({
         autoPrint: true,
-        terminalId: "POS-T01"
+        terminalId: "POS-T01",
+        silentPrinting: false,
+        printServerUrl: "http://localhost:12312"
     });
 
     // Default to "Walk-in Customer"
@@ -455,7 +458,9 @@ export default function POSPage() {
             const settings = company.posSettings as any;
             setPosSettings(prev => ({
                 ...prev,
-                autoPrint: settings.autoPrint ?? true
+                autoPrint: settings.autoPrint ?? true,
+                silentPrinting: settings.silentPrinting ?? false,
+                printServerUrl: settings.printServerUrl || "http://localhost:12312"
             }));
         }
     }, [company]);
@@ -463,13 +468,51 @@ export default function POSPage() {
     // Auto-Print Effect
     useEffect(() => {
         if (lastSuccessfulInvoice && posSettings.autoPrint) {
-            // Small delay to ensure Dialog content is rendered in the Portal
-            const timer = setTimeout(() => {
-                window.print();
-            }, 500);
-            return () => clearTimeout(timer);
+            if (posSettings.silentPrinting) {
+                handleSilentPrint();
+            } else {
+                // Small delay to ensure Dialog content is rendered in the Portal
+                const timer = setTimeout(() => {
+                    window.print();
+                }, 500);
+                return () => clearTimeout(timer);
+            }
         }
-    }, [lastSuccessfulInvoice, posSettings.autoPrint]);
+    }, [lastSuccessfulInvoice, posSettings.autoPrint, posSettings.silentPrinting]);
+
+    const handleSilentPrint = async () => {
+        const receiptElement = document.getElementById('receipt-48');
+        if (!receiptElement) {
+            toast({ title: "Print Error", description: "Receipt element not found.", variant: "destructive" });
+            return;
+        }
+
+        try {
+            const html = receiptElement.outerHTML;
+            // Wrap in a basic document with styling if needed, but receipt-48 already has <style>
+            const response = await fetch(`${posSettings.printServerUrl}/print`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ html })
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error || "Failed to send print job");
+            }
+
+            toast({ title: "Sent to Printer", description: "Silent print job sent successfully." });
+        } catch (error: any) {
+            console.error("Silent Print Error:", error);
+            toast({
+                title: "Print Failed",
+                description: "Print server not reachable or error occurred. Is the middleware running?",
+                variant: "destructive"
+            });
+            // Fallback to manual print if it fails? 
+            // window.print();
+        }
+    };
 
     // Set Default Customer
     useEffect(() => {
@@ -1338,20 +1381,35 @@ export default function POSPage() {
                         <div className="p-8 space-y-6 bg-white">
                             <div className="space-y-4">
                                 <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                                    <div className="flex flex-col">
-                                        <span className="text-sm font-bold text-slate-700">Auto-Print Receipt</span>
-                                        <span className="text-[10px] text-slate-400">Print immediately after checkout</span>
+                                    <div className="space-y-0.5">
+                                        <Label className="text-sm font-black text-slate-700">Auto-Print</Label>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Instant Receipt</p>
                                     </div>
                                     <Button
-                                        variant={posSettings.autoPrint ? "default" : "outline"}
-                                        size="sm"
+                                        variant="ghost"
                                         className={cn(
-                                            "rounded-lg h-8 px-3 font-black text-[10px]",
+                                            "h-10 px-4 rounded-xl font-black text-xs transition-all",
                                             posSettings.autoPrint ? "bg-primary text-white" : "text-slate-400"
                                         )}
                                         onClick={() => setPosSettings(prev => ({ ...prev, autoPrint: !prev.autoPrint }))}
                                     >
                                         {posSettings.autoPrint ? "ON" : "OFF"}
+                                    </Button>
+                                </div>
+                                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                    <div className="space-y-0.5">
+                                        <Label className="text-sm font-black text-slate-700">Silent (Proxy)</Label>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">No Dialog</p>
+                                    </div>
+                                    <Button
+                                        variant="ghost"
+                                        className={cn(
+                                            "h-10 px-4 rounded-xl font-black text-xs transition-all",
+                                            posSettings.silentPrinting ? "bg-emerald-500 text-white" : "text-slate-400"
+                                        )}
+                                        onClick={() => setPosSettings(prev => ({ ...prev, silentPrinting: !prev.silentPrinting }))}
+                                    >
+                                        {posSettings.silentPrinting ? "ON" : "OFF"}
                                     </Button>
                                 </div>
                                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
@@ -1397,9 +1455,10 @@ export default function POSPage() {
                             </div>
 
                             <div className="flex flex-col gap-3 w-full print:hidden">
-                                <Button className="h-16 rounded-2xl bg-slate-900 hover:bg-black text-white font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-3" onClick={() => window.print()}>
+                                <Button className="h-16 rounded-2xl bg-slate-900 hover:bg-black text-white font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-3"
+                                    onClick={() => posSettings.silentPrinting ? handleSilentPrint() : window.print()}>
                                     <Printer className="h-5 w-5" />
-                                    Print Receipt
+                                    {posSettings.silentPrinting ? "Silent Print" : "Print Receipt"}
                                 </Button>
                                 <Button variant="ghost" className="h-14 rounded-2xl font-black uppercase tracking-widest text-xs text-slate-400 hover:text-primary hover:bg-primary/5" onClick={() => setLastSuccessfulInvoice(null)}>
                                     Proceed to Next Customer

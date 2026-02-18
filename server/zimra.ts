@@ -679,23 +679,6 @@ export class ZimraDevice {
         return this.makeRequest('POST', 'CloseDay', payload);
     }
 
-    public static getTaxID(taxPercent: number): number {
-        const absPercent = Math.abs(taxPercent);
-        if (absPercent === 0) return 2; // Zero Rated
-        if (absPercent === 15.5 || absPercent === 15) return 3; // Standard
-        if (absPercent === 5) return 1; // Deprecated Exempt fallback
-        return 3; // Default Standard
-    }
-
-    public static getTaxCode(taxID: number): string {
-        switch (taxID) {
-            case 3: return 'A'; // Standard
-            case 2: return 'B'; // Zero Rated
-            case 1: return 'C'; // Exempt
-            case 4: return 'E'; // Other
-            default: return 'A';
-        }
-    }
 
     public async submitReceipt(receiptData: ReceiptData, previousReceiptHash: string | null = null, allowOffline = false): Promise<{
         response: any;
@@ -1076,6 +1059,17 @@ export class ZimraDevice {
         }
     }
 
+    public static formatZimraDate(date: Date): string {
+        const parts = new Intl.DateTimeFormat('en-GB', {
+            timeZone: 'Africa/Harare',
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit',
+            hour12: false
+        }).formatToParts(date);
+        const p = (t: string) => parts.find(x => x.type === t)?.value;
+        return `${p('year')}-${p('month')}-${p('day')}T${p('hour')}:${p('minute')}:${p('second')}`;
+    }
+
     public setInvoiceId(id: number) {
         this.currentInvoiceId = id;
     }
@@ -1088,7 +1082,7 @@ export class ZimraDevice {
             receiptCounter: invoice.receiptCounter || ((company.dailyReceiptCount || 0) + 1),
             receiptGlobalNo: invoice.receiptGlobalNo || ((company.lastReceiptGlobalNo || 0) + 1),
             invoiceNo: invoice.invoiceNumber,
-            receiptDate: new Date().toISOString().slice(0, 19),
+            receiptDate: ZimraDevice.formatZimraDate(new Date()), // Docs: local time YYYY-MM-DDTHH:mm:ss
             receiptLines: invoice.items.map((item: any, index: number) => {
                 const taxRate = parseFloat(item.taxRate);
                 let taxID = 3; // Default to Standard (15% or 15.5%)

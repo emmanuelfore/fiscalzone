@@ -101,6 +101,7 @@ export function Receipt48({ invoice, company, customer, items, originalInvoice, 
             {/* Invoice Details */}
             <div className="mb-2 pb-2 border-b border-dashed border-black">
                 <p>Invoice No: {invoice.invoiceNumber}</p>
+                <p>Receipt No: {invoice.receiptCounter || "N/A"} / {invoice.receiptGlobalNo || "N/A"}</p>
                 <p>Fiscal Day No: {invoice.fiscalDayNo || "N/A"}</p>
                 {invoice.customerReference && <p>Customer Ref: {invoice.customerReference}</p>} {/* [20] */}
                 <p>Device Serial: {company.deviceSerialNo || "N/A"}</p> {/* [21] */}

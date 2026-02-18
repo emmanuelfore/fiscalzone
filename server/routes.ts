@@ -20,7 +20,7 @@ import crypto from "crypto";
 import { logAction } from "./audit.js";
 import { startPosShift, endPosShift, addPosTransaction, getOpenShift, getShiftTransactions } from "./lib/pos.js";
 import { seedCompanyDefaults } from "./lib/seeding.js";
-import { processInvoiceFiscalization } from "./lib/fiscalization.js";
+import { processInvoiceFiscalization, getZimraLogger } from "./lib/fiscalization.js";
 import { db } from "./db";
 import { eq, and, gte, lte, ne, desc } from "drizzle-orm";
 import { invoices, posShifts, posShiftTransactions } from "@shared/schema";
@@ -139,26 +139,6 @@ export async function registerRoutes(
     }
   });
 
-  const getZimraLogger = (companyId: number) => ({
-    log: async (invoiceId: number | null, endpoint: string, request: any, response: any, statusCode?: number, errorMessage?: string) => {
-      console.log(`[ZIMRA LOGGER] Attempting to log for Company ${companyId}, Endpoint: ${endpoint}`);
-      try {
-        await storage.createZimraLog({
-          companyId,
-          invoiceId: invoiceId || undefined,
-          endpoint,
-          requestPayload: request,
-          responsePayload: response,
-          statusCode,
-          errorMessage
-        });
-      } catch (e: any) {
-        console.error("Critical: Failed to save ZIMRA log:", e.message);
-        if (e.code) console.error("SQL Error Code:", e.code);
-        console.error("Failed Payload:", { companyId, invoiceId, endpoint, statusCode });
-      }
-    }
-  });
 
   // Helper to ensure active subscription for production use
   const ensureSubscription = async (company: any, res: any) => {
@@ -1048,14 +1028,14 @@ export async function registerRoutes(
       });
 
       // Log the action
-      await logAction({
-        userId: (req.user as any)?.id || 'system',
+      await logAction(
         companyId,
-        action: 'api_key_generated',
-        entityType: 'company',
-        entityId: companyId.toString(),
-        details: { environment }
-      });
+        (req.user as any)?.id || 'system',
+        'api_key_generated',
+        'company',
+        companyId.toString(),
+        { environment }
+      );
 
       res.json({
         success: true,
@@ -1098,14 +1078,14 @@ export async function registerRoutes(
       });
 
       // Log the action
-      await logAction({
-        userId: (req.user as any)?.id || 'system',
+      await logAction(
         companyId,
-        action: 'api_key_rotated',
-        entityType: 'company',
-        entityId: companyId.toString(),
-        details: { environment }
-      });
+        (req.user as any)?.id || 'system',
+        'api_key_rotated',
+        'company',
+        companyId.toString(),
+        { environment }
+      );
 
       res.json({
         success: true,
@@ -1177,14 +1157,14 @@ export async function registerRoutes(
       });
 
       // Log the action
-      await logAction({
-        userId: (req.user as any)?.id || 'system',
+      await logAction(
         companyId,
-        action: 'api_key_revoked',
-        entityType: 'company',
-        entityId: companyId.toString(),
-        details: {}
-      });
+        (req.user as any)?.id || 'system',
+        'api_key_revoked',
+        'company',
+        companyId.toString(),
+        {}
+      );
 
       res.json({
         success: true,
@@ -1616,6 +1596,7 @@ export async function registerRoutes(
         currentFiscalDayNo: status.lastFiscalDayNo,
         lastFiscalDayStatus: status.fiscalDayStatus,
         lastReceiptGlobalNo: status.lastReceiptGlobalNo,
+        dailyReceiptCount: status.lastReceiptCounter, // Syncing daily receipt count
         fiscalDayOpen: status.fiscalDayStatus === 'FiscalDayOpened'
       });
 
@@ -2177,6 +2158,42 @@ export async function registerRoutes(
     }
   });
 
+  // Maintenance: Clear Test Invoices
+  app.post("/api/companies/:id/invoices/clear-test", requireAuth, async (req, res) => {
+    try {
+      const companyId = Number(req.params.id);
+
+      // Permission Check: Only Owner or Admin can clear test data
+      const role = await storage.getCompanyUserRole((req.user as any).id, companyId);
+      const isSuperAdmin = (req.user as any).isSuperAdmin;
+
+      if (!isSuperAdmin && role !== 'owner' && role !== 'admin') {
+        return res.status(403).json({ message: "Forbidden: Owner or Admin access required to clear data" });
+      }
+
+      const deletedCount = await storage.clearTestInvoices(companyId);
+
+      // Log the action for audit
+      await logAction(
+        companyId,
+        (req.user as any).id,
+        'clear_test_invoices',
+        'invoice',
+        'all_test',
+        { deletedCount }
+      );
+
+      res.json({
+        success: true,
+        message: `Successfully cleared ${deletedCount} test invoices and related records.`,
+        deletedCount
+      });
+    } catch (err: any) {
+      console.error("Clear Test Invoices Error:", err);
+      res.status(500).json({ message: "Failed to clear test invoices: " + err.message });
+    }
+  });
+
   // ==========================================
   // RevMax/ZIMRA API Endpoints
   // ==========================================
@@ -2288,6 +2305,7 @@ export async function registerRoutes(
         currentFiscalDayNo: status.lastFiscalDayNo,
         lastFiscalDayStatus: status.fiscalDayStatus,
         lastReceiptGlobalNo: status.lastReceiptGlobalNo,
+        dailyReceiptCount: status.lastReceiptCounter, // Syncing daily receipt count
         fiscalDayOpen: status.fiscalDayStatus === 'FiscalDayOpened'
       });
 
@@ -2424,13 +2442,14 @@ export async function registerRoutes(
 
       // Update invoice with fiscal data
       await storage.updateInvoice(invoice.id, {
-        fiscalCode: receiptData.verificationCode,
+        fiscalCode: receiptData.hash,
         qrCodeData: receiptData.qrCode,
         status: "issued",
         syncedWithFdms: true,
         receiptGlobalNo: receiptData.receiptGlobalNo,
         receiptCounter: receiptData.receiptCounter,
-        fiscalDayNo: company.currentFiscalDayNo ?? undefined
+        fiscalDayNo: company.currentFiscalDayNo ?? undefined,
+        issueDate: fullInvoice.issueDate // Keep original issue date if needed, but signature uses receiptData.receiptDate
       });
 
       // CRITICAL: Update Company Counters to maintain chain
@@ -2582,13 +2601,14 @@ export async function registerRoutes(
 
       // Update invoice
       await storage.updateInvoice(invoice.id, {
-        fiscalCode: receiptData.verificationCode,
+        fiscalCode: receiptData.hash,
         qrCodeData: receiptData.qrCode,
         status: "issued",
         syncedWithFdms: true,
         receiptGlobalNo: receiptData.receiptGlobalNo,
         receiptCounter: receiptData.receiptCounter,
-        fiscalDayNo: company.currentFiscalDayNo ?? undefined
+        fiscalDayNo: company.currentFiscalDayNo ?? undefined,
+        issueDate: fullInvoice.issueDate
       });
 
       // CRITICAL: Update Company Counters to maintain chain
@@ -3644,7 +3664,7 @@ export async function registerRoutes(
       const invoice = await storage.getInvoice(Number(req.params.id));
       if (!invoice) return res.status(404).json({ message: "Invoice not found" });
 
-      if (invoice.status !== "draft") {
+      if (invoice.status !== "draft" && !req.user.isSuperAdmin) {
         return res.status(400).json({ message: "Only draft invoices can be deleted" });
       }
 

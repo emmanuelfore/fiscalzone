@@ -13,7 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/lib/api";
 import { useState, useMemo, useEffect } from "react";
-import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, UserPlus, Loader2, Package, Tag, Pause, Play, History, Calculator, Printer, CheckCircle2, XCircle, ChevronRight, Fullscreen, HelpCircle, User, Settings as SettingsIcon, LogOut, FileText, Receipt, Clock } from "lucide-react";
+import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, UserPlus, Loader2, Package, Tag, Pause, Play, History, Calculator, Printer, CheckCircle2, XCircle, ChevronRight, Fullscreen, HelpCircle, User, Settings as SettingsIcon, LogOut, FileText, Receipt, Clock, LayoutGrid, ShoppingBag } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { POSReceipt } from "@/components/pos-receipt";
 import { Receipt48 } from "@/components/pos/receipt-48";
 import { ManagerOverride } from "@/components/pos/manager-override";
@@ -58,7 +59,7 @@ export default function POSPage() {
     const [paymentMethod, setPaymentMethod] = useState("CASH");
     const [isProcessing, setIsProcessing] = useState(false);
     const [lastSuccessfulInvoice, setLastSuccessfulInvoice] = useState<any>(null);
-    const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
+    const [activeView, setActiveView] = useState<"products" | "cart">("products");
     const [paidAmount, setPaidAmount] = useState<string>("");
     const [selectedCurrencyCode, setSelectedCurrencyCode] = useState<string>("USD");
 
@@ -74,10 +75,12 @@ export default function POSPage() {
     const [shiftModalType, setShiftModalType] = useState<"OPEN" | "CLOSE">("OPEN");
     const [shiftBalance, setShiftBalance] = useState("");
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [availablePrinters, setAvailablePrinters] = useState<any[]>([]);
     const [posSettings, setPosSettings] = useState({
         autoPrint: true,
         terminalId: "POS-T01",
         silentPrinting: false,
+        printerName: localStorage.getItem("pos_printer_name") || "",
         printServerUrl: "http://localhost:12312"
     });
 
@@ -460,7 +463,8 @@ export default function POSPage() {
                 ...prev,
                 autoPrint: settings.autoPrint ?? true,
                 silentPrinting: settings.silentPrinting ?? false,
-                printServerUrl: settings.printServerUrl || "http://localhost:12312"
+                printServerUrl: settings.printServerUrl || "http://localhost:12312",
+                printerName: prev.printerName || settings.printerName || ""
             }));
         }
     }, [company]);
@@ -480,10 +484,51 @@ export default function POSPage() {
         }
     }, [lastSuccessfulInvoice, posSettings.autoPrint, posSettings.silentPrinting]);
 
+    // Fetch available printers when settings dialog opens
+    useEffect(() => {
+        const fetchPrinters = async () => {
+            if (!isSettingsOpen) return;
+            try {
+                const response = await fetch(`${posSettings.printServerUrl}/printers`);
+                if (response.ok) {
+                    const data = await response.json();
+                    setAvailablePrinters(Array.isArray(data) ? data : []);
+                }
+            } catch (error) {
+                console.error("Failed to fetch printers:", error);
+            }
+        };
+        fetchPrinters();
+    }, [isSettingsOpen, posSettings.printServerUrl]);
+
+    // Persist local printer selection
+    useEffect(() => {
+        if (posSettings.printerName) {
+            localStorage.setItem("pos_printer_name", posSettings.printerName);
+        } else {
+            localStorage.removeItem("pos_printer_name");
+        }
+    }, [posSettings.printerName]);
+
     const handleSilentPrint = async () => {
-        const receiptElement = document.getElementById('receipt-48');
+        let receiptElement = document.getElementById('silent-receipt-48');
+
+        // Retry logic if element is not yet in DOM
         if (!receiptElement) {
-            toast({ title: "Print Error", description: "Receipt element not found.", variant: "destructive" });
+            console.log("Silent receipt element not found, retrying...");
+            for (let i = 0; i < 5; i++) {
+                await new Promise(resolve => setTimeout(resolve, 200));
+                receiptElement = document.getElementById('silent-receipt-48');
+                if (receiptElement) break;
+            }
+        }
+
+        if (!receiptElement) {
+            toast({
+                title: "Print Error",
+                description: "Receipt element not found. Please try again.",
+                variant: "destructive"
+            });
             return;
         }
 
@@ -493,7 +538,10 @@ export default function POSPage() {
             const response = await fetch(`${posSettings.printServerUrl}/print`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ html })
+                body: JSON.stringify({
+                    html,
+                    printerName: posSettings.printerName || undefined
+                })
             });
 
             if (!response.ok) {
@@ -770,43 +818,43 @@ export default function POSPage() {
                     description={pendingOverride?.type === "DISCOUNT" ? "Manager PIN required for high discount" : "Manager PIN required to void cart"}
                 />
                 {/* High-End Command Center Header */}
-                <div className="bg-white border-b border-slate-200/60 px-6 py-4 shrink-0 backdrop-blur-md sticky top-0 z-30 shadow-sm">
-                    <div className="flex flex-col xl:flex-row gap-6 items-stretch xl:items-center">
-                        {/* Brand & Context */}
-                        <div className="flex items-center gap-4 shrink-0">
-                            <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center shadow-lg">
-                                <Package className="h-6 w-6 text-white" />
-                            </div>
-                            <div className="flex flex-col">
-                                <h1 className="text-lg font-black text-slate-900 leading-none">{company?.name || "Premium POS"}</h1>
-                                <p className="text-[10px] uppercase tracking-[0.2em] text-primary font-black mt-1">Elite Terminal</p>
-                            </div>
-                        </div>
-
-                        <div className="h-8 w-px bg-slate-200 mx-2 hidden xl:block" />
-
-                        {/* Elite Search Bar */}
-                        <div className="relative flex-1 group">
-                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                <Search className="h-5 w-5 text-slate-400 group-focus-within:text-primary transition-colors" />
-                            </div>
-                            <Input
-                                placeholder="Search products, SKU or scan barcode..."
-                                className="pl-12 h-14 bg-slate-50/50 border-slate-200/80 focus:bg-white focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all rounded-2xl text-base font-medium shadow-inner border-none xxl:text-lg"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                autoFocus
-                            />
-                            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                                <div className="h-8 px-2 bg-white border border-slate-200 rounded-lg flex items-center gap-1 text-[10px] font-black text-slate-400 shadow-sm">
-                                    <kbd className="font-sans">ESC</kbd>
-                                    <span>to clear</span>
+                <div className="bg-white border-b border-slate-200/60 px-4 md:px-6 py-2 md:py-4 shrink-0 backdrop-blur-md sticky top-0 z-30 shadow-sm">
+                    <div className="flex flex-col xl:flex-row gap-2 md:gap-6 items-stretch xl:items-center">
+                        {/* Brand & Context - Compact on Mobile */}
+                        <div className="flex items-center justify-between xl:justify-start gap-4 shrink-0">
+                            <div className="flex items-center gap-2 md:gap-4">
+                                <div className="w-8 h-8 md:w-12 md:h-12 bg-slate-900 rounded-xl md:rounded-2xl flex items-center justify-center shadow-lg">
+                                    <Package className="h-4 w-4 md:h-6 md:w-6 text-white" />
+                                </div>
+                                <div className="flex flex-col">
+                                    <h1 className="text-sm md:text-lg font-black text-slate-900 leading-none truncate max-w-[150px] md:max-w-none">{company?.name || "Premium POS"}</h1>
+                                    <p className="text-[8px] md:text-[10px] uppercase tracking-[0.2em] text-primary font-black mt-0.5 md:mt-1">Elite Terminal</p>
                                 </div>
                             </div>
+
+                            {/* Mobile Total Indicator (shows when product view is active) */}
+                            {activeView === "products" && (
+                                <div className="md:hidden flex items-center gap-2 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-100">
+                                    <span className="text-[10px] font-black text-emerald-700">${total.toFixed(2)}</span>
+                                </div>
+                            )}
                         </div>
 
-                        {/* Integrated Controls & Profile */}
-                        <div className="flex items-center gap-3 lg:gap-4 flex-wrap">
+                        {/* Elite Search Bar - Full width on mobile */}
+                        <div className="relative flex-1 group">
+                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                <Search className="h-4 w-4 md:h-5 md:w-5 text-slate-400 group-focus-within:text-primary transition-colors" />
+                            </div>
+                            <Input
+                                placeholder="Search products..."
+                                className="pl-10 md:pl-12 h-10 md:h-14 bg-slate-50/50 border-slate-200/80 focus:bg-white focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all rounded-xl md:rounded-2xl text-sm md:text-base font-medium shadow-inner border-none"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                        </div>
+
+                        {/* Integrated Controls & Profile - Hidden on tiny screens or wrapped */}
+                        <div className="flex items-center gap-2 md:gap-4 overflow-x-auto no-scrollbar pb-1 md:pb-0">
                             {/* Customer Selector - Premium */}
                             <div className="flex items-center gap-2 bg-slate-100/50 p-1.5 rounded-2xl border border-slate-200/50">
                                 <Button
@@ -1010,17 +1058,20 @@ export default function POSPage() {
                 </div>
 
                 {/* Main Content Area */}
-                <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+                <div className="flex-1 flex flex-col md:flex-row overflow-hidden pb-[70px] md:pb-0">
                     {/* Products Grid */}
-                    <div className="flex-1 flex flex-col overflow-hidden p-4">
-                        <div className="flex gap-3 overflow-x-auto pb-6 scrollbar-hide shrink-0 px-2 mt-2">
+                    <div className={cn(
+                        "flex-1 flex flex-col overflow-hidden p-2 md:p-4",
+                        activeView === "cart" ? "hidden md:flex" : "flex"
+                    )}>
+                        <div className="flex gap-2 overflow-x-auto pb-4 scrollbar-hide shrink-0 px-1 mt-1">
                             {categories.map(cat => (
                                 <Button
                                     key={cat}
                                     variant={selectedCategory === cat ? "default" : "outline"}
                                     onClick={() => setSelectedCategory(cat)}
                                     className={cn(
-                                        "rounded-2xl whitespace-nowrap h-11 px-6 text-sm font-bold transition-all border-none shadow-sm",
+                                        "rounded-xl whitespace-nowrap h-9 md:h-11 px-4 md:px-6 text-xs md:text-sm font-bold transition-all border-none shadow-sm",
                                         selectedCategory === cat
                                             ? "bg-primary text-white shadow-lg shadow-primary/25 scale-105"
                                             : "bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700"
@@ -1041,7 +1092,7 @@ export default function POSPage() {
                                     </div>
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2 pb-8">
+                                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2 pb-8">
                                     {(filteredProducts as any[]).map(product => {
                                         // Generate pastel color based on product name
                                         const hash = product.name.split("").reduce((acc: number, char: string) => char.charCodeAt(0) + ((acc << 5) - acc), 0);
@@ -1062,7 +1113,7 @@ export default function POSPage() {
                                                             <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
                                                         ) : (
                                                             <div className="w-full h-full flex items-center justify-center">
-                                                                <Package className="h-8 w-8" style={{ color: iconColor }} />
+                                                                <Package className="h-6 w-6 md:h-8 md:w-8" style={{ color: iconColor }} />
                                                             </div>
                                                         )}
 
@@ -1079,16 +1130,16 @@ export default function POSPage() {
                                                     </div>
 
                                                     {/* Product Info */}
-                                                    <div className="p-2.5 flex flex-col flex-1 bg-white">
-                                                        <h4 className="text-[11px] font-black text-slate-800 line-clamp-2 mb-1 group-hover:text-primary transition-colors leading-tight min-h-[1.75rem]">{product.name}</h4>
+                                                    <div className="p-2 flex flex-col flex-1 bg-white">
+                                                        <h4 className="text-[10px] md:text-[11px] font-black text-slate-800 line-clamp-2 mb-1 group-hover:text-primary transition-colors leading-tight min-h-[1.5rem] md:min-h-[1.75rem]">{product.name}</h4>
                                                         <div className="flex justify-between items-center mt-auto">
-                                                            <p className="text-sm font-black text-slate-900">
-                                                                <span className="text-[10px] text-slate-400 mr-0.5">$</span>
+                                                            <p className="text-xs md:text-sm font-black text-slate-900">
+                                                                <span className="text-[9px] md:text-[10px] text-slate-400 mr-0.5">$</span>
                                                                 {Number(product.price).toFixed(2)}
                                                             </p>
                                                             {product.isTracked && (
                                                                 <span className={cn(
-                                                                    "text-[9px] font-bold",
+                                                                    "text-[8px] md:text-[9px] font-bold",
                                                                     Number(product.stockLevel) <= Number(product.lowStockThreshold) ? "text-red-500" : "text-slate-400"
                                                                 )}>
                                                                     {Number(product.stockLevel)}
@@ -1105,32 +1156,45 @@ export default function POSPage() {
                         </ScrollArea>
                     </div>
 
-                    {/* Cart Sidebar (Desktop) */}
-                    <div className="hidden md:flex flex-col w-[350px] lg:w-[400px] border-l border-slate-200 bg-white">
+                    {/* Cart Sidebar/View */}
+                    <div className={cn(
+                        "flex flex-col w-full md:w-[350px] lg:w-[400px] border-l border-slate-200 bg-white",
+                        activeView === "products" ? "hidden md:flex" : "flex"
+                    )}>
                         <CartSection />
                     </div>
                 </div>
 
-                {/* Mobile Cart Trigger */}
-                <div className="md:hidden fixed bottom-6 right-6 z-50">
-                    <Sheet open={isMobileCartOpen} onOpenChange={setIsMobileCartOpen}>
-                        <SheetTrigger asChild>
-                            <Button size="lg" className="rounded-full h-16 w-16 shadow-2xl bg-primary hover:bg-primary/90 text-white p-0">
-                                <div className="relative">
-                                    <ShoppingCart className="h-8 w-8" />
-                                    {cart.length > 0 && (
-                                        <Badge className="absolute -top-3 -right-3 h-6 min-w-6 flex items-center justify-center p-1 rounded-full border-2 border-white shadow-md font-bold" variant="destructive">
-                                            {cart.reduce((a, b) => a + b.quantity, 0)}
-                                        </Badge>
-                                    )}
-                                </div>
-                            </Button>
-                        </SheetTrigger>
-                        <SheetContent side="right" className="p-0 w-full sm:max-w-md border-l-0">
-                            <CartSection />
-                        </SheetContent>
-                    </Sheet>
+                {/* Mobile Bottom Navigation */}
+                <div className="md:hidden fixed bottom-0 left-0 right-0 h-[70px] bg-white border-t border-slate-100 flex items-center justify-around z-50 px-6 shadow-[0_-10px_30px_rgba(0,0,0,0.05)]">
+                    <button
+                        onClick={() => setActiveView("products")}
+                        className={cn(
+                            "flex flex-col items-center gap-1 transition-all duration-300 px-4 py-1 rounded-2xl",
+                            activeView === "products" ? "text-primary scale-110" : "text-slate-400 hover:text-slate-600"
+                        )}
+                    >
+                        <LayoutGrid className={cn("h-6 w-6", activeView === "products" ? "fill-primary/10" : "")} />
+                        <span className="text-[10px] font-black uppercase tracking-widest">Products</span>
+                    </button>
+
+                    <button
+                        onClick={() => setActiveView("cart")}
+                        className={cn(
+                            "flex flex-col items-center gap-1 transition-all duration-300 relative px-4 py-1 rounded-2xl",
+                            activeView === "cart" ? "text-primary scale-110" : "text-slate-400 hover:text-slate-600"
+                        )}
+                    >
+                        <ShoppingBag className={cn("h-6 w-6", activeView === "cart" ? "fill-primary/10" : "")} />
+                        {cart.length > 0 && (
+                            <span className="absolute top-0 right-2 bg-primary text-white text-[10px] font-black h-5 w-5 flex items-center justify-center rounded-full ring-2 ring-white">
+                                {cart.reduce((a, b) => a + b.quantity, 0)}
+                            </span>
+                        )}
+                        <span className="text-[10px] font-black uppercase tracking-widest">Cart</span>
+                    </button>
                 </div>
+
             </div>
 
             {/* Modals & Dialogs */}
@@ -1420,6 +1484,48 @@ export default function POSPage() {
                                         className="h-10 text-xs font-black bg-white border-slate-200 rounded-lg outline-none"
                                     />
                                 </div>
+                                <div className="p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100 animate-in fade-in slide-in-from-top-2 duration-300">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-emerald-600 block">Target Printer</label>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-6 px-2 text-[9px] font-black text-emerald-600 hover:bg-emerald-100"
+                                            onClick={async () => {
+                                                try {
+                                                    const response = await fetch(`${posSettings.printServerUrl}/printers`);
+                                                    if (response.ok) {
+                                                        const data = await response.json();
+                                                        setAvailablePrinters(Array.isArray(data) ? data : []);
+                                                    }
+                                                } catch (e) {
+                                                    console.error(e);
+                                                }
+                                            }}
+                                        >
+                                            <RefreshCw className="h-3 w-3 mr-1" /> Reload
+                                        </Button>
+                                    </div>
+                                    <Select
+                                        value={posSettings.printerName || "default"}
+                                        onValueChange={(val) => setPosSettings(prev => ({ ...prev, printerName: val === "default" ? "" : val }))}
+                                    >
+                                        <SelectTrigger className="h-10 text-xs font-black bg-white border-emerald-200 rounded-lg outline-none">
+                                            <SelectValue placeholder="Select Printer (or Default)" />
+                                        </SelectTrigger>
+                                        <SelectContent className="rounded-xl border-emerald-200">
+                                            <SelectItem value="default" className="text-xs font-bold">System Default</SelectItem>
+                                            {availablePrinters.map((p: any) => (
+                                                <SelectItem key={p.name} value={p.name} className="text-xs font-bold">
+                                                    {p.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <p className="text-[9px] text-emerald-600/60 font-bold uppercase tracking-tight mt-2 italic px-1">
+                                        Tip: Select your physical POS printer if "Default" fails.
+                                    </p>
+                                </div>
                             </div>
                             <Button className="w-full h-12 rounded-xl bg-slate-900 hover:bg-black text-white font-black uppercase tracking-widest transition-all active:scale-95" onClick={() => setIsSettingsOpen(false)}>
                                 Save & Close
@@ -1467,6 +1573,20 @@ export default function POSPage() {
                         </div>
                     </DialogContent>
                 </Dialog>
+            </div>
+
+            {/* Hidden Receipt for Silent Printing */}
+            <div className="fixed -left-[9999px] top-0 pointer-events-none overflow-hidden" style={{ width: '80mm' }}>
+                {lastSuccessfulInvoice && (
+                    <Receipt48
+                        id="silent-receipt-48"
+                        invoice={lastSuccessfulInvoice}
+                        company={company}
+                        customer={customers?.find(c => c.id === lastSuccessfulInvoice?.customerId)}
+                        items={lastSuccessfulInvoice?.items}
+                        user={user}
+                    />
+                )}
             </div>
         </PosLayout>
     );

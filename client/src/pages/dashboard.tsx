@@ -100,7 +100,7 @@ export default function Dashboard() {
   }, [selectedCompany?.fdmsDeviceId]);
 
   const { data: currencies } = useCurrencies(selectedCompany?.id || 0);
-  const [reportCurrencyCode, setReportCurrencyCode] = React.useState<string>("ZWG");
+  const [reportCurrencyCode, setReportCurrencyCode] = React.useState<string>("USD");
 
   const consolidatedCurrency = currencies?.find(c => c.code === reportCurrencyCode) || currencies?.find(c => c.code === 'USD');
   const consolidatedRate = Number(consolidatedCurrency?.exchangeRate || 1);

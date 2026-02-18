@@ -33,7 +33,7 @@ import POSPage from "@/pages/pos";
 import MySalesPage from "@/pages/my-sales";
 import PosReportsPage from "@/pages/pos-reports";
 import RecentSalesPage from "@/pages/recent-sales";
-import InventoryReportsPage from "@/pages/inventory-reports";
+// import InventoryReportsPage from "@/pages/inventory-reports";
 import TaxReportsPage from "@/pages/tax-reports";
 import PosSettingsPage from "@/pages/pos-settings";
 import SubscriptionPage from "@/pages/subscription";
@@ -152,9 +152,9 @@ function Router() {
       <Route path="/reports/pos">
         {() => <ProtectedRoute component={PosReportsPage} />}
       </Route>
-      <Route path="/reports/inventory">
+      /* <Route path="/reports/inventory">
         {() => <ProtectedRoute component={InventoryReportsPage} />}
-      </Route>
+      </Route> */
       <Route path="/reports/tax">
         {() => <ProtectedRoute component={TaxReportsPage} />}
       </Route>

@@ -3,6 +3,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { format } from "date-fns";
 
 interface Receipt48Props {
+    id?: string;
     invoice: any;
     company: any;
     customer?: any;
@@ -11,7 +12,7 @@ interface Receipt48Props {
     user?: any;
 }
 
-export function Receipt48({ invoice, company, customer, items, originalInvoice, user }: Receipt48Props) {
+export function Receipt48({ id = "receipt-48", invoice, company, customer, items, originalInvoice, user }: Receipt48Props) {
     if (!invoice || !company) return null;
 
     const receiptItems = items || invoice.items || [];
@@ -50,7 +51,7 @@ export function Receipt48({ invoice, company, customer, items, originalInvoice, 
     const documentTitle = isCreditNote ? "CREDIT NOTE" : isDebitNote ? "DEBIT NOTE" : "FISCAL TAX INVOICE";
 
     return (
-        <div id="receipt-48" className="w-[80mm] bg-white p-2 text-black font-mono text-[10px] leading-tight">
+        <div id={id} className="w-[80mm] bg-white p-2 text-black font-mono text-[10px] leading-tight">
             {/* [1] Logo (Placeholder if URL exists) */}
             {company.logoUrl && (
                 <div className="flex justify-center mb-2">

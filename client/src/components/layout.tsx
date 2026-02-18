@@ -114,7 +114,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       children: [
         { icon: MonitorCheck, label: "POS Reports", href: "/reports/pos" },
         { icon: History, label: "Recent Sales Ledger", href: "/pos/all-sales" },
-        { icon: Package, label: "Inventory Reports", href: "/reports/inventory" },
+        // { icon: Package, label: "Inventory Reports", href: "/reports/inventory" },
         { icon: FileText, label: "Tax & ZIMRA", href: "/reports/tax" },
         { icon: Coins, label: "Currencies", href: "/currencies" },
         { icon: Calculator, label: "Tax Config", href: "/tax-config" },

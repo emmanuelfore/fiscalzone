@@ -466,7 +466,16 @@ export class DatabaseStorage implements IStorage {
     }
 
     if (status && status !== 'all') {
-      filters.push(eq(invoices.status, status));
+      if (status === 'fiscalized') {
+        filters.push(eq(invoices.syncedWithFdms, true));
+      } else if (status === 'pending-sync') {
+        filters.push(and(
+          eq(invoices.syncedWithFdms, false),
+          eq(invoices.status, 'issued')
+        ));
+      } else {
+        filters.push(eq(invoices.status, status));
+      }
     }
 
     if (type && type !== 'all') {
@@ -2119,6 +2128,7 @@ export class DatabaseStorage implements IStorage {
   ): Promise<any[]> {
     const conditions = [
       eq(invoices.companyId, companyId),
+      eq(invoices.isPos, true),
       gte(invoices.issueDate, startDate),
       lte(invoices.issueDate, endDate)
     ];

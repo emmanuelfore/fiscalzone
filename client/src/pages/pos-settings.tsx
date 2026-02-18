@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Settings, Users, ShieldCheck, Save, Printer, Key, UserPlus, Trash2, Wrench, AlertTriangle } from "lucide-react";
+import { Settings, Users, ShieldCheck, Save, Printer, Key, UserPlus, Trash2, Wrench, AlertTriangle, RefreshCw } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
@@ -51,9 +51,11 @@ export default function PosSettingsPage() {
         defaultCustomerId?: string; // Stored as string to match Select value, but implies ID
         silentPrinting: boolean;
         printServerUrl: string;
+        printerName?: string;
     }
 
     // POS Settings Form State
+    const [availablePrinters, setAvailablePrinters] = useState<any[]>([]);
     const [posConfig, setPosConfig] = useState<PosSettings>({
         autoPrint: false,
         terminalId: "POS-01",
@@ -64,7 +66,8 @@ export default function PosSettingsPage() {
         allowedPaymentMethods: ["CASH", "CARD", "ECOCASH", "usd", "zig"],
         defaultCustomerId: "",
         silentPrinting: false,
-        printServerUrl: "http://localhost:12312"
+        printServerUrl: "http://localhost:12312",
+        printerName: ""
     });
 
     const { data: customers } = useCustomers(companyId);
@@ -82,10 +85,28 @@ export default function PosSettingsPage() {
                 allowedPaymentMethods: settings.allowedPaymentMethods || ["CASH", "CARD", "ECOCASH", "usd", "zig"],
                 defaultCustomerId: settings.defaultCustomerId || "",
                 silentPrinting: settings.silentPrinting ?? false,
-                printServerUrl: settings.printServerUrl || "http://localhost:12312"
+                printServerUrl: settings.printServerUrl || "http://localhost:12312",
+                printerName: settings.printerName || ""
             });
         }
     }, [currentCompany]);
+
+    // Fetch printers logic
+    const fetchPrintersForGlobal = async () => {
+        try {
+            const response = await fetch(`${posConfig.printServerUrl}/printers`);
+            if (response.ok) {
+                const data = await response.json();
+                setAvailablePrinters(Array.isArray(data) ? data : []);
+            }
+        } catch (error) {
+            console.error("Failed to fetch printers:", error);
+        }
+    };
+
+    useEffect(() => {
+        fetchPrintersForGlobal();
+    }, [posConfig.printServerUrl]);
 
     const handleSavePosSettings = async () => {
         try {
@@ -319,11 +340,6 @@ export default function PosSettingsPage() {
                                         onChange={(e) => setPosConfig({ ...posConfig, terminalId: e.target.value })}
                                         placeholder="POS-01"
                                     />
-                                    <Input
-                                        value={posConfig.terminalId}
-                                        onChange={(e) => setPosConfig({ ...posConfig, terminalId: e.target.value })}
-                                        placeholder="POS-01"
-                                    />
                                 </div>
 
                                 <div className="space-y-1">
@@ -378,6 +394,39 @@ export default function PosSettingsPage() {
                                         <p className="text-[10px] text-slate-500 italic">Requires middleware running at this address</p>
                                     </div>
                                 )}
+
+                                <div className="p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100 animate-in fade-in slide-in-from-top-2 duration-300">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-emerald-600 block">Target Printer</label>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-6 px-2 text-[9px] font-black text-emerald-600 hover:bg-emerald-100"
+                                            onClick={fetchPrintersForGlobal}
+                                        >
+                                            <RefreshCw className="h-3 w-3 mr-1" /> Reload
+                                        </Button>
+                                    </div>
+                                    <Select
+                                        value={posConfig.printerName || "default"}
+                                        onValueChange={(val) => setPosConfig({ ...posConfig, printerName: val === "default" ? "" : val })}
+                                    >
+                                        <SelectTrigger className="h-10 text-xs font-black bg-white border-emerald-200 rounded-lg outline-none">
+                                            <SelectValue placeholder="Select Printer (or Default)" />
+                                        </SelectTrigger>
+                                        <SelectContent className="rounded-xl border-emerald-200">
+                                            <SelectItem value="default" className="text-xs font-bold">System Default</SelectItem>
+                                            {availablePrinters.map((p: any) => (
+                                                <SelectItem key={p.name} value={p.name} className="text-xs font-bold">
+                                                    {p.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <p className="text-[9px] text-emerald-600/60 font-bold uppercase tracking-tight mt-2 italic px-1">
+                                        Tip: Select your physical POS printer if "Default" fails.
+                                    </p>
+                                </div>
 
                                 <div className="flex items-center justify-between border-t pt-4">
                                     <div className="space-y-0.5">

@@ -54,8 +54,8 @@ export default function RecentSalesPage() {
     // Default to Feb 1 - Feb 28 as requested for this specific "Recent Sales" view context
     // But allow full flexibility
     const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
-        from: new Date(2026, 1, 1), // Feb 1, 2026
-        to: new Date()              // Today
+        from: startOfMonth(new Date()),
+        to: new Date()
     });
 
     const [statusFilter, setStatusFilter] = useState("all");
@@ -78,6 +78,7 @@ export default function RecentSalesPage() {
         queryKey: ["pos-all-sales", companyId, dateRange.from, dateRange.to, statusFilter, cashierFilter, searchTerm],
         queryFn: async () => {
             const params = new URLSearchParams({
+                companyId: companyId!.toString(),
                 startDate: format(dateRange.from, 'yyyy-MM-dd'),
                 endDate: format(dateRange.to, 'yyyy-MM-dd'),
                 status: statusFilter,
@@ -278,7 +279,7 @@ export default function RecentSalesPage() {
                                     setSearchTerm("");
                                     setStatusFilter("all");
                                     if (!isCashier) setCashierFilter("all");
-                                    setDateRange({ from: new Date(2026, 1, 1), to: new Date() });
+                                    setDateRange({ from: startOfMonth(new Date()), to: new Date() });
                                 }}
                             >
                                 Reset

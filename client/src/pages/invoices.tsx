@@ -41,6 +41,14 @@ import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { Clock, TrendingUp, AlertCircle } from "lucide-react";
 import { useCurrencies } from "@/hooks/use-currencies";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 import { useAuth } from "@/hooks/use-auth";
 
@@ -263,7 +271,9 @@ export default function InvoicesPage() {
                 <SelectItem value="draft">Draft</SelectItem>
                 <SelectItem value="issued">Issued</SelectItem>
                 <SelectItem value="paid">Paid</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="pending">Payment Pending</SelectItem>
+                <SelectItem value="fiscalized">Fiscalized</SelectItem>
+                <SelectItem value="pending-sync">Pending Sync</SelectItem>
                 <SelectItem value="cancelled">Cancelled</SelectItem>
               </SelectContent>
             </Select>
@@ -342,60 +352,59 @@ export default function InvoicesPage() {
         </div>
 
         <CardContent className="p-0">
-          <div className="w-full overflow-x-auto min-h-[400px]">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr>
-                  <th className="data-table-header w-[140px]">Invoice #</th>
-                  <th className="data-table-header w-[120px]">Type</th>
-                  <th className="data-table-header">Reference</th>
-                  <th className="data-table-header w-[120px]">Date</th>
-                  <th className="data-table-header">Customer</th>
-                  <th className="data-table-header w-[140px] text-right">Amount</th>
-                  <th className="data-table-header w-[100px] text-right">Tax</th>
-                  <th className="data-table-header w-[120px]">Status</th>
-                  <th className="data-table-header">Notes</th>
-                  <th className="data-table-header w-[60px] text-right"></th>
-                </tr>
-              </thead>
-              <tbody>
+          <div className="rounded-md border border-slate-200">
+            <Table>
+              <TableHeader className="bg-slate-50">
+                <TableRow>
+                  <TableHead className="w-[140px] font-semibold text-slate-900">Invoice #</TableHead>
+                  <TableHead className="w-[120px] font-semibold text-slate-900">Type</TableHead>
+                  <TableHead className="w-[180px] font-semibold text-slate-900">Reference</TableHead>
+                  <TableHead className="w-[120px] font-semibold text-slate-900">Date</TableHead>
+                  <TableHead className="font-semibold text-slate-900">Customer</TableHead>
+                  <TableHead className="w-[140px] text-right font-semibold text-slate-900">Amount</TableHead>
+                  <TableHead className="w-[100px] text-right font-semibold text-slate-900">Tax</TableHead>
+                  <TableHead className="w-[120px] font-semibold text-slate-900">Status</TableHead>
+                  <TableHead className="font-semibold text-slate-900">Notes</TableHead>
+                  <TableHead className="w-[60px] text-right"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {isLoading ? (
-                  <tr>
-                    <td colSpan={10} className="p-8 text-center text-slate-500">
-                      <div className="flex flex-col items-center justify-center gap-2">
+                  <TableRow>
+                    <TableCell colSpan={10} className="h-24 text-center">
+                      <div className="flex flex-col items-center justify-center gap-2 text-slate-500">
                         <Loader2 className="h-6 w-6 animate-spin text-primary" />
                         <p>Loading invoices...</p>
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ) : invoices?.length === 0 ? (
-                  <tr>
-                    <td colSpan={10} className="p-12 text-center text-slate-500">
-                      <div className="flex flex-col items-center justify-center">
+                  <TableRow>
+                    <TableCell colSpan={10} className="h-32 text-center">
+                      <div className="flex flex-col items-center justify-center text-slate-500">
                         <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mb-3">
                           <FileText className="w-6 h-6 text-slate-400" />
                         </div>
-                        <p className="font-medium">No invoices found</p>
+                        <p className="font-medium text-slate-900">No invoices found</p>
                         <p className="text-xs mt-1">Try adjusting your filters or create a new invoice</p>
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ) : invoices?.map((invoice) => (
-                  <tr
+                  <TableRow
                     key={invoice.id}
-                    className="data-table-row group cursor-pointer hover:bg-slate-50 transition-colors"
+                    className="group cursor-pointer hover:bg-slate-50/80 transition-colors"
                     onClick={(e) => {
-                      // Prevent navigation if clicking specific interactive elements
                       if ((e.target as HTMLElement).closest('button, a, [role="menuitem"]')) return;
                       setLocation(`/invoices/${invoice.id}`);
                     }}
                   >
-                    <td className="data-table-cell font-medium font-mono text-slate-700">
+                    <TableCell className="font-medium font-mono text-slate-700 py-3">
                       <Link href={`/invoices/${invoice.id}`} className="hover:underline text-primary">
                         {invoice.invoiceNumber}
                       </Link>
-                    </td>
-                    <td className="data-table-cell">
+                    </TableCell>
+                    <TableCell className="py-3">
                       {invoice.transactionType === 'CreditNote' ? (
                         <Badge variant="outline" className="text-orange-600 border-orange-200 bg-orange-50 font-medium whitespace-nowrap">
                           Credit Note
@@ -409,8 +418,8 @@ export default function InvoicesPage() {
                           Invoice
                         </Badge>
                       )}
-                    </td>
-                    <td className="data-table-cell text-sm">
+                    </TableCell>
+                    <TableCell className="py-3">
                       {invoice.relatedInvoiceId && (
                         <Link href={`/invoices/${invoice.relatedInvoiceId}`} className="text-xs text-primary hover:underline flex items-center group/link font-medium">
                           <FileText className="w-3 h-3 mr-1 opacity-70 group-hover/link:opacity-100" />
@@ -418,7 +427,7 @@ export default function InvoicesPage() {
                         </Link>
                       )}
                       {invoice.transactionType === 'FiscalInvoice' && invoices?.some(inv => inv.relatedInvoiceId === invoice.id) && (
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-col gap-1 mt-1">
                           {invoices.filter(inv => inv.relatedInvoiceId === invoice.id).map(child => (
                             <Link key={child.id} href={`/invoices/${child.id}`} className="text-xs text-orange-600 hover:underline flex items-center group/link font-medium">
                               <ShieldCheck className="w-3 h-3 mr-1 opacity-70 group-hover/link:opacity-100" />
@@ -428,38 +437,38 @@ export default function InvoicesPage() {
                         </div>
                       )}
                       {!invoice.relatedInvoiceId && !invoices?.some(inv => inv.relatedInvoiceId === invoice.id) && (
-                        <span className="text-slate-400">-</span>
+                        <span className="text-slate-400 text-xs">-</span>
                       )}
-                    </td>
-                    <td className="data-table-cell text-slate-500">
+                    </TableCell>
+                    <TableCell className="text-slate-600 py-3">
                       {invoice.issueDate ? format(new Date(invoice.issueDate), "dd MMM yyyy") : "-"}
-                    </td>
-                    <td className="data-table-cell font-medium text-slate-900">
+                    </TableCell>
+                    <TableCell className="font-medium text-slate-900 py-3">
                       {invoice.customer?.name || "Walk-in Customer"}
-                    </td>
-                    <td className="data-table-cell font-semibold text-slate-900 text-right">
+                    </TableCell>
+                    <TableCell className="font-semibold text-slate-900 text-right py-3">
                       {invoice.currency} {Number(invoice.total).toFixed(2)}
-                    </td>
-                    <td className="data-table-cell text-slate-500 text-right">
+                    </TableCell>
+                    <TableCell className="text-slate-600 text-right py-3">
                       {Number(invoice.taxAmount).toFixed(2)}
-                    </td>
-                    <td className="data-table-cell">
-                      <div className="flex flex-col gap-1 w-fit">
+                    </TableCell>
+                    <TableCell className="py-3">
+                      <div className="flex flex-col gap-1.5 w-fit">
                         <StatusBadge status={invoice.status!} />
 
                         {invoice.fiscalCode && (
-                          <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] py-0.5 h-auto font-medium gap-1 hover:bg-emerald-100">
+                          <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] py-0.5 h-auto font-medium gap-1 hover:bg-emerald-100 w-fit">
                             <ShieldCheck className="w-3 h-3" /> Fiscalized
                           </Badge>
                         )}
 
                         {!invoice.syncedWithFdms && invoice.status === 'issued' && (
-                          <StatusBadge status="pending-sync" className="text-[8px] h-4 py-0" />
+                          <StatusBadge status="pending-sync" className="text-[10px] py-0.5 h-auto w-fit" />
                         )}
 
                         {invoice.validationStatus && invoice.validationStatus !== 'valid' && (
                           <Badge variant="outline" className={cn(
-                            "text-[10px] py-0.5 h-auto font-medium border-dashed",
+                            "text-[10px] py-0.5 h-auto font-medium border-dashed w-fit",
                             invoice.validationStatus === 'red' ? "text-red-700 bg-red-50 border-red-200" :
                               invoice.validationStatus === 'grey' ? "text-slate-600 bg-slate-100 border-slate-300" :
                                 "text-yellow-700 bg-yellow-50 border-yellow-200"
@@ -469,17 +478,16 @@ export default function InvoicesPage() {
                           </Badge>
                         )}
                       </div>
-                    </td>
-                    <td className="data-table-cell text-slate-500 max-w-[120px] truncate text-[8px] leading-tight opacity-60" title={invoice.notes || ""}>
+                    </TableCell>
+                    <TableCell className="text-slate-500 max-w-[150px] truncate text-xs opacity-80 py-3" title={invoice.notes || ""}>
                       {invoice.notes || "-"}
-                    </td>
-                    <td className="data-table-cell text-right pr-4">
-
+                    </TableCell>
+                    <TableCell className="text-right pr-4 py-3">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" className="h-8 w-8 p-0">
+                          <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-slate-100 rounded-full">
                             <span className="sr-only">Open menu</span>
-                            <MoreHorizontal className="h-4 w-4" />
+                            <MoreHorizontal className="h-4 w-4 text-slate-500" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-[180px]">
@@ -556,11 +564,11 @@ export default function InvoicesPage() {
                         </DropdownMenuContent>
                       </DropdownMenu>
 
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
 
           {/* Pagination Controls */}
@@ -590,8 +598,8 @@ export default function InvoicesPage() {
               </Button>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </CardContent >
+      </Card >
     </Layout >
   );
 }

@@ -1,5 +1,5 @@
 import { Layout } from "@/components/layout";
-import { useInvoices, useDeleteInvoice } from "@/hooks/use-invoices";
+import { useQuotations, useDeleteQuotation } from "@/hooks/use-quotations";
 import { Button } from "@/components/ui/button";
 import { Plus, Search, ClipboardList } from "lucide-react";
 import { DeleteButton } from "@/components/delete-button";
@@ -16,17 +16,13 @@ export default function QuotationsPage() {
     // Actually, checking previous code, 'quotations' usage seems to imply they are just invoices.
     // However, looking at file content, it filters `inv.transactionType === 'Quotation'`.
     // Let's just fetch a reasonable amount for now or update hook to filter.
-    const { data: result, isLoading } = useInvoices(selectedCompanyId, { limit: 100 });
-    const allInvoices = result?.data;
-    const deleteInvoice = useDeleteInvoice();
+    const { data: quotations, isLoading } = useQuotations(selectedCompanyId);
+    const deleteQuotation = useDeleteQuotation(); // Need to import this too
     const [searchTerm, setSearchTerm] = useState("");
 
-    // Filter for quotations only
-    const quotations = allInvoices?.filter(inv => inv.status === "quote");
-
-    const filteredQuotations = quotations?.filter(inv =>
-        inv.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        inv.total.toString().includes(searchTerm)
+    const filteredQuotations = quotations?.filter(quote =>
+        quote.quotationNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        quote.total.toString().includes(searchTerm)
     );
 
     return (
@@ -36,7 +32,7 @@ export default function QuotationsPage() {
                     <h1 className="text-3xl font-display font-bold text-slate-900">Quotations</h1>
                     <p className="text-slate-500 mt-1">Manage and track your customer quotations</p>
                 </div>
-                <Link href="/invoices/new?type=quote">
+                <Link href="/quotations/new">
                     <Button className="shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-all">
                         <Plus className="w-4 h-4 mr-2" />
                         Create Quotation
@@ -90,7 +86,7 @@ export default function QuotationsPage() {
                                 ) : filteredQuotations?.map((quote) => (
                                     <tr key={quote.id} className="data-table-row group">
                                         <td className="data-table-cell font-medium font-mono text-slate-700">
-                                            {quote.invoiceNumber}
+                                            {quote.quotationNumber}
                                         </td>
                                         <td className="data-table-cell">
                                             {new Date(quote.issueDate!).toLocaleDateString()}
@@ -106,18 +102,18 @@ export default function QuotationsPage() {
                                         </td>
                                         <td className="data-table-cell text-right">
                                             <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <Link href={`/invoices/${quote.id}`}>
+                                                <Link href={`/quotations/new?edit=${quote.id}`}>
                                                     <Button variant="ghost" size="sm">
-                                                        View
+                                                        Edit
                                                     </Button>
                                                 </Link>
                                                 <DeleteButton
                                                     title="Delete Quotation"
                                                     description="Are you sure you want to delete this quotation? This action cannot be undone."
                                                     onConfirm={async () => {
-                                                        await deleteInvoice.mutateAsync(quote.id);
+                                                        await deleteQuotation.mutateAsync(quote.id);
                                                     }}
-                                                    isDeleting={deleteInvoice.isPending}
+                                                    isDeleting={deleteQuotation.isPending}
                                                 />
                                             </div>
                                         </td>

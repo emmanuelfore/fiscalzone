@@ -120,13 +120,6 @@ export default function AuthPage() {
         <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-indigo-600/30 rounded-full blur-[100px] translate-y-1/2 -translate-x-1/2" />
 
         <div className="relative z-10 max-w-lg">
-          <div className="mb-8">
-            <img
-              src="/fiscalstack-logo.png"
-              alt="FiscalStack Logo"
-              className="h-10 w-auto object-contain brightness-0 invert"
-            />
-          </div>
           <h1 className="text-4xl font-display font-bold mb-6 leading-tight text-white">
             Seamless ZIMRA Compliant Invoicing.
           </h1>
@@ -146,8 +139,9 @@ export default function AuthPage() {
       </div>
 
       {/* Right Panel - Form */}
-      <div className="flex items-center justify-center p-6 bg-slate-50 relative">
+      <div className="flex flex-col items-center justify-center p-6 bg-slate-50 relative">
         <div className="absolute top-0 left-0 w-full h-full bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03] pointer-events-none" />
+
         <Card className="w-full max-w-md card-depth border-none relative z-10">
           <CardHeader className="text-center pb-2">
             <CardTitle className="font-display text-2xl">

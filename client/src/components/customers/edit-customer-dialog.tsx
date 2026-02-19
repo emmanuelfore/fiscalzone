@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Pencil, Loader2 } from "lucide-react";
+import { Pencil, Loader2, Building2 } from "lucide-react";
 import { useState } from "react";
 
 interface Props {
@@ -79,30 +79,30 @@ export function EditCustomerDialog({ customer, trigger }: Props) {
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
                 {trigger ? trigger : (
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                        <Pencil className="w-4 h-4 text-slate-500" />
+                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-full hover:bg-violet-50 hover:text-primary transition-all">
+                        <Pencil className="w-4 h-4 text-slate-400" />
                     </Button>
                 )}
             </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl">
                 <DialogHeader>
-                    <DialogTitle>Edit Customer</DialogTitle>
+                    <DialogTitle className="text-2xl font-display font-bold text-slate-900">Edit Customer</DialogTitle>
                     <DialogDescription>
                         Update details for {customer.name}
                     </DialogDescription>
                 </DialogHeader>
 
                 <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5 py-4">
+                        <div className="grid grid-cols-2 gap-5">
                             <FormField
                                 control={form.control}
                                 name="name"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>Customer Name</FormLabel>
+                                        <FormLabel className="text-slate-700 font-semibold">Customer Name</FormLabel>
                                         <FormControl>
-                                            <Input placeholder="John Doe or Company Name" {...field} />
+                                            <Input placeholder="John Doe or Company Name" {...field} className="rounded-xl bg-slate-50 border-slate-200 focus-visible:ring-primary/20" />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
@@ -114,17 +114,17 @@ export function EditCustomerDialog({ customer, trigger }: Props) {
                                 name="customerType"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>Type</FormLabel>
+                                        <FormLabel className="text-slate-700 font-semibold">Type</FormLabel>
                                         <Select
                                             onValueChange={field.onChange}
                                             defaultValue={field.value || undefined}
                                         >
                                             <FormControl>
-                                                <SelectTrigger>
+                                                <SelectTrigger className="rounded-xl bg-slate-50 border-slate-200 focus:ring-primary/20">
                                                     <SelectValue placeholder="Select type" />
                                                 </SelectTrigger>
                                             </FormControl>
-                                            <SelectContent>
+                                            <SelectContent className="rounded-xl shadow-xl">
                                                 <SelectItem value="individual">Individual</SelectItem>
                                                 <SelectItem value="business">Business</SelectItem>
                                             </SelectContent>
@@ -135,15 +135,15 @@ export function EditCustomerDialog({ customer, trigger }: Props) {
                             />
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-2 gap-5">
                             <FormField
                                 control={form.control}
                                 name="email"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>Email</FormLabel>
+                                        <FormLabel className="text-slate-700 font-semibold">Email</FormLabel>
                                         <FormControl>
-                                            <Input type="email" placeholder="email@example.com" value={field.value || ""} onChange={field.onChange} />
+                                            <Input type="email" placeholder="email@example.com" value={field.value || ""} onChange={field.onChange} className="rounded-xl bg-slate-50 border-slate-200 focus-visible:ring-primary/20" />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
@@ -155,9 +155,9 @@ export function EditCustomerDialog({ customer, trigger }: Props) {
                                 name="phone"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>Phone</FormLabel>
+                                        <FormLabel className="text-slate-700 font-semibold">Phone</FormLabel>
                                         <FormControl>
-                                            <Input placeholder="+263..." value={field.value || ""} onChange={field.onChange} />
+                                            <Input placeholder="+263..." value={field.value || ""} onChange={field.onChange} className="rounded-xl bg-slate-50 border-slate-200 focus-visible:ring-primary/20" />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
@@ -166,19 +166,22 @@ export function EditCustomerDialog({ customer, trigger }: Props) {
                         </div>
 
                         {customerType === "business" && (
-                            <div className="grid grid-cols-3 gap-4 p-4 bg-slate-50 rounded-lg border">
-                                <div className="col-span-3 font-medium text-sm text-slate-700 mb-2 flex items-center justify-between">
-                                    <span>Business Details</span>
-                                    <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">ZIMRA Requirement: TIN/BP 10 Digits, VAT 9-10 Digits</span>
+                            <div className="grid grid-cols-3 gap-4 p-5 bg-blue-50/50 rounded-2xl border border-blue-100">
+                                <div className="col-span-3 font-medium text-sm text-blue-900 mb-2 flex items-center justify-between">
+                                    <span className="flex items-center gap-2">
+                                        <Building2 className="w-4 h-4" />
+                                        Business Details
+                                    </span>
+                                    <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full uppercase tracking-wider font-bold">ZIMRA Requirement</span>
                                 </div>
                                 <FormField
                                     control={form.control}
                                     name="tin"
                                     render={({ field }) => (
                                         <FormItem>
-                                            <FormLabel>TIN</FormLabel>
+                                            <FormLabel className="text-xs uppercase tracking-wide text-slate-500">TIN</FormLabel>
                                             <FormControl>
-                                                <Input placeholder="1234567890" value={field.value || ""} onChange={field.onChange} />
+                                                <Input placeholder="10 Digits" value={field.value || ""} onChange={field.onChange} className="rounded-lg bg-white border-blue-200/50 focus-visible:ring-blue-500/20 font-mono text-sm" />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -189,9 +192,9 @@ export function EditCustomerDialog({ customer, trigger }: Props) {
                                     name="vatNumber"
                                     render={({ field }) => (
                                         <FormItem>
-                                            <FormLabel>VAT Number</FormLabel>
+                                            <FormLabel className="text-xs uppercase tracking-wide text-slate-500">VAT Number</FormLabel>
                                             <FormControl>
-                                                <Input placeholder="1234567890" value={field.value || ""} onChange={field.onChange} />
+                                                <Input placeholder="9-10 Digits" value={field.value || ""} onChange={field.onChange} className="rounded-lg bg-white border-blue-200/50 focus-visible:ring-blue-500/20 font-mono text-sm" />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -202,9 +205,9 @@ export function EditCustomerDialog({ customer, trigger }: Props) {
                                     name="bpNumber"
                                     render={({ field }) => (
                                         <FormItem>
-                                            <FormLabel>BP Number</FormLabel>
+                                            <FormLabel className="text-xs uppercase tracking-wide text-slate-500">BP Number</FormLabel>
                                             <FormControl>
-                                                <Input placeholder="1234567890" value={field.value || ""} onChange={field.onChange} />
+                                                <Input placeholder="Optional" value={field.value || ""} onChange={field.onChange} className="rounded-lg bg-white border-blue-200/50 focus-visible:ring-blue-500/20 font-mono text-sm" />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -213,15 +216,15 @@ export function EditCustomerDialog({ customer, trigger }: Props) {
                             </div>
                         )}
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-2 gap-5">
                             <FormField
                                 control={form.control}
                                 name="address"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>Address</FormLabel>
+                                        <FormLabel className="text-slate-700 font-semibold">Address</FormLabel>
                                         <FormControl>
-                                            <Textarea placeholder="Physical Address" className="resize-none h-20" value={field.value || ""} onChange={field.onChange} />
+                                            <Textarea placeholder="Physical Address" className="resize-none h-20 rounded-xl bg-slate-50 border-slate-200 focus-visible:ring-primary/20" value={field.value || ""} onChange={field.onChange} />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
@@ -232,9 +235,9 @@ export function EditCustomerDialog({ customer, trigger }: Props) {
                                 name="billingAddress"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>Billing Address</FormLabel>
+                                        <FormLabel className="text-slate-700 font-semibold">Billing Address</FormLabel>
                                         <FormControl>
-                                            <Textarea placeholder="Same as physical if empty" className="resize-none h-20" value={field.value || ""} onChange={field.onChange} />
+                                            <Textarea placeholder="Same as physical if empty" className="resize-none h-20 rounded-xl bg-slate-50 border-slate-200 focus-visible:ring-primary/20" value={field.value || ""} onChange={field.onChange} />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
@@ -247,9 +250,9 @@ export function EditCustomerDialog({ customer, trigger }: Props) {
                             name="notes"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Notes</FormLabel>
+                                    <FormLabel className="text-slate-700 font-semibold">Notes</FormLabel>
                                     <FormControl>
-                                        <Textarea placeholder="Internal notes..." className="resize-none" value={field.value || ""} onChange={field.onChange} />
+                                        <Textarea placeholder="Internal notes..." className="resize-none rounded-xl bg-slate-50 border-slate-200 focus-visible:ring-primary/20" value={field.value || ""} onChange={field.onChange} />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
@@ -260,10 +263,10 @@ export function EditCustomerDialog({ customer, trigger }: Props) {
                             control={form.control}
                             name="isActive"
                             render={({ field }) => (
-                                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm bg-slate-50">
+                                <FormItem className="flex flex-row items-center justify-between rounded-xl border-slate-200 p-4 shadow-sm bg-slate-50">
                                     <div className="space-y-0.5">
-                                        <FormLabel>Active Status</FormLabel>
-                                        <FormDescription>
+                                        <FormLabel className="text-base font-semibold text-slate-700">Active Status</FormLabel>
+                                        <FormDescription className="text-slate-500">
                                             Inactive customers won't appear in invoice selection
                                         </FormDescription>
                                     </div>
@@ -277,11 +280,11 @@ export function EditCustomerDialog({ customer, trigger }: Props) {
                             )}
                         />
 
-                        <div className="flex justify-end gap-2 pt-4">
-                            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                        <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                            <Button type="button" variant="outline" onClick={() => setOpen(false)} className="rounded-xl border-slate-200 text-slate-600 hover:text-slate-900">
                                 Cancel
                             </Button>
-                            <Button type="submit" disabled={updateCustomer.isPending}>
+                            <Button type="submit" disabled={updateCustomer.isPending} className="rounded-xl bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20">
                                 {updateCustomer.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                                 Save Changes
                             </Button>
@@ -289,6 +292,6 @@ export function EditCustomerDialog({ customer, trigger }: Props) {
                     </form>
                 </Form>
             </DialogContent>
-        </Dialog>
+        </Dialog >
     );
 }

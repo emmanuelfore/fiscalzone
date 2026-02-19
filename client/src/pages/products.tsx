@@ -94,8 +94,8 @@ export default function ProductsPage() {
     <Layout>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-display font-bold text-slate-900">Products</h1>
-          <p className="text-slate-500 mt-1">Inventory and goods</p>
+          <h1 className="text-3xl font-display font-black text-slate-900">Products</h1>
+          <p className="text-slate-500 mt-1 font-medium">Inventory and goods</p>
         </div>
         <div className="flex gap-2">
           <ManageCategoriesDialog companyId={companyId} />
@@ -109,17 +109,17 @@ export default function ProductsPage() {
           {companyId > 0 ? (
             <CreateProductDialog companyId={companyId} defaultType="good" triggerLabel="Add Product" />
           ) : (
-            <Button disabled variant="outline">Select a Company First</Button>
+            <Button disabled variant="outline" className="rounded-xl">Select a Company First</Button>
           )}
         </div>
       </div>
 
       <div className="flex flex-col md:flex-row gap-4 mb-6">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+        <div className="relative flex-1 max-w-sm group">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 group-hover:text-violet-500 transition-colors" />
           <Input
             placeholder="Search products..."
-            className="pl-9 bg-white"
+            className="pl-12 h-12 rounded-xl border-slate-200 bg-white shadow-sm focus:ring-violet-500/20 focus:border-violet-500 font-medium transition-all"
             value={searchTerm}
             onChange={handleSearch}
           />
@@ -127,7 +127,7 @@ export default function ProductsPage() {
 
         <div className="flex gap-2 flex-wrap">
           <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setCurrentPage(1); }}>
-            <SelectTrigger className="w-[130px] bg-white">
+            <SelectTrigger className="w-[130px] h-12 rounded-xl bg-white border-slate-200 font-bold">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
@@ -138,7 +138,7 @@ export default function ProductsPage() {
           </Select>
 
           <Select value={stockFilter} onValueChange={(v) => { setStockFilter(v); setCurrentPage(1); }}>
-            <SelectTrigger className="w-[140px] bg-white">
+            <SelectTrigger className="w-[140px] h-12 rounded-xl bg-white border-slate-200 font-bold">
               <SelectValue placeholder="Stock Level" />
             </SelectTrigger>
             <SelectContent>
@@ -150,7 +150,7 @@ export default function ProductsPage() {
           </Select>
 
           <Select value={taxFilter} onValueChange={(v) => { setTaxFilter(v); setCurrentPage(1); }}>
-            <SelectTrigger className="w-[140px] bg-white">
+            <SelectTrigger className="w-[140px] h-12 rounded-xl bg-white border-slate-200 font-bold">
               <SelectValue placeholder="Tax Class" />
             </SelectTrigger>
             <SelectContent>
@@ -174,39 +174,45 @@ export default function ProductsPage() {
               setTaxFilter("all");
               setCurrentPage(1);
             }}
-            className="text-slate-500"
+            className="text-slate-500 font-medium hover:text-slate-900 h-12 px-4 rounded-xl"
           >
             Reset
           </Button>
         )}
       </div>
 
-      <Card className="card-depth border-none overflow-hidden">
+      <Card className="border-none shadow-xl shadow-slate-200/50 bg-white/80 backdrop-blur-sm rounded-[2rem] overflow-hidden ring-1 ring-slate-100">
         <CardContent className="p-0">
           <table className="w-full text-left">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-100">
-                <th className="data-table-header p-4">Name</th>
-                <th className="data-table-header p-4">Code</th>
-                <th className="data-table-header p-4">Details</th>
-                <th className="data-table-header p-4">Category</th>
-                <th className="data-table-header p-4">Price</th>
-                <th className="data-table-header p-4">Stock</th>
-                <th className="data-table-header p-4">Tax Type</th>
-                <th className="data-table-header p-4"></th>
+              <tr className="bg-slate-50/80 border-b border-slate-100">
+                <th className="p-5 font-black text-slate-400 uppercase tracking-widest text-xs">Name</th>
+                <th className="p-5 font-black text-slate-400 uppercase tracking-widest text-xs">Code</th>
+                <th className="p-5 font-black text-slate-400 uppercase tracking-widest text-xs">Details</th>
+                <th className="p-5 font-black text-slate-400 uppercase tracking-widest text-xs">Category</th>
+                <th className="p-5 font-black text-slate-400 uppercase tracking-widest text-xs">Price</th>
+                <th className="p-5 font-black text-slate-400 uppercase tracking-widest text-xs">Stock</th>
+                <th className="p-5 font-black text-slate-400 uppercase tracking-widest text-xs">Tax Type</th>
+                <th className="p-5 font-black text-slate-400 uppercase tracking-widest text-xs"></th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-500">Loading products...</td>
+                  <td colSpan={8} className="p-12 text-center text-slate-500">
+                    <div className="flex flex-col items-center justify-center gap-3">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-600"></div>
+                      Loading products...
+                    </div>
+                  </td>
                 </tr>
               ) : paginatedProducts?.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-12 text-center text-slate-500">
+                  <td colSpan={8} className="p-12 text-center text-slate-500">
                     <div className="flex flex-col items-center justify-center">
                       <Package className="w-12 h-12 text-slate-200 mb-4" />
-                      <p>No products found</p>
+                      <p className="font-bold text-lg">No products found</p>
+                      <p className="text-sm">Try adjusting your filters</p>
                     </div>
                   </td>
                 </tr>
@@ -231,57 +237,57 @@ export default function ProductsPage() {
                 });
 
                 return (
-                  <tr key={p.id} className={`data-table-row border-b border-slate-50 hover:bg-slate-50/50 transition-colors ${!p.isActive ? 'opacity-50 grayscale' : ''}`}>
-                    <td className="data-table-cell p-4 font-medium text-slate-900">
+                  <tr key={p.id} className={`group border-b border-slate-50 hover:bg-slate-50/50 transition-colors cursor-default ${!p.isActive ? 'opacity-50 grayscale' : ''}`}>
+                    <td className="p-4 font-bold text-slate-900">
                       <div className="flex flex-col">
-                        <span>{p.name}</span>
-                        {!p.isActive && <span className="text-xs bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded w-fit mt-1">Inactive</span>}
-                        {p.description && <span className="text-xs text-slate-400 font-normal truncate max-w-[200px]">{p.description}</span>}
+                        <span className="font-display tracking-tight text-sm">{p.name}</span>
+                        {!p.isActive && <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider w-fit mt-1">Inactive</span>}
+                        {p.description && <span className="text-xs text-slate-400 font-medium truncate max-w-[200px]">{p.description}</span>}
                       </div>
                     </td>
-                    <td className="data-table-cell p-4 font-mono text-xs text-slate-600">
+                    <td className="p-4 font-mono text-xs font-bold text-slate-500">
                       {p.sku || "—"}
                     </td>
-                    <td className="data-table-cell p-4">
+                    <td className="p-4">
                       <div className="flex flex-col gap-1">
-                        {p.hsCode && <div className="text-xs text-slate-500 font-mono">HS: {p.hsCode}</div>}
+                        {p.hsCode && <div className="text-[10px] font-bold text-slate-400 font-mono uppercase">HS: {p.hsCode}</div>}
                       </div>
                     </td>
-                    <td className="data-table-cell p-4">
+                    <td className="p-4">
                       {p.category ? (
-                        <Badge variant="secondary" className="bg-slate-100 text-slate-600 font-normal">
+                        <Badge variant="secondary" className="bg-slate-100 text-slate-600 font-bold text-[10px] uppercase tracking-wider px-2 py-0.5">
                           {p.category}
                         </Badge>
                       ) : (
-                        <span className="text-slate-400 text-xs">—</span>
+                        <span className="text-slate-300 text-xs font-bold">—</span>
                       )}
                     </td>
-                    <td className="data-table-cell p-4 font-medium">${Number(p.price).toFixed(2)}</td>
-                    <td className="data-table-cell p-4">
+                    <td className="p-4 font-black text-slate-800 tracking-tight">${Number(p.price).toFixed(2)}</td>
+                    <td className="p-4">
                       {p.isTracked ? (
                         <div className="flex items-center gap-2">
-                          <span className={Number(p.stockLevel) <= Number(p.lowStockThreshold || 0) ? "text-red-600 font-bold" : "text-slate-700"}>
+                          <span className={`${Number(p.stockLevel) <= Number(p.lowStockThreshold || 0) ? "text-red-600 bg-red-50 px-2 py-0.5 rounded-md border border-red-100" : "text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200"} font-mono text-xs font-bold`}>
                             {p.stockLevel}
                           </span>
                           {Number(p.stockLevel) <= Number(p.lowStockThreshold || 0) && (
-                            <AlertCircle className="w-3 h-3 text-red-500" />
+                            <AlertCircle className="w-3 h-3 text-red-500 animate-pulse" />
                           )}
                         </div>
                       ) : (
-                        <Badge variant="secondary" className="text-[10px] bg-slate-100 text-slate-400">Unlimited</Badge>
+                        <Badge variant="secondary" className="text-[10px] bg-slate-100 text-slate-400 font-bold uppercase tracking-wider">Unlimited</Badge>
                       )}
                     </td>
-                    <td className="data-table-cell p-4">
+                    <td className="p-4">
                       {matchedType ? (
-                        <Badge variant="outline" className="bg-slate-50 text-slate-700 border-slate-200 font-normal">
-                          {matchedType.name} ({matchedType.rate}%)
+                        <Badge variant="outline" className="bg-white text-slate-600 border-slate-200 font-bold text-[10px] uppercase tracking-wider shadow-sm">
+                          {matchedType.name}
                         </Badge>
                       ) : (
-                        <span className="text-slate-500 text-sm">{p.taxRate}%</span>
+                        <span className="text-slate-400 text-xs font-bold">{p.taxRate}%</span>
                       )}
                     </td>
-                    <td className="data-table-cell p-4 text-right">
-                      <div className="flex justify-end gap-2">
+                    <td className="p-4 text-right">
+                      <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <EditProductDialog product={p} />
                         <DeleteButton
                           title="Delete Product"
@@ -304,28 +310,33 @@ export default function ProductsPage() {
 
           {/* Pagination Controls */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-end p-4 border-t border-slate-100 gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-              >
-                <ChevronLeft className="h-4 w-4" />
-                Previous
-              </Button>
-              <div className="text-sm text-slate-500 px-2">
+            <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50/30">
+              <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">
                 Page {currentPage} of {totalPages}
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-              >
-                Next
-                <ChevronRight className="h-4 w-4" />
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="rounded-xl h-9 text-xs font-bold border-slate-200"
+                >
+                  <ChevronLeft className="h-3 w-3 mr-1" />
+                  Previous
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="rounded-xl h-9 text-xs font-bold border-slate-200"
+                >
+                  Next
+                  <ChevronRight className="h-3 w-3 ml-1" />
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>

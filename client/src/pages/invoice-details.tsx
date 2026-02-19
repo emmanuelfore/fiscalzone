@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
 import { useLocation, useRoute } from "wouter";
-import { ArrowLeft, Printer, Send, ShieldCheck, Loader2, Download, Undo2, ClipboardList, MessageCircle, MoreVertical, Mail, Share2, CreditCard } from "lucide-react";
+import { ArrowLeft, Printer, Send, ShieldCheck, Loader2, Download, Undo2, ClipboardList, MessageCircle, MoreVertical, Mail, Share2, CreditCard, Eye } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
-import { PDFDownloadLink } from "@react-pdf/renderer";
+import { PDFDownloadLink, PDFViewer } from "@react-pdf/renderer";
 import { InvoicePDF } from "@/components/invoices/pdf-document";
 import { useCompany } from "@/hooks/use-companies";
 import QRCode from 'qrcode';
@@ -29,6 +29,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export default function InvoiceDetailsPage() {
   const [, params] = useRoute("/invoices/:id");
@@ -47,6 +48,7 @@ export default function InvoiceDetailsPage() {
 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showEmailDialog, setShowEmailDialog] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
 
   // Double-click prevention states
@@ -393,6 +395,20 @@ export default function InvoiceDetailsPage() {
             </DropdownMenu>
           )}
 
+
+          {/* Preview Button */}
+          {["issued", "paid", "fiscalized", "draft", "quote"].includes(invoice.status || "") && invoice && company && (!invoice.fiscalCode || qrCodeDataUrl) && (
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 w-9"
+              onClick={() => setIsPreviewOpen(true)}
+              title="Preview PDF"
+            >
+              <Eye className="w-4 h-4" />
+            </Button>
+          )}
+
           {/* Download Button (Icon only on mobile, text on desktop if space) */}
           {["issued", "paid", "fiscalized"].includes(invoice.status || "") && invoice && company && (!invoice.fiscalCode || qrCodeDataUrl) && (
             <PDFDownloadLink
@@ -522,6 +538,26 @@ export default function InvoiceDetailsPage() {
           </div>
         </div>
       )}
+
+      {/* PDF Preview Dialog */}
+      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+        <DialogContent className="max-w-4xl h-[90vh]">
+          <DialogHeader>
+            <DialogTitle>Invoice Preview</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 h-full min-h-[500px] w-full bg-slate-100 rounded-md overflow-hidden">
+            <PDFViewer width="100%" height="100%" className="w-full h-full border-none">
+              <InvoicePDF
+                invoice={invoice}
+                company={company}
+                customer={invoice.customer}
+                qrCodeUrl={qrCodeDataUrl}
+                taxTypes={taxTypes.data}
+              />
+            </PDFViewer>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <div className="max-w-4xl mx-auto">
         <Card className="border-none shadow-xl bg-white overflow-hidden print:shadow-none print:border">
@@ -750,8 +786,8 @@ export default function InvoiceDetailsPage() {
                       <td className="py-3 text-right text-slate-500 text-xs">{(() => {
                         const matchingType = taxTypes.data?.find((t: any) => t.id == item.taxTypeId);
                         const zimraTaxIdRaw = matchingType?.zimraTaxId;
-                        const isExempt = zimraTaxIdRaw == "1" || zimraTaxIdRaw == 1 || matchingType?.zimraCode === 'C' || matchingType?.zimraCode === 'E' || matchingType?.name?.toLowerCase().includes('exempt');
-                        const isZeroRated = zimraTaxIdRaw == "2" || zimraTaxIdRaw == 2 || matchingType?.zimraCode === 'D' || matchingType?.name?.toLowerCase().includes('zero rated') || (!isExempt && taxRate === 0);
+                        const isExempt = zimraTaxIdRaw == "1" || matchingType?.zimraCode === 'C' || matchingType?.zimraCode === 'E' || matchingType?.name?.toLowerCase().includes('exempt');
+                        const isZeroRated = zimraTaxIdRaw == "2" || matchingType?.zimraCode === 'D' || matchingType?.name?.toLowerCase().includes('zero rated') || (!isExempt && taxRate === 0);
                         return isExempt ? "-" : vatAmt.toFixed(2);
                       })()}</td>
                       <td className="py-3 text-right font-bold text-slate-900">{displayTotal.toFixed(2)}</td>
@@ -780,8 +816,8 @@ export default function InvoiceDetailsPage() {
                       const summary = data as { taxRate: number; taxTypeId: number; netAmount: number; taxAmount: number; totalAmount: number };
                       const matchingType = taxTypes.data?.find((t: any) => t.id == summary.taxTypeId);
                       const zimraTaxIdRaw = matchingType?.zimraTaxId;
-                      const isExempt = zimraTaxIdRaw == "1" || zimraTaxIdRaw == 1 || matchingType?.zimraCode === 'C' || matchingType?.zimraCode === 'E' || matchingType?.name?.toLowerCase().includes('exempt');
-                      const isZeroRated = zimraTaxIdRaw == "2" || zimraTaxIdRaw == 2 || matchingType?.zimraCode === 'D' || matchingType?.name?.toLowerCase().includes('zero rated') || (!isExempt && summary.taxRate === 0);
+                      const isExempt = zimraTaxIdRaw == "1" || matchingType?.zimraCode === 'C' || matchingType?.zimraCode === 'E' || matchingType?.name?.toLowerCase().includes('exempt');
+                      const isZeroRated = zimraTaxIdRaw == "2" || matchingType?.zimraCode === 'D' || matchingType?.name?.toLowerCase().includes('zero rated') || (!isExempt && summary.taxRate === 0);
 
                       return (
                         <div key={key} className="grid grid-cols-4 gap-4 text-sm border-b border-slate-200 pb-2 last:border-0">

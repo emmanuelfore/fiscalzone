@@ -1,0 +1,166 @@
+﻿client/src/App.tsx(156,43): error TS2304: Cannot find name 'InventoryReportsPage'.
+client/src/hooks/use-companies.ts(3,35): error TS2305: Module '"@shared/schema"' has no exported member 'Company'.
+client/src/hooks/use-invoices.ts(126,16): error TS2339: Property 'validationErrors' does not exist on type '{ status: string | null; id: number; createdAt: Date | null; currency: string | null; invoiceTemplate: string | null; companyId: number; notes: string | null; customerId: number; ... 26 more ...; createdBy: string | null; }'.
+client/src/hooks/use-invoices.ts(126,41): error TS2339: Property 'validationErrors' does not exist on type '{ status: string | null; id: number; createdAt: Date | null; currency: string | null; invoiceTemplate: string | null; companyId: number; notes: string | null; customerId: number; ... 26 more ...; createdBy: string | null; }'.
+client/src/hooks/use-invoices.ts(129,54): error TS2339: Property 'validationErrors' does not exist on type '{ status: string | null; id: number; createdAt: Date | null; currency: string | null; invoiceTemplate: string | null; companyId: number; notes: string | null; customerId: number; ... 26 more ...; createdBy: string | null; }'.
+client/src/pages/create-invoice.tsx(1186,44): error TS2367: This comparison appears to be unintentional because the types 'string | null | undefined' and 'number' have no overlap.
+client/src/pages/create-invoice.tsx(1187,47): error TS2367: This comparison appears to be unintentional because the types 'string | null | undefined' and 'number' have no overlap.
+client/src/pages/create-invoice.tsx(1496,42): error TS2367: This comparison appears to be unintentional because the types 'string | null | undefined' and 'number' have no overlap.
+client/src/pages/create-invoice.tsx(1498,45): error TS2367: This comparison appears to be unintentional because the types 'string | null | undefined' and 'number' have no overlap.
+client/src/pages/create-quotation.tsx(249,22): error TS2304: Cannot find name 'PDFDownloadLink'.
+client/src/pages/create-quotation.tsx(275,29): error TS7031: Binding element 'blob' implicitly has an 'any' type.
+client/src/pages/create-quotation.tsx(275,35): error TS7031: Binding element 'url' implicitly has an 'any' type.
+client/src/pages/create-quotation.tsx(275,40): error TS7031: Binding element 'loading' implicitly has an 'any' type.
+client/src/pages/create-quotation.tsx(275,49): error TS7031: Binding element 'error' implicitly has an 'any' type.
+client/src/pages/create-quotation.tsx(277,34): error TS2552: Cannot find name 'Download'. Did you mean 'onload'?
+client/src/pages/create-quotation.tsx(281,23): error TS2304: Cannot find name 'PDFDownloadLink'.
+client/src/pages/create-quotation.tsx(476,61): error TS2367: This comparison appears to be unintentional because the types 'string | null | undefined' and 'number' have no overlap.
+client/src/pages/create-quotation.tsx(477,58): error TS2367: This comparison appears to be unintentional because the types 'string | null | undefined' and 'number' have no overlap.
+client/src/pages/invoice-details.tsx(753,66): error TS2367: This comparison appears to be unintentional because the types 'string | null | undefined' and 'number' have no overlap.
+client/src/pages/invoice-details.tsx(754,69): error TS2367: This comparison appears to be unintentional because the types 'string | null | undefined' and 'number' have no overlap.
+client/src/pages/invoice-details.tsx(783,64): error TS2367: This comparison appears to be unintentional because the types 'string | null | undefined' and 'number' have no overlap.
+client/src/pages/invoice-details.tsx(784,67): error TS2367: This comparison appears to be unintentional because the types 'string | null | undefined' and 'number' have no overlap.
+client/src/pages/invoices.tsx(393,36): error TS7006: Parameter 'invoice' implicitly has an 'any' type.
+client/src/pages/invoices.tsx(429,86): error TS7006: Parameter 'inv' implicitly has an 'any' type.
+client/src/pages/invoices.tsx(431,44): error TS7006: Parameter 'inv' implicitly has an 'any' type.
+client/src/pages/invoices.tsx(431,92): error TS7006: Parameter 'child' implicitly has an 'any' type.
+client/src/pages/invoices.tsx(439,69): error TS7006: Parameter 'inv' implicitly has an 'any' type.
+client/src/pages/onboarding.tsx(410,54): error TS2322: Type '{ className: string; onChange: (...event: any[]) => void; onBlur: Noop; value: string | null | undefined; disabled?: boolean | undefined; name: "vatNumber"; ref: RefCallBack; placeholder: string; }' is not assignable to type 'Omit<DetailedHTMLProps<InputHTMLAttributes<HTMLInputElement>, HTMLInputElement>, "ref">'.
+  Types of property 'value' are incompatible.
+    Type 'string | null | undefined' is not assignable to type 'string | number | readonly string[] | undefined'.
+      Type 'null' is not assignable to type 'string | number | readonly string[] | undefined'.
+client/src/pages/onboarding.tsx(435,88): error TS2322: Type 'string | null | undefined' is not assignable to type 'string | undefined'.
+  Type 'null' is not assignable to type 'string | undefined'.
+client/src/pages/pos.tsx(693,61): error TS2362: The left-hand side of an arithmetic operation must be of type 'any', 'number', 'bigint' or an enum type.
+client/src/pages/pos.tsx(919,56): error TS2322: Type '"success" | "destructive"' is not assignable to type '"default" | "destructive" | "outline" | "secondary" | null | undefined'.
+  Type '"success"' is not assignable to type '"default" | "destructive" | "outline" | "secondary" | null | undefined'.
+client/src/pages/recent-sales.tsx(115,25): error TS7006: Parameter 'row' implicitly has an 'any' type.
+client/src/pages/recent-sales.tsx(115,40): error TS7006: Parameter 'cell' implicitly has an 'any' type.
+scripts/recover-products.ts(35,72): error TS2769: No overload matches this call.
+  Overload 1 of 3, '(left: PgColumn<{ name: "id"; tableName: "products"; dataType: "number"; columnType: "PgSerial"; data: number; driverParam: number; notNull: true; hasDefault: true; isPrimaryKey: true; isAutoincrement: false; ... 4 more ...; generated: undefined; }, {}, {}>, right: number | SQLWrapper): SQL<...>', gave the following error.
+    Argument of type 'number | null' is not assignable to parameter of type 'number | SQLWrapper'.
+      Type 'null' is not assignable to type 'number | SQLWrapper'.
+  Overload 2 of 3, '(left: Aliased<number | null>, right: number | SQLWrapper | null): SQL<unknown>', gave the following error.
+    Argument of type 'PgColumn<{ name: "id"; tableName: "products"; dataType: "number"; columnType: "PgSerial"; data: number; driverParam: number; notNull: true; hasDefault: true; isPrimaryKey: true; isAutoincrement: false; ... 4 more ...; generated: undefined; }, {}, {}>' is not assignable to parameter of type 'Aliased<number | null>'.
+      Type 'PgColumn<{ name: "id"; tableName: "products"; dataType: "number"; columnType: "PgSerial"; data: number; driverParam: number; notNull: true; hasDefault: true; isPrimaryKey: true; isAutoincrement: false; ... 4 more ...; generated: undefined; }, {}, {}>' is missing the following properties from type 'Aliased<number | null>': sql, fieldAlias
+  Overload 3 of 3, '(left: never, right: unknown): SQL<unknown>', gave the following error.
+    Argument of type 'PgColumn<{ name: "id"; tableName: "products"; dataType: "number"; columnType: "PgSerial"; data: number; driverParam: number; notNull: true; hasDefault: true; isPrimaryKey: true; isAutoincrement: false; ... 4 more ...; generated: undefined; }, {}, {}>' is not assignable to parameter of type 'never'.
+scripts/test-close-day.ts(18,7): error TS2415: Class 'TestZimraDevice' incorrectly extends base class 'ZimraDevice'.
+  Property 'makeRequest' is private in type 'ZimraDevice' but not in type 'TestZimraDevice'.
+scripts/verify-reporting.ts(102,42): error TS2339: Property 'userId' does not exist on type '{ id: number; name: string; tradingName: string | null; address: string; city: string; country: string | null; currency: string | null; phone: string; email: string; website: string | null; ... 39 more ...; createdAt: Date | null; }'.
+server/lib/fiscalization.ts(1,10): error TS2300: Duplicate identifier 'storage'.
+server/lib/fiscalization.ts(6,10): error TS2300: Duplicate identifier 'storage'.
+server/lib/fiscalization.ts(142,17): error TS2353: Object literal may only specify known properties, and 'lastFiscalDayNo' does not exist in type 'Partial<{ name: string; email: string; address: string; city: string; phone: string; tin: string; tradingName?: string | null | undefined; country?: string | null | undefined; currency?: string | null | undefined; ... 38 more ...; registeredMacAddress?: string | ... 1 more ... | undefined; }>'.
+server/lib/fiscalization.ts(160,21): error TS2353: Object literal may only specify known properties, and 'lastFiscalDayNo' does not exist in type 'Partial<{ name: string; email: string; address: string; city: string; phone: string; tin: string; tradingName?: string | null | undefined; country?: string | null | undefined; currency?: string | null | undefined; ... 38 more ...; registeredMacAddress?: string | ... 1 more ... | undefined; }>'.
+server/lib/fiscalization.ts(324,37): error TS2339: Property 'getTaxID' does not exist on type 'typeof ZimraDevice'.
+server/lib/fiscalization.ts(490,13): error TS2353: Object literal may only specify known properties, and 'fiscalDayNo' does not exist in type 'ReceiptData'.
+server/lib/fiscalization.ts(651,38): error TS2339: Property 'fiscalDayNo' does not exist on type 'ReceiptData'.
+server/paynow.ts(1,24): error TS7016: Could not find a declaration file for module 'paynow'. 'C:/Users/Emmanuel/Downloads/Zimra-Invoicing-SaaS/Zimra-Invoicing-SaaS/node_modules/paynow/dist/index.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/paynow` if it exists or add a new declaration (.d.ts) file containing `declare module 'paynow';`
+server/routes.ts(18,36): error TS7016: Could not find a declaration file for module 'xml2js'. 'C:/Users/Emmanuel/Downloads/Zimra-Invoicing-SaaS/Zimra-Invoicing-SaaS/node_modules/xml2js/lib/xml2js.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/xml2js` if it exists or add a new declaration (.d.ts) file containing `declare module 'xml2js';`
+server/routes.ts(97,19): error TS2304: Cannot find name 'companies'.
+server/routes.ts(664,7): error TS2345: Argument of type 'string' is not assignable to parameter of type 'number'.
+server/routes.ts(831,9): error TS2345: Argument of type 'string' is not assignable to parameter of type 'number'.
+server/routes.ts(1156,9): error TS2353: Object literal may only specify known properties, and 'apiKeyLastUsed' does not exist in type 'Partial<{ name: string; email: string; address: string; city: string; phone: string; tin: string; tradingName?: string | null | undefined; country?: string | null | undefined; currency?: string | null | undefined; ... 38 more ...; registeredMacAddress?: string | ... 1 more ... | undefined; }>'.
+server/routes.ts(2250,53): error TS2552: Cannot find name 'companies'. Did you mean 'allCompanies'?
+server/routes.ts(2411,23): error TS2551: Property 'createInvoiceItem' does not exist on type 'DatabaseStorage'. Did you mean 'createInvoice'?
+server/routes.ts(2571,23): error TS2551: Property 'createInvoiceItem' does not exist on type 'DatabaseStorage'. Did you mean 'createInvoice'?
+server/routes.ts(2595,41): error TS2339: Property 'getInvoiceWithItems' does not exist on type 'DatabaseStorage'.
+server/routes.ts(2750,41): error TS2339: Property 'getInvoiceWithItems' does not exist on type 'DatabaseStorage'.
+server/routes.ts(2856,34): error TS2769: No overload matches this call.
+  Overload 1 of 4, '(value: string | number | Date): Date', gave the following error.
+    Argument of type 'Date | null' is not assignable to parameter of type 'string | number | Date'.
+      Type 'null' is not assignable to type 'string | number | Date'.
+  Overload 2 of 4, '(value: string | number): Date', gave the following error.
+    Argument of type 'Date | null' is not assignable to parameter of type 'string | number'.
+      Type 'null' is not assignable to type 'string | number'.
+server/routes.ts(2947,34): error TS2769: No overload matches this call.
+  Overload 1 of 4, '(value: string | number | Date): Date', gave the following error.
+    Argument of type 'Date | null' is not assignable to parameter of type 'string | number | Date'.
+      Type 'null' is not assignable to type 'string | number | Date'.
+  Overload 2 of 4, '(value: string | number): Date', gave the following error.
+    Argument of type 'Date | null' is not assignable to parameter of type 'string | number'.
+      Type 'null' is not assignable to type 'string | number'.
+server/routes.ts(3056,26): error TS18046: 'row' is of type 'unknown'.
+server/routes.ts(3059,38): error TS18046: 'row' is of type 'unknown'.
+server/routes.ts(3060,29): error TS18046: 'row' is of type 'unknown'.
+server/routes.ts(3061,38): error TS18046: 'row' is of type 'unknown'.
+server/routes.ts(3062,32): error TS18046: 'row' is of type 'unknown'.
+server/routes.ts(3064,34): error TS18046: 'row' is of type 'unknown'.
+server/routes.ts(3069,28): error TS18046: 'row' is of type 'unknown'.
+server/routes.ts(3070,20): error TS18046: 'row' is of type 'unknown'.
+server/routes.ts(3077,23): error TS18046: 'row' is of type 'unknown'.
+server/routes.ts(3078,25): error TS18046: 'row' is of type 'unknown'.
+server/routes.ts(3236,18): error TS2304: Cannot find name 'insertTaxTypeSchema'.
+server/routes.ts(3443,9): error TS2353: Object literal may only specify known properties, and 'companyId' does not exist in type '{ symbol: string; code: string; name: string; isActive?: boolean | null | undefined; exchangeRate?: string | undefined; isBase?: boolean | null | undefined; }'.
+server/routes.ts(3667,42): error TS18048: 'req.user' is possibly 'undefined'.
+server/routes.ts(3718,29): error TS2339: Property 'exchangeRate' does not exist on type '{}'.
+server/routes.ts(3718,57): error TS2339: Property 'exchangeRate' does not exist on type '{}'.
+server/routes.ts(3720,30): error TS2339: Property 'amount' does not exist on type '{}'.
+server/routes.ts(4203,13): error TS7022: 'customers' implicitly has type 'any' because it does not have a type annotation and is referenced directly or indirectly in its own initializer.
+server/routes.ts(4204,19): error TS2448: Block-scoped variable 'customers' used before its declaration.
+server/routes.ts(4237,19): error TS2304: Cannot find name 'asc'.
+server/routes.ts(4243,22): error TS2552: Cannot find name 'format'. Did you mean 'FormData'?
+server/routes.ts(4243,38): error TS2769: No overload matches this call.
+  Overload 1 of 4, '(value: string | number | Date): Date', gave the following error.
+    Argument of type 'Date | null' is not assignable to parameter of type 'string | number | Date'.
+      Type 'null' is not assignable to type 'string | number | Date'.
+  Overload 2 of 4, '(value: string | number): Date', gave the following error.
+    Argument of type 'Date | null' is not assignable to parameter of type 'string | number'.
+      Type 'null' is not assignable to type 'string | number'.
+server/routes.ts(4292,78): error TS2345: Argument of type 'number | undefined' is not assignable to parameter of type 'string | undefined'.
+  Type 'number' is not assignable to type 'string'.
+server/routes.ts_snippet_categories.ts(3,1): error TS2304: Cannot find name 'app'.
+server/routes.ts_snippet_categories.ts(3,36): error TS2304: Cannot find name 'requireAuth'.
+server/routes.ts_snippet_categories.ts(3,56): error TS7006: Parameter 'req' implicitly has an 'any' type.
+server/routes.ts_snippet_categories.ts(3,61): error TS7006: Parameter 'res' implicitly has an 'any' type.
+server/routes.ts_snippet_categories.ts(6,34): error TS2304: Cannot find name 'storage'.
+server/routes.ts_snippet_categories.ts(13,1): error TS2304: Cannot find name 'app'.
+server/routes.ts_snippet_categories.ts(13,37): error TS2304: Cannot find name 'requireAuth'.
+server/routes.ts_snippet_categories.ts(13,57): error TS7006: Parameter 'req' implicitly has an 'any' type.
+server/routes.ts_snippet_categories.ts(13,62): error TS7006: Parameter 'res' implicitly has an 'any' type.
+server/routes.ts_snippet_categories.ts(15,22): error TS2304: Cannot find name 'insertProductCategorySchema'.
+server/routes.ts_snippet_categories.ts(16,32): error TS2304: Cannot find name 'storage'.
+server/routes.ts_snippet_categories.ts(29,1): error TS2304: Cannot find name 'app'.
+server/routes.ts_snippet_categories.ts(29,43): error TS2304: Cannot find name 'requireAuth'.
+server/routes.ts_snippet_categories.ts(29,63): error TS7006: Parameter 'req' implicitly has an 'any' type.
+server/routes.ts_snippet_categories.ts(29,68): error TS7006: Parameter 'res' implicitly has an 'any' type.
+server/routes.ts_snippet_categories.ts(33,15): error TS2304: Cannot find name 'storage'.
+server/storage.ts(4,36): error TS2305: Module '"../shared/schema.js"' has no exported member 'Company'.
+server/storage.ts(213,9): error TS2393: Duplicate function implementation.
+server/storage.ts(223,9): error TS2393: Duplicate function implementation.
+server/storage.ts(273,9): error TS2393: Duplicate function implementation.
+server/storage.ts(280,9): error TS2393: Duplicate function implementation.
+server/storage.ts(460,9): error TS2345: Argument of type 'SQL<unknown> | undefined' is not assignable to parameter of type 'SQL<unknown>'.
+  Type 'undefined' is not assignable to type 'SQL<unknown>'.
+server/storage.ts(472,22): error TS2345: Argument of type 'SQL<unknown> | undefined' is not assignable to parameter of type 'SQL<unknown>'.
+  Type 'undefined' is not assignable to type 'SQL<unknown>'.
+server/storage.ts(943,62): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(value: { symbol: string | SQL<unknown> | Placeholder<string, any>; code: string | SQL<unknown> | Placeholder<string, any>; name: string | SQL<unknown> | Placeholder<string, any>; ... 5 more ...; lastUpdated?: Date | ... 3 more ... | undefined; }): PgInsertBase<...>', gave the following error.
+    Argument of type '{ exchangeRate: string; symbol: string; code: string; name: string; isActive?: boolean | null | undefined; isBase?: boolean | null | undefined; }' is not assignable to parameter of type '{ symbol: string | SQL<unknown> | Placeholder<string, any>; code: string | SQL<unknown> | Placeholder<string, any>; name: string | SQL<unknown> | Placeholder<string, any>; ... 5 more ...; lastUpdated?: Date | ... 3 more ... | undefined; }'.
+      Property 'companyId' is missing in type '{ exchangeRate: string; symbol: string; code: string; name: string; isActive?: boolean | null | undefined; isBase?: boolean | null | undefined; }' but required in type '{ symbol: string | SQL<unknown> | Placeholder<string, any>; code: string | SQL<unknown> | Placeholder<string, any>; name: string | SQL<unknown> | Placeholder<string, any>; ... 5 more ...; lastUpdated?: Date | ... 3 more ... | undefined; }'.
+  Overload 2 of 2, '(values: { symbol: string | SQL<unknown> | Placeholder<string, any>; code: string | SQL<unknown> | Placeholder<string, any>; name: string | SQL<unknown> | Placeholder<string, any>; ... 5 more ...; lastUpdated?: Date | ... 3 more ... | undefined; }[]): PgInsertBase<...>', gave the following error.
+    Argument of type '{ exchangeRate: string; symbol: string; code: string; name: string; isActive?: boolean | null | undefined; isBase?: boolean | null | undefined; }' is not assignable to parameter of type '{ symbol: string | SQL<unknown> | Placeholder<string, any>; code: string | SQL<unknown> | Placeholder<string, any>; name: string | SQL<unknown> | Placeholder<string, any>; ... 5 more ...; lastUpdated?: Date | ... 3 more ... | undefined; }[]'.
+      Type '{ exchangeRate: string; symbol: string; code: string; name: string; isActive?: boolean | null | undefined; isBase?: boolean | null | undefined; }' is missing the following properties from type '{ symbol: string | SQL<unknown> | Placeholder<string, any>; code: string | SQL<unknown> | Placeholder<string, any>; name: string | SQL<unknown> | Placeholder<string, any>; ... 5 more ...; lastUpdated?: Date | ... 3 more ... | undefined; }[]': length, pop, push, concat, and 35 more.
+server/storage.ts(1004,9): error TS2393: Duplicate function implementation.
+server/storage.ts(1404,59): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(value: { companyId: number | SQL<unknown> | Placeholder<string, any>; paymentMethod: string | SQL<unknown> | Placeholder<string, any>; invoiceId: number | SQL<...> | Placeholder<...>; ... 8 more ...; reference?: string | ... 3 more ... | undefined; }): PgInsertBase<...>', gave the following error.
+    Argument of type '{ paymentMethod: string; invoiceId: number; amount: string; currency?: string | undefined; notes?: string | null | undefined; exchangeRate?: string | null | undefined; createdBy?: string | null | undefined; paymentDate?: Date | undefined; reference?: string | ... 1 more ... | undefined; }' is not assignable to parameter of type '{ companyId: number | SQL<unknown> | Placeholder<string, any>; paymentMethod: string | SQL<unknown> | Placeholder<string, any>; invoiceId: number | SQL<...> | Placeholder<...>; ... 8 more ...; reference?: string | ... 3 more ... | undefined; }'.
+      Property 'companyId' is missing in type '{ paymentMethod: string; invoiceId: number; amount: string; currency?: string | undefined; notes?: string | null | undefined; exchangeRate?: string | null | undefined; createdBy?: string | null | undefined; paymentDate?: Date | undefined; reference?: string | ... 1 more ... | undefined; }' but required in type '{ companyId: number | SQL<unknown> | Placeholder<string, any>; paymentMethod: string | SQL<unknown> | Placeholder<string, any>; invoiceId: number | SQL<...> | Placeholder<...>; ... 8 more ...; reference?: string | ... 3 more ... | undefined; }'.
+  Overload 2 of 2, '(values: { companyId: number | SQL<unknown> | Placeholder<string, any>; paymentMethod: string | SQL<unknown> | Placeholder<string, any>; invoiceId: number | SQL<...> | Placeholder<...>; ... 8 more ...; reference?: string | ... 3 more ... | undefined; }[]): PgInsertBase<...>', gave the following error.
+    Argument of type '{ paymentMethod: string; invoiceId: number; amount: string; currency?: string | undefined; notes?: string | null | undefined; exchangeRate?: string | null | undefined; createdBy?: string | null | undefined; paymentDate?: Date | undefined; reference?: string | ... 1 more ... | undefined; }' is not assignable to parameter of type '{ companyId: number | SQL<unknown> | Placeholder<string, any>; paymentMethod: string | SQL<unknown> | Placeholder<string, any>; invoiceId: number | SQL<...> | Placeholder<...>; ... 8 more ...; reference?: string | ... 3 more ... | undefined; }[]'.
+      Type '{ paymentMethod: string; invoiceId: number; amount: string; currency?: string | undefined; notes?: string | null | undefined; exchangeRate?: string | null | undefined; createdBy?: string | null | undefined; paymentDate?: Date | undefined; reference?: string | ... 1 more ... | undefined; }' is missing the following properties from type '{ companyId: number | SQL<unknown> | Placeholder<string, any>; paymentMethod: string | SQL<unknown> | Placeholder<string, any>; invoiceId: number | SQL<...> | Placeholder<...>; ... 8 more ...; reference?: string | ... 3 more ... | undefined; }[]': length, pop, push, concat, and 35 more.
+server/storage.ts(1539,9): error TS2393: Duplicate function implementation.
+server/storage.ts(1889,9): error TS2393: Duplicate function implementation.
+server/storage.ts(1891,15): error TS2345: Argument of type '{ role: PgColumn<{ name: "role"; tableName: "company_users"; dataType: "string"; columnType: "PgText"; data: string; driverParam: string; notNull: false; hasDefault: true; isPrimaryKey: false; isAutoincrement: false; ... 4 more ...; generated: undefined; }, {}, {}>; ... 14 more ...; enableRLS: () => Omit<...>; }' is not assignable to parameter of type 'SelectedFields'.
+  Property '_' is incompatible with index signature.
+    Type '{ readonly brand: "Table"; readonly config: { name: "users"; schema: undefined; columns: { id: PgColumn<{ name: "id"; tableName: "users"; dataType: "string"; columnType: "PgUUID"; data: string; driverParam: string; ... 8 more ...; generated: undefined; }, {}, {}>; ... 7 more ...; isSuperAdmin: PgColumn<...>; }; dial...' is not assignable to type 'SQL<unknown> | Aliased<unknown> | PgColumn<ColumnBaseConfig<ColumnDataType, string>, {}, {}> | PgTable<TableConfig> | SelectedFieldsFlat<...>'.
+      Type '{ readonly brand: "Table"; readonly config: { name: "users"; schema: undefined; columns: { id: PgColumn<{ name: "id"; tableName: "users"; dataType: "string"; columnType: "PgUUID"; data: string; driverParam: string; ... 8 more ...; generated: undefined; }, {}, {}>; ... 7 more ...; isSuperAdmin: PgColumn<...>; }; dial...' is not assignable to type 'SelectedFieldsFlat<PgColumn<ColumnBaseConfig<ColumnDataType, string>, {}, {}>>'.
+        Property 'brand' is incompatible with index signature.
+          Type 'string' is not assignable to type 'SQL<unknown> | Aliased<unknown> | PgColumn<ColumnBaseConfig<ColumnDataType, string>, {}, {}>'.
+server/storage.ts(1979,13): error TS2552: Cannot find name 'format'. Did you mean 'FormData'?
+server/storage.ts(2008,9): error TS2393: Duplicate function implementation.
+server/tests/zimra-manual-test.ts(155,29): error TS2820: Type '"CASH"' is not assignable to type '"Cash" | "Card" | "MobileWallet" | "Coupon" | "Credit" | "BankTransfer" | "Other"'. Did you mean '"Cash"'?
+shared/routes.ts(263,42): error TS2322: Type 'boolean' is not assignable to type 'never'.
+shared/routes.ts(297,58): error TS2322: Type 'boolean' is not assignable to type 'never'.

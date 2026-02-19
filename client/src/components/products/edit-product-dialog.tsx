@@ -145,29 +145,29 @@ export function EditProductDialog({ product, trigger }: Props) {
         }}>
             <DialogTrigger asChild>
                 {trigger ? trigger : (
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                        <Pencil className="w-4 h-4 text-slate-500" />
+                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-full hover:bg-violet-50 hover:text-primary transition-all">
+                        <Pencil className="w-4 h-4 text-slate-400" />
                     </Button>
                 )}
             </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl">
                 <DialogHeader>
-                    <DialogTitle>Edit {isService ? "Service" : "Product"}</DialogTitle>
+                    <DialogTitle className="text-2xl font-display font-bold text-slate-900">Edit {isService ? "Service" : "Product"}</DialogTitle>
                     <DialogDescription>
                         Update details for {product.name}
                     </DialogDescription>
                 </DialogHeader>
 
                 <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5 py-4">
                         <FormField
                             control={form.control}
                             name="name"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>{isService ? "Service Name" : "Product Name"}</FormLabel>
+                                    <FormLabel className="text-slate-700 font-semibold">{isService ? "Service Name" : "Product Name"}</FormLabel>
                                     <FormControl>
-                                        <Input placeholder={isService ? "e.g. Consulting, Labor" : "e.g. Widget X"} {...field} />
+                                        <Input placeholder={isService ? "e.g. Consulting, Labor" : "e.g. Widget X"} {...field} className="rounded-xl bg-slate-50 border-slate-200 focus-visible:ring-primary/20" />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
@@ -179,18 +179,18 @@ export function EditProductDialog({ product, trigger }: Props) {
                             name="category"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Category</FormLabel>
+                                    <FormLabel className="text-slate-700 font-semibold">Category</FormLabel>
                                     <Select
                                         onValueChange={field.onChange}
                                         defaultValue={field.value || undefined}
                                         value={field.value || undefined}
                                     >
                                         <FormControl>
-                                            <SelectTrigger className="bg-white">
+                                            <SelectTrigger className="rounded-xl bg-slate-50 border-slate-200 focus:ring-primary/20">
                                                 <SelectValue placeholder="Select Category" />
                                             </SelectTrigger>
                                         </FormControl>
-                                        <SelectContent>
+                                        <SelectContent className="rounded-xl shadow-xl">
                                             {categories?.map((cat: any) => (
                                                 <SelectItem key={cat.id} value={cat.name}>
                                                     {cat.name}
@@ -211,9 +211,9 @@ export function EditProductDialog({ product, trigger }: Props) {
                             name="description"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Description</FormLabel>
+                                    <FormLabel className="text-slate-700 font-semibold">Description</FormLabel>
                                     <FormControl>
-                                        <Textarea placeholder="Details..." className="resize-none h-20" value={field.value || ""} onChange={field.onChange} />
+                                        <Textarea placeholder="Details..." className="resize-none h-20 rounded-xl bg-slate-50 border-slate-200 focus-visible:ring-primary/20" value={field.value || ""} onChange={field.onChange} />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
@@ -221,9 +221,9 @@ export function EditProductDialog({ product, trigger }: Props) {
                         />
 
                         {/* Tax Configuration Section */}
-                        <div className="rounded-lg bg-slate-50 p-4 border border-slate-100 space-y-4">
-                            <h4 className="text-sm font-medium text-slate-800 flex items-center gap-2">
-                                <span className="w-1 h-4 bg-blue-500 rounded-full"></span>
+                        <div className="rounded-2xl bg-blue-50/50 p-5 border border-blue-100 space-y-4">
+                            <h4 className="text-sm font-bold text-blue-900 flex items-center gap-2">
+                                <span className="w-1.5 h-4 bg-blue-500 rounded-full"></span>
                                 Tax Configuration
                             </h4>
                             <div className="grid grid-cols-2 gap-4">
@@ -232,7 +232,7 @@ export function EditProductDialog({ product, trigger }: Props) {
                                     name="taxRate"
                                     render={({ field }) => (
                                         <FormItem>
-                                            <FormLabel>ZIMRA Tax Type</FormLabel>
+                                            <FormLabel className="text-xs uppercase tracking-wide text-blue-700 font-semibold">ZIMRA Tax Type</FormLabel>
                                             <Select
                                                 onValueChange={(val) => {
                                                     setSelectedTaxTypeId(val);
@@ -246,11 +246,11 @@ export function EditProductDialog({ product, trigger }: Props) {
                                                 value={selectedTaxTypeId}
                                             >
                                                 <FormControl>
-                                                    <SelectTrigger className="bg-white">
+                                                    <SelectTrigger className="rounded-xl bg-white border-blue-200 focus:ring-blue-500/20 text-slate-700">
                                                         <SelectValue placeholder="Select Tax Type" />
                                                     </SelectTrigger>
                                                 </FormControl>
-                                                <SelectContent>
+                                                <SelectContent className="rounded-xl shadow-xl">
                                                     {taxTypes.data?.map((t: any) => (
                                                         <SelectItem key={t.id} value={t.id.toString()}>
                                                             {t.name} ({t.rate}%)
@@ -267,9 +267,9 @@ export function EditProductDialog({ product, trigger }: Props) {
                                     name="hsCode"
                                     render={({ field }) => (
                                         <FormItem>
-                                            <FormLabel>HS Code</FormLabel>
+                                            <FormLabel className="text-xs uppercase tracking-wide text-blue-700 font-semibold">HS Code</FormLabel>
                                             <FormControl>
-                                                <Input placeholder="Fiscal Code" className="bg-white" value={field.value || ""} onChange={field.onChange} />
+                                                <Input placeholder="Fiscal Code" className="rounded-xl bg-white border-blue-200 focus-visible:ring-blue-500/20 font-mono text-sm" value={field.value || ""} onChange={field.onChange} />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -284,9 +284,9 @@ export function EditProductDialog({ product, trigger }: Props) {
                                 name="price"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>Selling Price ($)</FormLabel>
+                                        <FormLabel className="text-slate-700 font-semibold">Selling Price ($)</FormLabel>
                                         <FormControl>
-                                            <Input type="number" step="0.01" min="0" {...field} />
+                                            <Input type="number" step="0.01" min="0" {...field} className="rounded-xl bg-slate-50 border-slate-200 focus-visible:ring-primary/20 font-mono" />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
@@ -297,9 +297,9 @@ export function EditProductDialog({ product, trigger }: Props) {
                                 name="sku"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>SKU / Code <span className="text-red-500">*</span></FormLabel>
+                                        <FormLabel className="text-slate-700 font-semibold">SKU / Code <span className="text-red-500">*</span></FormLabel>
                                         <FormControl>
-                                            <Input placeholder="Required" value={field.value || ""} onChange={field.onChange} />
+                                            <Input placeholder="Required" value={field.value || ""} onChange={field.onChange} className="rounded-xl bg-slate-50 border-slate-200 focus-visible:ring-primary/20 font-mono" />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
@@ -311,9 +311,9 @@ export function EditProductDialog({ product, trigger }: Props) {
                                     name="barcode"
                                     render={({ field }) => (
                                         <FormItem>
-                                            <FormLabel>Barcode</FormLabel>
+                                            <FormLabel className="text-slate-700 font-semibold">Barcode</FormLabel>
                                             <FormControl>
-                                                <Input placeholder="Optional" value={field.value || ""} onChange={field.onChange} />
+                                                <Input placeholder="Optional" value={field.value || ""} onChange={field.onChange} className="rounded-xl bg-slate-50 border-slate-200 focus-visible:ring-primary/20 font-mono" />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -323,16 +323,16 @@ export function EditProductDialog({ product, trigger }: Props) {
                         </div>
 
                         {!isService && (
-                            <div className="border rounded-lg p-4 space-y-4">
+                            <div className="border border-slate-200 rounded-2xl p-5 space-y-4 bg-slate-50/50">
                                 <FormField
                                     control={form.control}
                                     name="isTracked"
                                     render={({ field }) => (
-                                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm bg-white">
+                                        <FormItem className="flex flex-row items-center justify-between rounded-xl border border-slate-200 p-4 shadow-sm bg-white">
                                             <div className="space-y-0.5">
-                                                <FormLabel>Track Inventory</FormLabel>
+                                                <FormLabel className="text-base font-semibold text-slate-700">Track Inventory</FormLabel>
                                                 <FormDescription>
-                                                    Enable stock tracking
+                                                    Enable stock tracking for this item
                                                 </FormDescription>
                                             </div>
                                             <FormControl>
@@ -352,9 +352,9 @@ export function EditProductDialog({ product, trigger }: Props) {
                                             name="stockLevel"
                                             render={({ field }) => (
                                                 <FormItem>
-                                                    <FormLabel>Current Stock</FormLabel>
+                                                    <FormLabel className="text-slate-700 font-semibold">Current Stock</FormLabel>
                                                     <FormControl>
-                                                        <Input type="number" {...field} value={field.value || "0"} />
+                                                        <Input type="number" {...field} value={field.value || "0"} className="rounded-xl bg-white border-slate-200 focus-visible:ring-primary/20" />
                                                     </FormControl>
                                                     <FormMessage />
                                                 </FormItem>
@@ -365,9 +365,9 @@ export function EditProductDialog({ product, trigger }: Props) {
                                             name="lowStockThreshold"
                                             render={({ field }) => (
                                                 <FormItem>
-                                                    <FormLabel>Low Stock Alert</FormLabel>
+                                                    <FormLabel className="text-slate-700 font-semibold">Low Stock Alert</FormLabel>
                                                     <FormControl>
-                                                        <Input type="number" {...field} value={field.value || "10"} />
+                                                        <Input type="number" {...field} value={field.value || "10"} className="rounded-xl bg-white border-slate-200 focus-visible:ring-primary/20" />
                                                     </FormControl>
                                                     <FormMessage />
                                                 </FormItem>
@@ -382,9 +382,9 @@ export function EditProductDialog({ product, trigger }: Props) {
                             control={form.control}
                             name="isActive"
                             render={({ field }) => (
-                                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm bg-slate-50">
+                                <FormItem className="flex flex-row items-center justify-between rounded-xl border-slate-200 border p-4 shadow-sm bg-slate-50">
                                     <div className="space-y-0.5">
-                                        <FormLabel>Active Status</FormLabel>
+                                        <FormLabel className="text-base font-semibold text-slate-700">Active Status</FormLabel>
                                         <FormDescription>
                                             Inactive items won't appear in lists
                                         </FormDescription>
@@ -399,11 +399,11 @@ export function EditProductDialog({ product, trigger }: Props) {
                             )}
                         />
 
-                        <div className="flex justify-end gap-2 pt-4">
-                            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                        <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                            <Button type="button" variant="outline" onClick={() => setOpen(false)} className="rounded-xl border-slate-200 text-slate-600 hover:text-slate-900">
                                 Cancel
                             </Button>
-                            <Button type="submit" disabled={updateProduct.isPending}>
+                            <Button type="submit" disabled={updateProduct.isPending} className="rounded-xl bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20">
                                 {updateProduct.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                                 Save Changes
                             </Button>
@@ -411,6 +411,6 @@ export function EditProductDialog({ product, trigger }: Props) {
                     </form>
                 </Form>
             </DialogContent>
-        </Dialog>
+        </Dialog >
     );
 }

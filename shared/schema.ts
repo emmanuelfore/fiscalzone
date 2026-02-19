@@ -541,6 +541,8 @@ export const insertQuotationSchema = createInsertSchema(quotations).omit({
   createdAt: true,
 }).extend({
   quotationNumber: z.string().optional(),
+  issueDate: z.coerce.date().optional(),
+  expiryDate: z.coerce.date().optional().nullable(),
 });
 export const insertQuotationItemSchema = createInsertSchema(quotationItems).omit({ id: true, quotationId: true });
 

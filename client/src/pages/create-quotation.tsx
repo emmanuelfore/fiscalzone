@@ -12,13 +12,13 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { PDFViewer } from "@react-pdf/renderer";
+import { PDFViewer, PDFDownloadLink } from "@react-pdf/renderer";
 import { InvoicePDF } from "@/components/invoices/pdf-document";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { Plus, Trash2, Loader2, ArrowLeft, Check, ChevronsUpDown, Send, Eye, Save } from "lucide-react";
+import { Plus, Trash2, Loader2, ArrowLeft, Check, ChevronsUpDown, Send, Eye, Save, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
     Command,
@@ -50,6 +50,7 @@ type LineItem = {
     unitPrice: number;
     taxRate: number;
     taxTypeId?: number | null;
+    hsCode?: string;
 };
 
 export default function CreateQuotationPage() {
@@ -93,18 +94,22 @@ export default function CreateQuotationPage() {
             setCurrencyCode(existingQuotation.currency || "USD");
 
             if (existingQuotation.items && existingQuotation.items.length > 0) {
-                setItems(existingQuotation.items.map(item => ({
-                    localId: Math.random().toString(36).substring(2, 11),
-                    productId: item.productId,
-                    description: item.description,
-                    quantity: Number(item.quantity),
-                    unitPrice: Number(item.unitPrice),
-                    taxRate: Number(item.taxRate),
-                    taxTypeId: item.taxTypeId
-                })));
+                setItems(existingQuotation.items.map(item => {
+                    const product = products?.find(p => p.id === item.productId);
+                    return {
+                        localId: Math.random().toString(36).substring(2, 11),
+                        productId: item.productId,
+                        description: item.description,
+                        quantity: Number(item.quantity),
+                        unitPrice: Number(item.unitPrice),
+                        taxRate: Number(item.taxRate),
+                        taxTypeId: item.taxTypeId,
+                        hsCode: product?.hsCode
+                    };
+                }));
             }
         }
-    }, [existingQuotation, isEditing]);
+    }, [existingQuotation, isEditing, products]);
 
     const handleAddItem = () => {
         setItems([...items, { localId: Math.random().toString(36).substring(2, 11), productId: null, description: "", quantity: 1, unitPrice: 0, taxRate: 15 }]);
@@ -142,7 +147,8 @@ export default function CreateQuotationPage() {
                     quantity: 1,
                     unitPrice: scaledPrice,
                     taxRate: taxRate,
-                    taxTypeId: product.taxTypeId
+                    taxTypeId: product.taxTypeId,
+                    hsCode: product.hsCode
                 };
             }));
         }
@@ -154,13 +160,16 @@ export default function CreateQuotationPage() {
 
         items.forEach(item => {
             const lineTotal = item.quantity * item.unitPrice;
+            // If company is not VAT registered, effective tax rate is 0
+            const effectiveTaxRate = company?.vatRegistered ? Number(item.taxRate) : 0;
+
             if (taxInclusive) {
-                const taxPortion = lineTotal - (lineTotal / (1 + (item.taxRate / 100)));
+                const taxPortion = lineTotal - (lineTotal / (1 + (effectiveTaxRate / 100)));
                 subtotal += (lineTotal - taxPortion);
                 taxAmount += taxPortion;
             } else {
                 subtotal += lineTotal;
-                taxAmount += (lineTotal * (item.taxRate / 100));
+                taxAmount += (lineTotal * (effectiveTaxRate / 100));
             }
         });
 
@@ -172,7 +181,8 @@ export default function CreateQuotationPage() {
 
         items.forEach(item => {
             const lineTotal = item.quantity * item.unitPrice;
-            const rate = Number(item.taxRate);
+            // If company is not VAT registered, effective tax rate is 0
+            const rate = company?.vatRegistered ? Number(item.taxRate) : 0;
             const taxTypeId = item.taxTypeId || 0;
             const key = `${rate}-${taxTypeId}`;
 
@@ -243,9 +253,54 @@ export default function CreateQuotationPage() {
                     <Button variant="outline" onClick={() => handleSave("draft")} disabled={createQuotation.isPending || updateQuotation.isPending}>
                         <Save className="w-4 h-4 mr-2" /> Save Draft
                     </Button>
-                    <Button variant="outline" onClick={() => setShowPreview(true)}>
+                    <Button variant="outline" onClick={() => setShowPreview(true)} disabled={!company}>
                         <Eye className="w-4 h-4 mr-2" /> Preview
                     </Button>
+                    {company && (
+                        <PDFDownloadLink
+                            document={
+                                <InvoicePDF
+                                    invoice={{
+                                        invoiceNumber: isEditing && existingQuotation ? existingQuotation.quotationNumber : "PREVIEW",
+                                        issueDate: new Date(issueDate),
+                                        expiryDate: expiryDate ? new Date(expiryDate) : undefined,
+                                        status: 'quote', // Ensure status is explicitly quote for preview/download
+                                        items: items.map(i => ({
+                                            ...i,
+                                            lineTotal: (i.quantity * i.unitPrice).toString(),
+                                            product: { hsCode: i.hsCode || "0000" }
+                                        })),
+                                        subtotal: subtotal.toString(),
+                                        taxAmount: taxAmount.toString(),
+                                        total: total.toString(),
+                                        currency: currencyCode,
+                                        taxInclusive,
+                                        notes
+                                    }}
+                                    company={company}
+                                    customer={customers?.find(c => c.id.toString() === customerId)}
+                                    taxTypes={taxTypes.data}
+                                />
+                            }
+                            fileName={`Quotation-${isEditing && existingQuotation ? existingQuotation.quotationNumber : "Draft"}.pdf`}
+                        >
+                            {({ blob, url, loading, error }: any) => {
+                                if (error) {
+                                    return (
+                                        <Button variant="outline" disabled className="text-red-500 border-red-200">
+                                            <Download className="w-4 h-4 mr-2" /> Error
+                                        </Button>
+                                    );
+                                }
+                                return (
+                                    <Button variant="outline" disabled={loading}>
+                                        <Download className="w-4 h-4 mr-2" />
+                                        {loading ? "Loading..." : "Download PDF"}
+                                    </Button>
+                                );
+                            }}
+                        </PDFDownloadLink>
+                    )}
                     <Button onClick={() => handleSave("sent")} disabled={createQuotation.isPending || updateQuotation.isPending}>
                         <Send className="w-4 h-4 mr-2" /> Save & Send
                     </Button>
@@ -263,9 +318,12 @@ export default function CreateQuotationPage() {
                                 invoice={{
                                     invoiceNumber: isEditing && existingQuotation ? existingQuotation.quotationNumber : "PREVIEW",
                                     issueDate: new Date(issueDate),
+                                    expiryDate: expiryDate ? new Date(expiryDate) : undefined,
+                                    status: 'quote',
                                     items: items.map(i => ({
                                         ...i,
-                                        lineTotal: (i.quantity * i.unitPrice).toString()
+                                        lineTotal: (i.quantity * i.unitPrice).toString(),
+                                        product: { hsCode: i.hsCode || "0000" }
                                     })),
                                     subtotal: subtotal.toString(),
                                     taxAmount: taxAmount.toString(),
@@ -424,7 +482,7 @@ export default function CreateQuotationPage() {
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="flex justify-between text-sm">
-                                <span className="text-slate-500">{!taxInclusive ? "Total (excl. tax)" : "Subtotal"}</span>
+                                <span className="text-slate-500">Total (excl. tax)</span>
                                 <span>{currencyCode} {subtotal.toFixed(2)}</span>
                             </div>
                             <div className="bg-slate-50 rounded-lg p-3 border border-slate-200 my-4">
@@ -438,8 +496,8 @@ export default function CreateQuotationPage() {
                                 <div className="space-y-1">
                                     {Object.entries(taxBreakdown).map(([key, vals]) => {
                                         const mTax = taxTypes.data?.find((t: any) => t.id == vals.taxTypeId);
-                                        const isZeroRated = mTax?.zimraTaxId == 2 || mTax?.zimraTaxId == "2" || mTax?.zimraCode === 'D' || mTax?.name?.toLowerCase().includes('zero rated');
-                                        const isExempt = mTax?.zimraTaxId == 1 || mTax?.zimraTaxId == "1" || mTax?.zimraCode === 'C' || mTax?.zimraCode === 'E' || mTax?.name?.toLowerCase().includes('exempt') || (vals.rate === 0 && !isZeroRated);
+                                        const isZeroRated = mTax?.zimraTaxId === "2" || mTax?.zimraCode === 'D' || mTax?.name?.toLowerCase().includes('zero rated');
+                                        const isExempt = mTax?.zimraTaxId === "1" || mTax?.zimraCode === 'C' || mTax?.zimraCode === 'E' || mTax?.name?.toLowerCase().includes('exempt') || (vals.rate === 0 && !isZeroRated);
 
                                         return (
                                             <div key={key} className="grid grid-cols-4 gap-2 text-[10px] items-center py-1 border-b border-slate-100 last:border-0">

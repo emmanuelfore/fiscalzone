@@ -170,47 +170,49 @@ export default function Dashboard() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 pb-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pb-8">
         {/* Business Identity Card */}
         <Link href="/settings">
-          <Card className="card-depth border-none h-full bg-gradient-to-br from-white to-slate-50 hover:border-violet-200 transition-all cursor-pointer group relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-slate-100 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:bg-violet-100 transition-colors" />
-            <CardHeader>
-              <CardTitle className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-white border border-slate-100 shadow-sm flex items-center justify-center text-slate-600 group-hover:text-violet-600 group-hover:scale-110 transition-all">
+          <Card className="h-full border-none bg-white rounded-[2rem] hover:shadow-2xl hover:shadow-slate-200/50 transition-all duration-300 cursor-pointer group relative overflow-hidden ring-1 ring-slate-100">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-slate-50/80 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:bg-violet-50/80 transition-colors pointer-events-none" />
+            <CardHeader className="p-8 pb-4 relative z-10">
+              <CardTitle className="flex items-start gap-5">
+                <div className="w-16 h-16 rounded-2xl bg-white border border-slate-100 shadow-lg shadow-slate-200/50 flex items-center justify-center text-slate-400 group-hover:text-violet-600 group-hover:scale-110 group-hover:shadow-violet-200/50 transition-all duration-300">
                   {selectedCompany.logoUrl ? (
                     <img src={selectedCompany.logoUrl} alt="Logo" className="w-full h-full object-contain rounded-xl" />
                   ) : (
-                    <Building2 className="w-6 h-6" />
+                    <Building2 className="w-8 h-8" />
                   )}
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <div className="text-lg font-bold text-slate-900">{selectedCompany.name}</div>
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider ${selectedCompany.zimraEnvironment === 'production' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                      {selectedCompany.zimraEnvironment === 'production' ? 'Production' : 'Test'}
-                    </span>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="text-xl font-black font-display text-slate-900 group-hover:text-violet-700 transition-colors">{selectedCompany.name}</div>
                   </div>
-                  <div className="text-xs text-slate-500 font-medium bg-slate-100 px-2 py-0.5 rounded-full w-fit mt-1 group-hover:bg-violet-100 group-hover:text-violet-700 transition-colors">
-                    {selectedCompany.city}, Zimbabwe
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] px-2 py-1 rounded-md font-black uppercase tracking-wider border ${selectedCompany.zimraEnvironment === 'production' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>
+                      {selectedCompany.zimraEnvironment === 'production' ? 'Production' : 'Test Mode'}
+                    </span>
+                    <div className="text-xs text-slate-500 font-bold bg-slate-100/80 px-2.5 py-1 rounded-md group-hover:bg-violet-50 group-hover:text-violet-700 transition-colors">
+                      {selectedCompany.city || "Harare"}, ZW
+                    </div>
                   </div>
                 </div>
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex justify-between items-center py-2 border-b border-slate-100/50">
-                <div className="flex items-center gap-2 text-sm text-slate-500">
+            <CardContent className="p-8 pt-2 space-y-4 relative z-10">
+              <div className="flex justify-between items-center py-3 border-b border-slate-100/50">
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
                   <Fingerprint className="w-4 h-4" /> TIN / BP
                 </div>
-                <div className="font-mono text-sm font-semibold text-slate-700">
+                <div className="font-mono text-sm font-bold text-slate-700 bg-slate-50 px-2 py-1 rounded-md border border-slate-100 group-hover:bg-white transition-colors">
                   {selectedCompany.tin || selectedCompany.bpNumber || "Not Set"}
                 </div>
               </div>
               <div className="flex justify-between items-center py-1">
-                <div className="flex items-center gap-2 text-sm text-slate-500">
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
                   <FileText className="w-4 h-4" /> VAT Status
                 </div>
-                <div className={`px-2 py-0.5 rounded text-xs font-bold ${selectedCompany.vatEnabled ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>
+                <div className={`px-2.5 py-1 rounded-md text-xs font-black uppercase tracking-wider ${selectedCompany.vatEnabled ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
                   {selectedCompany.vatEnabled ? "Registered" : "Non-VAT"}
                 </div>
               </div>
@@ -219,41 +221,37 @@ export default function Dashboard() {
         </Link>
 
         {/* Stats Cards */}
-        <div className="col-span-1 lg:col-span-2 grid grid-cols-2 gap-4">
-          <Card className="card-depth border-none flex flex-col justify-between">
-            <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
-              <CardTitle className="text-sm font-medium text-slate-500">Total Revenue</CardTitle>
-              <Select value={reportCurrencyCode} onValueChange={setReportCurrencyCode}>
-                <SelectTrigger className="w-[80px] h-7 text-[10px] py-0 px-2">
-                  <SelectValue placeholder="Cur" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="USD">USD</SelectItem>
-                  {currencies?.filter(c => c.code !== 'USD').map(c => (
-                    <SelectItem key={c.id} value={c.code}>{c.code}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+        <div className="col-span-1 lg:col-span-2 grid grid-cols-2 gap-6">
+          <Card className="border-none bg-gradient-to-br from-white to-slate-50 rounded-[2rem] flex flex-col justify-between shadow-sm hover:shadow-xl transition-all duration-300 ring-1 ring-slate-100">
+            <CardHeader className="p-8 pb-2 flex flex-row items-center justify-between space-y-0">
+              <CardTitle className="text-xs font-black text-slate-400 uppercase tracking-widest">Total Revenue</CardTitle>
+              <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
+                <TrendingUp className="w-5 h-5" />
+              </div>
             </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-display font-bold text-slate-900">
+            <CardContent className="p-8 pt-0">
+              <div className="text-4xl lg:text-5xl font-black font-display text-slate-900 tracking-tight">
                 {consolidatedSymbol}{stats.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </div>
-              <div className="text-xs text-emerald-600 flex items-center mt-2 font-medium">
-                <TrendingUp className="w-3 h-3 mr-1" /> Converted from USD
+              <div className="text-xs font-bold text-slate-400 mt-4 flex items-center gap-2">
+                <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">+12%</span>
+                <span>vs last month</span>
               </div>
             </CardContent>
           </Card>
-          <Card className="card-depth border-none flex flex-col justify-between">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-slate-500">Pending Payments</CardTitle>
+          <Card className="border-none bg-gradient-to-br from-white to-slate-50 rounded-[2rem] flex flex-col justify-between shadow-sm hover:shadow-xl transition-all duration-300 ring-1 ring-slate-100">
+            <CardHeader className="p-8 pb-2 flex flex-row items-center justify-between space-y-0">
+              <CardTitle className="text-xs font-black text-slate-400 uppercase tracking-widest">Pending Invoices</CardTitle>
+              <div className="p-2 rounded-xl bg-amber-50 text-amber-600">
+                <Clock className="w-5 h-5" />
+              </div>
             </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-display font-bold text-slate-900">
+            <CardContent className="p-8 pt-0">
+              <div className="text-4xl lg:text-5xl font-black font-display text-slate-900 tracking-tight">
                 {consolidatedSymbol}{stats.pending.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </div>
-              <div className="text-xs text-amber-600 mt-2 font-medium">
-                {((stats.pending / (stats.total || 1)) * 100).toFixed(0)}% of total revenue
+              <div className="text-xs font-bold text-slate-400 mt-4">
+                <span className="text-amber-600 font-extrabold">{((stats.pending / (stats.total || 1)) * 100).toFixed(0)}%</span> of total revenue
               </div>
             </CardContent>
           </Card>

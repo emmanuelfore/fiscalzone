@@ -45,8 +45,8 @@ export default function LandingPage() {
         { icon: Zap, color: "text-amber-600", bg: "bg-amber-100", title: "FDMS Sync", desc: "Real-time fiscal device synchronization." },
         { icon: QrCode, color: "text-blue-600", bg: "bg-blue-100", title: "Smart QR Codes", desc: "Embeds fiscal signatures automatically." },
         { icon: Calculator, color: "text-emerald-600", bg: "bg-emerald-100", title: "Auto-Tax", desc: "VAT and multiple tax rate automated calculation." },
-        { icon: Users, color: "text-pink-600", bg: "bg-pink-100", title: "Client Portal", desc: "Allow clients to view and pay invoices online." },
-        { icon: BarChart3, color: "text-cyan-600", bg: "bg-cyan-100", title: "Analytics", desc: "Deep insights into your revenue streams." },
+        { icon: LayoutDashboard, color: "text-orange-600", bg: "bg-orange-100", title: "Smart POS", desc: "Complete Point of Sale system for retail operations." },
+        { icon: Check, color: "text-indigo-600", bg: "bg-indigo-100", title: "Inventory", desc: "Track stock levels and manage products easily." },
     ];
 
     return (
@@ -99,61 +99,57 @@ export default function LandingPage() {
                 </div>
             )}
 
-            {/* Creative Grid Background */}
-            <div className="fixed inset-0 pointer-events-none z-0">
-                <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]" />
-                <div className="absolute left-0 right-0 top-0 -z-10 m-auto h-[310px] w-[310px] rounded-full bg-violet-500 opacity-20 blur-[100px]" />
+            {/* Premium Background */}
+            <div className="fixed inset-0 pointer-events-none z-0 bg-slate-50">
+                <div className="absolute top-0 inset-x-0 h-[600px] bg-gradient-to-b from-indigo-50/50 via-slate-50/50 to-slate-50" />
+                <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808008_1px,transparent_1px),linear-gradient(to_bottom,#80808008_1px,transparent_1px)] bg-[size:24px_24px]" />
+                <div className="absolute right-0 top-0 -z-10 h-[600px] w-[600px] rounded-full bg-violet-200/20 blur-[100px]" />
+                <div className="absolute left-0 top-1/2 -z-10 h-[400px] w-[400px] rounded-full bg-blue-200/20 blur-[100px]" />
             </div>
 
             {/* Hero Section */}
-            <section className="relative pt-24 pb-16 lg:pt-32 lg:pb-20 overflow-visible z-10">
+            <section className="relative pt-32 pb-20 lg:pt-40 lg:pb-32 overflow-visible z-10">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
-                    <div className="grid lg:grid-cols-2 gap-12 items-center">
+                    <div className="grid lg:grid-cols-2 gap-16 items-center">
                         <motion.div
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.6 }}
                             className="text-center lg:text-left"
                         >
-                            <motion.div
-                                initial={{ opacity: 0, scale: 0.9 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                transition={{ delay: 0.2 }}
-                                className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white border border-violet-100 text-violet-700 text-xs font-semibold uppercase tracking-wide mb-6 shadow-sm"
-                            >
-                                <span className="w-2 h-2 rounded-full bg-violet-600 animate-pulse" />
-                                ZIMRA Certified
-                            </motion.div>
-
                             <h1 className="text-5xl sm:text-6xl lg:text-7xl font-display font-bold text-slate-900 leading-[1.1] mb-8 tracking-tight">
-                                ZIMRA Compliant <br />
-                                <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 via-cyan-500 to-violet-500 animate-gradient-x">
-                                    Invoicing Platform
+                                Fiscal Intelligence <br />
+                                <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-600 via-indigo-600 to-blue-600">
+                                    Reimagined.
                                 </span>
                             </h1>
 
-                            <p className="text-xl text-slate-600 mb-10 leading-relaxed max-w-2xl mx-auto lg:mx-0">
-                                Automate your tax compliance with real-time FDMS integration.
-                                Create fiscalized invoices, manage multi-currency transactions, and stay compliant with Zimbabwe's tax regulations—all in one powerful platform.
+                            <p className="text-xl text-slate-600 mb-10 leading-relaxed max-w-2xl mx-auto lg:mx-0 font-medium">
+                                The all-in-one fiscalization platform for Zimbabwe's modern businesses.
+                                Seamlessly sync with ZIMRA, manage inventory, and drive growth with smart analytics.
                             </p>
 
                             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-                                <Button size="lg" className="h-14 px-8 rounded-full text-lg btn-gradient border-none transition-transform hover:scale-105" onClick={() => setLocation("/auth?mode=signup")}>
+                                <Button size="lg" className="h-14 px-8 rounded-full text-lg btn-gradient border-none hover:shadow-lg hover:shadow-indigo-500/20 transition-all duration-300 transform hover:-translate-y-1" onClick={() => setLocation("/auth?mode=signup")}>
                                     Start Free Trial <ArrowRight className="ml-2 w-5 h-5" />
                                 </Button>
-                                <Button size="lg" variant="outline" className="h-14 px-8 rounded-full text-lg border-2 hover:bg-white bg-white/50 backdrop-blur-sm" onClick={() => setContactFormOpen(true)}>
-                                    Request Demo
+                                <Button size="lg" variant="ghost" className="h-14 px-8 rounded-full text-lg text-slate-700 hover:bg-white hover:shadow-md transition-all duration-300" onClick={() => setContactFormOpen(true)}>
+                                    Book a Demo
                                 </Button>
                             </div>
 
-                            <div className="mt-12 flex items-center justify-center lg:justify-start gap-8">
-                                <div className="flex items-center gap-2 text-sm font-semibold text-slate-600">
-                                    <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600"><Shield className="w-4 h-4" /></div>
-                                    Trusted Security
-                                </div>
-                                <div className="flex items-center gap-2 text-sm font-semibold text-slate-600">
-                                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600"><Globe className="w-4 h-4" /></div>
-                                    24/7 Support
+                            <div className="mt-12 flex items-center justify-center lg:justify-start gap-8 border-t border-slate-200/50 pt-8">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex -space-x-3">
+                                        {[1, 2, 3, 4].map(i => (
+                                            <div key={i} className={`w-8 h-8 rounded-full border-2 border-white bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-500 overflow-hidden`}>
+                                                <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${i}`} alt="Avatar" className="w-full h-full" />
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="text-sm font-medium text-slate-600">
+                                        Trusted by <span className="font-bold text-slate-900">500+</span> businesses
+                                    </div>
                                 </div>
                             </div>
                         </motion.div>
@@ -319,16 +315,19 @@ export default function LandingPage() {
             </section>
 
             {/* Features Colorful Grid */}
-            <section id="features" className="py-24 bg-white relative z-10">
+            <section id="features" className="py-32 bg-slate-50 relative z-10">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="text-center max-w-3xl mx-auto mb-20">
-                        <Badge variant="outline" className="mb-4 border-violet-200 text-violet-600 bg-violet-50">Power Features</Badge>
-                        <h2 className="text-4xl font-display font-bold text-slate-900 mb-6">
-                            Everything you need to <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-600 to-cyan-500">succeed.</span>
+                        <Badge variant="outline" className="mb-4 border-indigo-200 text-indigo-600 bg-indigo-50">Power Features</Badge>
+                        <h2 className="text-4xl lg:text-5xl font-display font-bold text-slate-900 mb-6">
+                            Everything you need to <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-600 to-indigo-500">succeed.</span>
                         </h2>
+                        <p className="text-xl text-slate-600">
+                            Built for speed, compliance, and growth.
+                        </p>
                     </div>
 
-                    <div className="grid md:grid-cols-3 gap-8">
+                    <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
                         {featureColors.map((f, i) => (
                             <motion.div
                                 key={i}
@@ -336,9 +335,9 @@ export default function LandingPage() {
                                 whileInView={{ opacity: 1, y: 0 }}
                                 viewport={{ once: true }}
                                 transition={{ delay: i * 0.1 }}
-                                className="group p-8 rounded-3xl bg-slate-50 border border-slate-100 hover:bg-white hover:shadow-2xl hover:shadow-slate-200/50 hover:-translate-y-1 transition-all duration-300"
+                                className={`group p-8 rounded-3xl bg-white border border-slate-100 hover:border-indigo-100/50 hover:shadow-2xl hover:shadow-indigo-500/10 hover:-translate-y-1 transition-all duration-300 ${i === 0 || i === 3 ? 'md:col-span-2' : ''}`}
                             >
-                                <div className={`w-14 h-14 rounded-2xl ${f.bg} flex items-center justify-center ${f.color} mb-6 transition-transform group-hover:scale-110 duration-300`}>
+                                <div className={`w-14 h-14 rounded-2xl ${f.bg} flex items-center justify-center ${f.color} mb-6 transition-transform group-hover:scale-110 group-hover:rotate-3 duration-300`}>
                                     <f.icon className="w-7 h-7" />
                                 </div>
                                 <h3 className="text-xl font-bold text-slate-900 mb-3 font-display">{f.title}</h3>
@@ -352,46 +351,49 @@ export default function LandingPage() {
             </section>
 
             {/* Pricing Section */}
-            <section id="pricing" className="py-24 bg-slate-50 relative z-10">
+            <section id="pricing" className="py-32 bg-white relative z-10">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="text-center mb-16 px-4">
-                        <h2 className="text-4xl font-display font-bold text-slate-900 mb-4">
+                    <div className="text-center mb-20 px-4">
+                        <Badge variant="outline" className="mb-4 border-indigo-200 text-indigo-600 bg-indigo-50">Pricing</Badge>
+                        <h2 className="text-4xl lg:text-5xl font-display font-bold text-slate-900 mb-4">
                             Transparent Pricing
                         </h2>
+                        <p className="text-xl text-slate-600">Start for free, scale as you grow.</p>
                     </div>
 
-                    <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
                         {[
-                            { name: "Starter", price: "$0", desc: "For freelancers", features: ["10 invoices/mo", "Basic Reports", "1 User"] },
-                            { name: "Pro", price: "$150", popular: true, desc: "For growing teams", features: ["Unlimited Invoices", "FDMS Integration", "Priority Support", "5 Users"] },
-                            { name: "Enterprise", price: "$350", desc: "For corporations", features: ["Unlimited Users", "API Access", "Dedicated Manager", "SLA"] },
+                            { name: "Test Mode", price: "Free", desc: "For development & testing", features: ["Unlimited Invoices (Test)", "Sandboxed FDMS", "API Access", "Dev Support"] },
+                            { name: "Production", price: "$150", popular: true, desc: "Per device / year", features: ["Unlimited Invoices", "Live FDMS Sync", "Priority Support", "ZIMRA Compliant"] },
+                            { name: "Enterprise", price: "Custom", desc: "For large organizations", features: ["Unlimited Users", "Dedicated Manager", "SLA Assurance", "Custom Integration"] },
                         ].map((plan, i) => (
                             <motion.div
                                 key={i}
-                                initial={{ opacity: 0, scale: 0.95 }}
-                                whileInView={{ opacity: 1, scale: 1 }}
+                                initial={{ opacity: 0, y: 20 }}
+                                whileInView={{ opacity: 1, y: 0 }}
                                 viewport={{ once: true }}
                                 transition={{ delay: i * 0.1 }}
-                                className={`relative p-8 rounded-3xl bg-white border ${plan.popular ? 'border-violet-500/30 ring-4 ring-violet-500/10 shadow-2xl' : 'border-slate-200 shadow-sm'} flex flex-col hover:scale-105 transition-transform duration-300`}
+                                className={`relative p-10 rounded-[2.5rem] bg-slate-50 border ${plan.popular ? 'border-indigo-500 ring-4 ring-indigo-500/10 shadow-2xl shadow-indigo-500/10' : 'border-slate-200'} flex flex-col hover:scale-105 transition-transform duration-300`}
                             >
-                                {plan.popular && <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-gradient-to-r from-violet-600 to-indigo-600 text-white px-6 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide shadow-lg shadow-violet-500/30">Most Popular</div>}
+                                {plan.popular && <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-indigo-600 text-white px-6 py-2 rounded-full text-xs font-bold uppercase tracking-wide shadow-lg shadow-indigo-500/30">Most Popular</div>}
                                 <div className="mb-8">
-                                    <h3 className="text-xl font-bold font-display text-slate-900">{plan.name}</h3>
-                                    <p className="text-sm text-slate-500 mb-4">{plan.desc}</p>
+                                    <h3 className="text-2xl font-bold font-display text-slate-900">{plan.name}</h3>
+                                    <p className="text-sm text-slate-500 mb-6 font-medium">{plan.desc}</p>
                                     <div className="flex items-baseline gap-1">
-                                        <span className="text-4xl font-bold text-slate-900">{plan.price}</span>
-                                        <span className="text-slate-500">/yr</span>
+                                        <span className="text-5xl font-bold text-slate-900 tracking-tight">{plan.price}</span>
+                                        {plan.price !== "Custom" && <span className="text-slate-500 font-medium">/yr</span>}
                                     </div>
                                 </div>
-                                <ul className="space-y-4 mb-8 flex-1">
+                                <ul className="space-y-4 mb-10 flex-1">
                                     {plan.features.map((feat) => (
                                         <li key={feat} className="flex items-center gap-3 text-sm text-slate-700 font-medium">
-                                            <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center text-green-600 flex-shrink-0"><Check className="w-3 h-3" /></div> {feat}
+                                            <div className={`w-6 h-6 rounded-full ${plan.popular ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-200 text-slate-600'} flex items-center justify-center flex-shrink-0`}><Check className="w-3.5 h-3.5" /></div>
+                                            {feat}
                                         </li>
                                     ))}
                                 </ul>
-                                <Button className={`w-full h-12 rounded-xl font-bold ${plan.popular ? 'btn-gradient' : 'bg-slate-900 text-white hover:bg-slate-800'}`} onClick={() => setLocation("/auth?mode=signup")}>
-                                    Get Started
+                                <Button size="lg" className={`w-full h-14 rounded-2xl font-bold text-base ${plan.popular ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/25' : 'bg-white border-2 border-slate-200 text-slate-900 hover:border-slate-300 hover:bg-slate-50'}`} onClick={() => setLocation("/auth?mode=signup")}>
+                                    {plan.price === "Custom" ? "Contact Sales" : "Get Started"}
                                 </Button>
                             </motion.div>
                         ))}
@@ -524,7 +526,10 @@ export default function LandingPage() {
                         <div className="flex items-center gap-2">
                             <img src="/fiscalstack-logo.png" alt="FiscalStack" className="h-8" />
                         </div>
-                        <p className="text-sm text-slate-500">© 2026 FiscalStack. Made with ❤️ in Zimbabwe.</p>
+                        <div className="flex flex-col items-end gap-1">
+                            <a href="mailto:info@fiscalstack.co.zw" className="text-sm text-slate-600 hover:text-violet-600 transition-colors">info@fiscalstack.co.zw</a>
+                            <p className="text-sm text-slate-500">© 2026 FiscalStack. Made with ❤️ in Zimbabwe.</p>
+                        </div>
                     </div>
                 </div>
             </footer>

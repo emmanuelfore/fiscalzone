@@ -161,74 +161,75 @@ export function Layout({ children }: { children: React.ReactNode }) {
   if (!user) return null;
 
   return (
-    <div className="min-h-screen bg-slate-50 flex font-sans">
-      {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-slate-200 flex flex-col fixed inset-y-0 z-50">
-        <div className="p-6 border-b border-slate-100/50">
-          <div className="flex items-center gap-3 mb-6">
-            <img src="/fiscalstack-logo.png" alt="FiscalStack" className="h-10" />
+    <div className="min-h-screen bg-slate-50/50 flex font-sans selection:bg-violet-500/20">
+      {/* Floating Sidebar */}
+      <aside className="w-72 bg-white/80 backdrop-blur-xl border border-white/50 shadow-2xl shadow-slate-200/50 flex flex-col fixed inset-y-4 left-4 z-50 rounded-[2rem] overflow-hidden transition-all duration-300">
+        <div className="p-6 border-b border-slate-100/50 bg-white/50">
+          <div className="flex items-center gap-3 mb-6 px-1">
+            <img src="/fiscalstack-logo.png" alt="FiscalStack" className="h-9" />
           </div>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 hover:bg-slate-100 transition-colors cursor-pointer group">
+              <div className="p-3 rounded-2xl bg-white border border-slate-200/60 shadow-sm hover:shadow-md hover:border-violet-200/60 transition-all cursor-pointer group active:scale-95 duration-200">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-400 overflow-hidden shadow-sm">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-100 flex items-center justify-center text-slate-400 overflow-hidden shadow-inner font-display font-bold text-xs">
                     {selectedCompany?.logoUrl ? (
                       <img src={selectedCompany.logoUrl} alt="Logo" className="w-full h-full object-contain" />
                     ) : (
-                      <Building2 className="w-4 h-4" />
+                      <Building2 className="w-5 h-5" />
                     )}
                   </div>
                   <div className="overflow-hidden flex-1 text-left">
                     <div className="flex items-center justify-between mb-0.5">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active Entity</p>
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Active Entity</p>
                       {user.isSuperAdmin && (
-                        <span className="text-[10px] bg-amber-500/10 text-amber-600 px-1.5 py-0 rounded-full font-bold uppercase tracking-wider">Super</span>
+                        <span className="text-[9px] bg-amber-50 text-amber-600 px-1.5 py-0 rounded-full font-black uppercase tracking-wider border border-amber-100">Super</span>
                       )}
                     </div>
-                    <p className="text-sm font-bold text-slate-900 truncate flex items-center gap-1">
+                    <p className="text-sm font-black text-slate-800 truncate flex items-center gap-1 group-hover:text-violet-700 transition-colors font-display">
                       {selectedCompany ? selectedCompany.name : "Setup Required"}
-                      {selectedCompany && (
-                        <span className={`text-[8px] px-1 rounded font-bold uppercase ${selectedCompany.zimraEnvironment === 'production' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                          {selectedCompany.zimraEnvironment === 'production' ? 'PROD' : 'TEST'}
-                        </span>
-                      )}
-                      <ChevronDown className="w-3 h-3 text-slate-400 group-hover:text-slate-600 transition-colors" />
                     </p>
+                    {selectedCompany && (
+                      <span className={`text-[9px] px-1.5 rounded-md font-bold uppercase tracking-wider ${selectedCompany.zimraEnvironment === 'production' ? 'text-emerald-600 bg-emerald-50' : 'text-amber-600 bg-amber-50'}`}>
+                        {selectedCompany.zimraEnvironment === 'production' ? 'Producdtion' : 'Test Mode'}
+                      </span>
+                    )}
                   </div>
+                  <ChevronDown className="w-4 h-4 text-slate-300 group-hover:text-violet-400 transition-colors" />
                 </div>
               </div>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-64 max-h-[300px] overflow-y-auto bg-white border-slate-200">
-              <div className="p-2">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-2 pb-2">Your Companies</p>
+            <DropdownMenuContent align="start" className="w-64 max-h-[300px] overflow-y-auto bg-white/90 backdrop-blur-xl border-slate-200 rounded-2xl shadow-xl p-2">
+              <div className="px-2 py-1.5">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 pb-2">Switch Workspace</p>
                 {companies?.map((company) => (
                   <DropdownMenuItem
                     key={company.id}
                     onClick={() => handleCompanyChange(company.id)}
                     className={cn(
-                      "flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors",
-                      selectedCompanyId === company.id ? "bg-primary/10 text-primary font-semibold" : "hover:bg-slate-50"
+                      "flex items-center gap-3 p-2.5 rounded-xl cursor-pointer transition-all duration-200 font-medium",
+                      selectedCompanyId === company.id ? "bg-violet-50 text-violet-700 shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                     )}
                   >
-                    <div className="w-6 h-6 rounded bg-slate-100 flex items-center justify-center text-slate-500 overflow-hidden text-[10px]">
-                      {company.logoUrl ? <img src={company.logoUrl} className="w-full h-full object-contain" /> : <Building2 className="w-3 h-3" />}
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold ${selectedCompanyId === company.id ? 'bg-white text-violet-600 shadow-sm' : 'bg-slate-100 text-slate-500'}`}>
+                      {company.logoUrl ? <img src={company.logoUrl} className="w-full h-full object-contain rounded-md" /> : company.name.substring(0, 2).toUpperCase()}
                     </div>
-                    <span className="truncate flex-1">{company.name}</span>
+                    <span className="truncate flex-1 font-bold font-display">{company.name}</span>
+                    {selectedCompanyId === company.id && <div className="w-2 h-2 rounded-full bg-violet-500" />}
                   </DropdownMenuItem>
                 ))}
                 <div className="h-px bg-slate-100 my-2" />
-                <DropdownMenuItem onClick={() => setLocation("/onboarding")} className="flex items-center gap-2 p-2 text-primary font-medium cursor-pointer hover:bg-primary/5 rounded-lg">
+                <DropdownMenuItem onClick={() => setLocation("/onboarding")} className="flex items-center justify-center gap-2 p-3 text-white bg-slate-900 font-bold cursor-pointer hover:bg-slate-800 rounded-xl shadow-lg shadow-slate-900/10 active:scale-95 transition-all">
                   <Plus className="w-4 h-4" />
-                  <span>Register New Company</span>
+                  <span>New Company</span>
                 </DropdownMenuItem>
               </div>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
 
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto custom-scrollbar">
           {navItems.map((item) => {
             if (item.children) {
               const isActiveGroup = item.children.some(child =>
@@ -252,37 +253,46 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <CollapsibleTrigger asChild>
                     <div
                       className={cn(
-                        "flex items-center justify-between w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer text-slate-600 hover:bg-slate-100 hover:text-slate-900",
-                        isActiveGroup && "text-slate-900 font-semibold"
+                        "flex items-center justify-between w-full px-4 py-3 rounded-2xl text-sm font-bold transition-all duration-200 cursor-pointer select-none group",
+                        isActiveGroup
+                          ? "bg-slate-50 text-slate-900 shadow-sm"
+                          : "text-slate-500 hover:bg-slate-50 hover:text-slate-900 hover:ml-1"
                       )}
                     >
-                      <div className="flex items-center gap-3">
-                        <item.icon className={cn("w-5 h-5", isActiveGroup ? "text-primary" : "text-slate-400")} />
-                        {item.label}
+                      <div className="flex items-center gap-3.5">
+                        <div className={cn("p-1.5 rounded-lg transition-colors", isActiveGroup ? "bg-white text-violet-600 shadow-sm" : "bg-transparent group-hover:bg-slate-200/50")}>
+                          <item.icon className="w-4.5 h-4.5" />
+                        </div>
+                        <span className="font-display tracking-tight">{item.label}</span>
                       </div>
                       <ChevronDown
-                        className={cn("w-4 h-4 text-slate-400 transition-transform duration-200", isOpen && "transform rotate-180")}
+                        className={cn("w-4 h-4 text-slate-300 transition-transform duration-300", isOpen && "transform rotate-180 text-slate-500")}
                       />
                     </div>
                   </CollapsibleTrigger>
-                  <CollapsibleContent className="space-y-1">
-                    {item.children.map((child) => {
-                      const isChildActive = location + window.location.search === child.href || (location === child.href && !child.href.includes("?"));
-                      return (
-                        <Link key={child.label} href={child.href}>
-                          <div
-                            className={cn(
-                              "flex items-center gap-3 pl-11 pr-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer",
-                              isChildActive
-                                ? "bg-primary/10 text-primary shadow-sm"
-                                : "text-slate-500 hover:text-slate-900 hover:bg-slate-50"
-                            )}
-                          >
-                            <span className="truncate">{child.label}</span>
-                          </div>
-                        </Link>
-                      );
-                    })}
+                  <CollapsibleContent className="space-y-1 pt-1 pb-2 pl-4">
+                    <div className="pl-4 border-l-2 border-slate-100 space-y-1">
+                      {item.children.map((child) => {
+                        const isChildActive = location + window.location.search === child.href || (location === child.href && !child.href.includes("?"));
+                        return (
+                          <Link key={child.label} href={child.href}>
+                            <div
+                              className={cn(
+                                "flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer w-full relative overflow-hidden active:scale-95",
+                                isChildActive
+                                  ? "bg-violet-600 text-white shadow-lg shadow-violet-500/25"
+                                  : "text-slate-500 hover:text-slate-900 hover:bg-slate-50"
+                              )}
+                            >
+                              {isChildActive && (
+                                <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent pointer-events-none" />
+                              )}
+                              <span className="truncate tracking-wide">{child.label}</span>
+                            </div>
+                          </Link>
+                        );
+                      })}
+                    </div>
                   </CollapsibleContent>
                 </Collapsible>
               );
@@ -293,110 +303,121 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <Link key={item.label} href={item.href!}>
                 <div
                   className={cn(
-                    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer",
+                    "flex items-center gap-3.5 px-4 py-3.5 rounded-2xl text-sm font-bold transition-all duration-200 cursor-pointer select-none active:scale-95",
                     isActive
-                      ? "bg-primary/10 text-primary shadow-sm"
-                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                      ? "bg-slate-900 text-white shadow-xl shadow-slate-900/10"
+                      : "text-slate-500 hover:bg-white hover:shadow-md hover:text-slate-900 hover:scale-[1.02]"
                   )}
                 >
-                  <item.icon className={cn("w-5 h-5", isActive ? "text-primary" : "text-slate-400")} />
-                  {item.label}
+                  <item.icon className={cn("w-5 h-5", isActive ? "text-slate-200" : "text-slate-400 group-hover:text-slate-600")} />
+                  <span className="font-display tracking-tight">{item.label}</span>
                 </div>
               </Link>
             );
           })}
         </nav>
 
-        <div className="p-4 border-t border-slate-100">
-          {/* Footer removed - moved to top header */}
+        <div className="p-4 bg-slate-50/50 border-t border-slate-100/50">
+          <div className="flex items-center justify-center gap-1 text-[10px] font-bold text-slate-300 uppercase tracking-widest">
+            <ShieldCheck className="w-3 h-3" />
+            <span>FiscalStack v1.2</span>
+          </div>
         </div>
       </aside>
 
       {/* Main Content Wrapper */}
-      <div className="flex-1 ml-64 flex flex-col min-h-screen">
+      <div className="flex-1 ml-80 flex flex-col min-h-screen transition-all duration-300">
 
         {/* Top Header */}
-        <header className="h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40 px-8 flex items-center justify-end gap-3">
+        <header className="h-20 bg-transparent flex items-center justify-end gap-4 px-8 pt-4 pb-2 z-40 sticky top-0 backdrop-blur-sm">
           {user.isSuperAdmin && (
-            <div className="mr-auto flex items-center gap-2 bg-amber-50 border border-amber-200 px-3 py-1 rounded-full shadow-sm">
+            <div className="mr-auto flex items-center gap-2 bg-amber-100/80 backdrop-blur-md border border-amber-200/50 px-4 py-1.5 rounded-full shadow-sm">
               <LogOut className="w-4 h-4 text-amber-600" />
-              <span className="text-xs font-bold text-amber-700 uppercase tracking-widest">Global Super Admin Access</span>
+              <span className="text-xs font-black text-amber-700 uppercase tracking-widest">Global Super Admin</span>
             </div>
           )}
-          {selectedCompanyId && <DeviceStatusWidget companyId={selectedCompanyId} />}
-          {selectedCompany?.subscriptionStatus !== 'active' && (
-            <Link href="/subscription">
-              <div className="flex items-center gap-2 bg-red-50 border border-red-200 px-3 py-1.5 rounded-full shadow-sm hover:bg-red-100 transition-colors cursor-pointer">
-                <AlertTriangle className="w-3.5 h-3.5 text-red-600" />
-                <span className="text-[10px] font-bold text-red-700 uppercase tracking-widest">
-                  Subscription {selectedCompany?.subscriptionStatus || 'Inactive'}
-                </span>
-              </div>
-            </Link>
-          )}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-10 w-10 rounded-full p-0 border border-slate-200 hover:bg-slate-100 transition-colors">
-                <Avatar className="h-9 w-9">
-                  <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">
-                    {user.name?.substring(0, 2).toUpperCase() || "US"}
-                  </AvatarFallback>
-                </Avatar>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56 bg-white">
-              <div className="flex items-center justify-start gap-2 p-2">
-                <div className="flex flex-col space-y-1 leading-none">
-                  <div className="flex items-center gap-2">
-                    {user.name && <p className="font-medium">{user.name}</p>}
-                    {user.isSuperAdmin && (
-                      <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider">Super Admin</span>
+
+          <div className="flex items-center gap-3 bg-white/80 backdrop-blur-xl border border-white/40 p-1.5 rounded-full shadow-lg shadow-slate-200/50">
+            {selectedCompanyId && <DeviceStatusWidget companyId={selectedCompanyId} />}
+
+            <div className="h-6 w-px bg-slate-200 mx-1" />
+
+            {selectedCompany?.subscriptionStatus !== 'active' && (
+              <Link href="/subscription">
+                <div className="flex items-center gap-2 bg-red-50 border border-red-100 px-3 py-1.5 rounded-full hover:bg-red-100 transition-colors cursor-pointer group">
+                  <AlertTriangle className="w-3.5 h-3.5 text-red-600 group-hover:scale-110 transition-transform" />
+                  <span className="text-[10px] font-black text-red-700 uppercase tracking-widest">
+                    {selectedCompany?.subscriptionStatus || 'Inactive'}
+                  </span>
+                </div>
+              </Link>
+            )}
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="h-10 w-10 rounded-full p-0 border-2 border-slate-100 hover:border-violet-200 transition-all hover:scale-105 active:scale-95 shadow-sm">
+                  <Avatar className="h-9 w-9">
+                    <AvatarFallback className="bg-gradient-to-br from-violet-600 to-indigo-600 text-white text-xs font-black">
+                      {user.name?.substring(0, 2).toUpperCase() || "US"}
+                    </AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64 bg-white/90 backdrop-blur-xl rounded-2xl shadow-2xl border-white/50 p-2 mt-2">
+                <div className="flex items-center justify-start gap-3 p-3 bg-slate-50/50 rounded-xl mb-2">
+                  <div className="h-10 w-10 rounded-full bg-violet-100 flex items-center justify-center text-violet-600 font-black text-sm">
+                    {user.name?.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex flex-col space-y-0.5 leading-none">
+                    <div className="flex items-center gap-2">
+                      {user.name && <p className="font-bold text-slate-900 font-display">{user.name}</p>}
+                    </div>
+                    {user.email && (
+                      <p className="w-[140px] truncate text-xs font-medium text-slate-500">
+                        {user.email}
+                      </p>
                     )}
                   </div>
-                  {user.email && (
-                    <p className="w-[200px] truncate text-xs text-muted-foreground">
-                      {user.email}
-                    </p>
-                  )}
                 </div>
-              </div>
-              <div className="h-px bg-slate-100 my-1" />
-              <DropdownMenuItem onClick={() => setLocation("/dashboard")}>
-                <LayoutDashboard className="mr-2 h-4 w-4" />
-                <span>Dashboard</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setLocation("/settings")}>
-                <UserCog className="mr-2 h-4 w-4" />
-                <span>Account Settings</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setLocation("/profile")}>
-                <UserCog className="mr-2 h-4 w-4" />
-                <span>My Profile</span>
-              </DropdownMenuItem>
-              <div className="h-px bg-slate-100 my-1" />
-              <DropdownMenuItem className="text-red-600 focus:text-red-600 focus:bg-red-50" onClick={() => logout()}>
-                <LogOut className="mr-2 h-4 w-4" />
-                <span>Log out</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <DropdownMenuItem onClick={() => setLocation("/dashboard")} className="p-3 rounded-xl font-bold text-slate-600 cursor-pointer hover:bg-slate-50 hover:text-slate-900 hover:scale-[1.02] transition-all">
+                  <LayoutDashboard className="mr-3 h-4 w-4" />
+                  <span>Dashboard</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setLocation("/settings")} className="p-3 rounded-xl font-bold text-slate-600 cursor-pointer hover:bg-slate-50 hover:text-slate-900 hover:scale-[1.02] transition-all">
+                  <UserCog className="mr-3 h-4 w-4" />
+                  <span>Account Settings</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setLocation("/profile")} className="p-3 rounded-xl font-bold text-slate-600 cursor-pointer hover:bg-slate-50 hover:text-slate-900 hover:scale-[1.02] transition-all">
+                  <UserCog className="mr-3 h-4 w-4" />
+                  <span>My Profile</span>
+                </DropdownMenuItem>
+                <div className="h-px bg-slate-100 my-1" />
+                <DropdownMenuItem className="p-3 rounded-xl font-bold text-red-600 focus:text-red-700 focus:bg-red-50 hover:bg-red-50 cursor-pointer active:scale-95 transition-all" onClick={() => logout()}>
+                  <LogOut className="mr-3 h-4 w-4" />
+                  <span>Log out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </header>
 
         {/* Password Warning Banner */}
         {user && user.passwordChanged === false && (
-          <div className="bg-amber-50 border-b border-amber-200 px-8 py-2 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-amber-800 text-sm">
-              <LogOut className="w-4 h-4" />
-              <span>You are using a <strong>default password</strong>. For security, please update your password in your profile.</span>
+          <div className="mx-8 mt-4 rounded-xl bg-amber-50 border border-amber-200/60 p-4 flex items-center justify-between shadow-sm">
+            <div className="flex items-center gap-3 text-amber-800 text-sm font-medium">
+              <div className="p-2 bg-amber-100 rounded-lg text-amber-600">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+              <span><strong>Security Alert:</strong> You are using a temporary password. Please update it immediately.</span>
             </div>
-            <Button variant="outline" size="sm" className="h-7 text-xs border-amber-300 text-amber-900 bg-white hover:bg-amber-100" onClick={() => setLocation("/profile")}>
-              Change Password
+            <Button size="sm" className="h-9 px-4 text-xs font-bold bg-white text-amber-700 border border-amber-200 shadow-sm hover:bg-amber-100 hover:border-amber-300 rounded-lg" onClick={() => setLocation("/profile")}>
+              Update Password
             </Button>
           </div>
         )}
 
         {/* Page Content */}
-        <main className="flex-1 p-8 max-w-7xl mx-auto w-full">
+        <main className="flex-1 p-8 pt-6 max-w-[1600px] w-full mx-auto">
           {children}
         </main>
       </div>

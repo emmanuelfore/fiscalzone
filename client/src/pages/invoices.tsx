@@ -354,18 +354,18 @@ export default function InvoicesPage() {
         <CardContent className="p-0">
           <div className="rounded-md border border-slate-200">
             <Table>
-              <TableHeader className="bg-slate-50">
-                <TableRow>
-                  <TableHead className="w-[140px] font-semibold text-slate-900">Invoice #</TableHead>
-                  <TableHead className="w-[120px] font-semibold text-slate-900">Type</TableHead>
-                  <TableHead className="w-[180px] font-semibold text-slate-900">Reference</TableHead>
-                  <TableHead className="w-[120px] font-semibold text-slate-900">Date</TableHead>
-                  <TableHead className="font-semibold text-slate-900">Customer</TableHead>
-                  <TableHead className="w-[140px] text-right font-semibold text-slate-900">Amount</TableHead>
-                  <TableHead className="w-[100px] text-right font-semibold text-slate-900">Tax</TableHead>
-                  <TableHead className="w-[120px] font-semibold text-slate-900">Status</TableHead>
-                  <TableHead className="font-semibold text-slate-900">Notes</TableHead>
-                  <TableHead className="w-[60px] text-right"></TableHead>
+              <TableHeader className="bg-slate-50/80 border-b border-slate-100">
+                <TableRow className="hover:bg-transparent border-none">
+                  <TableHead className="w-[140px] px-3 py-3 font-black text-slate-400 uppercase tracking-widest text-xs">Invoice #</TableHead>
+                  <TableHead className="w-[120px] px-3 py-3 font-black text-slate-400 uppercase tracking-widest text-xs">Type</TableHead>
+                  <TableHead className="w-[180px] px-3 py-3 font-black text-slate-400 uppercase tracking-widest text-xs">Reference</TableHead>
+                  <TableHead className="w-[120px] px-3 py-3 font-black text-slate-400 uppercase tracking-widest text-xs">Date</TableHead>
+                  <TableHead className="px-3 py-3 font-black text-slate-400 uppercase tracking-widest text-xs">Customer</TableHead>
+                  <TableHead className="w-[140px] text-right px-3 py-3 font-black text-slate-400 uppercase tracking-widest text-xs">Amount</TableHead>
+                  <TableHead className="w-[100px] text-right px-3 py-3 font-black text-slate-400 uppercase tracking-widest text-xs">Tax</TableHead>
+                  <TableHead className="w-[120px] px-3 py-3 font-black text-slate-400 uppercase tracking-widest text-xs">Status</TableHead>
+                  <TableHead className="px-3 py-3 font-black text-slate-400 uppercase tracking-widest text-xs">Notes</TableHead>
+                  <TableHead className="w-[60px] text-right px-3 py-3"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -399,37 +399,37 @@ export default function InvoicesPage() {
                       setLocation(`/invoices/${invoice.id}`);
                     }}
                   >
-                    <TableCell className="font-medium font-mono text-slate-700 py-3">
+                    <TableCell className="px-3 py-2.5 font-bold font-mono text-slate-700">
                       <Link href={`/invoices/${invoice.id}`} className="hover:underline text-primary">
                         {invoice.invoiceNumber}
                       </Link>
                     </TableCell>
-                    <TableCell className="py-3">
+                    <TableCell className="px-3 py-2.5">
                       {invoice.transactionType === 'CreditNote' ? (
-                        <Badge variant="outline" className="text-orange-600 border-orange-200 bg-orange-50 font-medium whitespace-nowrap">
+                        <Badge variant="outline" className="text-orange-600 border-orange-200 bg-orange-50 font-bold whitespace-nowrap text-[10px] uppercase tracking-wider">
                           Credit Note
                         </Badge>
                       ) : invoice.transactionType === 'DebitNote' ? (
-                        <Badge variant="outline" className="text-purple-600 border-purple-200 bg-purple-50 font-medium whitespace-nowrap">
+                        <Badge variant="outline" className="text-purple-600 border-purple-200 bg-purple-50 font-bold whitespace-nowrap text-[10px] uppercase tracking-wider">
                           Debit Note
                         </Badge>
                       ) : (
-                        <Badge variant="outline" className="text-blue-600 border-blue-200 bg-blue-50 font-medium whitespace-nowrap">
+                        <Badge variant="outline" className="text-blue-600 border-blue-200 bg-blue-50 font-bold whitespace-nowrap text-[10px] uppercase tracking-wider">
                           Invoice
                         </Badge>
                       )}
                     </TableCell>
-                    <TableCell className="py-3">
+                    <TableCell className="px-3 py-2.5">
                       {invoice.relatedInvoiceId && (
-                        <Link href={`/invoices/${invoice.relatedInvoiceId}`} className="text-xs text-primary hover:underline flex items-center group/link font-medium">
+                        <Link href={`/invoices/${invoice.relatedInvoiceId}`} className="text-xs text-primary hover:underline flex items-center group/link font-bold whitespace-nowrap">
                           <FileText className="w-3 h-3 mr-1 opacity-70 group-hover/link:opacity-100" />
                           Org #{invoice.relatedInvoiceId}
                         </Link>
                       )}
                       {invoice.transactionType === 'FiscalInvoice' && invoices?.some(inv => inv.relatedInvoiceId === invoice.id) && (
-                        <div className="flex flex-col gap-1 mt-1">
+                        <div className="flex flex-wrap gap-1.5 mt-1">
                           {invoices.filter(inv => inv.relatedInvoiceId === invoice.id).map(child => (
-                            <Link key={child.id} href={`/invoices/${child.id}`} className="text-xs text-orange-600 hover:underline flex items-center group/link font-medium">
+                            <Link key={child.id} href={`/invoices/${child.id}`} className="text-xs text-orange-600 hover:underline flex items-center group/link font-bold whitespace-nowrap bg-orange-50 px-1 rounded border border-orange-100">
                               <ShieldCheck className="w-3 h-3 mr-1 opacity-70 group-hover/link:opacity-100" />
                               {child.transactionType === 'CreditNote' ? 'CN' : 'DN'} #{child.id}
                             </Link>
@@ -437,38 +437,37 @@ export default function InvoicesPage() {
                         </div>
                       )}
                       {!invoice.relatedInvoiceId && !invoices?.some(inv => inv.relatedInvoiceId === invoice.id) && (
-                        <span className="text-slate-400 text-xs">-</span>
+                        <span className="text-slate-400 text-xs font-bold">-</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-slate-600 py-3">
+                    <TableCell className="text-slate-600 px-3 py-2.5 font-medium text-xs whitespace-nowrap">
                       {invoice.issueDate ? format(new Date(invoice.issueDate), "dd MMM yyyy") : "-"}
                     </TableCell>
-                    <TableCell className="font-medium text-slate-900 py-3">
+                    <TableCell className="font-bold text-slate-900 px-3 py-2.5 text-sm max-w-[200px] truncate">
                       {invoice.customer?.name || "Walk-in Customer"}
                     </TableCell>
-                    <TableCell className="font-semibold text-slate-900 text-right py-3">
+                    <TableCell className="font-black text-slate-800 text-right px-3 py-2.5 tracking-tight whitespace-nowrap">
                       {invoice.currency} {Number(invoice.total).toFixed(2)}
                     </TableCell>
-                    <TableCell className="text-slate-600 text-right py-3">
+                    <TableCell className="text-slate-500 text-right px-3 py-2.5 font-bold text-xs whitespace-nowrap">
                       {Number(invoice.taxAmount).toFixed(2)}
                     </TableCell>
-                    <TableCell className="py-3">
-                      <div className="flex flex-col gap-1.5 w-fit">
+                    <TableCell className="px-3 py-2.5">
+                      <div className="flex flex-col gap-1 w-fit">
                         <StatusBadge status={invoice.status!} />
 
                         {invoice.fiscalCode && (
-                          <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] py-0.5 h-auto font-medium gap-1 hover:bg-emerald-100 w-fit">
+                          <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] py-0.5 h-auto font-bold gap-1 hover:bg-emerald-100 w-fit uppercase tracking-wider whitespace-nowrap">
                             <ShieldCheck className="w-3 h-3" /> Fiscalized
                           </Badge>
                         )}
-
                         {!invoice.syncedWithFdms && invoice.status === 'issued' && (
-                          <StatusBadge status="pending-sync" className="text-[10px] py-0.5 h-auto w-fit" />
+                          <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] py-0.5 h-auto font-bold w-fit uppercase tracking-wider whitespace-nowrap">Pending Sync</Badge>
                         )}
 
                         {invoice.validationStatus && invoice.validationStatus !== 'valid' && (
                           <Badge variant="outline" className={cn(
-                            "text-[10px] py-0.5 h-auto font-medium border-dashed w-fit",
+                            "text-[10px] py-0.5 h-auto font-bold border-dashed w-fit uppercase tracking-wider whitespace-nowrap",
                             invoice.validationStatus === 'red' ? "text-red-700 bg-red-50 border-red-200" :
                               invoice.validationStatus === 'grey' ? "text-slate-600 bg-slate-100 border-slate-300" :
                                 "text-yellow-700 bg-yellow-50 border-yellow-200"
@@ -479,15 +478,15 @@ export default function InvoicesPage() {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="text-slate-500 max-w-[150px] truncate text-xs opacity-80 py-3" title={invoice.notes || ""}>
+                    <TableCell className="text-slate-400 max-w-[150px] truncate text-xs font-medium p-4 py-3" title={invoice.notes || ""}>
                       {invoice.notes || "-"}
                     </TableCell>
-                    <TableCell className="text-right pr-4 py-3">
+                    <TableCell className="text-right pr-4 py-3 p-4">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-slate-100 rounded-full">
                             <span className="sr-only">Open menu</span>
-                            <MoreHorizontal className="h-4 w-4 text-slate-500" />
+                            <MoreHorizontal className="h-4 w-4 text-slate-400" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-[180px]">

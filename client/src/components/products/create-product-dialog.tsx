@@ -119,29 +119,29 @@ export function CreateProductDialog({ companyId, defaultType = "good", triggerLa
             if (!val) setSelectedTaxTypeId(undefined);
         }}>
             <DialogTrigger asChild>
-                <Button className="gap-2">
+                <Button className="gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white shadow-lg shadow-indigo-500/20 rounded-xl transition-all duration-300 hover:-translate-y-0.5">
                     <Plus className="w-4 h-4" />
                     {triggerLabel}
                 </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl">
                 <DialogHeader>
-                    <DialogTitle>Add New {isService ? "Service" : "Product"}</DialogTitle>
+                    <DialogTitle className="text-2xl font-display font-bold text-slate-900">Add New {isService ? "Service" : "Product"}</DialogTitle>
                     <DialogDescription>
                         Create a {isService ? "service offering" : "physical product"} to add to your invoices.
                     </DialogDescription>
                 </DialogHeader>
 
                 <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5 py-4">
                         <FormField
                             control={form.control}
                             name="name"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>{isService ? "Service Name" : "Product Name"}</FormLabel>
+                                    <FormLabel className="text-slate-700 font-semibold">{isService ? "Service Name" : "Product Name"}</FormLabel>
                                     <FormControl>
-                                        <Input placeholder={isService ? "e.g. Consulting, Labor" : "e.g. Widget X"} {...field} />
+                                        <Input placeholder={isService ? "e.g. Consulting, Labor" : "e.g. Widget X"} {...field} className="rounded-xl bg-slate-50 border-slate-200 focus-visible:ring-primary/20" />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
@@ -153,18 +153,18 @@ export function CreateProductDialog({ companyId, defaultType = "good", triggerLa
                             name="category"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Category</FormLabel>
+                                    <FormLabel className="text-slate-700 font-semibold">Category</FormLabel>
                                     <Select
                                         onValueChange={field.onChange}
                                         defaultValue={field.value || undefined}
                                         value={field.value || undefined}
                                     >
                                         <FormControl>
-                                            <SelectTrigger className="bg-white">
+                                            <SelectTrigger className="rounded-xl bg-slate-50 border-slate-200 focus:ring-primary/20">
                                                 <SelectValue placeholder="Select Category" />
                                             </SelectTrigger>
                                         </FormControl>
-                                        <SelectContent>
+                                        <SelectContent className="rounded-xl shadow-xl">
                                             {categories?.map((cat: any) => (
                                                 <SelectItem key={cat.id} value={cat.name}>
                                                     {cat.name}
@@ -182,9 +182,9 @@ export function CreateProductDialog({ companyId, defaultType = "good", triggerLa
                             name="description"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Description</FormLabel>
+                                    <FormLabel className="text-slate-700 font-semibold">Description</FormLabel>
                                     <FormControl>
-                                        <Textarea placeholder="Details..." className="resize-none h-20" value={field.value || ""} onChange={field.onChange} />
+                                        <Textarea placeholder="Details..." className="resize-none h-20 rounded-xl bg-slate-50 border-slate-200 focus-visible:ring-primary/20" value={field.value || ""} onChange={field.onChange} />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
@@ -192,9 +192,9 @@ export function CreateProductDialog({ companyId, defaultType = "good", triggerLa
                         />
 
                         {/* Tax Configuration Section */}
-                        <div className="rounded-lg bg-slate-50 p-4 border border-slate-100 space-y-4">
-                            <h4 className="text-sm font-medium text-slate-800 flex items-center gap-2">
-                                <span className="w-1 h-4 bg-violet-500 rounded-full"></span>
+                        <div className="rounded-2xl bg-blue-50/50 p-5 border border-blue-100 space-y-4">
+                            <h4 className="text-sm font-bold text-blue-900 flex items-center gap-2">
+                                <span className="w-1.5 h-4 bg-blue-500 rounded-full"></span>
                                 Tax Configuration
                             </h4>
                             <div className="grid grid-cols-2 gap-4">
@@ -203,7 +203,7 @@ export function CreateProductDialog({ companyId, defaultType = "good", triggerLa
                                     name="taxRate"
                                     render={({ field }) => (
                                         <FormItem>
-                                            <FormLabel>ZIMRA Tax Type</FormLabel>
+                                            <FormLabel className="text-xs uppercase tracking-wide text-blue-700 font-semibold">ZIMRA Tax Type</FormLabel>
                                             <Select
                                                 onValueChange={(val) => {
                                                     setSelectedTaxTypeId(val);
@@ -217,11 +217,11 @@ export function CreateProductDialog({ companyId, defaultType = "good", triggerLa
                                                 value={selectedTaxTypeId}
                                             >
                                                 <FormControl>
-                                                    <SelectTrigger className="bg-white">
+                                                    <SelectTrigger className="rounded-xl bg-white border-blue-200 focus:ring-blue-500/20 text-slate-700">
                                                         <SelectValue placeholder="Select Tax Type" />
                                                     </SelectTrigger>
                                                 </FormControl>
-                                                <SelectContent>
+                                                <SelectContent className="rounded-xl shadow-xl">
                                                     {taxTypes.data?.map((t: any) => (
                                                         <SelectItem key={t.id} value={t.id.toString()}>
                                                             {t.name} ({t.rate}%)
@@ -238,9 +238,9 @@ export function CreateProductDialog({ companyId, defaultType = "good", triggerLa
                                     name="hsCode"
                                     render={({ field }) => (
                                         <FormItem>
-                                            <FormLabel>HS Code</FormLabel>
+                                            <FormLabel className="text-xs uppercase tracking-wide text-blue-700 font-semibold">HS Code</FormLabel>
                                             <FormControl>
-                                                <Input placeholder="Fiscal Code" className="bg-white" value={field.value || ""} onChange={field.onChange} />
+                                                <Input placeholder="Fiscal Code" className="rounded-xl bg-white border-blue-200 focus-visible:ring-blue-500/20 font-mono text-sm" value={field.value || ""} onChange={field.onChange} />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -255,9 +255,9 @@ export function CreateProductDialog({ companyId, defaultType = "good", triggerLa
                                 name="price"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>Selling Price ($)</FormLabel>
+                                        <FormLabel className="text-slate-700 font-semibold">Selling Price ($)</FormLabel>
                                         <FormControl>
-                                            <Input type="number" step="0.01" min="0" {...field} />
+                                            <Input type="number" step="0.01" min="0" {...field} className="rounded-xl bg-slate-50 border-slate-200 focus-visible:ring-primary/20 font-mono" />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
@@ -268,9 +268,9 @@ export function CreateProductDialog({ companyId, defaultType = "good", triggerLa
                                 name="sku"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>SKU / Code <span className="text-red-500">*</span></FormLabel>
+                                        <FormLabel className="text-slate-700 font-semibold">SKU / Code <span className="text-red-500">*</span></FormLabel>
                                         <FormControl>
-                                            <Input placeholder="Required" value={field.value || ""} onChange={field.onChange} />
+                                            <Input placeholder="Required" value={field.value || ""} onChange={field.onChange} className="rounded-xl bg-slate-50 border-slate-200 focus-visible:ring-primary/20 font-mono" />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
@@ -282,9 +282,9 @@ export function CreateProductDialog({ companyId, defaultType = "good", triggerLa
                                     name="barcode"
                                     render={({ field }) => (
                                         <FormItem>
-                                            <FormLabel>Barcode</FormLabel>
+                                            <FormLabel className="text-slate-700 font-semibold">Barcode</FormLabel>
                                             <FormControl>
-                                                <Input placeholder="Optional" value={field.value || ""} onChange={field.onChange} />
+                                                <Input placeholder="Optional" value={field.value || ""} onChange={field.onChange} className="rounded-xl bg-slate-50 border-slate-200 focus-visible:ring-primary/20 font-mono" />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -294,16 +294,16 @@ export function CreateProductDialog({ companyId, defaultType = "good", triggerLa
                         </div>
 
                         {!isService && (
-                            <div className="border rounded-lg p-4 space-y-4">
+                            <div className="border border-slate-200 rounded-2xl p-5 space-y-4 bg-slate-50/50">
                                 <FormField
                                     control={form.control}
                                     name="isTracked"
                                     render={({ field }) => (
-                                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm bg-white">
+                                        <FormItem className="flex flex-row items-center justify-between rounded-xl border border-slate-200 p-4 shadow-sm bg-white">
                                             <div className="space-y-0.5">
-                                                <FormLabel>Track Inventory</FormLabel>
+                                                <FormLabel className="text-base font-semibold text-slate-700">Track Inventory</FormLabel>
                                                 <FormDescription>
-                                                    Enable stock tracking
+                                                    Enable stock tracking for this item
                                                 </FormDescription>
                                             </div>
                                             <FormControl>
@@ -323,9 +323,9 @@ export function CreateProductDialog({ companyId, defaultType = "good", triggerLa
                                             name="stockLevel"
                                             render={({ field }) => (
                                                 <FormItem>
-                                                    <FormLabel>Current Stock</FormLabel>
+                                                    <FormLabel className="text-slate-700 font-semibold">Current Stock</FormLabel>
                                                     <FormControl>
-                                                        <Input type="number" {...field} value={field.value || "0"} />
+                                                        <Input type="number" {...field} value={field.value || "0"} className="rounded-xl bg-white border-slate-200 focus-visible:ring-primary/20" />
                                                     </FormControl>
                                                     <FormMessage />
                                                 </FormItem>
@@ -336,9 +336,9 @@ export function CreateProductDialog({ companyId, defaultType = "good", triggerLa
                                             name="lowStockThreshold"
                                             render={({ field }) => (
                                                 <FormItem>
-                                                    <FormLabel>Low Stock Alert</FormLabel>
+                                                    <FormLabel className="text-slate-700 font-semibold">Low Stock Alert</FormLabel>
                                                     <FormControl>
-                                                        <Input type="number" {...field} value={field.value || "10"} />
+                                                        <Input type="number" {...field} value={field.value || "10"} className="rounded-xl bg-white border-slate-200 focus-visible:ring-primary/20" />
                                                     </FormControl>
                                                     <FormMessage />
                                                 </FormItem>
@@ -349,11 +349,11 @@ export function CreateProductDialog({ companyId, defaultType = "good", triggerLa
                             </div>
                         )}
 
-                        <div className="flex justify-end gap-2 pt-4">
-                            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                        <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                            <Button type="button" variant="outline" onClick={() => setOpen(false)} className="rounded-xl border-slate-200 text-slate-600 hover:text-slate-900">
                                 Cancel
                             </Button>
-                            <Button type="submit" disabled={createProduct.isPending}>
+                            <Button type="submit" disabled={createProduct.isPending} className="rounded-xl bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20">
                                 {createProduct.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                                 Save {isService ? "Service" : "Product"}
                             </Button>
@@ -361,6 +361,6 @@ export function CreateProductDialog({ companyId, defaultType = "good", triggerLa
                     </form>
                 </Form>
             </DialogContent>
-        </Dialog>
+        </Dialog >
     );
 }

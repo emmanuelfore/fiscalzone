@@ -14,16 +14,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/lib/api";
 import {
-    cacheProducts, getCachedProducts,
-    cacheCustomers, getCachedCustomers,
-    cacheCurrencies, getCachedCurrencies,
-    cacheTaxConfig, getCachedTaxConfig,
-    cacheCompanySettings, getCachedCompanySettings,
+    cacheShift, getCachedShift,
+    addPendingShiftAction, getPendingShifts,
+    addOfflineHold, getOfflineHolds, removeOfflineHold,
     setLastCacheTime,
     addPendingSale,
 } from "@/lib/offline-db";
 import { useState, useMemo, useEffect } from "react";
-import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, UserPlus, Loader2, Package, Tag, Pause, Play, History, Calculator, Printer, CheckCircle2, XCircle, ChevronRight, Fullscreen, HelpCircle, User, Settings as SettingsIcon, LogOut, FileText, Receipt, Clock, LayoutGrid, ShoppingBag, Filter, WifiOff, Wifi, CloudUpload } from "lucide-react";
+import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, UserPlus, Loader2, Package, Tag, Pause, Play, History, Calculator, Printer, CheckCircle2, XCircle, ChevronRight, Fullscreen, HelpCircle, User, Settings as SettingsIcon, LogOut, FileText, Receipt, Clock, LayoutGrid, ShoppingBag, Filter, WifiOff, Wifi, CloudUpload, AlertTriangle } from "lucide-react";
 import { RefreshCw } from "lucide-react";
 import { POSReceipt } from "@/components/pos-receipt";
 import { Receipt48 } from "@/components/pos/receipt-48";
@@ -70,21 +68,13 @@ export default function POSPage() {
         lastCacheTime,
         refreshCacheTime
     } = useOffline(companyId);
-    const [offlineProducts, setOfflineProducts] = useState<any[] | null>(null);
-    const [offlineCustomers, setOfflineCustomers] = useState<any[] | null>(null);
-    const [offlineCurrencies, setOfflineCurrencies] = useState<any[] | null>(null);
-    const [offlineTaxTypes, setOfflineTaxTypes] = useState<any | null>(null);
-    const [offlineCompany, setOfflineCompany] = useState<any | null>(null);
 
-    // Cache progress tracking
-    const [cacheProgress, setCacheProgress] = useState({ current: 0, total: 5, label: '', active: false, done: false });
-
-    // Resolved data — prefer live API data, fallback to cached
-    const resolvedProducts = products || offlineProducts || [];
-    const resolvedCustomers = customers || offlineCustomers || [];
-    const resolvedCurrencies = currencies || offlineCurrencies || [];
-    const resolvedTaxTypes = taxTypes?.data || offlineTaxTypes || [];
-    const resolvedCompany = company || offlineCompany;
+    // Resolved data — hooks now handle caching and fallback automatically
+    const resolvedProducts = products || [];
+    const resolvedCustomers = customers || [];
+    const resolvedCurrencies = currencies || [];
+    const resolvedTaxTypes = taxTypes?.data || [];
+    const resolvedCompany = company;
     const { toast } = useToast();
 
     const [searchQuery, setSearchQuery] = useState("");
@@ -124,14 +114,13 @@ export default function POSPage() {
 
     // Default to "Walk-in Customer"
     useEffect(() => {
-        const c = customers || offlineCustomers;
-        if (!selectedCustomerId && c && c.length > 0) {
-            const walkIn = c.find((x: any) => x.name.toLowerCase().includes("walk-in") || x.name.toLowerCase().includes("guest"));
+        if (!selectedCustomerId && resolvedCustomers && resolvedCustomers.length > 0) {
+            const walkIn = resolvedCustomers.find((x: any) => x.name.toLowerCase().includes("walk-in") || x.name.toLowerCase().includes("guest"));
             if (walkIn) {
                 setSelectedCustomerId(walkIn.id.toString());
             }
         }
-    }, [customers, offlineCustomers, selectedCustomerId]);
+    }, [resolvedCustomers, selectedCustomerId]);
 
     // Manager Override State
     const [pendingOverride, setPendingOverride] = useState<{ type: "DISCOUNT" | "VOID_CART", data: any } | null>(null);
@@ -185,12 +174,12 @@ export default function POSPage() {
     // Handlers
     const addToCart = (product: any) => {
         // Strict Stock Check
-        if (product.isTracked) {
+        if (product && product.isTracked) {
             const inCart = cart.find(item => item.productId === product.id)?.quantity || 0;
-            if (inCart >= Number(product.stockLevel)) {
+            if (inCart >= Number(product.stockLevel || 0)) {
                 toast({
                     title: "Out of Stock",
-                    description: `Only ${product.stockLevel} units available for ${product.name}`,
+                    description: `Only ${product.stockLevel || 0} units available for ${product.name}`,
                     variant: "destructive"
                 });
                 return;
@@ -456,7 +445,7 @@ export default function POSPage() {
 
     const processOrder = async () => {
         let finalCustomerId = selectedCustomerId;
-        const settings = (company || offlineCompany)?.posSettings as any;
+        const settings = company?.posSettings as any;
         if (!finalCustomerId && settings?.defaultCustomerId) {
             finalCustomerId = settings.defaultCustomerId;
         }
@@ -508,30 +497,39 @@ export default function POSPage() {
             // ─── Offline fallback: queue sale locally ────────────────────
             if (!isOnline) {
                 const offlineId = await addPendingSale(companyId, invoiceData);
-                setLastSuccessfulInvoice({
+                const offInvoice = {
                     id: offlineId,
                     ...invoiceData,
                     _offline: true,
                     invoiceNumber: `OFFLINE-${Date.now().toString().slice(-6)}`,
-                });
+                };
+                if (posSettings.printingEnabled) {
+                    setLastSuccessfulInvoice(offInvoice);
+                } else {
+                    toast({ title: "📴 Saved Offline", description: "Sale queued — will sync when reconnected" });
+                    setActiveView("products");
+                }
                 setCart([]);
                 setOrderDiscount(0);
                 setSelectedCustomerId("");
                 setPaidAmount("");
                 setIsCheckoutOpen(false);
                 await refreshPendingCount();
-                toast({ title: "📴 Saved Offline", description: "Sale queued — will sync when reconnected" });
                 return;
             }
 
             const result = await createInvoice.mutateAsync(invoiceData as any);
-            setLastSuccessfulInvoice(result);
+            if (posSettings.printingEnabled) {
+                setLastSuccessfulInvoice(result);
+            } else {
+                toast({ title: "Success", description: "Order processed successfully" });
+                setActiveView("products");
+            }
             setCart([]);
             setOrderDiscount(0);
             setSelectedCustomerId("");
             setPaidAmount("");
             setIsCheckoutOpen(false);
-            toast({ title: "Success", description: "Order processed and fiscalized successfully" });
         } catch (error: any) {
             // If the error looks like a network failure, queue offline
             if (!navigator.onLine || error.message === 'Failed to fetch') {
@@ -567,19 +565,24 @@ export default function POSPage() {
                         }))
                     };
                     const offlineId = await addPendingSale(companyId, invoiceData);
-                    setLastSuccessfulInvoice({
+                    const offInvoice = {
                         id: offlineId,
                         ...invoiceData,
                         _offline: true,
                         invoiceNumber: `OFFLINE-${Date.now().toString().slice(-6)}`,
-                    });
+                    };
+                    if (posSettings.printingEnabled) {
+                        setLastSuccessfulInvoice(offInvoice);
+                    } else {
+                        toast({ title: "📴 Saved Offline", description: "Connection lost — sale queued for sync" });
+                        setActiveView("products");
+                    }
                     setCart([]);
                     setOrderDiscount(0);
                     setSelectedCustomerId("");
                     setPaidAmount("");
                     setIsCheckoutOpen(false);
                     await refreshPendingCount();
-                    toast({ title: "📴 Saved Offline", description: "Connection lost — sale queued for sync" });
                     return;
                 } catch (offlineError) {
                     toast({ title: "Error", description: "Failed to save sale offline", variant: "destructive" });
@@ -682,68 +685,10 @@ export default function POSPage() {
         return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
     }, []);
 
-    // ─── Cache reference data to IndexedDB when fetched online ───────────
-    useEffect(() => {
-        if (!companyId || !isOnline) return;
-        let step = 0;
-        const total = 5;
-        const runCache = async () => {
-            setCacheProgress({ current: 0, total, label: 'Preparing offline data...', active: true, done: false });
-
-            if (products) {
-                setCacheProgress(p => ({ ...p, current: ++step, label: 'Caching products...' }));
-                await cacheProducts(companyId, products as any[]);
-            }
-            if (customers) {
-                setCacheProgress(p => ({ ...p, current: ++step, label: 'Caching customers...' }));
-                await cacheCustomers(companyId, customers as any[]);
-            }
-            if (currencies) {
-                setCacheProgress(p => ({ ...p, current: ++step, label: 'Caching currencies...' }));
-                await cacheCurrencies(companyId, currencies as any[]);
-            }
-            if (taxTypes?.data) {
-                setCacheProgress(p => ({ ...p, current: ++step, label: 'Caching tax config...' }));
-                await cacheTaxConfig(companyId, taxTypes.data);
-            }
-            if (company) {
-                setCacheProgress(p => ({ ...p, current: ++step, label: 'Caching company settings...' }));
-                await cacheCompanySettings(companyId, company);
-            }
-
-            const now = Date.now();
-            await setLastCacheTime(companyId, now);
-            refreshCacheTime();
-
-            setCacheProgress({ current: total, total, label: 'Offline data ready!', active: true, done: true });
-            setTimeout(() => setCacheProgress(p => ({ ...p, active: false })), 2500);
-        };
-
-        // Only run when all data is loaded and not recently cached
-        if (products && customers && currencies && taxTypes?.data && company) {
-            // Avoid re-running if cached in the last 60 seconds
-            const lastCached = parseInt(localStorage.getItem(`last_cache_run_${companyId}`) || "0");
-            if (Date.now() - lastCached > 60000) {
-                runCache();
-                localStorage.setItem(`last_cache_run_${companyId}`, Date.now().toString());
-            }
-        }
-    }, [products, customers, currencies, taxTypes, company, companyId, isOnline, refreshCacheTime]);
-
-    // ─── Load cached data when offline ──────────────────────────────────
-    useEffect(() => {
-        if (!isOnline && companyId) {
-            getCachedProducts(companyId).then(d => d && setOfflineProducts(d));
-            getCachedCustomers(companyId).then(d => d && setOfflineCustomers(d));
-            getCachedCurrencies(companyId).then(d => d && setOfflineCurrencies(d));
-            getCachedTaxConfig(companyId).then(d => d && setOfflineTaxTypes(d));
-            getCachedCompanySettings(companyId).then(d => d && setOfflineCompany(d));
-        }
-    }, [isOnline, companyId]);
 
     // Sync Settings from Company
     useEffect(() => {
-        const src = company || offlineCompany;
+        const src = company;
         if (src?.posSettings) {
             const settings = src.posSettings as any;
             setPosSettings(prev => ({
@@ -761,12 +706,21 @@ export default function POSPage() {
     useEffect(() => {
         if (lastSuccessfulInvoice && posSettings.printingEnabled && posSettings.autoPrint) {
             if (posSettings.silentPrinting) {
-                handleSilentPrint();
+                handleSilentPrint().then(() => {
+                    // Auto-advance after silent print completes
+                    setTimeout(() => {
+                        setLastSuccessfulInvoice(null);
+                        setActiveView("products");
+                    }, 1500);
+                });
             } else {
                 // Small delay to ensure Dialog content is rendered in the Portal
                 const timer = setTimeout(() => {
                     window.print();
-                }, 500);
+                    // Auto-advance after print dialog shows
+                    setLastSuccessfulInvoice(null);
+                    setActiveView("products");
+                }, 1000);
                 return () => clearTimeout(timer);
             }
         }
@@ -915,13 +869,13 @@ export default function POSPage() {
     function Numpad({ value, onChange, onEnter }: { value: string, onChange: (val: string) => void, onEnter?: () => void }) {
         const buttons = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", ".", "DEL"];
         return (
-            <div className="grid grid-cols-3 gap-1.5 p-3 bg-slate-50/50 rounded-2xl border border-slate-100">
+            <div className="grid grid-cols-3 gap-1 p-1 md:p-2 bg-slate-50/50 rounded-xl border border-slate-100">
                 {buttons.map(btn => (
                     <Button
                         key={btn}
                         variant="ghost"
                         className={cn(
-                            "h-12 font-black text-base rounded-xl transition-all active:scale-95",
+                            "h-7 md:h-10 font-black text-[10px] md:text-sm rounded-lg transition-all active:scale-95",
                             btn === "DEL" ? "text-red-500 hover:bg-red-50" : "bg-white shadow-sm border border-slate-200/50 text-slate-700 hover:bg-slate-50"
                         )}
                         onClick={() => {
@@ -940,7 +894,7 @@ export default function POSPage() {
     // Sub-component defined inside to have access to POSPage state
     function CartSection() {
         return (
-            <div className="flex flex-col h-full bg-white relative">
+            <div className="flex flex-col h-full bg-white relative overflow-hidden">
                 {/* Premium Cart Header */}
                 <div className="pt-6 pb-3 px-6 border-b border-slate-100 flex items-center justify-between shrink-0 bg-white z-10 sticky top-0">
                     <div className="flex flex-col">
@@ -954,7 +908,7 @@ export default function POSPage() {
                     </Badge>
                 </div>
 
-                <ScrollArea className="flex-1 px-3 py-3">
+                <ScrollArea className="flex-1 px-3 py-3 overflow-y-auto">
                     {cart.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-[300px] text-slate-300">
                             <ShoppingCart className="h-8 w-8 opacity-20 mb-3" />
@@ -1019,9 +973,9 @@ export default function POSPage() {
                     )}
                 </ScrollArea>
 
-                {/* Tactical Footer */}
-                <div className="p-4 bg-white border-t border-slate-100 space-y-4 shrink-0 shadow-[0_-20px_40px_-5px_rgba(0,0,0,0.03)] z-20">
-                    <div className="space-y-2">
+                {/* Tactical Footer - Ultra Compact Fixed/Afloat */}
+                <div className="mt-auto p-3 bg-white/95 backdrop-blur-md border-t border-slate-100 space-y-2 shrink-0 shadow-[0_-10px_40px_rgba(0,0,0,0.08)] z-20 sticky bottom-0">
+                    <div className="space-y-1.5">
                         <div className="flex justify-between text-[10px] font-black text-slate-400 uppercase tracking-widest">
                             <span>Subtotal</span>
                             <span className="text-slate-600">${subtotal.toFixed(2)}</span>
@@ -1061,11 +1015,11 @@ export default function POSPage() {
                             </Button>
                         </div>
 
-                        <div className="flex justify-between items-center py-2 border-t border-slate-100 border-dashed mt-2">
-                            <span className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">Grand Total</span>
+                        <div className="flex justify-between items-center py-1.5 border-t border-slate-100 border-dashed mt-1.5">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Grand Total</span>
                             <div className="text-right">
-                                <p className="text-2xl font-black text-slate-900 tracking-tight leading-none">${total.toFixed(2)}</p>
-                                <p className="text-[10px] font-bold text-emerald-600 mt-0.5 uppercase tracking-widest">{selectedCurrencyCode}</p>
+                                <p className="text-xl font-black text-slate-900 tracking-tight leading-none">${total.toFixed(2)}</p>
+                                <p className="text-[9px] font-bold text-emerald-600 mt-0.5 uppercase tracking-widest">{selectedCurrencyCode}</p>
                             </div>
                         </div>
                     </div>
@@ -1106,30 +1060,10 @@ export default function POSPage() {
                     description={pendingOverride?.type === "DISCOUNT" ? "Manager PIN required for high discount" : "Manager PIN required to void cart"}
                 />
 
-                {/* ─── Initial Cache Progress Bar ─── */}
-                {cacheProgress.active && (
-                    <div className="px-3 md:px-6 py-2 bg-indigo-500 text-white shrink-0 z-40 print:hidden animate-in slide-in-from-top-2 duration-300">
-                        <div className="flex items-center justify-between mb-1">
-                            <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest">
-                                {cacheProgress.done
-                                    ? <><CheckCircle2 className="h-3.5 w-3.5" /> {cacheProgress.label}</>
-                                    : <><Loader2 className="h-3.5 w-3.5 animate-spin" /> {cacheProgress.label}</>
-                                }
-                            </div>
-                            <span className="text-[10px] font-bold opacity-80">{cacheProgress.current}/{cacheProgress.total}</span>
-                        </div>
-                        <div className="w-full bg-white/20 rounded-full h-1.5 overflow-hidden">
-                            <div
-                                className="h-full bg-white rounded-full transition-all duration-500 ease-out"
-                                style={{ width: `${(cacheProgress.current / cacheProgress.total) * 100}%` }}
-                            />
-                        </div>
-                    </div>
-                )}
 
                 {/* ─── Stale Data Warning ─── */}
                 {lastCacheTime && (Date.now() - lastCacheTime > 24 * 60 * 60 * 1000) && (
-                    <div className="px-3 md:px-6 py-1 bg-red-600 text-white shrink-0 z-40 print:hidden flex items-center justify-center gap-2 text-[10px] font-bold uppercase tracking-tighter animate-pulse">
+                    <div className="px-3 md:px-6 py-2 pt-10 md:pt-2 bg-red-600 text-white shrink-0 z-40 print:hidden flex items-center justify-center gap-2 text-[10px] font-bold uppercase tracking-tighter animate-pulse">
                         <AlertTriangle className="h-3 w-3" />
                         Warning: Offline data is over 24h old. Refresh required for accurate pricing/stock.
                         <Button
@@ -1145,7 +1079,7 @@ export default function POSPage() {
                 {/* ─── Offline / Sync Status Banner ─── */}
                 {(!isOnline || pendingSalesCount > 0 || syncStatus === 'syncing') && (
                     <div className={cn(
-                        "px-3 md:px-6 py-2 shrink-0 z-40 print:hidden transition-colors animate-in slide-in-from-top-2 duration-300",
+                        "px-3 md:px-6 py-2 pt-10 md:pt-2 shrink-0 z-40 print:hidden transition-colors animate-in slide-in-from-top-2 duration-300",
                         !isOnline
                             ? "bg-amber-500 text-white"
                             : syncStatus === 'syncing'
@@ -1186,7 +1120,7 @@ export default function POSPage() {
                 )}
 
                 {/* High-End Command Center Header */}
-                <div className="bg-white border-b border-slate-200/60 px-3 md:px-6 py-2 md:py-4 shrink-0 backdrop-blur-md sticky top-0 z-30 shadow-sm">
+                <div className="bg-white border-b border-slate-200/60 px-3 md:px-6 py-4 md:py-4 pt-10 md:pt-4 shrink-0 backdrop-blur-md sticky top-0 z-30 shadow-sm">
                     <div className="flex flex-col md:flex-row gap-2 md:gap-6 items-stretch md:items-center">
                         <div className="flex gap-2 items-center">
                             {/* Brand & Context - Hyper Compact on Mobile */}
@@ -1621,7 +1555,7 @@ export default function POSPage() {
                 </div>
 
                 {/* Main Content Area */}
-                <div className="flex-1 flex flex-col md:flex-row overflow-hidden pb-[70px] md:pb-0">
+                <div className="flex-1 flex flex-col md:flex-row overflow-hidden pb-0 md:pb-0 h-full relative">
                     {/* Products Grid */}
                     <div className={cn(
                         "flex-1 flex flex-col overflow-hidden p-2 md:p-4",
@@ -1660,33 +1594,42 @@ export default function POSPage() {
                                 </div>
                             ) : (
                                 <>
-                                    {/* Mobile View: Compact List (No Images) */}
-                                    <div className="md:hidden flex flex-col gap-2 pb-20">
-                                        {(filteredProducts as any[]).map(product => (
-                                            <div
-                                                key={product.id}
-                                                className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between active:scale-[0.98] transition-transform"
-                                                onClick={() => addToCart(product)}
-                                            >
-                                                <div className="flex flex-col gap-1 overflow-hidden">
-                                                    <h4 className="text-xs font-black text-slate-900 truncate">{product.name}</h4>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-xs font-bold text-slate-500">${Number(product.price).toFixed(2)}</span>
-                                                        {product.isTracked && (
-                                                            <span className={cn(
-                                                                "text-[10px] font-black px-1.5 py-0.5 rounded bg-slate-100",
-                                                                Number(product.stockLevel) <= Number(product.lowStockThreshold) ? "text-red-600 bg-red-50" : "text-slate-500"
-                                                            )}>
-                                                                {Number(product.stockLevel)} Left
-                                                            </span>
+                                    {/* Mobile View: High-Density Ultra-Compact Grid */}
+                                    <div className="md:hidden grid grid-cols-3 gap-1 pb-24 px-1 select-none touch-manipulation">
+                                        {(filteredProducts as any[]).map(product => {
+                                            const hash = product.name.split("").reduce((acc: number, char: string) => char.charCodeAt(0) + ((acc << 5) - acc), 0);
+                                            const hue = Math.abs(hash % 360);
+                                            const bgColor = `hsl(${hue}, 70%, 95%)`;
+                                            const iconColor = `hsl(${hue}, 60%, 60%)`;
+
+                                            return (
+                                                <div
+                                                    key={product.id}
+                                                    className="bg-white p-1 rounded-lg border border-slate-100/50 shadow-sm flex flex-col gap-1 active:scale-90 transition-all relative overflow-hidden group"
+                                                    onClick={() => addToCart(product)}
+                                                >
+                                                    <div className="aspect-[4/5] rounded-md flex items-center justify-center shrink-0 relative overflow-hidden" style={{ backgroundColor: product.imageUrl ? '#f8fafc' : bgColor }}>
+                                                        {product.imageUrl ? (
+                                                            <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+                                                        ) : (
+                                                            <Package className="h-4 w-4" style={{ color: iconColor }} />
+                                                        )}
+                                                        <div className="absolute inset-0 bg-primary/20 opacity-0 active:opacity-100 transition-opacity flex items-center justify-center">
+                                                            <Plus className="h-4 w-4 text-primary" />
+                                                        </div>
+                                                        {product.isTracked && Number(product.stockLevel) <= Number(product.lowStockThreshold) && (
+                                                            <div className="absolute top-0.5 right-0.5 bg-red-500 text-[5px] font-black h-2.5 px-1 rounded-sm flex items-center text-white uppercase">OUT</div>
                                                         )}
                                                     </div>
+                                                    <div className="flex flex-col gap-0.5 pb-0.5">
+                                                        <h4 className="text-[8px] font-black text-slate-800 line-clamp-1 leading-tight px-0.5">{product.name}</h4>
+                                                        <div className="flex items-center justify-between px-0.5">
+                                                            <span className="text-[9px] font-black text-slate-900">${Number(product.price).toFixed(2)}</span>
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                                <Button size="icon" variant="ghost" className="h-8 w-8 rounded-full bg-primary/5 text-primary">
-                                                    <Plus className="h-5 w-5" />
-                                                </Button>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
 
                                     {/* Desktop View: Grid with Images */}
@@ -1757,40 +1700,48 @@ export default function POSPage() {
 
                     {/* Cart Sidebar/View */}
                     <div className={cn(
-                        "flex flex-col w-full md:w-[350px] lg:w-[400px] border-l border-slate-200 bg-white",
+                        "flex flex-col w-full md:w-[350px] lg:w-[400px] border-l border-slate-200 bg-white md:relative absolute inset-0 z-40 md:z-auto bg-white mb-[70px] md:mb-0",
                         activeView === "products" ? "hidden md:flex" : "flex"
                     )}>
                         <CartSection />
                     </div>
                 </div>
 
-                {/* Mobile Bottom Navigation */}
-                <div className="md:hidden fixed bottom-0 left-0 right-0 h-[70px] bg-white border-t border-slate-100 flex items-center justify-around z-50 px-6 shadow-[0_-10px_30px_rgba(0,0,0,0.05)]">
+                {/* Mobile Bottom Navigation - Native App Style */}
+                <div className="md:hidden fixed bottom-0 left-0 right-0 h-[75px] bg-white/80 backdrop-blur-2xl border-t border-slate-100/50 flex items-center justify-around z-50 px-6 shadow-[0_-10px_40px_rgba(0,0,0,0.06)] select-none">
                     <button
                         onClick={() => setActiveView("products")}
                         className={cn(
-                            "flex flex-col items-center gap-1 transition-all duration-300 px-4 py-1 rounded-2xl",
-                            activeView === "products" ? "text-primary scale-110" : "text-slate-400 hover:text-slate-600"
+                            "flex flex-col items-center gap-1 transition-all duration-300 px-6 py-2 rounded-3xl relative",
+                            activeView === "products" ? "text-primary" : "text-slate-400"
                         )}
                     >
-                        <LayoutGrid className={cn("h-6 w-6", activeView === "products" ? "fill-primary/10" : "")} />
-                        <span className="text-[10px] font-black uppercase tracking-widest">Products</span>
+                        {activeView === "products" && (
+                            <div className="absolute inset-0 bg-primary/10 rounded-3xl animate-in zoom-in-95 duration-200" />
+                        )}
+                        <LayoutGrid className={cn("h-5 w-5 relative z-10", activeView === "products" ? "fill-primary/20" : "")} />
+                        <span className="text-[9px] font-black uppercase tracking-widest relative z-10">Products</span>
                     </button>
 
                     <button
                         onClick={() => setActiveView("cart")}
                         className={cn(
-                            "flex flex-col items-center gap-1 transition-all duration-300 relative px-4 py-1 rounded-2xl",
-                            activeView === "cart" ? "text-primary scale-110" : "text-slate-400 hover:text-slate-600"
+                            "flex flex-col items-center gap-1 transition-all duration-300 px-6 py-2 rounded-3xl relative",
+                            activeView === "cart" ? "text-primary" : "text-slate-400"
                         )}
                     >
-                        <ShoppingBag className={cn("h-6 w-6", activeView === "cart" ? "fill-primary/10" : "")} />
-                        {cart.length > 0 && (
-                            <span className="absolute top-0 right-2 bg-primary text-white text-[10px] font-black h-5 w-5 flex items-center justify-center rounded-full ring-2 ring-white">
-                                {cart.reduce((a, b) => a + b.quantity, 0)}
-                            </span>
+                        {activeView === "cart" && (
+                            <div className="absolute inset-0 bg-primary/10 rounded-3xl animate-in zoom-in-95 duration-200" />
                         )}
-                        <span className="text-[10px] font-black uppercase tracking-widest">Cart</span>
+                        <div className="relative z-10">
+                            <ShoppingCart className={cn("h-5 w-5", activeView === "cart" ? "fill-primary/20" : "")} />
+                            {cart.length > 0 && (
+                                <span className="absolute -top-1.5 -right-1.5 h-4 min-w-[16px] px-1 bg-red-500 text-white text-[8px] font-black rounded-full flex items-center justify-center ring-2 ring-white">
+                                    {cart.reduce((a, b) => a + b.quantity, 0)}
+                                </span>
+                            )}
+                        </div>
+                        <span className="text-[9px] font-black uppercase tracking-widest relative z-10">Checkout</span>
                     </button>
                 </div>
 
@@ -1800,15 +1751,15 @@ export default function POSPage() {
             <div className="pos-modals">
                 {/* High-End Elite Checkout Modal */}
                 <Dialog open={isCheckoutOpen} onOpenChange={setIsCheckoutOpen}>
-                    <DialogContent className="max-w-[100vw] h-[100vh] md:h-auto md:max-w-[850px] p-0 overflow-hidden border-none rounded-none md:rounded-[2rem] shadow-2xl flex flex-col">
-                        <div className="flex flex-col md:flex-row h-full md:min-h-[500px]">
-                            {/* Summary Side */}
-                            <div className="md:flex-1 bg-slate-900 text-white p-4 md:p-8 flex flex-row md:flex-col justify-between items-center md:items-stretch relative overflow-hidden shrink-0">
+                    <DialogContent className="max-w-[95vw] h-auto my-auto md:max-w-[650px] p-0 overflow-hidden border-none rounded-[1.5rem] shadow-2xl flex flex-col">
+                        <div className="flex flex-col md:flex-row h-full md:min-h-[400px]">
+                            {/* Summary Side - Compact for all devices */}
+                            <div className="md:flex-[0.8] bg-slate-900 text-white p-2 md:p-5 flex flex-row md:flex-col justify-between items-center md:items-stretch relative overflow-hidden shrink-0">
                                 <div className="absolute top-0 right-0 w-64 h-64 bg-primary/20 rounded-full blur-[100px] -mr-32 -mt-32" />
 
                                 <div className="relative z-10 flex flex-col md:block">
-                                    <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 md:mb-6">Total Link</h3>
-                                    <div className="hidden md:block space-y-4">
+                                    <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 md:mb-3">Total Link</h3>
+                                    <div className="hidden md:block space-y-2">
                                         <div className="flex justify-between items-center text-slate-300">
                                             <span className="text-xs font-bold uppercase tracking-widest">Subtotal</span>
                                             <span className="font-mono text-sm">${subtotal.toFixed(2)}</span>
@@ -1829,28 +1780,28 @@ export default function POSPage() {
                                 <div className="relative z-10">
                                     <div className="hidden md:block h-px bg-slate-800 w-full mb-6 border-dashed" />
                                     <div
-                                        className="flex flex-col gap-1 cursor-pointer group/total"
+                                        className="flex flex-col gap-0 md:gap-1 cursor-pointer group/total"
                                         onClick={() => setPaidAmount(total.toFixed(2))}
                                         title="Click to pay exact amount"
                                     >
                                         <span className="hidden md:block text-[10px] font-black uppercase tracking-[0.4em] text-white group-hover/total:text-slate-200 transition-colors">Total Payable</span>
-                                        <h2 className="text-3xl md:text-5xl font-black tracking-tighter leading-none text-white group-hover/total:scale-105 transition-transform origin-left text-right md:text-left">${total.toFixed(2)}</h2>
-                                        <p className="hidden md:block text-[10px] font-bold text-slate-500 mt-2 uppercase tracking-widest">ID: {companyId}</p>
+                                        <h2 className="text-base md:text-3xl font-black tracking-tighter leading-none text-white group-hover/total:scale-105 transition-transform origin-left text-right md:text-left">${total.toFixed(2)}</h2>
+                                        <p className="hidden md:block text-[10px] font-bold text-slate-500 mt-1 uppercase tracking-widest">ID: {companyId}</p>
                                     </div>
                                 </div>
                             </div>
 
                             {/* Payment Input Side */}
-                            <div className="flex-1 bg-white p-4 md:p-8 flex flex-col overflow-y-auto">
-                                <div className="flex items-center justify-between mb-4 md:mb-6 shrink-0">
-                                    <h3 className="text-base md:text-lg font-black text-slate-900">Checkout</h3>
-                                    <div className="flex gap-1.5">
+                            <div className="flex-1 bg-white p-2 md:p-6 flex flex-col overflow-y-auto">
+                                <div className="flex items-center justify-between mb-1.5 md:mb-4 shrink-0">
+                                    <h3 className="text-[10px] md:text-base font-black text-slate-900 uppercase tracking-widest">Pay</h3>
+                                    <div className="flex gap-1">
                                         {['USD', 'ZWG'].map(cc => (
                                             <Button
                                                 key={cc}
                                                 variant={selectedCurrencyCode === cc ? 'default' : 'outline'}
                                                 className={cn(
-                                                    "h-7 md:h-8 px-3 rounded-lg font-black text-[10px] transition-all",
+                                                    "h-6 md:h-8 px-2 rounded-md font-black text-[9px] transition-all",
                                                     selectedCurrencyCode === cc ? "bg-primary text-white shadow-lg shadow-primary/20" : "text-slate-400 border-slate-100"
                                                 )}
                                                 onClick={() => setSelectedCurrencyCode(cc)}
@@ -1861,24 +1812,24 @@ export default function POSPage() {
                                     </div>
                                 </div>
 
-                                <div className="space-y-4 flex-1 flex flex-col">
+                                <div className="space-y-1.5 flex-1 flex flex-col">
                                     <div className="relative group shrink-0">
-                                        <span className="absolute left-4 md:left-6 top-1/2 -translate-y-1/2 text-lg md:text-xl font-black text-slate-300 group-focus-within:text-primary transition-colors">$</span>
+                                        <span className="absolute left-2.5 md:left-4 top-1/2 -translate-y-1/2 text-sm md:text-xl font-black text-slate-300 group-focus-within:text-primary transition-colors">$</span>
                                         <Input
                                             type="number"
                                             placeholder="0.00"
                                             value={paidAmount}
                                             onChange={(e) => setPaidAmount(e.target.value)}
-                                            className="h-12 md:h-16 pl-8 md:pl-10 text-xl md:text-2xl font-black bg-slate-50 border-none rounded-xl md:rounded-2xl focus:ring-4 md:focus:ring-8 focus:ring-primary/5 transition-all text-slate-800"
+                                            className="h-7 md:h-12 pl-5 md:pl-8 text-sm md:text-xl font-black bg-slate-50 border-none rounded-md md:rounded-xl focus:ring-4 md:focus:ring-8 focus:ring-primary/5 transition-all text-slate-800"
                                         />
-                                        <div className="absolute right-4 md:right-6 top-1/2 -translate-y-1/2 text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest">Received</div>
+                                        <div className="absolute right-2.5 md:right-4 top-1/2 -translate-y-1/2 text-[6px] md:text-[8px] font-black text-slate-400 uppercase tracking-widest">Rec.</div>
                                     </div>
 
                                     <div className="flex-1 md:flex-none">
                                         <Numpad value={paidAmount} onChange={setPaidAmount} />
                                     </div>
 
-                                    <div className="grid grid-cols-2 gap-2 md:gap-3 mt-2 md:mt-4 overflow-y-auto max-h-[150px] md:max-h-none shrink-0">
+                                    <div className="grid grid-cols-2 gap-1 md:gap-2 mt-1 md:mt-2 overflow-y-auto max-h-[80px] md:max-h-none shrink-0 border-t border-slate-50 pt-1">
                                         {[
                                             { id: 'CASH', icon: Banknote, label: 'Cash' },
                                             { id: 'CARD', icon: CreditCard, label: 'Card' },
@@ -1895,47 +1846,47 @@ export default function POSPage() {
                                                 key={method.id}
                                                 variant={paymentMethod === method.id ? 'default' : 'outline'}
                                                 className={cn(
-                                                    "h-12 md:h-16 rounded-xl md:rounded-2xl flex flex-col gap-1 md:gap-1.5 font-black uppercase tracking-widest text-[8px] md:text-[9px] transition-all",
+                                                    "h-6 md:h-10 rounded-md flex flex-col gap-0 md:gap-1 font-black uppercase tracking-widest text-[6px] md:text-[8px] transition-all",
                                                     paymentMethod === method.id
                                                         ? "bg-slate-900 text-white shadow-xl shadow-slate-900/10 scale-[1.02]"
                                                         : "border-slate-100 text-slate-400 hover:bg-slate-50"
                                                 )}
                                                 onClick={() => setPaymentMethod(method.id as any)}
                                             >
-                                                <method.icon className={cn("h-4 w-4 md:h-5 md:w-5", paymentMethod === method.id ? "text-primary" : "text-slate-200")} />
+                                                <method.icon className={cn("h-2 w-2 md:h-4 md:w-4", paymentMethod === method.id ? "text-primary" : "text-slate-200")} />
                                                 {method.label}
                                             </Button>
                                         ))}
                                     </div>
 
                                     {paidAmount && (
-                                        <div className="bg-emerald-50 p-3 md:p-4 rounded-xl md:rounded-2xl border border-emerald-100 flex items-center justify-between shrink-0">
+                                        <div className="bg-emerald-50 p-1 md:p-3 rounded-md md:rounded-xl border border-emerald-100 flex items-center justify-between shrink-0">
                                             <div className="flex flex-col">
-                                                <span className="text-[9px] uppercase font-black tracking-widest text-emerald-600 mb-0.5 md:mb-1">Change</span>
-                                                <h3 className="text-xl md:text-2xl font-black text-emerald-700">
+                                                <span className="text-[6px] uppercase font-black tracking-widest text-emerald-600">Change</span>
+                                                <h3 className="text-sm md:text-xl font-black text-emerald-700">
                                                     {selectedCurrencyCode} {(parseFloat(paidAmount) - (total * Number(currencies?.find(c => c.code === selectedCurrencyCode)?.exchangeRate || 1))).toFixed(2)}
                                                 </h3>
                                             </div>
-                                            <div className="w-8 h-8 md:w-10 md:h-10 bg-white rounded-xl flex items-center justify-center shadow-sm">
-                                                <Banknote className="h-4 w-4 md:h-5 md:w-5 text-emerald-500" />
+                                            <div className="w-5 h-5 md:w-8 md:h-8 bg-white rounded-md flex items-center justify-center shadow-sm">
+                                                <Banknote className="h-2.5 w-2.5 md:h-4 md:w-4 text-emerald-500" />
                                             </div>
                                         </div>
                                     )}
 
-                                    <div className="flex gap-2 md:gap-4 pt-2 mt-auto shrink-0 pb-safe">
+                                    <div className="flex gap-2 md:gap-3 mt-auto shrink-0 pb-2 md:pb-0">
                                         <Button
                                             variant="ghost"
-                                            className="flex-1 h-12 md:h-12 rounded-xl font-black uppercase tracking-widest text-[10px] text-slate-400 hover:text-red-500 hover:bg-red-50"
+                                            className="flex-1 h-7 md:h-10 rounded-lg font-black uppercase tracking-widest text-[8px] text-slate-400 hover:text-red-500 hover:bg-red-50"
                                             onClick={() => setIsCheckoutOpen(false)}
                                         >
                                             Cancel
                                         </Button>
                                         <Button
                                             disabled={isProcessing || !paidAmount}
-                                            className="flex-[2] h-12 md:h-12 rounded-xl bg-primary hover:bg-primary/90 text-white font-black uppercase tracking-widest text-[10px] shadow-xl shadow-primary/20 transition-all active:scale-95"
+                                            className="flex-[2] h-7 md:h-10 rounded-lg bg-primary hover:bg-primary/90 text-white font-black uppercase tracking-widest text-[8px] shadow-xl shadow-primary/20 transition-all active:scale-95"
                                             onClick={processOrder}
                                         >
-                                            {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Complete Sale"}
+                                            {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Complete"}
                                         </Button>
                                     </div>
                                 </div>
@@ -2136,7 +2087,7 @@ export default function POSPage() {
                 </Dialog>
 
                 {/* Success/Confetti Modal */}
-                <Dialog open={!!lastSuccessfulInvoice} onOpenChange={() => setLastSuccessfulInvoice(null)}>
+                <Dialog open={!!lastSuccessfulInvoice} onOpenChange={() => { setLastSuccessfulInvoice(null); setActiveView("products"); }}>
                     <DialogContent className="sm:max-w-[450px] p-0 overflow-hidden border-none rounded-[3rem] shadow-2xl">
                         <div className="bg-emerald-500 p-12 text-center text-white relative print:hidden">
                             <div className="absolute top-0 left-0 w-full h-full opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white to-transparent" />
@@ -2175,7 +2126,7 @@ export default function POSPage() {
                                         {posSettings.silentPrinting ? "Silent Print" : "Print Receipt"}
                                     </Button>
                                 )}
-                                <Button variant="ghost" className="h-14 rounded-2xl font-black uppercase tracking-widest text-xs text-slate-400 hover:text-primary hover:bg-primary/5" onClick={() => setLastSuccessfulInvoice(null)}>
+                                <Button variant="ghost" className="h-14 rounded-2xl font-black uppercase tracking-widest text-xs text-slate-400 hover:text-primary hover:bg-primary/5 active:scale-95" onClick={() => { setLastSuccessfulInvoice(null); setActiveView("products"); }}>
                                     Proceed to Next Customer
                                 </Button>
                             </div>

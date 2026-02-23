@@ -51,9 +51,9 @@ import { useEffect } from "react";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
-  const { data: companies, isLoading: isLoadingCompanies } = useCompanies(!!user);
+  const { data: companies, isLoading: isLoadingCompanies, isSuccess: isCompaniesSuccess, isError: isCompaniesError } = useCompanies(!!user);
   const { activeCompany, isLoading: isLoadingActiveCompany } = useActiveCompany();
-  const [location, setLocation] = useLocation();
+  const [location] = useLocation();
 
   if (isLoading || isLoadingCompanies || isLoadingActiveCompany) {
     return (
@@ -67,16 +67,34 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
     return <Redirect to="/auth" />;
   }
 
-  if (!companies || companies.length === 0) {
+  // Redirect to onboarding ONLY if:
+  // 1. We are online (browser thinks we have connection)
+  // 2. The query succeeded (didn't catch an error)
+  // 3. We have a non-null result that is definitely an empty array.
+  // This avoids accidental redirects during network hiccups or if the offline cache is empty.
+  const isPossiblyOffline = !navigator.onLine || isCompaniesError;
+  const hasConfirmedEmpty = !isPossiblyOffline && isCompaniesSuccess && Array.isArray(companies) && companies.length === 0;
+
+  if (hasConfirmedEmpty) {
     return <Redirect to="/onboarding" />;
   }
 
-  // Role based redirection for Cashiers
-  if (activeCompany) {
+  // Redirection Logic
+  const isPosPath = location.startsWith("/pos");
+  const isOffline = !navigator.onLine || isCompaniesError;
+
+  // 1. IF OFFLINE: Force POS access only
+  if (isOffline && !isPosPath) {
+    return <Redirect to="/pos" />;
+  }
+
+  // 2. IF ONLINE: Normal role-based restrictions
+  if (!isOffline && activeCompany) {
     const role = (activeCompany as any).role;
-    const allowedCashierPaths = ["/pos", "/pos/my-sales"];
-    // Redirection for Cashiers - SuperAdmins are ALWAYS exempt from forced POS view
-    if (!user?.isSuperAdmin && role === "cashier" && !allowedCashierPaths.includes(location)) {
+    const isCashier = role === "cashier" && !user?.isSuperAdmin;
+    const isAllowedPath = isPosPath || location.startsWith("/profile");
+
+    if (isCashier && !isAllowedPath) {
       return <Redirect to="/pos" />;
     }
   }
@@ -86,7 +104,7 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 
 function OnboardingRoute() {
   const { user, isLoading } = useAuth();
-  const { data: companies, isLoading: isLoadingCompanies } = useCompanies(!!user);
+  const { data: companies, isLoading: isLoadingCompanies, isError } = useCompanies(!!user);
 
   if (isLoading || isLoadingCompanies) {
     return (
@@ -100,8 +118,18 @@ function OnboardingRoute() {
     return <Redirect to="/auth" />;
   }
 
+  // Always redirect to POS as requested
+  if (!navigator.onLine || isError) {
+    return <Redirect to="/pos" />;
+  }
+
   if (companies && companies.length > 0) {
-    return <Redirect to="/dashboard" />;
+    const isOffline = !navigator.onLine || isError;
+    if (isOffline) return <Redirect to="/pos" />;
+
+    const role = (companies[0] as any).role;
+    const isCashier = role === "cashier" && !user?.isSuperAdmin;
+    return <Redirect to={isCashier ? "/pos" : "/dashboard"} />;
   }
 
   return <OnboardingPage />;
@@ -112,8 +140,9 @@ function Router() {
 
   return (
     <Switch>
-      <Route path="/" component={LandingPage} />
-      <Route path="/auth" component={AuthPage} />
+      <Route path="/auth">
+        {user ? <Redirect to={navigator.onLine ? "/dashboard" : "/pos"} /> : <AuthPage />}
+      </Route>
       <Route path="/forgot-password" component={ForgotPasswordPage} />
       <Route path="/reset-password" component={ResetPasswordPage} />
 
@@ -224,9 +253,12 @@ function Router() {
       <Route path="/pos-settings">
         {() => <ProtectedRoute component={PosSettingsPage} />}
       </Route>
+      <Route path="/">
+        {user ? <Redirect to={navigator.onLine ? "/dashboard" : "/pos"} /> : <LandingPage />}
+      </Route>
 
       <Route component={NotFound} />
-    </Switch>
+    </Switch >
   );
 }
 

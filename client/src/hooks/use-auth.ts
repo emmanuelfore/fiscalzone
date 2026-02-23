@@ -4,6 +4,7 @@ import { apiFetch } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
+import { cacheUser, getCachedUser, clearCachedUser } from "@/lib/offline-db";
 
 export function useAuth() {
   const queryClient = useQueryClient();
@@ -44,20 +45,25 @@ export function useAuth() {
     queryFn: async () => {
       try {
         const res = await apiFetch("/api/user");
-        if (res.status === 401) return null;
-        if (!res.ok) {
-          const debug = await res.text();
-          console.error("Auth Fetch Failed:", res.status, debug);
-          throw new Error("Failed to fetch user: " + debug);
+        if (res.status === 401) {
+          await clearCachedUser();
+          return null;
         }
-        return await res.json();
+        if (!res.ok) {
+          throw new Error("Network response was not ok");
+        }
+        const user = await res.json();
+        if (user) await cacheUser(user);
+        return user;
       } catch (err) {
-        console.error("User query error:", err);
-        return null;
+        console.warn("User fetch failed, trying offline cache...", err);
+        const cached = await getCachedUser();
+        return cached || null;
       }
     },
     // Only fetch if we passed the initial loading check
     enabled: !isSupabaseLoading,
+    staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
   const loginWithGoogle = async () => {
@@ -94,6 +100,7 @@ export function useAuth() {
 
   const logout = async () => {
     await supabase.auth.signOut();
+    await clearCachedUser();
     queryClient.clear();
     // Clear company selection to prevent stale data across user sessions
     localStorage.removeItem("selectedCompanyId");

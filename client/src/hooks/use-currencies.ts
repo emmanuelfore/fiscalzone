@@ -3,15 +3,25 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
 import { type InsertCurrency, type Currency } from "@shared/schema";
 import { apiFetch } from "@/lib/api";
+import { cacheCurrencies, getCachedCurrencies } from "@/lib/offline-db";
 
 export function useCurrencies(companyId: number) {
     return useQuery({
         queryKey: [api.currencies.list.path, companyId],
         queryFn: async () => {
-            const url = buildUrl(api.currencies.list.path, { companyId });
-            const res = await apiFetch(url);
-            if (!res.ok) throw new Error("Failed to fetch currencies");
-            return api.currencies.list.responses[200].parse(await res.json());
+            try {
+                const url = buildUrl(api.currencies.list.path, { companyId });
+                const res = await apiFetch(url);
+                if (!res.ok) throw new Error("Failed to fetch currencies");
+                const currencies = api.currencies.list.responses[200].parse(await res.json());
+                if (companyId) await cacheCurrencies(companyId, currencies);
+                return currencies;
+            } catch (err) {
+                console.warn("Currencies fetch failed, trying offline cache...", err);
+                const cached = await getCachedCurrencies(companyId);
+                if (cached && cached.length > 0) return cached;
+                throw err;
+            }
         },
         enabled: !!companyId,
     });

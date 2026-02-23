@@ -2,14 +2,27 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
 import { type InsertCompany, type Company } from "@shared/schema";
 import { apiFetch } from "@/lib/api";
+import { cacheCompaniesList, getCachedCompaniesList, cacheCompanySettings, getCachedCompanySettings } from "@/lib/offline-db";
 
 export function useCompanies(enabled: boolean = true) {
   return useQuery({
     queryKey: [api.companies.list.path],
     queryFn: async () => {
-      const res = await apiFetch(api.companies.list.path);
-      if (!res.ok) throw new Error("Failed to fetch companies");
-      return api.companies.list.responses[200].parse(await res.json());
+      try {
+        const res = await apiFetch(api.companies.list.path);
+        if (!res.ok) throw new Error("Failed to fetch companies");
+        const companies = api.companies.list.responses[200].parse(await res.json());
+        if (companies) await cacheCompaniesList(companies);
+        return companies;
+      } catch (err) {
+        console.warn("Companies fetch failed, trying offline cache...", err);
+        const cached = await getCachedCompaniesList();
+        // Only return from cache if we actually have company data.
+        // If the cache is empty/undefined, it's better to throw the error
+        // so the UI knows we are truly offline/disconnected without data.
+        if (cached && cached.length > 0) return cached;
+        throw err;
+      }
     },
     enabled,
   });
@@ -19,10 +32,19 @@ export function useCompany(id: number) {
   return useQuery({
     queryKey: [api.companies.get.path, id],
     queryFn: async () => {
-      const url = buildUrl(api.companies.get.path, { id });
-      const res = await apiFetch(url);
-      if (!res.ok) throw new Error("Failed to fetch company");
-      return api.companies.get.responses[200].parse(await res.json());
+      try {
+        const url = buildUrl(api.companies.get.path, { id });
+        const res = await apiFetch(url);
+        if (!res.ok) throw new Error("Failed to fetch company");
+        const company = api.companies.get.responses[200].parse(await res.json());
+        if (id) await cacheCompanySettings(id, company);
+        return company;
+      } catch (err) {
+        console.warn("Company fetch failed, trying offline cache...", err);
+        const cached = await getCachedCompanySettings(id);
+        if (cached) return cached;
+        throw err;
+      }
     },
     enabled: !!id,
   });

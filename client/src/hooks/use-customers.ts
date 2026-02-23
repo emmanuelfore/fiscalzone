@@ -2,15 +2,25 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
 import { type InsertCustomer } from "@shared/schema";
 import { apiFetch } from "@/lib/api";
+import { cacheCustomers, getCachedCustomers } from "@/lib/offline-db";
 
 export function useCustomers(companyId: number) {
   return useQuery({
     queryKey: [api.customers.list.path, companyId],
     queryFn: async () => {
-      const url = buildUrl(api.customers.list.path, { companyId });
-      const res = await apiFetch(url);
-      if (!res.ok) throw new Error("Failed to fetch customers");
-      return api.customers.list.responses[200].parse(await res.json());
+      try {
+        const url = buildUrl(api.customers.list.path, { companyId });
+        const res = await apiFetch(url);
+        if (!res.ok) throw new Error("Failed to fetch customers");
+        const customers = api.customers.list.responses[200].parse(await res.json());
+        if (companyId) await cacheCustomers(companyId, customers);
+        return customers;
+      } catch (err) {
+        console.warn("Customers fetch failed, trying offline cache...", err);
+        const cached = await getCachedCustomers(companyId);
+        if (cached && cached.length > 0) return cached;
+        throw err;
+      }
     },
     enabled: !!companyId,
   });

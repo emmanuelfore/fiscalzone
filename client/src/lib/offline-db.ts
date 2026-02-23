@@ -1,7 +1,7 @@
 import { openDB, type IDBPDatabase } from 'idb';
 
 const DB_NAME = 'pos-offline';
-const DB_VERSION = 2;
+const DB_VERSION = 5;
 
 interface PendingSale {
     id: string;
@@ -37,30 +37,22 @@ export async function getDb(): Promise<IDBPDatabase> {
     if (dbInstance) return dbInstance;
 
     dbInstance = await openDB(DB_NAME, DB_VERSION, {
-        upgrade(db, oldVersion) {
-            // Reference data stores — keyed by companyId
-            if (!db.objectStoreNames.contains('products')) {
-                db.createObjectStore('products');
-            }
-            if (!db.objectStoreNames.contains('customers')) {
-                db.createObjectStore('customers');
-            }
-            if (!db.objectStoreNames.contains('currencies')) {
-                db.createObjectStore('currencies');
-            }
-            if (!db.objectStoreNames.contains('taxConfig')) {
-                db.createObjectStore('taxConfig');
-            }
-            if (!db.objectStoreNames.contains('companySettings')) {
-                db.createObjectStore('companySettings');
-            }
+        upgrade(db, oldVersion, newVersion) {
+            console.log(`[DB] Upgrading from ${oldVersion} to ${newVersion}`);
 
-            // Shifts cache
-            if (!db.objectStoreNames.contains('shifts')) {
-                db.createObjectStore('shifts');
-            }
+            const stores = [
+                'products', 'customers', 'currencies', 'taxConfig',
+                'companySettings', 'shifts', 'metadata', 'user_cache',
+                'companies_list'
+            ];
 
-            // Pending sales queue — keyed by unique id
+            stores.forEach(storeName => {
+                if (!db.objectStoreNames.contains(storeName)) {
+                    db.createObjectStore(storeName);
+                }
+            });
+
+            // Pending sales queue
             if (!db.objectStoreNames.contains('pendingSales')) {
                 const store = db.createObjectStore('pendingSales', { keyPath: 'id' });
                 store.createIndex('byCompany', 'companyId');
@@ -79,12 +71,15 @@ export async function getDb(): Promise<IDBPDatabase> {
                 const store = db.createObjectStore('holds', { keyPath: 'id' });
                 store.createIndex('byCompany', 'companyId');
             }
-
-            // Metadata store
-            if (!db.objectStoreNames.contains('metadata')) {
-                db.createObjectStore('metadata');
-            }
         },
+        blocked() {
+            console.warn('[DB] Upgrade blocked by older version open in another tab. Please close all tabs.');
+        },
+        blocking() {
+            console.warn('[DB] New version available, closing this connection to allow upgrade.');
+            dbInstance?.close();
+            dbInstance = null;
+        }
     });
 
     return dbInstance;
@@ -100,6 +95,36 @@ export async function setLastCacheTime(companyId: number, timestamp: number): Pr
 export async function getLastCacheTime(companyId: number): Promise<number | undefined> {
     const db = await getDb();
     return db.get('metadata', `lastCache-${companyId}`);
+}
+
+// ─── User Cache ─────────────────────────────────────────────────────────────
+
+export async function cacheUser(user: any): Promise<void> {
+    const db = await getDb();
+    await db.put('user_cache', user, 'current_user');
+}
+
+export async function getCachedUser(): Promise<any | undefined> {
+    const db = await getDb();
+    return db.get('user_cache', 'current_user');
+}
+
+export async function clearCachedUser(): Promise<void> {
+    const db = await getDb();
+    await db.delete('user_cache', 'current_user');
+    await db.delete('companies_list', 'current_list');
+}
+
+// ─── Companies List ──────────────────────────────────────────────────────────
+
+export async function cacheCompaniesList(companies: any[]): Promise<void> {
+    const db = await getDb();
+    await db.put('companies_list', companies, 'current_list');
+}
+
+export async function getCachedCompaniesList(): Promise<any[] | undefined> {
+    const db = await getDb();
+    return db.get('companies_list', 'current_list');
 }
 
 // ─── Products ───────────────────────────────────────────────────────────────

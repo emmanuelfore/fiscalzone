@@ -126,7 +126,7 @@ export default function OnboardingPage() {
         queryKey: [api.companies.list.path],
         queryFn: async () => {
             const res = await apiFetch(api.companies.list.path);
-            if (!res.ok) return [];
+            if (!res.ok) throw new Error("Failed to load companies");
             return await res.json();
         },
         enabled: !!user // Only run if user is logged in

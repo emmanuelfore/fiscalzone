@@ -2,15 +2,25 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
 import { type InsertProduct } from "@shared/schema";
 import { apiFetch } from "@/lib/api";
+import { cacheProducts, getCachedProducts } from "@/lib/offline-db";
 
 export function useProducts(companyId: number) {
   return useQuery({
     queryKey: [api.products.list.path, companyId],
     queryFn: async () => {
-      const url = buildUrl(api.products.list.path, { companyId });
-      const res = await apiFetch(url);
-      if (!res.ok) throw new Error("Failed to fetch products");
-      return api.products.list.responses[200].parse(await res.json());
+      try {
+        const url = buildUrl(api.products.list.path, { companyId });
+        const res = await apiFetch(url);
+        if (!res.ok) throw new Error("Failed to fetch products");
+        const products = api.products.list.responses[200].parse(await res.json());
+        if (companyId) await cacheProducts(companyId, products);
+        return products;
+      } catch (err) {
+        console.warn("Products fetch failed, trying offline cache...", err);
+        const cached = await getCachedProducts(companyId);
+        if (cached && cached.length > 0) return cached;
+        throw err;
+      }
     },
     enabled: !!companyId,
   });

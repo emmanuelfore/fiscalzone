@@ -140,7 +140,14 @@ export function POSReceipt({ invoice, company, customer, items }: POSReceiptProp
             {/* Footer */}
             <div className="text-center space-y-1 text-[8px] italic break-inside-avoid">
                 <p>{company.posSettings?.receiptFooter || "Thank you for your business!"}</p>
-                <p>*** FISCAL RECEIPT ***</p>
+                {invoice._offline ? (
+                    <div className="my-2 border-2 border-red-500 p-1 text-red-600 font-black text-[10px] animate-pulse">
+                        *** PENDING FISCALIZATION ***
+                        <p className="text-[7px]">Offline Sale - Will sync once reconnected</p>
+                    </div>
+                ) : (
+                    <p>*** FISCAL RECEIPT ***</p>
+                )}
                 <p>Powered by Fisczim SaaS</p>
             </div>
 

@@ -19,7 +19,12 @@ import {
   currencies,
   insertCurrencySchema,
   payments,
-  insertPaymentSchema
+  insertPaymentSchema,
+  insertSupplierSchema,
+  insertExpenseSchema,
+  type Supplier,
+  type InventoryTransaction,
+  type Expense
 } from './schema.js';
 
 export const errorSchemas = {
@@ -305,6 +310,121 @@ export const api = {
       responses: {
         204: z.void(),
         404: errorSchemas.notFound,
+      }
+    }
+  },
+  suppliers: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/companies/:companyId/suppliers',
+      responses: {
+        200: z.array(z.custom<Supplier>()),
+      }
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/companies/:companyId/suppliers',
+      input: insertSupplierSchema,
+      responses: {
+        201: z.custom<Supplier>(),
+      }
+    },
+    update: {
+      method: 'PATCH' as const,
+      path: '/api/suppliers/:id',
+      input: insertSupplierSchema.partial(),
+      responses: {
+        200: z.custom<Supplier>(),
+        404: errorSchemas.notFound,
+      }
+    }
+  },
+  inventory: {
+    transactions: {
+      method: 'GET' as const,
+      path: '/api/companies/:companyId/inventory/transactions',
+      responses: {
+        200: z.array(z.custom<InventoryTransaction>()),
+      }
+    },
+    stockIn: {
+      method: 'POST' as const,
+      path: '/api/companies/:companyId/inventory/stock-in',
+      input: z.object({
+        productId: z.number(),
+        quantity: z.number().or(z.string()),
+        unitCost: z.number().or(z.string()),
+        supplierId: z.number().optional(),
+        notes: z.string().optional()
+      }),
+      responses: {
+        201: z.object({ message: z.string() }),
+      }
+    },
+    batchStockIn: {
+      method: 'POST' as const,
+      path: '/api/companies/:companyId/inventory/batch-stock-in',
+      input: z.object({
+        supplierId: z.number().optional(),
+        notes: z.string().optional(),
+        items: z.array(z.object({
+          productId: z.number(),
+          quantity: z.number().or(z.string()),
+          unitCost: z.number().or(z.string()),
+        }))
+      }),
+      responses: {
+        201: z.object({ message: z.string() }),
+      }
+    }
+  },
+  expenses: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/companies/:companyId/expenses',
+      responses: {
+        200: z.array(z.custom<Expense>()),
+      }
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/companies/:companyId/expenses',
+      input: insertExpenseSchema,
+      responses: {
+        201: z.custom<Expense>(),
+      }
+    }
+  },
+  reports: {
+    stockValuation: {
+      method: "GET" as const,
+      path: "/api/companies/:companyId/reports/stock-valuation",
+      responses: {
+        200: z.array(z.object({
+          productId: z.number(),
+          name: z.string(),
+          sku: z.string().nullable(),
+          stockLevel: z.string(),
+          unitCost: z.string(),
+          totalValuation: z.number()
+        }))
+      }
+    },
+    financialSummary: {
+      method: "GET" as const,
+      path: "/api/companies/:companyId/reports/financial-summary",
+      responses: {
+        200: z.object({
+          revenue: z.number(),
+          cogs: z.number(),
+          grossProfit: z.number(),
+          expenses: z.number(),
+          netProfit: z.number(),
+          expenseBreakdown: z.array(z.object({
+            category: z.string(),
+            amount: z.number()
+          }))
+        })
       }
     }
   }

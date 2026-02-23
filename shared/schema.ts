@@ -86,6 +86,9 @@ export const companies = pgTable("companies", {
   posSettings: jsonb("pos_settings"), // Stores receipt header/footer, auto-print defaults etc.
   lastReceiptAt: timestamp("last_receipt_at"),
 
+  // Inventory Settings
+  inventoryValuationMethod: text("inventory_valuation_method").default("FIFO"), // FIFO, LIFO, WAC
+
   subscriptionEndDate: timestamp("subscription_end_date"),
   subscriptionStatus: text("subscription_status").default("inactive"), // active, inactive, expired
   registeredMacAddress: text("registered_mac_address"), // Physical device binding
@@ -97,6 +100,8 @@ export const companiesRelations = relations(companies, ({ many }) => ({
   customers: many(customers),
   products: many(products),
   invoices: many(invoices),
+  suppliers: many(suppliers),
+  expenses: many(expenses),
 }));
 
 // Join table for Users <-> Companies
@@ -235,8 +240,9 @@ export const products = pgTable("products", {
   };
 });
 
-export const productsRelations = relations(products, ({ one }) => ({
+export const productsRelations = relations(products, ({ one, many }) => ({
   company: one(companies, { fields: [products.companyId], references: [companies.id] }),
+  inventoryTransactions: many(inventoryTransactions),
 }));
 
 // Product Categories
@@ -347,6 +353,7 @@ export const invoiceItems = pgTable("invoice_items", {
   taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).notNull(),
   lineTotal: decimal("line_total", { precision: 10, scale: 2 }).notNull(),
   taxTypeId: integer("tax_type_id").references(() => taxTypes.id),
+  cogsAmount: decimal("cogs_amount", { precision: 10, scale: 2 }),
 }, (table) => {
   return {
     invoiceIdIdx: index("invoice_items_invoice_id_idx").on(table.invoiceId),
@@ -420,6 +427,7 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 export type ResetToken = typeof resetTokens.$inferSelect;
 export type InsertResetToken = z.infer<typeof insertResetTokenSchema>;
 
+export type Company = typeof companies.$inferSelect;
 export type InsertCompany = z.infer<typeof insertCompanySchema>;
 export type Customer = typeof customers.$inferSelect;
 export type InsertCustomer = z.infer<typeof insertCustomerSchema>;
@@ -523,6 +531,7 @@ export const quotationItems = pgTable("quotation_items", {
   taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).notNull(),
   lineTotal: decimal("line_total", { precision: 10, scale: 2 }).notNull(),
   taxTypeId: integer("tax_type_id").references(() => taxTypes.id),
+  cogsAmount: decimal("cogs_amount", { precision: 10, scale: 2 }), // Cost of Goods Sold for this line
 });
 
 export const quotationsRelations = relations(quotations, ({ one, many }) => ({
@@ -719,3 +728,104 @@ export const posShiftTransactionsRelations = relations(posShiftTransactions, ({ 
 export const insertPosShiftTransactionSchema = createInsertSchema(posShiftTransactions).omit({ id: true, createdAt: true });
 export type PosShiftTransaction = typeof posShiftTransactions.$inferSelect;
 export type InsertPosShiftTransaction = z.infer<typeof insertPosShiftTransactionSchema>;
+
+// Suppliers
+export const suppliers = pgTable("suppliers", {
+  id: serial("id").primaryKey(),
+  companyId: integer("company_id").references(() => companies.id).notNull(),
+  name: text("name").notNull(),
+  contactPerson: text("contact_person"),
+  email: text("email"),
+  phone: text("phone"),
+  address: text("address"),
+  tin: text("tin"),
+  vatNumber: text("vat_number"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => {
+  return {
+    companyIdIdx: index("suppliers_company_id_idx").on(table.companyId),
+  };
+});
+
+export const suppliersRelations = relations(suppliers, ({ one }) => ({
+  company: one(companies, { fields: [suppliers.companyId], references: [companies.id] }),
+}));
+
+// Inventory Transactions (Stock Ledger)
+export const inventoryTransactions = pgTable("inventory_transactions", {
+  id: serial("id").primaryKey(),
+  companyId: integer("company_id").references(() => companies.id).notNull(),
+  productId: integer("product_id").references(() => products.id).notNull(),
+  supplierId: integer("supplier_id").references(() => suppliers.id),
+
+  type: text("type").notNull(), // 'STOCK_IN' (GRN), 'STOCK_OUT' (Invoice), 'ADJUSTMENT'
+  quantity: decimal("quantity", { precision: 10, scale: 2 }).notNull(),
+  unitCost: decimal("unit_cost", { precision: 10, scale: 2 }),
+  totalCost: decimal("total_cost", { precision: 10, scale: 2 }),
+
+  referenceType: text("reference_type"), // 'GRN', 'INVOICE', 'MANUAL'
+  referenceId: text("reference_id"), // ID of the GRN or Invoice
+
+  remainingQuantity: decimal("remaining_quantity", { precision: 10, scale: 2 }), // For FIFO/LIFO tracking
+  batchNumber: text("batch_number"),
+  expiryDate: timestamp("expiry_date"),
+
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => {
+  return {
+    companyIdIdx: index("inv_trans_company_id_idx").on(table.companyId),
+    productIdIdx: index("inv_trans_product_id_idx").on(table.productId),
+  };
+});
+
+export const inventoryTransactionsRelations = relations(inventoryTransactions, ({ one }) => ({
+  company: one(companies, { fields: [inventoryTransactions.companyId], references: [companies.id] }),
+  product: one(products, { fields: [inventoryTransactions.productId], references: [products.id] }),
+  supplier: one(suppliers, { fields: [inventoryTransactions.supplierId], references: [suppliers.id] }),
+}));
+
+// Expenses
+export const expenses = pgTable("expenses", {
+  id: serial("id").primaryKey(),
+  companyId: integer("company_id").references(() => companies.id).notNull(),
+  supplierId: integer("supplier_id").references(() => suppliers.id),
+
+  category: text("category").notNull(), // Rent, Utilities, Salary, etc.
+  description: text("description").notNull(),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  currency: text("currency").default("USD").notNull(),
+  expenseDate: timestamp("expense_date").defaultNow().notNull(),
+
+  paymentMethod: text("payment_method"),
+  reference: text("reference"),
+  status: text("status").default("paid"), // paid, pending
+
+  attachmentUrl: text("attachment_url"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => {
+  return {
+    companyIdIdx: index("expenses_company_id_idx").on(table.companyId),
+  };
+});
+
+export const expensesRelations = relations(expenses, ({ one }) => ({
+  company: one(companies, { fields: [expenses.companyId], references: [companies.id] }),
+  supplier: one(suppliers, { fields: [expenses.supplierId], references: [suppliers.id] }),
+}));
+
+// Zod schemas for new tables
+export const insertSupplierSchema = createInsertSchema(suppliers).omit({ id: true, createdAt: true });
+export type Supplier = typeof suppliers.$inferSelect;
+export type InsertSupplier = z.infer<typeof insertSupplierSchema>;
+
+export const insertInventoryTransactionSchema = createInsertSchema(inventoryTransactions).omit({ id: true, createdAt: true });
+export type InventoryTransaction = typeof inventoryTransactions.$inferSelect;
+export type InsertInventoryTransaction = z.infer<typeof insertInventoryTransactionSchema>;
+
+export const insertExpenseSchema = createInsertSchema(expenses).omit({ id: true, createdAt: true });
+export type Expense = typeof expenses.$inferSelect;
+export type InsertExpense = z.infer<typeof insertExpenseSchema>;
+

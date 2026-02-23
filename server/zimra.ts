@@ -516,9 +516,6 @@ export class ZimraDevice {
         if (thumbprint) {
             url += `?thumbprint=${encodeURIComponent(thumbprint)}`;
         }
-        if (thumbprint) {
-            url += `?thumbprint=${encodeURIComponent(thumbprint)}`;
-        }
         return this.wrapRequest('GetServerCertificate', () => this.axiosInstance.get(url));
     }
 

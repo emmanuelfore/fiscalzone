@@ -35,6 +35,12 @@ export async function setupVite(server: Server, app: Express) {
     const url = req.originalUrl;
 
     try {
+      // If it looks like a static asset or module that Vite should have handled, 
+      // but it fell through to the catch-all, don't serve index.html
+      if (url.includes(".") && !url.endsWith(".html")) {
+        return next();
+      }
+
       const clientTemplate = path.resolve(
         process.cwd(),
         "client",
@@ -43,10 +49,6 @@ export async function setupVite(server: Server, app: Express) {
 
       // always reload the index.html file from disk incase it changes
       let template = await fs.promises.readFile(clientTemplate, "utf-8");
-      template = template.replace(
-        `src="/src/main.tsx"`,
-        `src="/src/main.tsx?v=${nanoid()}"`,
-      );
       const page = await vite.transformIndexHtml(url, template);
       res.status(200).set({ "Content-Type": "text/html" }).end(page);
     } catch (e) {

@@ -793,124 +793,116 @@ export default function CreateInvoicePage() {
 
   return (
     <Layout>
-      <div className="bg-slate-50/50 min-h-screen pb-20">
+      <div className="bg-slate-50/40 min-h-screen pb-32">
         {isLockedByOther && (
-          <div className="bg-amber-50 border-l-4 border-amber-500 p-4 mb-4 rounded-r shadow-sm">
+          <div className="bg-amber-50 border-l-4 border-amber-500 p-4 mb-8 rounded-r-xl shadow-sm animate-in slide-in-from-top duration-300">
             <div className="flex">
               <div className="flex-shrink-0">
                 <Lock className="h-5 w-5 text-amber-500" aria-hidden="true" />
               </div>
               <div className="ml-3">
-                <p className="text-sm text-amber-700">
+                <p className="text-sm text-amber-900 font-bold">
                   {lockStatus}
-                  <span className="block mt-1 text-xs opacity-75">You can view this invoice but cannot make changes.</span>
+                  <span className="block mt-1 text-xs opacity-75 font-medium">You can view this invoice but cannot make changes.</span>
                 </p>
               </div>
             </div>
           </div>
         )}
-
-        <div className="mb-6 flex flex-col md:flex-row gap-4 items-center justify-between no-print">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" onClick={() => setLocation("/invoices")} className="pl-0 hover:pl-0 hover:bg-transparent text-slate-500 hover:text-slate-900 transition-colors">
-              <ArrowLeft className="w-5 h-5 mr-2" />
-              <span className="text-lg font-medium">Back</span>
-            </Button>
-            <div className="h-8 w-px bg-slate-200 mx-2"></div>
-            <h1 className="text-3xl font-display font-bold text-slate-900 tracking-tight">
-              {isEditing
-                ? (existingInvoice?.status === "quote" ? "Edit Quotation" : (existingInvoice?.transactionType === "CreditNote" ? "Edit Credit Note" : (existingInvoice?.transactionType === "DebitNote" ? "Edit Debit Note" : "Edit Invoice")))
-                : (searchParams.get('type') === 'quote' ? "New Quotation" : "New Invoice")
-              }
-            </h1>
-          </div>
-          <div className="flex gap-3">
-            <Button
-              variant="outline"
-              onClick={() => handleActionClick('draft')}
-              disabled={loadingAction !== null || isLockedByOther}
-              className="rounded-xl border-slate-200 shadow-sm hover:bg-slate-50 hover:text-slate-900 transition-all font-medium"
-            >
-              {loadingAction === 'draft' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ShieldCheck className="w-4 h-4 mr-2 text-slate-500" />}
-              Save Draft
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => handleActionClick('quote')}
-              disabled={loadingAction !== null || isLockedByOther}
-              className="rounded-xl border-slate-200 shadow-sm hover:bg-slate-50 hover:text-slate-900 transition-all font-medium"
-            >
-              {loadingAction === 'quote' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ClipboardList className="w-4 h-4 mr-2 text-blue-500" />}
-              Save as Quotation
-            </Button>
-            <Button
-              onClick={() => handleActionClick('issue')}
-              disabled={loadingAction !== null || isLockedByOther}
-              className="rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white shadow-lg shadow-indigo-500/20 transition-all hover:-translate-y-0.5 font-semibold px-6"
-            >
-              {loadingAction === 'issue' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
-              Issue Invoice
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900"
-              onClick={() => setIsPreviewOpen(true)}
-              title="Preview PDF"
-            >
-              <Eye className="w-5 h-5" />
-            </Button>
-          </div>
+        <div className="mb-6 flex items-center justify-between no-print pt-4">
+          <Button variant="ghost" onClick={() => setLocation("/invoices")} className="px-3 hover:bg-white/50 text-slate-500 hover:text-slate-900 transition-all rounded-xl h-12">
+            <ArrowLeft className="w-5 h-5 mr-2" />
+            <span className="text-sm font-black uppercase tracking-widest">Back to Matrix</span>
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="rounded-xl hover:bg-white/50 text-slate-500 h-12 w-12 flex"
+            onClick={() => setIsPreviewOpen(true)}
+            title="Preview PDF"
+          >
+            <Eye className="w-5 h-5" />
+          </Button>
         </div>
 
-        <div className="max-w-7xl mx-auto px-4 md:px-8 py-8">
-          <div className="bg-white shadow-2xl shadow-slate-200/50 border border-slate-100 rounded-[2rem] overflow-hidden">
+        <div className="max-w-7xl mx-auto px-0 md:px-0">
+          <div className="bg-white shadow-3xl shadow-slate-200 border-none rounded-[2.5rem] overflow-hidden">
             {/* Header Section */}
-            <div className="bg-slate-50/50 border-b border-slate-100 px-8 md:px-12 py-10 relative overflow-hidden">
-              <div className="absolute top-0 right-0 p-12 opacity-5 pointer-events-none">
-                <svg width="200" height="200" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M14 2H6C4.89543 2 4 2.89543 4 4V20C4 21.1046 4.89543 22 6 22H18C19.1046 22 20 21.1046 20 20V8L14 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  <path d="M14 2V8H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  <path d="M16 13H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  <path d="M16 17H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  <path d="M10 9H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </div>
-              <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-6 relative z-10">
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3">
-                    <div className={cn("p-2 rounded-xl", searchParams.get('type') === 'quote' ? "bg-blue-100 text-blue-600" : "bg-violet-100 text-violet-600")}>
-                      {searchParams.get('type') === 'quote' || existingInvoice?.status === 'quote' ? <ClipboardList className="w-6 h-6" /> : <ShieldCheck className="w-6 h-6" />}
+            <div className="bg-slate-900 px-8 md:px-16 py-12 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-primary/20 blur-[120px] -mr-32 -mt-32 rounded-full animate-pulse" />
+              <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-500/10 blur-[100px] -ml-32 -mb-32 rounded-full" />
+
+              <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-8 relative z-10">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4">
+                    <div className={cn("p-3.5 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 shadow-inner", searchParams.get('type') === 'quote' ? "text-blue-400" : "text-violet-400")}>
+                      {searchParams.get('type') === 'quote' || existingInvoice?.status === 'quote' ? <ClipboardList className="w-8 h-8" /> : <ShieldCheck className="w-8 h-8" />}
                     </div>
-                    <h1 className="text-3xl font-display font-black text-slate-900 tracking-tight uppercase">
-                      {searchParams.get('type') === 'quote' || existingInvoice?.status === 'quote'
-                        ? "Official Quotation"
-                        : (existingInvoice?.fiscalCode
-                          ? (existingInvoice?.transactionType === "CreditNote" ? "Fiscal Credit Note" : (existingInvoice?.transactionType === "DebitNote" ? "Fiscal Debit Note" : (company?.vatRegistered ? "Fiscal Tax Invoice" : "Fiscal Invoice")))
-                          : (existingInvoice?.transactionType === "CreditNote" ? "Credit Note" : (existingInvoice?.transactionType === "DebitNote" ? "Debit Note" : "Tax Invoice")))
-                      }
-                    </h1>
+                    <div>
+                      <h1 className="text-4xl font-display font-black text-white tracking-tight uppercase leading-none">
+                        {searchParams.get('type') === 'quote' || existingInvoice?.status === 'quote'
+                          ? "Official Quotation"
+                          : (existingInvoice?.fiscalCode
+                            ? (existingInvoice?.transactionType === "CreditNote" ? "Fiscal Credit Note" : (existingInvoice?.transactionType === "DebitNote" ? "Fiscal Debit Note" : (company?.vatRegistered ? "Fiscal Tax Invoice" : "Fiscal Invoice")))
+                            : (existingInvoice?.transactionType === "CreditNote" ? "Credit Note" : (existingInvoice?.transactionType === "DebitNote" ? "Debit Note" : "Tax Invoice")))
+                        }
+                      </h1>
+                      <div className="flex items-center gap-2 mt-2">
+                        <Badge variant="outline" className="border-white/20 text-white/60 font-black uppercase tracking-widest text-[10px] bg-white/5 px-2 py-0.5">
+                          Draft Mode
+                        </Badge>
+                        <div className="w-1 h-1 rounded-full bg-white/20" />
+                        <p className="text-white/40 font-bold text-xs uppercase tracking-widest">Document ID: <span className="font-mono text-white/60">{isEditing && existingInvoice ? existingInvoice.invoiceNumber : 'NEW-INV'}</span></p>
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-slate-500 font-medium text-lg pl-1">Create and customize your document details below.</p>
                 </div>
 
-                <div className="flex flex-col items-start lg:items-end gap-3">
-                  <div className="flex items-center gap-1 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm">
+                <div className="flex flex-col items-start lg:items-end gap-6">
+                  <div className="flex gap-3 w-full md:w-auto">
                     <Button
-                      variant={taxInclusive ? "ghost" : "default"}
-                      size="sm"
-                      onClick={() => setTaxInclusive(false)}
-                      className={cn("rounded-xl text-sm font-semibold px-4 py-2 transition-all", !taxInclusive ? "bg-slate-900 text-white shadow-md" : "text-slate-600 hover:bg-slate-100")}
+                      variant="outline"
+                      onClick={() => handleActionClick('draft')}
+                      disabled={loadingAction !== null || isLockedByOther}
+                      className="rounded-xl border-white/20 bg-white/5 backdrop-blur-md text-white hover:bg-white/10 transition-all font-black text-[10px] uppercase tracking-widest h-12 px-6"
                     >
-                      Tax Exclusive
+                      {loadingAction === 'draft' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ClipboardList className="w-4 h-4 mr-2 text-white/40" />}
+                      Save Draft
                     </Button>
                     <Button
-                      variant={taxInclusive ? "default" : "ghost"}
+                      variant="outline"
+                      onClick={() => handleActionClick('quote')}
+                      disabled={loadingAction !== null || isLockedByOther}
+                      className="rounded-xl border-white/20 bg-white/5 backdrop-blur-md text-white hover:bg-white/10 transition-all font-black text-[10px] uppercase tracking-widest h-12 px-6"
+                    >
+                      {loadingAction === 'quote' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2 text-blue-400" />}
+                      Quotation
+                    </Button>
+                    <Button
+                      onClick={() => handleActionClick('issue')}
+                      disabled={loadingAction !== null || isLockedByOther}
+                      className="btn-gradient rounded-xl shadow-2xl shadow-primary/20 transition-all font-black text-[10px] uppercase tracking-[0.2em] h-12 px-8"
+                    >
+                      {loadingAction === 'issue' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />}
+                      Issue & Fiscalize
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-2 bg-white/5 backdrop-blur-xl p-1 rounded-2xl border border-white/10 shadow-inner">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setTaxInclusive(false)}
+                      className={cn("rounded-xl text-[10px] font-black uppercase tracking-widest px-5 h-10 transition-all", !taxInclusive ? "bg-white text-slate-900 shadow-xl" : "text-white/60 hover:text-white hover:bg-white/10")}
+                    >
+                      Exclusive
+                    </Button>
+                    <Button
+                      variant="ghost"
                       size="sm"
                       onClick={() => setTaxInclusive(true)}
-                      className={cn("rounded-xl text-sm font-semibold px-4 py-2 transition-all", taxInclusive ? "bg-slate-900 text-white shadow-md" : "text-slate-600 hover:bg-slate-100")}
+                      className={cn("rounded-xl text-[10px] font-black uppercase tracking-widest px-5 h-10 transition-all", taxInclusive ? "bg-white text-slate-900 shadow-xl" : "text-white/60 hover:text-white hover:bg-white/10")}
                     >
-                      Tax Inclusive
+                      Inclusive
                     </Button>
                   </div>
                 </div>
@@ -918,87 +910,90 @@ export default function CreateInvoicePage() {
             </div>
 
             {/* Main Content */}
-            <div className="px-8 md:px-12 py-12 space-y-16">
+            <div className="px-8 md:px-16 py-12 space-y-16 bg-slate-50/30">
 
               {/* Invoice Details Header */}
-              <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm relative overflow-hidden group hover:border-violet-100 transition-all duration-500">
-                <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-violet-500 to-indigo-500"></div>
-                <h3 className="text-lg font-bold text-slate-900 mb-8 flex items-center gap-3">
-                  <span className="w-8 h-8 rounded-full bg-violet-50 flex items-center justify-center text-violet-600 font-bold text-sm">1</span>
-                  Document Details
+              <div className="glass-card rounded-3xl p-8 border-none relative overflow-hidden group">
+                <div className="absolute top-0 left-0 w-1.5 h-full bg-primary/20 transition-all group-hover:bg-primary group-hover:w-2" />
+                <h3 className="text-xs font-black text-slate-400 mb-8 flex items-center gap-3 uppercase tracking-[0.2em]">
+                  <span className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black text-[10px] shadow-lg">01</span>
+                  Document Configuration
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-                  <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 pl-1">Invoice No</Label>
-                    <div className="font-mono font-bold text-slate-800 bg-slate-50/80 px-4 py-3 rounded-xl border border-slate-200/60 shadow-sm">
-                      {isEditing && existingInvoice ? existingInvoice.invoiceNumber : <span className="text-slate-400 italic">Auto-Generated</span>}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-10">
+                  <div className="space-y-2.5">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Reference No</Label>
+                    <div className="font-mono font-black text-primary bg-indigo-50/50 px-5 py-4 rounded-2xl border border-indigo-100/50 shadow-inner group-hover:scale-[1.02] transition-transform cursor-context-menu">
+                      {isEditing && existingInvoice ? existingInvoice.invoiceNumber : <span className="text-slate-300 italic opacity-50">AUTO-GEN</span>}
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 pl-1">Fiscal Day</Label>
-                    <div className="font-mono font-bold text-slate-800 bg-slate-50/80 px-4 py-3 rounded-xl border border-slate-200/60 shadow-sm">
-                      {isEditing && existingInvoice ? (existingInvoice.fiscalDayNo || "-") : <span className="text-slate-400 italic">Auto-Generated</span>}
+                  <div className="space-y-2.5">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Fiscal ID</Label>
+                    <div className="font-mono font-black text-slate-900 bg-slate-100/50 px-5 py-4 rounded-2xl border border-slate-200/50 shadow-inner transition-all group-hover:bg-white text-sm">
+                      {isEditing && existingInvoice ? (existingInvoice.fiscalDayNo || "-") : <span className="text-slate-300 italic opacity-50">STBY</span>}
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 pl-1">Date</Label>
+                  <div className="space-y-2.5">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Issue Timestamp</Label>
                     <Input
                       type="date"
                       value={issueDate}
                       onChange={(e) => setIssueDate(e.target.value)}
-                      className="h-11 rounded-xl bg-white border-slate-200 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all font-medium"
+                      className="h-14 rounded-2xl bg-white border-slate-200 focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all font-black text-sm uppercase tracking-tight shadow-sm"
                       required
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 pl-1">Due Date</Label>
+                  <div className="space-y-2.5">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Expiry/Due Date</Label>
                     <Input
                       type="date"
                       value={dueDate}
                       onChange={(e) => setDueDate(e.target.value)}
-                      className="h-11 rounded-xl bg-white border-slate-200 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all font-medium"
+                      className="h-14 rounded-2xl bg-white border-slate-200 focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all font-black text-sm uppercase tracking-tight shadow-sm"
                       required
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 pl-1">Currency</Label>
+                  <div className="space-y-2.5">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Base Currency</Label>
                     <Select value={currencyCode} onValueChange={handleCurrencyChange}>
-                      <SelectTrigger className="h-11 rounded-xl bg-white border-slate-200 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all font-medium">
+                      <SelectTrigger className="h-14 rounded-2xl bg-white border-slate-200 focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all font-black tracking-tight text-sm shadow-sm">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent className="rounded-xl shadow-xl border-slate-100">
+                      <SelectContent className="rounded-2xl shadow-2xl border-slate-100 p-2">
                         {currencies?.map(c => (
-                          <SelectItem key={c.id} value={c.code} className="font-medium">{c.code} ({c.symbol})</SelectItem>
+                          <SelectItem key={c.id} value={c.code} className="font-bold rounded-xl py-3 px-4">{c.code} ({c.symbol})</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 pl-1">Payment Method</Label>
+                  <div className="space-y-2.5">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Settlement Method</Label>
                     <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                      <SelectTrigger className="h-11 rounded-xl bg-white border-slate-200 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all font-medium">
+                      <SelectTrigger className="h-14 rounded-2xl bg-white border-slate-200 focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all font-black tracking-tight text-sm shadow-sm">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent className="rounded-xl shadow-xl border-slate-100">
-                        <SelectItem value="CASH">Cash</SelectItem>
-                        <SelectItem value="CARD">Card / Swipe</SelectItem>
-                        <SelectItem value="TRANSFER">Bank Transfer</SelectItem>
-                        <SelectItem value="ECOCASH">Ecocash / Mobile</SelectItem>
-                        <SelectItem value="OTHER">Other</SelectItem>
+                      <SelectContent className="rounded-2xl shadow-2xl border-slate-100 p-2">
+                        <SelectItem value="CASH" className="font-bold rounded-xl py-3 px-4">Cash Liquidity</SelectItem>
+                        <SelectItem value="CARD" className="font-bold rounded-xl py-3 px-4">Digital Card</SelectItem>
+                        <SelectItem value="TRANSFER" className="font-bold rounded-xl py-3 px-4">Swift Transfer</SelectItem>
+                        <SelectItem value="ECOCASH" className="font-bold rounded-xl py-3 px-4">Mobile Money</SelectItem>
+                        <SelectItem value="OTHER" className="font-bold rounded-xl py-3 px-4">Other Protocol</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
-                  <div className="space-y-2 lg:col-span-2">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 pl-1">Fiscal Device ID</Label>
-                    <div className="text-slate-900 font-mono font-semibold bg-slate-50/50 px-4 py-3 rounded-xl border border-slate-100 text-sm flex items-center gap-2">
-                      <div className={cn("w-2 h-2 rounded-full", company?.fdmsDeviceId ? "bg-emerald-500" : "bg-amber-500")}></div>
-                      {company?.fdmsDeviceId || "Not Registered"}
+                  <div className="space-y-2.5 lg:col-span-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Hardware Authorization</Label>
+                    <div className="text-slate-900 font-mono font-black bg-slate-900 text-white/90 px-5 py-4 rounded-2xl border border-slate-800 text-xs flex items-center justify-between shadow-2xl">
+                      <div className="flex items-center gap-3">
+                        <div className={cn("w-2 h-2 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.3)]", company?.fdmsDeviceId ? "bg-emerald-400 shadow-emerald-400/50" : "bg-amber-400 shadow-amber-400/50")}></div>
+                        <span className="tracking-widest uppercase opacity-60">Status: Registered</span>
+                      </div>
+                      <span className="font-mono text-[10px] text-white/40">{company?.fdmsDeviceId || "DEATHSTAR-UNMOD"}</span>
                     </div>
                   </div>
                 </div>
@@ -1007,23 +1002,26 @@ export default function CreateInvoicePage() {
               {/* Seller & Buyer Section */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
                 {/* Seller Details */}
-                <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm relative overflow-hidden group hover:border-blue-100 transition-all duration-500">
-                  <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
-                  <div className="flex items-center gap-4 mb-6">
-                    <div className="p-3 bg-blue-50 rounded-2xl">
-                      <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="glass-card rounded-[2rem] p-10 border-none relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 -mr-16 -mt-16 rounded-full transition-transform group-hover:scale-150" />
+                  <div className="flex items-center gap-5 mb-10">
+                    <div className="p-4 bg-slate-900 rounded-2xl shadow-xl shadow-blue-500/10">
+                      <svg className="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                       </svg>
                     </div>
-                    <h3 className="text-lg font-bold text-slate-900">Seller Details</h3>
+                    <div>
+                      <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest leading-none mb-1.5">Primary Entity</h3>
+                      <p className="text-xl font-display font-black text-slate-900 tracking-tight uppercase">Seller Profile</p>
+                    </div>
                   </div>
-                  <div className="flex gap-6 items-start">
+                  <div className="flex flex-col sm:flex-row gap-8 items-start">
                     {company?.logoUrl && (
-                      <div className="flex-shrink-0">
+                      <div className="flex-shrink-0 group-hover:rotate-2 transition-transform">
                         <img
                           src={company.logoUrl}
                           alt="Company Logo"
-                          className="h-20 w-32 object-contain rounded-xl border border-slate-100 bg-slate-50/50 p-2"
+                          className="h-28 w-44 object-contain rounded-3xl bg-white shadow-2xl shadow-slate-200/50 p-4 border border-slate-100"
                           onError={(e) => {
                             console.error("Logo load error:", e);
                             e.currentTarget.style.display = 'none';
@@ -1031,115 +1029,125 @@ export default function CreateInvoicePage() {
                         />
                       </div>
                     )}
-                    <div className="flex-1 space-y-3">
-                      <h4 className="text-xl font-bold text-slate-900">{company?.tradingName || company?.name || "Company Name"}</h4>
-                      <div className="text-slate-600 space-y-2 text-sm font-medium">
-                        <div className="grid grid-cols-2 gap-4">
-                          <p><span className="text-slate-400 font-normal">TIN:</span> <span className="font-mono text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded">{company?.tin || "-"}</span></p>
-                          <p><span className="text-slate-400 font-normal">VAT:</span> <span className="font-mono text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded">{company?.vatNumber || "-"}</span></p>
+                    <div className="flex-1 space-y-5">
+                      <h4 className="text-2xl font-display font-black text-slate-900 tracking-tighter uppercase leading-tight">{company?.tradingName || company?.name || "Company Name"}</h4>
+                      <div className="space-y-4">
+                        <div className="flex flex-wrap gap-4">
+                          <div className="bg-slate-50 px-4 py-2.5 rounded-2xl border border-slate-100 shadow-inner">
+                            <span className="text-[10px] font-black text-slate-400 uppercase block mb-0.5">Tax Node</span>
+                            <span className="font-mono font-black text-slate-900 text-sm tracking-tight">{company?.tin || "-"}</span>
+                          </div>
+                          <div className="bg-slate-50 px-4 py-2.5 rounded-2xl border border-slate-100 shadow-inner">
+                            <span className="text-[10px] font-black text-slate-400 uppercase block mb-0.5">VAT Registry</span>
+                            <span className="font-mono font-black text-slate-900 text-sm tracking-tight">{company?.vatNumber || "-"}</span>
+                          </div>
                         </div>
-                        <p className="flex items-start gap-2"><span className="text-slate-400 font-normal min-w-[60px]">Address:</span> <span>{company?.address || "Address Line 1"}, {company?.city}</span></p>
-                        <p className="flex items-start gap-2"><span className="text-slate-400 font-normal min-w-[60px]">Contact:</span> <span>{company?.email} {company?.phone && `| ${company?.phone}`}</span></p>
+                        <div className="space-y-1.5 pt-2">
+                          <div className="flex items-start gap-3">
+                            <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5" />
+                            <p className="text-sm font-bold text-slate-600 line-clamp-2 uppercase tracking-tight">{company?.address || "Address Line 1"}, {company?.city}</p>
+                          </div>
+                          <div className="flex items-start gap-3">
+                            <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5" />
+                            <p className="text-sm font-bold text-slate-500 lowerecase">{company?.email} {company?.phone && `| ${company?.phone}`}</p>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
 
                 {/* Buyer Details */}
-                <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm relative overflow-hidden group hover:border-emerald-100 transition-all duration-500">
-                  <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
-                  <div className="flex items-center gap-4 mb-6">
-                    <div className="p-3 bg-emerald-50 rounded-2xl">
-                      <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="glass-card rounded-[2rem] p-10 border-none relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 -mr-16 -mt-16 rounded-full transition-transform group-hover:scale-150" />
+                  <div className="flex items-center gap-5 mb-10">
+                    <div className="p-4 bg-slate-900 rounded-2xl shadow-xl shadow-emerald-500/10">
+                      <svg className="w-8 h-8 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                       </svg>
                     </div>
-                    <h3 className="text-lg font-bold text-slate-900">Buyer Details</h3>
+                    <div>
+                      <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest leading-none mb-1.5">Counterparty</h3>
+                      <p className="text-xl font-display font-black text-slate-900 tracking-tight uppercase">Buyer Profile</p>
+                    </div>
                   </div>
-                  <div className="space-y-4">
+                  <div className="space-y-8">
                     <div className="space-y-3">
-                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 pl-1">Select Customer</Label>
-                      <div className="flex gap-2">
+                      <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Target Entity Selection</Label>
+                      <div className="relative">
                         <Popover open={open} onOpenChange={setOpen}>
                           <PopoverTrigger asChild>
                             <Button
                               variant="outline"
                               role="combobox"
                               aria-expanded={open}
-                              className="flex-1 justify-between bg-white border-slate-200 h-12 rounded-xl text-base px-4 hover:bg-slate-50 hover:border-emerald-200 transition-all"
+                              className="w-full justify-between bg-white border-slate-200 h-16 rounded-2xl text-lg font-black px-6 hover:bg-slate-50 hover:border-emerald-300 hover:ring-4 hover:ring-emerald-500/5 transition-all text-slate-900 tracking-tight uppercase"
                             >
                               {customerId
                                 ? customers?.find((customer) => customer.id.toString() === customerId)?.name
-                                : <span className="text-slate-400 font-normal">Select a client or search...</span>}
-                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                : <span className="text-slate-300 font-bold opacity-50">Initialize Customer Selection...</span>}
+                              <ChevronsUpDown className="ml-2 h-5 w-5 shrink-0 opacity-20" />
                             </Button>
                           </PopoverTrigger>
-                          <PopoverContent className="w-[400px] p-0 rounded-xl shadow-xl border-slate-100" align="start">
-                            <Command className="rounded-xl">
+                          <PopoverContent className="w-[450px] p-0 rounded-[2rem] shadow-3xl border-slate-100 overflow-hidden" align="start">
+                            <Command className="rounded-none">
                               <CommandInput
-                                placeholder="Search customer by name, TIN or email..."
+                                placeholder="Query neural network for customer identity..."
                                 value={customerSearch}
                                 onValueChange={setCustomerSearch}
-                                className="h-12 text-base"
+                                className="h-16 text-lg font-bold border-none"
                               />
-                              <CommandList className="max-h-[300px]">
-                                <CommandEmpty className="p-0">
-                                  <div className="p-6 text-sm text-center text-slate-500 flex flex-col items-center gap-2">
-                                    <div className="p-3 bg-slate-50 rounded-full mb-2">
-                                      <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                                    </div>
-                                    <span>No customer found.</span>
+                              <CommandList className="max-h-[400px] scrollbar-thin scrollbar-thumb-slate-200">
+                                <CommandEmpty className="py-12 px-6 text-sm text-center text-slate-400 flex flex-col items-center gap-4">
+                                  <div className="p-5 bg-slate-50 rounded-3xl">
+                                    <Plus className="w-10 h-10 opacity-20" />
                                   </div>
+                                  <span className="font-bold uppercase tracking-widest text-[10px]">No matches found in matrix</span>
                                   {customerSearch.trim() && (
-                                    <div className="p-2 border-t border-slate-100 bg-slate-50">
-                                      <Button
-                                        variant="ghost"
-                                        className="w-full justify-start h-10 text-sm font-medium text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg"
-                                        onClick={async () => {
-                                          try {
-                                            const newC = await createCustomer.mutateAsync({
-                                              name: customerSearch,
-                                              customerType: "individual"
-                                            });
-                                            setCustomerId(newC.id.toString());
-                                            setCustomerSearch("");
-                                            setOpen(false);
-                                            toast({ title: "Customer Added", description: `${newC.name} has been created.` });
-                                          } catch (e) {
-                                            console.error(e);
-                                          }
-                                        }}
-                                      >
-                                        <Plus className="w-4 h-4 mr-2" /> Create "{customerSearch}"
-                                      </Button>
-                                    </div>
+                                    <Button
+                                      onClick={async () => {
+                                        try {
+                                          const newC = await createCustomer.mutateAsync({
+                                            name: customerSearch,
+                                            customerType: "individual"
+                                          });
+                                          setCustomerId(newC.id.toString());
+                                          setCustomerSearch("");
+                                          setOpen(false);
+                                          toast({ title: "Entity Created", description: `${newC.name} synced to registry.` });
+                                        } catch (e) { console.error(e); }
+                                      }}
+                                      className="btn-gradient px-8 h-12 rounded-xl text-xs font-black uppercase tracking-widest"
+                                    >
+                                      Create "{customerSearch}"
+                                    </Button>
                                   )}
                                 </CommandEmpty>
-                                <CommandGroup>
+                                <CommandGroup className="p-2">
                                   {customers?.map((customer) => (
                                     <CommandItem
                                       key={customer.id}
                                       value={`${customer.name} ${customer.tin || ""} ${customer.email || ""}`}
-                                      className="py-3 px-3 cursor-pointer aria-selected:bg-emerald-50"
+                                      className="py-4 px-5 cursor-pointer aria-selected:bg-emerald-50 rounded-2xl transition-all"
                                       onSelect={() => {
                                         setCustomerId(customer.id.toString());
                                         setOpen(false);
                                       }}
                                     >
-                                      <Check
-                                        className={cn(
-                                          "mr-3 h-4 w-4 text-emerald-600",
-                                          customerId === customer.id.toString() ? "opacity-100" : "opacity-0"
-                                        )}
-                                      />
-                                      <div className="flex flex-col gap-0.5">
-                                        <span className="font-semibold text-slate-900">{customer.name}</span>
-                                        {(customer.tin || customer.email) && (
-                                          <span className="text-xs text-slate-500 flex items-center gap-2">
-                                            {customer.tin && <span className="bg-slate-100 px-1.5 rounded font-mono">{customer.tin}</span>}
-                                            {customer.email && <span>{customer.email}</span>}
-                                          </span>
-                                        )}
+                                      <div className="flex items-center gap-4 w-full">
+                                        <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm transition-all shadow-inner", customerId === customer.id.toString() ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-400")}>
+                                          {customer.name.charAt(0).toUpperCase()}
+                                        </div>
+                                        <div className="flex flex-col flex-1 gap-1">
+                                          <span className="font-black text-slate-900 uppercase tracking-tight leading-none">{customer.name}</span>
+                                          {(customer.tin || customer.email) && (
+                                            <div className="flex items-center gap-3 text-[10px]">
+                                              {customer.tin && <span className="font-mono font-black text-emerald-600 bg-emerald-50 px-1.5 rounded">{customer.tin}</span>}
+                                              {customer.email && <span className="font-bold text-slate-400">{customer.email}</span>}
+                                            </div>
+                                          )}
+                                        </div>
+                                        {customerId === customer.id.toString() && <Check className="w-5 h-5 text-emerald-500" />}
                                       </div>
                                     </CommandItem>
                                   ))}
@@ -1156,18 +1164,28 @@ export default function CreateInvoicePage() {
                       const c = customers?.find(cust => cust.id.toString() === customerId);
                       if (!c) return null;
                       return (
-                        <div className="bg-emerald-50/50 rounded-2xl p-5 border border-emerald-100/50 transition-all animate-in fade-in slide-in-from-top-2">
-                          <h4 className="text-lg font-bold text-slate-900 mb-3 flex items-center gap-2">
-                            {c.name}
-                            <Badge variant="outline" className="bg-white border-emerald-200 text-emerald-700 font-normal">Verified</Badge>
-                          </h4>
-                          <div className="text-slate-600 space-y-2 text-sm font-medium">
-                            <div className="grid grid-cols-2 gap-4">
-                              <p><span className="text-slate-400 font-normal">TIN:</span> <span className="font-mono text-slate-800 bg-white px-1.5 py-0.5 rounded border border-emerald-100">{c.tin || "-"}</span></p>
-                              <p><span className="text-slate-400 font-normal">VAT:</span> <span className="font-mono text-slate-800 bg-white px-1.5 py-0.5 rounded border border-emerald-100">{c.vatNumber || "-"}</span></p>
+                        <div className="bg-emerald-500/5 rounded-3xl p-6 border border-emerald-500/10 transition-all animate-in zoom-in-95 duration-500 group/buyer hover:bg-emerald-500/10">
+                          <div className="flex justify-between items-start mb-4">
+                            <h4 className="text-xl font-display font-black text-slate-900 tracking-tight uppercase leading-none">{c.name}</h4>
+                            <Badge className="bg-emerald-500 text-white border-none font-black text-[9px] uppercase tracking-[0.2em] px-2 py-0.5 shadow-lg shadow-emerald-500/20">Verified</Badge>
+                          </div>
+                          <div className="grid grid-cols-2 gap-6 pt-2">
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-black text-slate-400 uppercase block tracking-widest">Registry ID</span>
+                              <span className="font-mono font-black text-slate-900 text-sm tracking-tight bg-white px-2 py-1 rounded-lg border border-emerald-100/50 shadow-sm block w-fit">{c.tin || "UNREGISTERED"}</span>
                             </div>
-                            <p className="flex items-start gap-2"><span className="text-slate-400 font-normal min-w-[60px]">Address:</span> <span>{c.address || "No Address"}, {c.city}</span></p>
-                            <p className="flex items-start gap-2"><span className="text-slate-400 font-normal min-w-[60px]">Contact:</span> <span>{c.email} {c.phone && `| ${c.phone}`}</span></p>
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-black text-slate-400 uppercase block tracking-widest">VAT Protocol</span>
+                              <span className="font-mono font-black text-slate-900 text-sm tracking-tight bg-white px-2 py-1 rounded-lg border border-emerald-100/50 shadow-sm block w-fit">{c.vatNumber || "NON-VAT"}</span>
+                            </div>
+                            <div className="col-span-2 pt-2 space-y-3">
+                              <div className="flex items-start gap-4">
+                                <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center shadow-sm border border-emerald-100/50">
+                                  <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                </div>
+                                <p className="text-xs font-black text-slate-600 uppercase tracking-tight pt-1.5">{c.address || "No Physical Coordinates Registered"}, {c.city}</p>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       );
@@ -1177,261 +1195,227 @@ export default function CreateInvoicePage() {
               </div>
 
               {/* Invoice Items Section */}
-              <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm overflow-hidden">
-                <div className="flex items-center justify-between mb-8">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-violet-50 rounded-2xl">
-                      <svg className="w-6 h-6 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="glass-card rounded-[2rem] p-10 border-none overflow-hidden">
+                <div className="flex items-center justify-between mb-10">
+                  <div className="flex items-center gap-5">
+                    <div className="p-4 bg-slate-900 rounded-2xl shadow-xl shadow-violet-500/10">
+                      <svg className="w-8 h-8 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                       </svg>
                     </div>
                     <div>
-                      <h3 className="text-xl font-bold text-slate-900">Items & Services</h3>
-                      <p className="text-sm text-slate-500 font-medium">Add products or services to this document</p>
+                      <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest leading-none mb-1.5">Inventory manifest</h3>
+                      <p className="text-xl font-display font-black text-slate-900 tracking-tight uppercase">Line Items & Allocation</p>
                     </div>
                   </div>
                 </div>
 
-                <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm">
-                  <Table>
-                    <TableHeader className="bg-slate-50/50 border-b border-slate-100">
-                      <TableRow className="hover:bg-slate-50/50 border-none">
-                        <TableHead className="w-[300px] pl-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Item Details</TableHead>
-                        <TableHead className="min-w-[200px] py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Description</TableHead>
-                        <TableHead className="w-[100px] text-center py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Qty</TableHead>
-                        <TableHead className="w-[160px] text-right py-4 text-xs font-bold uppercase tracking-wider text-slate-500">
-                          <div>Unit Price</div>
-                          <div className="text-[9px] lowercase font-normal text-slate-400 no-underline opacity-75">{taxInclusive ? '(Incl. Tax)' : '(Excl. Tax)'}</div>
-                        </TableHead>
-                        <TableHead className="w-[160px] text-right py-4 text-xs font-bold uppercase tracking-wider text-slate-500 pr-6">Total</TableHead>
-                        <TableHead className="w-[50px] py-4"></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      <AnimatePresence mode="popLayout">
-                        {items.length === 0 && (
-                          <motion.tr
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                          >
-                            <TableCell colSpan={6} className="h-48 text-center text-slate-400 border-none">
-                              <div className="flex flex-col items-center justify-center gap-2">
-                                <div className="p-3 bg-slate-50 rounded-full">
-                                  <ClipboardList className="w-6 h-6 opacity-20" />
-                                </div>
-                                <p>No items added yet</p>
-                              </div>
-                            </TableCell>
-                          </motion.tr>
-                        )}
-                        {items.map((item, index) => {
-                          const lineVal = item.quantity * item.unitPrice;
-                          let vatAmt = 0;
-                          let totalAmt = 0;
-
-                          if (taxInclusive) {
-                            totalAmt = lineVal;
-                          } else {
-                            vatAmt = lineVal * (item.taxRate / 100);
-                            totalAmt = lineVal + vatAmt;
-                          }
-
-                          return (
+                <div className="border border-slate-100 rounded-[2rem] overflow-hidden bg-white/50 backdrop-blur-sm shadow-2xl">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader className="bg-slate-900">
+                        <TableRow className="hover:bg-slate-900 border-none">
+                          <TableHead className="w-[350px] pl-8 py-5 text-[10px] font-black uppercase tracking-widest text-white/40">Product / Service Description</TableHead>
+                          <TableHead className="w-[120px] text-center py-5 text-[10px] font-black uppercase tracking-widest text-white/40">Quantity</TableHead>
+                          <TableHead className="w-[180px] text-right py-5 text-[10px] font-black uppercase tracking-widest text-white/40">
+                            Unit Cost <span className="opacity-30">({taxInclusive ? 'Gross' : 'Net'})</span>
+                          </TableHead>
+                          <TableHead className="w-[180px] text-right py-5 text-[10px] font-black uppercase tracking-widest text-white/40 pr-8">Ext. Amount</TableHead>
+                          <TableHead className="w-[80px] py-5"></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        <AnimatePresence mode="popLayout">
+                          {items.length === 0 && (
                             <motion.tr
-                              key={item.localId}
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              exit={{ opacity: 0, x: -20, height: 0 }}
-                              transition={{ duration: 0.2 }}
-                              className="group hover:bg-slate-50/50 transition-colors border-b border-slate-50 last:border-none"
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              exit={{ opacity: 0 }}
                             >
-                              <TableCell className="align-top pl-6 py-4">
-                                <Popover
-                                  open={openRowIndex === index}
-                                  onOpenChange={(isOpen) => setOpenRowIndex(isOpen ? index : null)}
-                                >
-                                  <PopoverTrigger asChild>
-                                    <Button
-                                      variant="outline"
-                                      role="combobox"
-                                      className={cn(
-                                        "w-full justify-between bg-white h-11 px-3.5 font-normal rounded-xl border-slate-200 hover:border-violet-300 hover:ring-2 hover:ring-violet-100 transition-all text-left",
-                                        !item.productId && "text-muted-foreground"
-                                      )}
-                                    >
-                                      <div className="flex items-center gap-2 overflow-hidden w-full">
-                                        {item.hsCode && (
-                                          <Badge variant="secondary" className="text-[10px] h-5 py-0 px-1.5 font-mono bg-slate-100 text-slate-600 border-slate-200">
-                                            {item.hsCode}
-                                          </Badge>
-                                        )}
-                                        <span className="truncate flex-1">
-                                          {item.productId
-                                            ? products?.find((p) => p.id === item.productId)?.name || "Select Item"
-                                            : "Select Item"}
-                                        </span>
-                                      </div>
-                                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-30" />
-                                    </Button>
-                                  </PopoverTrigger>
-                                  <PopoverContent className="w-[400px] p-0 rounded-xl shadow-xl border-slate-100" align="start">
-                                    <Command className="rounded-xl">
-                                      <CommandInput
-                                        placeholder="Search products or services..."
-                                        value={productSearch[item.localId] || ""}
-                                        onValueChange={(val) => setProductSearch(prev => ({ ...prev, [item.localId]: val }))}
-                                        className="h-12 text-base"
-                                      />
-                                      <CommandList className="max-h-[300px]">
-                                        <CommandEmpty className="p-0">
-                                          <div className="p-6 text-sm text-center text-slate-500 flex flex-col items-center gap-2">
-                                            <span>No item found.</span>
-                                          </div>
-                                          {productSearch[item.localId]?.trim() && (
-                                            <div className="p-2 border-t border-slate-100 bg-slate-50">
-                                              <Button
-                                                variant="ghost"
-                                                className="w-full justify-start h-10 text-sm font-medium text-violet-600 hover:text-violet-700 hover:bg-violet-50 rounded-lg"
-                                                onClick={async () => {
-                                                  try {
-                                                    const newP = await createProduct.mutateAsync({
-                                                      name: productSearch[item.localId],
-                                                      price: "0",
-                                                      taxRate: "15",
-                                                      productType: "good",
-                                                      sku: `AUTO-${Date.now().toString().slice(-4)}`
-                                                    });
-                                                    handleProductSelect(item.localId, newP.id.toString());
-                                                    setProductSearch(prev => {
-                                                      const next = { ...prev };
-                                                      delete next[item.localId];
-                                                      return next;
-                                                    });
-                                                    setOpenRowIndex(null);
-                                                    toast({ title: "Product Added", description: `${newP.name} has been created.` });
-                                                  } catch (e) {
-                                                    console.error(e);
-                                                  }
-                                                }}
-                                              >
-                                                <Plus className="w-4 h-4 mr-2" /> Add "{productSearch[item.localId]}"
-                                              </Button>
-                                            </div>
-                                          )}
-                                        </CommandEmpty>
-                                        <CommandGroup heading="Products">
-                                          {products?.filter(p => !p.productType || p.productType === 'good').map((product) => (
-                                            <CommandItem
-                                              key={product.id}
-                                              value={`product ${product.name} ${product.sku || ""}`}
-                                              className="py-3 px-3 cursor-pointer aria-selected:bg-violet-50"
-                                              onSelect={() => {
-                                                handleProductSelect(item.localId, product.id.toString());
-                                                setOpenRowIndex(null);
-                                              }}
-                                            >
-                                              <Check
-                                                className={cn(
-                                                  "mr-3 h-4 w-4 text-violet-600",
-                                                  item.productId === product.id ? "opacity-100" : "opacity-0"
-                                                )}
-                                              />
-                                              <div className="flex flex-col flex-1 gap-0.5">
-                                                <span className="font-semibold text-slate-900">{product.name}</span>
-                                                <div className="flex justify-between w-full text-xs text-slate-500">
-                                                  <span>{product.sku}</span>
-                                                  <span className="font-mono font-medium text-slate-700">${Number(product.price).toFixed(2)}</span>
-                                                </div>
-                                              </div>
-                                            </CommandItem>
-                                          ))}
-                                        </CommandGroup>
-                                        <CommandGroup heading="Services">
-                                          {products?.filter(p => p.productType === 'service').map((service) => (
-                                            <CommandItem
-                                              key={service.id}
-                                              value={`service ${service.name} ${service.sku || ""}`}
-                                              className="py-3 px-3 cursor-pointer aria-selected:bg-violet-50"
-                                              onSelect={() => {
-                                                handleProductSelect(item.localId, service.id.toString());
-                                                setOpenRowIndex(null);
-                                              }}
-                                            >
-                                              <Check
-                                                className={cn(
-                                                  "mr-3 h-4 w-4 text-violet-600",
-                                                  item.productId === service.id ? "opacity-100" : "opacity-0"
-                                                )}
-                                              />
-                                              <div className="flex flex-col flex-1 gap-0.5">
-                                                <span className="font-semibold text-slate-900">{service.name}</span>
-                                                <div className="flex justify-between w-full text-xs text-slate-500">
-                                                  <span>{service.sku || 'Service'}</span>
-                                                  <span className="font-mono font-medium text-slate-700">${Number(service.price).toFixed(2)}</span>
-                                                </div>
-                                              </div>
-                                            </CommandItem>
-                                          ))}
-                                        </CommandGroup>
-                                      </CommandList>
-                                    </Command>
-                                  </PopoverContent>
-                                </Popover>
-                              </TableCell>
-                              <TableCell className="align-top py-4">
-                                <Input
-                                  placeholder="Description..."
-                                  value={item.description}
-                                  onChange={(e) => updateItem(item.localId, 'description', e.target.value)}
-                                  className="bg-slate-50/50 border-transparent hover:border-slate-200 hover:bg-white focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 focus:bg-white h-11 px-3 text-sm transition-all rounded-xl shadow-sm"
-                                />
-                              </TableCell>
-                              <TableCell className="align-top py-4">
-                                <Input
-                                  type="number"
-                                  min="1"
-                                  value={item.quantity}
-                                  onChange={(e) => updateItem(item.localId, 'quantity', parseFloat(e.target.value) || 0)}
-                                  className="bg-slate-50/50 border-transparent hover:border-slate-200 hover:bg-white focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 focus:bg-white h-11 px-2 text-center text-sm font-bold text-slate-700 w-full transition-all rounded-xl shadow-sm"
-                                />
-                              </TableCell>
-                              <TableCell className="align-top py-4">
-                                <Input
-                                  type="number"
-                                  step="0.01"
-                                  value={Number(item.unitPrice)}
-                                  onChange={(e) => updateItem(item.localId, 'unitPrice', parseFloat(e.target.value) || 0)}
-                                  onBlur={(e) => {
-                                    // Allow negative values for discounts
-                                    const val = parseFloat(e.target.value) || 0;
-                                    updateItem(item.localId, 'unitPrice', parseFloat(val.toFixed(2)));
-                                  }}
-                                  className="bg-slate-50/50 border-transparent hover:border-slate-200 hover:bg-white focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 focus:bg-white h-11 px-3 text-right text-sm font-mono font-medium text-slate-700 w-full transition-all rounded-xl shadow-sm"
-                                />
-                              </TableCell>
-                              <TableCell className="text-right font-bold font-mono text-slate-900 align-middle py-4 pr-6 text-base">
-                                {totalAmt.toFixed(2)}
-                              </TableCell>
-                              <TableCell className="align-middle py-4">
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-9 w-9 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl opacity-0 group-hover:opacity-100 transition-all"
-                                  onClick={() => handleRemoveItem(item.localId)}
-                                >
-                                  <Trash2 className="w-5 h-5" />
-                                </Button>
+                              <TableCell colSpan={5} className="h-64 text-center text-slate-400 border-none">
+                                <div className="flex flex-col items-center justify-center gap-4">
+                                  <div className="p-6 bg-slate-50 rounded-[2rem]">
+                                    <ClipboardList className="w-12 h-12 opacity-10" />
+                                  </div>
+                                  <p className="font-bold uppercase tracking-widest text-[10px]">Matrix empty: Initializing required</p>
+                                </div>
                               </TableCell>
                             </motion.tr>
-                          );
-                        })}
-                      </AnimatePresence>
-                    </TableBody>
-                  </Table>
-                  <div className="p-3 border-t border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-colors">
-                    <Button variant="ghost" size="sm" onClick={handleAddItem} className="text-violet-600 hover:text-violet-700 hover:bg-violet-100/50 w-full justify-center h-10 rounded-xl font-medium border border-dashed border-violet-200 hover:border-violet-300">
-                      <Plus className="w-4 h-4 mr-2" /> Add Line Item
+                          )}
+                          {items.map((item, index) => {
+                            const lineVal = item.quantity * item.unitPrice;
+                            let vatAmt = 0;
+                            let totalAmt = 0;
+
+                            if (taxInclusive) {
+                              totalAmt = lineVal;
+                            } else {
+                              vatAmt = lineVal * (item.taxRate / 100);
+                              totalAmt = lineVal + vatAmt;
+                            }
+
+                            return (
+                              <motion.tr
+                                key={item.localId}
+                                initial={{ opacity: 0, scale: 0.98 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, x: -50 }}
+                                className="group hover:bg-slate-50 transition-all border-b border-slate-50 last:border-none"
+                              >
+                                <TableCell className="align-top pl-8 py-6">
+                                  <div className="space-y-3">
+                                    <Popover
+                                      open={openRowIndex === index}
+                                      onOpenChange={(isOpen) => setOpenRowIndex(isOpen ? index : null)}
+                                    >
+                                      <PopoverTrigger asChild>
+                                        <Button
+                                          variant="outline"
+                                          role="combobox"
+                                          className={cn(
+                                            "w-full justify-between bg-white h-14 px-5 font-black uppercase tracking-tighter text-sm rounded-2xl border-slate-200 hover:border-violet-400 hover:ring-4 hover:ring-violet-500/5 transition-all text-left shadow-sm",
+                                            !item.productId && "text-slate-300"
+                                          )}
+                                        >
+                                          <div className="flex items-center gap-3 overflow-hidden w-full">
+                                            {item.hsCode && (
+                                              <Badge className="text-[9px] font-mono font-black bg-slate-900 text-white border-none py-0.5 px-2 tracking-widest leading-none">
+                                                HS:{item.hsCode}
+                                              </Badge>
+                                            )}
+                                            <span className="truncate flex-1">
+                                              {item.productId
+                                                ? products?.find((p) => p.id === item.productId)?.name || "Select Item Identity"
+                                                : "Select Item Identity"}
+                                            </span>
+                                          </div>
+                                          <ChevronsUpDown className="ml-2 h-5 w-5 shrink-0 opacity-10" />
+                                        </Button>
+                                      </PopoverTrigger>
+                                      <PopoverContent className="w-[450px] p-0 rounded-[2rem] shadow-3xl border-slate-100 overflow-hidden" align="start">
+                                        <Command>
+                                          <CommandInput
+                                            placeholder="Querying item registries..."
+                                            value={productSearch[item.localId] || ""}
+                                            onValueChange={(val) => setProductSearch(prev => ({ ...prev, [item.localId]: val }))}
+                                            className="h-16 text-lg font-bold"
+                                          />
+                                          <CommandList className="max-h-[400px]">
+                                            <CommandEmpty className="p-10 text-center">
+                                              <span className="font-black uppercase tracking-widest text-[10px] text-slate-400 block mb-4">No matching records found</span>
+                                              {productSearch[item.localId]?.trim() && (
+                                                <Button
+                                                  onClick={async () => {
+                                                    try {
+                                                      const newP = await createProduct.mutateAsync({
+                                                        name: productSearch[item.localId],
+                                                        price: "0",
+                                                        taxRate: "15",
+                                                        productType: "good",
+                                                        sku: `SKU-${Date.now().toString().slice(-4)}`
+                                                      });
+                                                      handleProductSelect(item.localId, newP.id.toString());
+                                                      setProductSearch(prev => {
+                                                        const next = { ...prev };
+                                                        delete next[item.localId];
+                                                        return next;
+                                                      });
+                                                      setOpenRowIndex(null);
+                                                      toast({ title: "Registry Updated", description: `${newP.name} added to catalog.` });
+                                                    } catch (e) { console.error(e); }
+                                                  }}
+                                                  className="btn-gradient px-8 h-12 rounded-xl text-xs font-black uppercase tracking-widest"
+                                                >
+                                                  Add "{productSearch[item.localId]}"
+                                                </Button>
+                                              )}
+                                            </CommandEmpty>
+                                            <CommandGroup heading="Material Goods" className="p-2">
+                                              {products?.filter(p => !p.productType || p.productType === 'good').map((product) => (
+                                                <CommandItem
+                                                  key={product.id}
+                                                  value={`product ${product.name} ${product.sku || ""}`}
+                                                  className="py-4 px-5 cursor-pointer aria-selected:bg-violet-50 rounded-2xl"
+                                                  onSelect={() => {
+                                                    handleProductSelect(item.localId, product.id.toString());
+                                                    setOpenRowIndex(null);
+                                                  }}
+                                                >
+                                                  <div className="flex items-center gap-4 w-full">
+                                                    <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center font-black transition-all shadow-inner", item.productId === product.id ? "bg-violet-500 text-white" : "bg-slate-100 text-slate-400")}>
+                                                      {product.name.charAt(0).toUpperCase()}
+                                                    </div>
+                                                    <div className="flex flex-col flex-1 gap-1">
+                                                      <span className="font-black text-slate-900 uppercase tracking-tight leading-none">{product.name}</span>
+                                                      <div className="flex justify-between items-center pr-2">
+                                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{product.sku}</span>
+                                                        <span className="font-mono font-black text-violet-600">${Number(product.price).toFixed(2)}</span>
+                                                      </div>
+                                                    </div>
+                                                  </div>
+                                                </CommandItem>
+                                              ))}
+                                            </CommandGroup>
+                                          </CommandList>
+                                        </Command>
+                                      </PopoverContent>
+                                    </Popover>
+                                    <Input
+                                      placeholder="Custom description overlay..."
+                                      value={item.description}
+                                      onChange={(e) => updateItem(item.localId, 'description', e.target.value)}
+                                      className="bg-white border-slate-200 h-11 px-4 text-xs font-bold uppercase tracking-tight transition-all rounded-xl shadow-sm focus:ring-4 focus:ring-slate-100"
+                                    />
+                                  </div>
+                                </TableCell>
+                                <TableCell className="align-top py-6">
+                                  <Input
+                                    type="number"
+                                    min="1"
+                                    value={item.quantity}
+                                    onChange={(e) => updateItem(item.localId, 'quantity', parseFloat(e.target.value) || 0)}
+                                    className="bg-white border-slate-200 h-14 px-2 text-center text-lg font-black text-slate-900 w-full transition-all rounded-2xl shadow-sm focus:ring-4 focus:ring-slate-100"
+                                  />
+                                </TableCell>
+                                <TableCell className="align-top py-6">
+                                  <div className="relative">
+                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 font-mono font-black text-slate-300 text-sm">$</span>
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      value={Number(item.unitPrice)}
+                                      onChange={(e) => updateItem(item.localId, 'unitPrice', parseFloat(e.target.value) || 0)}
+                                      onBlur={(e) => {
+                                        const val = parseFloat(e.target.value) || 0;
+                                        updateItem(item.localId, 'unitPrice', parseFloat(val.toFixed(2)));
+                                      }}
+                                      className="bg-white border-slate-200 h-14 pl-8 pr-4 text-right text-lg font-mono font-black text-slate-900 w-full transition-all rounded-2xl shadow-sm focus:ring-4 focus:ring-slate-100"
+                                    />
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-right font-black font-mono text-slate-900 align-top py-8 pr-8 text-xl tracking-tighter">
+                                  {totalAmt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </TableCell>
+                                <TableCell className="align-top py-8">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-10 w-10 text-slate-200 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                                    onClick={() => handleRemoveItem(item.localId)}
+                                  >
+                                    <Trash2 className="w-5 h-5" />
+                                  </Button>
+                                </TableCell>
+                              </motion.tr>
+                            );
+                          })}
+                        </AnimatePresence>
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <div className="p-6 bg-slate-900/5 backdrop-blur-md">
+                    <Button variant="ghost" size="lg" onClick={handleAddItem} className="bg-white hover:bg-slate-900 hover:text-white text-slate-900 w-full justify-center h-16 rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] border-2 border-dashed border-slate-200 hover:border-slate-900 transition-all shadow-lg active:scale-95">
+                      <Plus className="w-5 h-5 mr-3" /> Append Data Stream
                     </Button>
                   </div>
                 </div>
@@ -1440,124 +1424,116 @@ export default function CreateInvoicePage() {
               {/* Notes & Banking Section */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
                 {/* Notes Section */}
-                <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm relative overflow-hidden group hover:border-amber-100 transition-all duration-500">
-                  <div className="absolute top-0 left-0 w-1 h-full bg-amber-400"></div>
-                  <div className="flex items-start gap-4 mb-6">
-                    <div className="p-3 bg-amber-50 rounded-2xl">
-                      <svg className="w-6 h-6 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="glass-card rounded-[2rem] p-10 border-none relative overflow-hidden group">
+                  <div className="absolute top-0 left-0 w-1.5 h-full bg-amber-400 opacity-20 transition-all group-hover:opacity-100" />
+                  <div className="flex items-start gap-5 mb-8">
+                    <div className="p-4 bg-slate-900 rounded-2xl shadow-xl shadow-amber-500/10">
+                      <svg className="w-8 h-8 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                       </svg>
                     </div>
-                    <div className="flex-1">
-                      <h3 className="text-xl font-bold text-slate-900">Notes & Terms</h3>
-                      <p className="text-sm text-slate-500 font-medium mb-1">Additional information for the customer</p>
+                    <div className="flex-1 pt-1">
+                      <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest leading-none mb-1.5">Extended Protocol</h3>
+                      <p className="text-xl font-display font-black text-slate-900 tracking-tight uppercase">Manual Notes & Conditions</p>
                       {(existingInvoice?.transactionType === "CreditNote" || existingInvoice?.transactionType === "DebitNote") && (
-                        <div className="flex items-center gap-1.5 text-xs font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-lg w-fit mt-1">
-                          <AlertCircle className="w-3.5 h-3.5" />
-                          <span>Required for CN/DN</span>
+                        <div className="flex items-center gap-2 text-[10px] font-black text-amber-600 bg-amber-50 px-3 py-1 rounded-xl w-fit mt-3 uppercase tracking-widest border border-amber-100">
+                          <AlertCircle className="w-4 h-4" />
+                          <span>Validation Required for CN/DN</span>
                         </div>
                       )}
                     </div>
                   </div>
                   <Textarea
-                    placeholder="Enter invoice notes, terms and conditions, payment instructions, etc..."
-                    className="bg-slate-50 min-h-[160px] resize-none text-sm rounded-2xl border-slate-200 focus:border-amber-400 focus:ring-amber-400/20"
+                    placeholder="Append manual override notes, legal disclaimers, or specific settlement protocols..."
+                    className="bg-white/50 backdrop-blur-sm min-h-[180px] resize-none text-sm font-bold rounded-2xl border-slate-200 focus:border-amber-400 focus:ring-4 focus:ring-amber-400/10 transition-all shadow-inner"
                     value={notes}
                     onChange={e => setNotes(e.target.value)}
                   />
                 </div>
 
                 {/* Banking Details Section */}
-                <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm relative overflow-hidden group hover:border-emerald-100 transition-all duration-500">
-                  <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
-                  <div className="flex items-start gap-4 mb-6">
-                    <div className="p-3 bg-emerald-50 rounded-2xl">
-                      <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="glass-card rounded-[2rem] p-10 border-none relative overflow-hidden group">
+                  <div className="absolute top-0 left-0 w-1.5 h-full bg-emerald-500 opacity-20 transition-all group-hover:opacity-100" />
+                  <div className="flex items-start gap-5 mb-8">
+                    <div className="p-4 bg-slate-900 rounded-2xl shadow-xl shadow-emerald-500/10">
+                      <svg className="w-8 h-8 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                       </svg>
                     </div>
-                    <div>
-                      <h3 className="text-xl font-bold text-slate-900">Banking Details</h3>
-                      <p className="text-sm text-slate-500 font-medium">Payment collection information</p>
+                    <div className="pt-1">
+                      <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest leading-none mb-1.5">Fiat Settlement</h3>
+                      <p className="text-xl font-display font-black text-slate-900 tracking-tight uppercase">Bank Wire Parameters</p>
                     </div>
                   </div>
-                  <div className="space-y-6">
-                    <div className="grid grid-cols-2 gap-5">
-                      <div className="space-y-2">
-                        <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 pl-1">Bank Name</Label>
-                        <Input
-                          placeholder="e.g. Stanbic, CBZ"
-                          value={bankName}
-                          onChange={e => setBankName(e.target.value)}
-                          className="bg-slate-50/50 border-slate-200 h-11 rounded-xl focus:border-emerald-500 focus:ring-emerald-500/20"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 pl-1">Account Name</Label>
-                        <Input
-                          placeholder="Beneficiary Name"
-                          value={accountName}
-                          onChange={e => setAccountName(e.target.value)}
-                          className="bg-slate-50/50 border-slate-200 h-11 rounded-xl focus:border-emerald-500 focus:ring-emerald-500/20"
-                        />
-                      </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+                    <div className="space-y-3">
+                      <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Financial Institution</Label>
+                      <Input
+                        placeholder="e.g. CORE-BANK-A"
+                        value={bankName}
+                        onChange={e => setBankName(e.target.value)}
+                        className="bg-white border-slate-200 h-14 rounded-2xl font-black uppercase tracking-tight text-sm focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all shadow-sm"
+                      />
                     </div>
-                    <div className="grid grid-cols-2 gap-5">
-                      <div className="space-y-2">
-                        <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 pl-1">Account Number</Label>
-                        <Input
-                          placeholder="Account Number"
-                          value={accountNumber}
-                          onChange={e => setAccountNumber(e.target.value)}
-                          className="bg-slate-50/50 border-slate-200 h-11 rounded-xl font-mono focus:border-emerald-500 focus:ring-emerald-500/20"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 pl-1">Branch Code</Label>
-                        <Input
-                          placeholder="Sort Code"
-                          value={branchCode}
-                          onChange={e => setBranchCode(e.target.value)}
-                          className="bg-slate-50/50 border-slate-200 h-11 rounded-xl focus:border-emerald-500 focus:ring-emerald-500/20"
-                        />
-                      </div>
+                    <div className="space-y-3">
+                      <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Target Account Name</Label>
+                      <Input
+                        placeholder="ENTITY NAME"
+                        value={accountName}
+                        onChange={e => setAccountName(e.target.value)}
+                        className="bg-white border-slate-200 h-14 rounded-2xl font-black uppercase tracking-tight text-sm focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all shadow-sm"
+                      />
+                    </div>
+                    <div className="space-y-3">
+                      <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Node/Account Number</Label>
+                      <Input
+                        placeholder="0000-0000-0000"
+                        value={accountNumber}
+                        onChange={e => setAccountNumber(e.target.value)}
+                        className="bg-white border-slate-200 h-14 rounded-2xl font-mono font-black text-sm focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all shadow-sm"
+                      />
+                    </div>
+                    <div className="space-y-3">
+                      <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Gateway/Branch Code</Label>
+                      <Input
+                        placeholder="ROUTE-001"
+                        value={branchCode}
+                        onChange={e => setBranchCode(e.target.value)}
+                        className="bg-white border-slate-200 h-14 rounded-2xl font-black uppercase tracking-widest text-xs focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all shadow-sm"
+                      />
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* Totals & Verification Section */}
-              <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-xl shadow-slate-200/40 relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-8 opacity-5">
-                  <ShieldCheck className="w-32 h-32" />
-                </div>
+              <div className="glass-card rounded-[3rem] p-12 border-none relative overflow-hidden shadow-3xl shadow-slate-200/50 bg-slate-900 group">
+                <div className="absolute top-0 right-0 w-96 h-96 bg-primary/20 blur-[150px] -mr-48 -mt-48 rounded-full animate-pulse" />
+                <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-500/10 blur-[100px] -ml-32 -mb-32 rounded-full" />
 
-                <div className="flex flex-col lg:flex-row gap-12">
-                  <div className="flex-1 space-y-8">
-                    <div className="flex items-center gap-4">
-                      <div className="p-3 bg-indigo-50 rounded-2xl">
-                        <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                        </svg>
+                <div className="flex flex-col lg:flex-row gap-16 relative z-10">
+                  <div className="flex-1 space-y-10">
+                    <div className="flex items-center gap-6">
+                      <div className="p-5 bg-white/5 backdrop-blur-xl rounded-[2rem] border border-white/10 shadow-2xl">
+                        <ShieldCheck className="w-10 h-10 text-primary" />
                       </div>
                       <div>
-                        <h3 className="text-xl font-bold text-slate-900">Summary & Verification</h3>
-                        <p className="text-sm text-slate-500 font-medium">Final calculation and compliance check</p>
+                        <h3 className="text-xs font-black text-white/40 uppercase tracking-[0.3em] leading-none mb-2">Security & Compliance</h3>
+                        <p className="text-2xl font-display font-black text-white tracking-tight uppercase">Fiscal Verification</p>
                       </div>
                     </div>
 
-                    <div className="bg-slate-50/50 rounded-2xl p-5 border border-slate-100">
-                      <div className="flex items-start gap-4">
-                        <div className="bg-white border-2 border-slate-200 rounded-xl h-20 w-20 flex items-center justify-center text-xs font-mono text-slate-300 text-center p-2 flex-shrink-0 shadow-sm">
-                          <div className="space-y-1">
-                            <div className="w-8 h-8 mx-auto bg-slate-100 rounded-lg"></div>
-                            <span>QR</span>
+                    <div className="bg-white/5 backdrop-blur-3xl rounded-[2.5rem] p-8 border border-white/10 shadow-2xl space-y-6">
+                      <div className="flex items-center gap-6">
+                        <div className="bg-white rounded-3xl h-24 w-24 flex items-center justify-center p-4 flex-shrink-0 shadow-3xl">
+                          <div className="grid grid-cols-3 gap-1 w-full h-full opacity-10">
+                            {[...Array(9)].map((_, i) => <div key={i} className="bg-slate-900 rounded-sm" />)}
                           </div>
                         </div>
                         <div className="space-y-2">
-                          <p className="font-bold text-slate-800">Digital Verification</p>
-                          <p className="text-sm text-slate-500 leading-relaxed max-w-sm">
-                            A unique QR code and fiscal signature will be automatically generated upon submission to ZIMRA for compliance.
+                          <p className="font-black text-white uppercase tracking-widest text-xs">Digital DNA Encapsulation</p>
+                          <p className="text-xs font-bold text-white/40 leading-relaxed max-w-sm uppercase tracking-tight">
+                            Upon final execution, a unique ZIMRA-signed identity and encrypted QR matrix will be merged into this document for legal persistence.
                           </p>
                         </div>
                       </div>
@@ -1565,47 +1541,59 @@ export default function CreateInvoicePage() {
                   </div>
 
                   <div className="flex-1 lg:max-w-md">
-                    <div className="bg-slate-50 rounded-2xl p-6 space-y-4 border border-slate-100">
-                      <div className="flex justify-between items-center py-2">
-                        <span className="text-slate-600 font-medium">{!taxInclusive ? "Subtotal (excl. tax)" : "Subtotal"}</span>
-                        <span className="font-mono font-bold text-slate-900 text-lg">{currentSymbol}{subtotal.toFixed(2)}</span>
-                      </div>
+                    <div className="bg-white/5 backdrop-blur-3xl rounded-[2.5rem] p-10 space-y-8 border border-white/10 shadow-2xl relative overflow-hidden">
+                      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
 
-                      <div className="bg-white rounded-xl p-4 border border-slate-200/60 shadow-sm">
-                        <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 border-b border-slate-100 pb-2">Tax Breakdown</h4>
-                        <div className="space-y-3">
-                          {Object.entries(taxBreakdown).length > 0 ? Object.entries(taxBreakdown).map(([key, vals]) => {
-                            const mTax = taxTypes.data?.find((t: any) => t.id == vals.taxTypeId);
-                            // Strict check for Exempt first
-                            const isExempt = mTax?.zimraTaxId == "1" || mTax?.zimraCode === 'C' || mTax?.zimraCode === 'E' || mTax?.name?.toLowerCase().includes('exempt');
+                      <div className="space-y-4">
+                        <div className="flex justify-between items-center px-2">
+                          <span className="text-white/40 font-black uppercase tracking-widest text-[10px]">{!taxInclusive ? "Basis Amount" : "Combined Total"}</span>
+                          <span className="font-mono font-black text-white text-xl tracking-tighter">{currentSymbol}{subtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
 
-                            return (
-                              <div key={key} className="flex justify-between items-center text-sm">
-                                <div className="flex items-center gap-2">
-                                  <div className={cn("w-1.5 h-1.5 rounded-full", isExempt ? "bg-slate-300" : "bg-indigo-500")}></div>
-                                  <span className="text-slate-600 font-medium">
-                                    {isExempt ? (mTax?.name || "Exempt") : `VAT (${Number(vals.rate).toFixed(1)}%)`}
+                        <div className="bg-black/20 rounded-3xl p-6 border border-white/5 shadow-inner">
+                          <h4 className="text-[10px] font-black text-primary uppercase tracking-[0.3em] mb-6 border-b border-white/5 pb-3">Duty Breakdown</h4>
+                          <div className="space-y-5">
+                            {Object.entries(taxBreakdown).length > 0 ? Object.entries(taxBreakdown).map(([key, vals]) => {
+                              const mTax = taxTypes.data?.find((t: any) => t.id == vals.taxTypeId);
+                              const isExempt = mTax?.zimraTaxId == "1" || mTax?.zimraCode === 'C' || mTax?.zimraCode === 'E' || mTax?.name?.toLowerCase().includes('exempt');
+
+                              return (
+                                <div key={key} className="flex justify-between items-center text-xs">
+                                  <div className="flex items-center gap-3">
+                                    <div className={cn("w-2 h-2 rounded-full", isExempt ? "bg-white/20" : "bg-primary shadow-[0_0_8px_rgba(var(--primary),0.5)]")}></div>
+                                    <span className="text-white/60 font-black uppercase tracking-widest text-[10px]">
+                                      {isExempt ? (mTax?.name || "Tax Exempt") : `VAT NODE (${Number(vals.rate).toFixed(1)}%)`}
+                                    </span>
+                                  </div>
+                                  <span className="font-mono font-black text-white/90">
+                                    {isExempt ? "-" : `${currentSymbol}${vals.tax.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                   </span>
                                 </div>
-                                <span className="font-mono font-bold text-slate-700">
-                                  {isExempt ? "-" : `${currentSymbol}${vals.tax.toFixed(2)}`}
-                                </span>
+                              );
+                            }) : (
+                              <div className="flex justify-between items-center text-xs opacity-30">
+                                <span className="text-white/40 font-black uppercase tracking-widest text-[10px]">No duties applied</span>
+                                <span className="font-mono font-black text-white/90">-</span>
                               </div>
-                            );
-                          }) : <div className="text-xs text-slate-400 italic text-center py-2">No tax applicable</div>}
+                            )}
+                          </div>
                         </div>
                       </div>
 
-                      <div className="flex justify-between items-center pt-2">
-                        <span className="text-slate-600 font-bold">Total Tax</span>
-                        <span className="font-mono font-bold text-slate-800">{currentSymbol}{taxAmount.toFixed(2)}</span>
-                      </div>
-
-                      <div className="pt-4 border-t border-slate-200">
-                        <div className="flex justify-between items-end bg-slate-900 p-6 rounded-xl shadow-lg shadow-slate-200 text-white relative overflow-hidden">
-                          <div className="absolute top-0 right-0 p-8 bg-white/5 rounded-full blur-2xl -mr-4 -mt-4"></div>
-                          <span className="text-lg font-medium text-slate-300 relative z-10">Grand Total</span>
-                          <span className="text-3xl font-mono font-bold tracking-tight relative z-10">{currentSymbol}{total.toFixed(2)}</span>
+                      <div className="pt-6 border-t border-white/10">
+                        <div className="flex justify-between items-end">
+                          <div>
+                            <span className="text-primary font-black uppercase tracking-[0.4em] text-[10px] block mb-1">Final Settlement</span>
+                            <span className="text-white/40 font-bold text-[10px] uppercase tracking-widest">Total Liability</span>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-4xl font-display font-black text-white tracking-tighter leading-none mb-1">
+                              {currentSymbol}{total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
+                            <div className="text-[10px] font-mono font-black text-primary/60 uppercase tracking-widest">
+                              {currencyCode} EQUIVALENT
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1616,10 +1604,10 @@ export default function CreateInvoicePage() {
           </div>
         </div>
 
-      </div>
+      </div >
 
       {/* Validation Warning Dialog */}
-      <Dialog open={showValidationDialog} onOpenChange={setShowValidationDialog}>
+      < Dialog open={showValidationDialog} onOpenChange={setShowValidationDialog} >
         <DialogContent className="sm:max-w-md rounded-3xl border-0 shadow-2xl p-6">
           <DialogHeader className="mb-4">
             <div className="mx-auto w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center mb-3">
@@ -1652,10 +1640,10 @@ export default function CreateInvoicePage() {
             </Button>
           </div>
         </DialogContent>
-      </Dialog>
+      </Dialog >
 
       {/* PDF Preview Dialog */}
-      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+      < Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen} >
         <DialogContent className="max-w-5xl h-[92vh] p-0 rounded-3xl overflow-hidden border-0 shadow-2xl flex flex-col bg-slate-50">
           <div className="px-6 py-4 bg-white border-b border-slate-100 flex items-center justify-between shrink-0 z-10">
             <div className="flex items-center gap-4">
@@ -1836,7 +1824,7 @@ export default function CreateInvoicePage() {
             </Button>
           </div>
         </DialogContent>
-      </Dialog>
+      </Dialog >
     </Layout >
   );
 }

@@ -22,18 +22,33 @@ import { startPosShift, endPosShift, addPosTransaction, getOpenShift, getShiftTr
 import { seedCompanyDefaults } from "./lib/seeding.js";
 import { processInvoiceFiscalization, getZimraLogger } from "./lib/fiscalization.js";
 import { db } from "./db";
-import { eq, and, gte, lte, ne, desc } from "drizzle-orm";
-import { invoices, posShifts, posShiftTransactions } from "@shared/schema";
+import { eq, and, gte, lte, ne, desc, asc, sql } from "drizzle-orm";
+import { format } from "date-fns";
 import {
+  invoices,
+  posShifts,
+  posShiftTransactions,
+  companies,
+  customers,
+  products,
+  inventoryTransactions,
+  suppliers,
+  expenses,
   insertQuotationSchema,
   insertQuotationItemSchema,
   insertRecurringInvoiceSchema,
   insertPosShiftSchema,
   insertPosHoldSchema,
   insertProductCategorySchema,
+  insertSupplierSchema,
+  insertExpenseSchema,
+  insertTaxTypeSchema,
+  insertInvoiceSchema,
+  insertInvoiceItemSchema,
+  insertCustomerSchema,
   type InsertQuotation,
   type InsertRecurringInvoice
-} from "../shared/schema.js";
+} from "@shared/schema";
 import { paynowService } from "./paynow.js";
 
 export async function registerRoutes(
@@ -1576,8 +1591,22 @@ export async function registerRoutes(
     try {
       const companyId = Number(req.params.id);
       const company = await storage.getCompany(companyId);
-      if (!company || !company.fdmsDeviceId || !company.zimraPrivateKey) {
-        return res.status(400).json({ message: "Company not registered with ZIMRA" });
+      if (!company) {
+        return res.status(404).json({ message: "Company not found" });
+      }
+
+      // Provide more specific feedback about what's missing
+      const missingFields = [];
+      if (!company.fdmsDeviceId) missingFields.push("Device ID");
+      if (!company.zimraPrivateKey) missingFields.push("Private Key");
+      if (!company.zimraCertificate) missingFields.push("Certificate");
+
+      if (missingFields.length > 0) {
+        return res.status(400).json({
+          message: "Company is not fully registered with ZIMRA",
+          details: `Missing: ${missingFields.join(", ")}. Please complete registration in ZIMRA settings.`,
+          isRegistered: false
+        });
       }
 
       const device = new ZimraDevice({
@@ -2136,6 +2165,13 @@ export async function registerRoutes(
 
       if (!company) {
         return res.status(404).json({ message: "Company not found" });
+      }
+
+      if (!company.fdmsDeviceId || !company.zimraCertificate) {
+        return res.status(400).json({
+          message: "ZIMRA Reporting Unavailable",
+          details: "This company is not registered with ZIMRA. Please configure your ZIMRA details in Settings first."
+        });
       }
 
       // Get the fiscal day number from query params or use the last closed day
@@ -3024,6 +3060,112 @@ export async function registerRoutes(
     }
   });
 
+  // Supplier Routes
+  app.get("/api/companies/:companyId/suppliers", requireAuth, async (req, res) => {
+    const suppliers = await storage.getSuppliers(Number(req.params.companyId));
+    res.json(suppliers);
+  });
+
+  app.post("/api/companies/:companyId/suppliers", requireAuth, async (req, res) => {
+    const input = insertSupplierSchema.parse(req.body);
+    const supplier = await storage.createSupplier({
+      ...input,
+      companyId: Number(req.params.companyId)
+    });
+    res.status(201).json(supplier);
+  });
+
+  app.patch("/api/suppliers/:id", requireAuth, async (req, res) => {
+    const id = Number(req.params.id);
+    const updated = await storage.updateSupplier(id, req.body);
+    if (!updated) return res.status(404).json({ message: "Supplier not found" });
+    res.json(updated);
+  });
+
+  // Inventory Routes
+  app.get("/api/companies/:companyId/inventory/transactions", requireAuth, async (req, res) => {
+    const productId = req.query.productId ? Number(req.query.productId) : undefined;
+    const items = await storage.getInventoryTransactions(Number(req.params.companyId), productId);
+    res.json(items);
+  });
+
+  app.post("/api/companies/:companyId/inventory/stock-in", requireAuth, async (req, res) => {
+    const { productId, quantity, unitCost, supplierId, notes } = req.body;
+    const { recordStockIn } = await import("./lib/inventory.js");
+
+    await recordStockIn(
+      Number(productId),
+      parseFloat(quantity),
+      parseFloat(unitCost),
+      Number(req.params.companyId),
+      supplierId ? Number(supplierId) : undefined,
+      notes
+    );
+
+    res.status(201).json({ message: "Stock recorded successfully" });
+  });
+
+  app.post("/api/companies/:companyId/inventory/batch-stock-in", requireAuth, async (req, res) => {
+    const { items, supplierId, notes } = req.body;
+    const { recordBatchStockIn } = await import("./lib/inventory.js");
+
+    await recordBatchStockIn(
+      Number(req.params.companyId),
+      items,
+      supplierId ? Number(supplierId) : undefined,
+      notes
+    );
+
+    res.status(201).json({ message: "Batch stock recorded successfully" });
+  });
+
+  // Expense Routes
+  app.get("/api/companies/:companyId/expenses", requireAuth, async (req, res) => {
+    const expenses = await storage.getExpenses(Number(req.params.companyId));
+    res.json(expenses);
+  });
+
+  app.post("/api/companies/:companyId/expenses", requireAuth, async (req, res) => {
+    const input = insertExpenseSchema.parse(req.body);
+    const expense = await storage.createExpense({
+      ...input,
+      companyId: Number(req.params.companyId)
+    });
+    res.status(201).json(expense);
+  });
+
+
+  app.patch("/api/expenses/:id", requireAuth, async (req, res) => {
+    const id = Number(req.params.id);
+    const updated = await storage.updateExpense(id, req.body);
+    if (!updated) return res.status(404).json({ message: "Expense not found" });
+    res.json(updated);
+  });
+
+  // Report Routes
+  app.get("/api/companies/:companyId/reports/stock-valuation", requireAuth, async (req, res) => {
+    try {
+      const companyId = parseInt(req.params.companyId);
+      const data = await storage.getStockValuationReport(companyId);
+      res.json(data);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/companies/:companyId/reports/financial-summary", requireAuth, async (req, res) => {
+    try {
+      const companyId = parseInt(req.params.companyId);
+      const { from, to } = req.query;
+      const dateFrom = from ? new Date(from as string) : undefined;
+      const dateTo = to ? new Date(to as string) : undefined;
+      const data = await storage.getFinancialSummary(companyId, dateFrom, dateTo);
+      res.json(data);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
 
   // Import Routes
   app.post("/api/import/products", requireAuth, (req, res, next) => {
@@ -3321,22 +3463,27 @@ export async function registerRoutes(
         companyId: Number(req.params.companyId)
       });
 
-      // ZIMRA Fiscalization Trigger for POS
+      // ZIMRA Fiscalization Trigger for POS (only for VAT-registered companies)
       if (input.isPos) {
-        try {
-          invoice = await processInvoiceFiscalization(
-            invoice.id,
-            invoice.companyId,
-            req.user?.id,
-            (req.user as any)?.isSuperAdmin,
-            undefined, // zimraSync
-            true // isPos
-          );
-        } catch (fiscalError) {
-          console.error("POS Fiscalization Failed:", fiscalError);
-          // We swallow the error here because the invoice is already created
-          // and the user will see the failure status on the invoice.
-          // The invoice will be returned with status 'draft' or 'failed'
+        const company = await storage.getCompany(Number(req.params.companyId));
+        if (company?.vatRegistered !== false) {
+          try {
+            invoice = await processInvoiceFiscalization(
+              invoice.id,
+              invoice.companyId,
+              req.user?.id,
+              (req.user as any)?.isSuperAdmin,
+              undefined, // zimraSync
+              true // isPos
+            );
+          } catch (fiscalError) {
+            console.error("POS Fiscalization Failed:", fiscalError);
+            // We swallow the error here because the invoice is already created
+            // and the user will see the failure status on the invoice.
+            // The invoice will be returned with status 'draft' or 'failed'
+          }
+        } else {
+          console.log(`[POS] Skipping fiscalization for non-VAT registered company ${req.params.companyId}`);
         }
       }
 
@@ -3821,6 +3968,114 @@ export async function registerRoutes(
     }
   });
 
+  // Financial Summary Report (Revenue, COGS, Gross Profit, Expenses, Net Profit)
+  // Includes BOTH regular invoices AND POS sales (isPos = true)
+  app.get("/api/companies/:companyId/reports/financial-summary", requireAuth, async (req, res) => {
+    try {
+      const companyId = Number(req.params.companyId);
+      const { from, to } = req.query;
+
+      const startDate = from ? new Date(from as string) : new Date(new Date().getFullYear(), 0, 1);
+      const endDate = to ? new Date(to as string) : new Date();
+      endDate.setHours(23, 59, 59, 999);
+
+      const { invoiceItems: invoiceItemsTable, expenses: expensesTable } = await import("@shared/schema");
+
+      // Revenue: all non-draft, non-cancelled, non-quote invoices (covers both POS + regular)
+      const revenueRows = await db
+        .select({ total: sql<number>`coalesce(sum(${invoices.total}), 0)` })
+        .from(invoices)
+        .where(and(
+          eq(invoices.companyId, companyId),
+          gte(invoices.issueDate, startDate),
+          lte(invoices.issueDate, endDate),
+          ne(invoices.status, 'draft'),
+          ne(invoices.status, 'cancelled'),
+          ne(invoices.status, 'quote'),
+        ));
+      const revenue = Number(revenueRows[0]?.total || 0);
+
+      // COGS: from invoice_items.cogs_amount (computed at sale time via FIFO)
+      const cogsRows = await db
+        .select({ total: sql<number>`coalesce(sum(${invoiceItemsTable.cogsAmount}), 0)` })
+        .from(invoiceItemsTable)
+        .innerJoin(invoices, eq(invoiceItemsTable.invoiceId, invoices.id))
+        .where(and(
+          eq(invoices.companyId, companyId),
+          gte(invoices.issueDate, startDate),
+          lte(invoices.issueDate, endDate),
+          ne(invoices.status, 'draft'),
+          ne(invoices.status, 'cancelled'),
+          ne(invoices.status, 'quote'),
+        ));
+      const cogs = Number(cogsRows[0]?.total || 0);
+
+      // Operating Expenses (from expenses table)
+      const expenseRows = await db
+        .select({
+          total: sql<number>`coalesce(sum(${expensesTable.amount}), 0)`,
+          category: expensesTable.category
+        })
+        .from(expensesTable)
+        .where(and(
+          eq(expensesTable.companyId, companyId),
+          gte(expensesTable.date, startDate),
+          lte(expensesTable.date, endDate),
+        ))
+        .groupBy(expensesTable.category);
+
+      const totalExpenses = expenseRows.reduce((sum, r) => sum + Number(r.total), 0);
+      const expenseBreakdown = expenseRows.map(r => ({
+        category: r.category || 'Uncategorized',
+        amount: Number(r.total)
+      }));
+
+      const grossProfit = revenue - cogs;
+      const netProfit = grossProfit - totalExpenses;
+
+      res.json({ revenue, cogs, grossProfit, expenses: totalExpenses, netProfit, expenseBreakdown });
+    } catch (err: any) {
+      console.error("Financial Summary Error:", err);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Stock Valuation Report
+  app.get("/api/companies/:companyId/reports/stock-valuation", requireAuth, async (req, res) => {
+    try {
+      const companyId = Number(req.params.companyId);
+
+      // Return all tracked products with their stock level and cost value
+      const rows = await db
+        .select({
+          productId: products.id,
+          name: products.name,
+          sku: products.sku,
+          stockLevel: products.stockLevel,
+          unitCost: products.costPrice,
+        })
+        .from(products)
+        .where(and(
+          eq(products.companyId, companyId),
+          eq(products.isTracked, true),
+        ));
+
+      const result = rows.map(p => ({
+        productId: p.productId,
+        name: p.name,
+        sku: p.sku,
+        stockLevel: p.stockLevel || "0",
+        unitCost: p.unitCost || "0",
+        totalValuation: Number(p.stockLevel || 0) * Number(p.unitCost || 0),
+        category: (p as any).category || null,
+      }));
+
+      res.json(result);
+    } catch (err: any) {
+      console.error("Stock Valuation Error:", err);
+      res.status(500).json({ message: err.message });
+    }
+  });
 
   // Multer config for generic uploads (Supabase)
   const mainUpload = multer({ storage: multer.memoryStorage() });

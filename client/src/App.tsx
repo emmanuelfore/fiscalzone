@@ -15,6 +15,10 @@ import CreateInvoicePage from "@/pages/create-invoice";
 import InvoiceDetailsPage from "@/pages/invoice-details";
 import CustomersPage from "@/pages/customers";
 import CustomerDetailsPage from "@/pages/customer-details";
+import SuppliersPage from "@/pages/suppliers";
+import ExpensesPage from "@/pages/expenses";
+import InventoryTransactionsPage from "@/pages/inventory-transactions";
+import InventoryAccountPage from "@/pages/inventory-account";
 import ProductsPage from "@/pages/products";
 import ServicesPage from "@/pages/services";
 import TaxConfigPage from "@/pages/tax-config";
@@ -27,6 +31,8 @@ import UserProfilePage from "@/pages/user-profile";
 import AuditLogsPage from "@/pages/audit-logs";
 import QuotationsPage from "@/pages/quotations";
 import CreateQuotationPage from "@/pages/create-quotation";
+import FinancialReportsPage from "@/pages/financial-reports";
+import InventoryReportsPage from "@/pages/inventory-reports";
 import RecurringInvoicesPage from "@/pages/recurring-invoices";
 import ZimraLogsPage from "@/pages/zimra-logs";
 import POSPage from "@/pages/pos";
@@ -130,6 +136,24 @@ function Router() {
       </Route>
       <Route path="/customers/:id">
         {() => <ProtectedRoute component={CustomerDetailsPage} />}
+      </Route>
+      <Route path="/suppliers">
+        {() => <ProtectedRoute component={SuppliersPage} />}
+      </Route>
+      <Route path="/expenses">
+        {() => <ProtectedRoute component={ExpensesPage} />}
+      </Route>
+      <Route path="/inventory">
+        {() => <ProtectedRoute component={InventoryTransactionsPage} />}
+      </Route>
+      <Route path="/inventory/account">
+        {() => <ProtectedRoute component={InventoryAccountPage} />}
+      </Route>
+      <Route path="/reports/inventory">
+        {() => <ProtectedRoute component={InventoryReportsPage} />}
+      </Route>
+      <Route path="/reports/financial">
+        {() => <ProtectedRoute component={FinancialReportsPage} />}
       </Route>
       <Route path="/products">
         {() => <ProtectedRoute component={ProductsPage} />}

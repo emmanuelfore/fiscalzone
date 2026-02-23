@@ -26,7 +26,8 @@ import {
   TrendingUp,
   ShieldCheck,
   History,
-  Receipt
+  Receipt,
+  Truck
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -104,8 +105,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
       icon: Package,
       label: "Inventory",
       children: [
+        { icon: LayoutDashboard, label: "Goods Received", href: "/inventory/account" },
         { icon: Package, label: "Products", href: "/products" },
+        { icon: History, label: "Stock Ledger", href: "/inventory" },
         { icon: Briefcase, label: "Services", href: "/services" },
+        { icon: Truck, label: "Suppliers", href: "/suppliers" },
       ]
     },
     {
@@ -113,8 +117,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
       label: "Finance & Reports",
       children: [
         { icon: MonitorCheck, label: "POS Reports", href: "/reports/pos" },
+        { icon: TrendingUp, label: "Financial Analysis", href: "/reports/financial" },
         { icon: History, label: "Recent Sales Ledger", href: "/pos/all-sales" },
-        // { icon: Package, label: "Inventory Reports", href: "/reports/inventory" },
+        { icon: Calculator, label: "Expenses", href: "/expenses" },
+        { icon: Package, label: "Stock Reports", href: "/reports/inventory" },
         { icon: FileText, label: "Tax & ZIMRA", href: "/reports/tax" },
         { icon: Coins, label: "Currencies", href: "/currencies" },
         { icon: Calculator, label: "Tax Config", href: "/tax-config" },

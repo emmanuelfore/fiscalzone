@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Package, AlertCircle, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { CreateProductDialog } from "@/components/products/create-product-dialog";
 import { EditProductDialog } from "@/components/products/edit-product-dialog";
+import { StockInDialog } from "@/components/products/stock-in-dialog";
 import { DeleteButton } from "@/components/delete-button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -288,6 +289,7 @@ export default function ProductsPage() {
                     </td>
                     <td className="p-4 text-right">
                       <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {p.isTracked && <StockInDialog product={p} companyId={companyId} />}
                         <EditProductDialog product={p} />
                         <DeleteButton
                           title="Delete Product"

@@ -6,14 +6,24 @@ import { useCurrencies } from "@/hooks/use-currencies";
 import { useCompany } from "@/hooks/use-companies";
 import { useTaxConfig } from "@/hooks/use-tax-config";
 import { useToast } from "@/hooks/use-toast";
+import { useOffline } from "@/hooks/use-offline";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/lib/api";
+import {
+    cacheProducts, getCachedProducts,
+    cacheCustomers, getCachedCustomers,
+    cacheCurrencies, getCachedCurrencies,
+    cacheTaxConfig, getCachedTaxConfig,
+    cacheCompanySettings, getCachedCompanySettings,
+    setLastCacheTime,
+    addPendingSale,
+} from "@/lib/offline-db";
 import { useState, useMemo, useEffect } from "react";
-import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, UserPlus, Loader2, Package, Tag, Pause, Play, History, Calculator, Printer, CheckCircle2, XCircle, ChevronRight, Fullscreen, HelpCircle, User, Settings as SettingsIcon, LogOut, FileText, Receipt, Clock, LayoutGrid, ShoppingBag, Filter } from "lucide-react";
+import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, UserPlus, Loader2, Package, Tag, Pause, Play, History, Calculator, Printer, CheckCircle2, XCircle, ChevronRight, Fullscreen, HelpCircle, User, Settings as SettingsIcon, LogOut, FileText, Receipt, Clock, LayoutGrid, ShoppingBag, Filter, WifiOff, Wifi, CloudUpload } from "lucide-react";
 import { RefreshCw } from "lucide-react";
 import { POSReceipt } from "@/components/pos-receipt";
 import { Receipt48 } from "@/components/pos/receipt-48";
@@ -48,6 +58,33 @@ export default function POSPage() {
     const { data: currencies } = useCurrencies(companyId);
     const { taxTypes } = useTaxConfig(companyId);
     const createInvoice = useCreateInvoice(companyId);
+
+    // Offline support
+    const {
+        isOnline,
+        pendingSalesCount,
+        syncStatus,
+        syncProgress,
+        triggerSync,
+        refreshPendingCount,
+        lastCacheTime,
+        refreshCacheTime
+    } = useOffline(companyId);
+    const [offlineProducts, setOfflineProducts] = useState<any[] | null>(null);
+    const [offlineCustomers, setOfflineCustomers] = useState<any[] | null>(null);
+    const [offlineCurrencies, setOfflineCurrencies] = useState<any[] | null>(null);
+    const [offlineTaxTypes, setOfflineTaxTypes] = useState<any | null>(null);
+    const [offlineCompany, setOfflineCompany] = useState<any | null>(null);
+
+    // Cache progress tracking
+    const [cacheProgress, setCacheProgress] = useState({ current: 0, total: 5, label: '', active: false, done: false });
+
+    // Resolved data — prefer live API data, fallback to cached
+    const resolvedProducts = products || offlineProducts || [];
+    const resolvedCustomers = customers || offlineCustomers || [];
+    const resolvedCurrencies = currencies || offlineCurrencies || [];
+    const resolvedTaxTypes = taxTypes?.data || offlineTaxTypes || [];
+    const resolvedCompany = company || offlineCompany;
     const { toast } = useToast();
 
     const [searchQuery, setSearchQuery] = useState("");
@@ -77,6 +114,7 @@ export default function POSPage() {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [availablePrinters, setAvailablePrinters] = useState<any[]>([]);
     const [posSettings, setPosSettings] = useState({
+        printingEnabled: true,
         autoPrint: true,
         terminalId: "POS-T01",
         silentPrinting: false,
@@ -86,33 +124,34 @@ export default function POSPage() {
 
     // Default to "Walk-in Customer"
     useEffect(() => {
-        if (!selectedCustomerId && customers && customers.length > 0) {
-            const walkIn = customers.find(c => c.name.toLowerCase().includes("walk-in") || c.name.toLowerCase().includes("guest"));
+        const c = customers || offlineCustomers;
+        if (!selectedCustomerId && c && c.length > 0) {
+            const walkIn = c.find((x: any) => x.name.toLowerCase().includes("walk-in") || x.name.toLowerCase().includes("guest"));
             if (walkIn) {
                 setSelectedCustomerId(walkIn.id.toString());
             }
         }
-    }, [customers, selectedCustomerId]);
+    }, [customers, offlineCustomers, selectedCustomerId]);
 
     // Manager Override State
     const [pendingOverride, setPendingOverride] = useState<{ type: "DISCOUNT" | "VOID_CART", data: any } | null>(null);
 
     // Derived data
     const categories = useMemo(() => {
-        if (!products) return ["All"];
-        const cats = new Set(products.map(p => p.category || "Uncategorized"));
+        if (!resolvedProducts || resolvedProducts.length === 0) return ["All"];
+        const cats = new Set(resolvedProducts.map((p: any) => p.category || "Uncategorized"));
         return ["All", ...Array.from(cats)];
-    }, [products]);
+    }, [resolvedProducts]);
 
     const filteredProducts = useMemo(() => {
-        if (!products) return [];
-        return products.filter(p => {
+        if (!resolvedProducts || resolvedProducts.length === 0) return [];
+        return resolvedProducts.filter((p: any) => {
             const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 (p.sku && p.sku.toLowerCase().includes(searchQuery.toLowerCase()));
             const matchesCategory = selectedCategory === "All" || p.category === selectedCategory;
             return matchesSearch && matchesCategory;
         });
-    }, [products, searchQuery, selectedCategory]);
+    }, [resolvedProducts, searchQuery, selectedCategory]);
 
     const taxInclusive = company?.vatEnabled ?? false;
 
@@ -207,7 +246,7 @@ export default function POSPage() {
             } else {
                 if (e.key === 'Enter') {
                     // Process barcode
-                    const found = products?.find(p => p.barcode === barcodeBuffer || p.sku === barcodeBuffer);
+                    const found = resolvedProducts?.find((p: any) => p.barcode === barcodeBuffer || p.sku === barcodeBuffer);
                     if (found) {
                         addToCart(found);
                         toast({ title: "Scanned", description: `Added ${found.name}` });
@@ -225,7 +264,7 @@ export default function POSPage() {
     }, [barcodeBuffer, lastCharTime, products]);
 
     const updateQuantity = (productId: number, delta: number) => {
-        const product = products?.find(p => p.id === productId);
+        const product = resolvedProducts?.find((p: any) => p.id === productId);
         setCart(prev => prev.map(item => {
             if (item.productId === productId) {
                 const newQty = item.quantity + delta;
@@ -252,32 +291,99 @@ export default function POSPage() {
     };
 
     const fetchShift = async () => {
-        const res = await apiFetch(`/api/pos/shifts/current?companyId=${companyId}`);
-        if (res.ok) setCurrentShift(await res.json());
+        if (isOnline) {
+            try {
+                const res = await apiFetch(`/api/pos/shifts/current?companyId=${companyId}`);
+                if (res.ok) {
+                    const shiftData = await res.json();
+                    setCurrentShift(shiftData);
+                    if (companyId) await cacheShift(companyId, shiftData);
+                }
+            } catch (e) {
+                console.error("Failed to fetch shift from API", e);
+            }
+        } else if (companyId) {
+            const cached = await getCachedShift(companyId);
+            if (cached) setCurrentShift(cached);
+        }
     };
 
     const fetchHeldSales = async () => {
-        const res = await apiFetch(`/api/pos/holds?companyId=${companyId}`);
-        if (res.ok) setHeldSales(await res.json());
+        let serverHolds: any[] = [];
+        let offlineHolds: any[] = [];
+
+        if (isOnline) {
+            try {
+                const res = await apiFetch(`/api/pos/holds?companyId=${companyId}`);
+                if (res.ok) serverHolds = await res.json();
+            } catch (e) {
+                console.error("Failed to fetch holds from API", e);
+            }
+        }
+
+        if (companyId) {
+            const local = await getOfflineHolds(companyId);
+            offlineHolds = local.map(h => ({
+                ...h,
+                id: h.id, // Keep original ID
+                _offline: true,
+                holdName: `${h.holdName} (Offline)`
+            }));
+        }
+
+        setHeldSales([...serverHolds, ...offlineHolds]);
     };
 
     const openShift = async () => {
+        const shiftData = {
+            companyId,
+            openingBalance: shiftBalance || "0",
+            status: "OPEN",
+            openedAt: new Date().toISOString(),
+            openedBy: user?.id,
+            totalSales: "0",
+            totalTax: "0",
+            _provisional: !isOnline
+        };
+
         try {
-            const res = await apiFetch("/api/pos/shifts/open", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    companyId,
-                    openingBalance: shiftBalance || "0"
-                })
-            });
-            if (res.ok) {
-                toast({ title: "Shift Opened", description: `Register opened with $${shiftBalance}` });
+            if (isOnline) {
+                const res = await apiFetch("/api/pos/shifts/open", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        companyId,
+                        openingBalance: shiftBalance || "0"
+                    })
+                });
+                if (res.ok) {
+                    toast({ title: "Shift Opened", description: `Register opened with $${shiftBalance}` });
+                    setIsShiftModalOpen(false);
+                    setShiftBalance("");
+                    fetchShift();
+                    return;
+                }
+            } else {
+                // Offline fallback
+                await addPendingShiftAction(companyId, 'open', { openingBalance: shiftBalance || "0" });
+                setCurrentShift(shiftData);
+                await cacheShift(companyId, shiftData);
+                toast({ title: "Shift Opened (Offline)", description: "Provisional shift started. Will sync when online." });
                 setIsShiftModalOpen(false);
                 setShiftBalance("");
-                fetchShift();
+                return;
             }
         } catch (e) {
+            if (!isOnline) {
+                // Secondary check for offline if network failed mid-request
+                await addPendingShiftAction(companyId, 'open', { openingBalance: shiftBalance || "0" });
+                setCurrentShift(shiftData);
+                await cacheShift(companyId, shiftData);
+                toast({ title: "Shift Opened (Offline)", description: "Connection lost. Provisional shift started." });
+                setIsShiftModalOpen(false);
+                setShiftBalance("");
+                return;
+            }
             toast({ title: "Error", description: "Failed to open shift", variant: "destructive" });
         }
     };
@@ -285,19 +391,47 @@ export default function POSPage() {
     const handleCloseShift = async () => {
         if (!currentShift) return;
         try {
-            const res = await apiFetch(`/api/pos/shifts/${currentShift.id}/close`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ closingBalance: shiftBalance || "0" })
-            });
-            if (res.ok) {
-                toast({ title: "Shift Closed", description: "Z-Report generated successfully" });
+            if (isOnline && !currentShift._provisional) {
+                const res = await apiFetch(`/api/pos/shifts/${currentShift.id}/close`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ closingBalance: shiftBalance || "0" })
+                });
+                if (res.ok) {
+                    toast({ title: "Shift Closed", description: "Z-Report generated successfully" });
+                    setCurrentShift(null);
+                    await cacheShift(companyId, null);
+                    setIsShiftModalOpen(false);
+                    setShiftBalance("");
+                    fetchShift();
+                    return;
+                }
+            } else {
+                // Offline fallback or closing a provisional shift
+                await addPendingShiftAction(companyId, 'close', {
+                    shiftId: currentShift.id,
+                    closingBalance: shiftBalance || "0"
+                });
                 setCurrentShift(null);
+                await cacheShift(companyId, null);
+                toast({ title: "Shift Closed (Offline)", description: "Closing queued. Reconciliation will sync later." });
                 setIsShiftModalOpen(false);
                 setShiftBalance("");
-                fetchShift();
+                return;
             }
         } catch (e) {
+            if (!isOnline) {
+                await addPendingShiftAction(companyId, 'close', {
+                    shiftId: currentShift.id,
+                    closingBalance: shiftBalance || "0"
+                });
+                setCurrentShift(null);
+                await cacheShift(companyId, null);
+                toast({ title: "Shift Closed (Offline)", description: "Connection lost. Closing queued." });
+                setIsShiftModalOpen(false);
+                setShiftBalance("");
+                return;
+            }
             toast({ title: "Error", description: "Failed to close shift", variant: "destructive" });
         }
     };
@@ -309,7 +443,7 @@ export default function POSPage() {
         }
         if (!selectedCustomerId) {
             // Find a "Cash Customer" or prompt
-            const cashCustomer = customers?.find(c => c.name.toLowerCase().includes("cash") || c.name.toLowerCase().includes("walk-in"));
+            const cashCustomer = resolvedCustomers?.find((c: any) => c.name.toLowerCase().includes("cash") || c.name.toLowerCase().includes("walk-in"));
             if (cashCustomer) {
                 setSelectedCustomerId(cashCustomer.id.toString());
             } else {
@@ -322,7 +456,7 @@ export default function POSPage() {
 
     const processOrder = async () => {
         let finalCustomerId = selectedCustomerId;
-        const settings = company?.posSettings as any;
+        const settings = (company || offlineCompany)?.posSettings as any;
         if (!finalCustomerId && settings?.defaultCustomerId) {
             finalCustomerId = settings.defaultCustomerId;
         }
@@ -340,7 +474,7 @@ export default function POSPage() {
         }
 
         try {
-            const currency = currencies?.find(c => c.code === selectedCurrencyCode) || { code: "USD", exchangeRate: "1" };
+            const currency = resolvedCurrencies?.find((c: any) => c.code === selectedCurrencyCode) || { code: "USD", exchangeRate: "1" };
             const invoiceData = {
                 companyId,
                 customerId: parseInt(finalCustomerId),
@@ -371,6 +505,25 @@ export default function POSPage() {
                 }))
             };
 
+            // ─── Offline fallback: queue sale locally ────────────────────
+            if (!isOnline) {
+                const offlineId = await addPendingSale(companyId, invoiceData);
+                setLastSuccessfulInvoice({
+                    id: offlineId,
+                    ...invoiceData,
+                    _offline: true,
+                    invoiceNumber: `OFFLINE-${Date.now().toString().slice(-6)}`,
+                });
+                setCart([]);
+                setOrderDiscount(0);
+                setSelectedCustomerId("");
+                setPaidAmount("");
+                setIsCheckoutOpen(false);
+                await refreshPendingCount();
+                toast({ title: "📴 Saved Offline", description: "Sale queued — will sync when reconnected" });
+                return;
+            }
+
             const result = await createInvoice.mutateAsync(invoiceData as any);
             setLastSuccessfulInvoice(result);
             setCart([]);
@@ -380,6 +533,58 @@ export default function POSPage() {
             setIsCheckoutOpen(false);
             toast({ title: "Success", description: "Order processed and fiscalized successfully" });
         } catch (error: any) {
+            // If the error looks like a network failure, queue offline
+            if (!navigator.onLine || error.message === 'Failed to fetch') {
+                try {
+                    const currency = resolvedCurrencies?.find((c: any) => c.code === selectedCurrencyCode) || { code: "USD", exchangeRate: "1" };
+                    const invoiceData = {
+                        companyId,
+                        customerId: parseInt(finalCustomerId),
+                        issueDate: new Date(),
+                        dueDate: new Date(),
+                        notes: "POS Transaction",
+                        currency: currency.code,
+                        exchangeRate: currency.exchangeRate,
+                        paymentMethod,
+                        status: "issued",
+                        isPos: true,
+                        createdBy: user?.id,
+                        discountAmount: orderDiscount.toString(),
+                        transactionType: "FiscalInvoice",
+                        subtotal: subtotal.toString(),
+                        taxAmount: taxAmount.toString(),
+                        total: total.toString(),
+                        taxInclusive: taxInclusive,
+                        items: cart.map(item => ({
+                            productId: item.productId,
+                            description: item.name,
+                            quantity: item.quantity.toString(),
+                            unitPrice: item.price.toString(),
+                            discountAmount: item.discountAmount.toString(),
+                            taxRate: item.taxRate.toString(),
+                            lineTotal: ((item.price * item.quantity) - item.discountAmount).toString(),
+                            taxTypeId: item.taxTypeId
+                        }))
+                    };
+                    const offlineId = await addPendingSale(companyId, invoiceData);
+                    setLastSuccessfulInvoice({
+                        id: offlineId,
+                        ...invoiceData,
+                        _offline: true,
+                        invoiceNumber: `OFFLINE-${Date.now().toString().slice(-6)}`,
+                    });
+                    setCart([]);
+                    setOrderDiscount(0);
+                    setSelectedCustomerId("");
+                    setPaidAmount("");
+                    setIsCheckoutOpen(false);
+                    await refreshPendingCount();
+                    toast({ title: "📴 Saved Offline", description: "Connection lost — sale queued for sync" });
+                    return;
+                } catch (offlineError) {
+                    toast({ title: "Error", description: "Failed to save sale offline", variant: "destructive" });
+                }
+            }
             // Handle NO_ACTIVE_SHIFT error specifically
             if (error.message?.includes("No active shift") || error.code === "NO_ACTIVE_SHIFT") {
                 setIsCheckoutOpen(false);
@@ -402,29 +607,51 @@ export default function POSPage() {
     const holdOrder = async () => {
         if (cart.length === 0) return;
         try {
-            const res = await apiFetch("/api/pos/holds", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    companyId,
-                    cartData: cart,
-                    holdName: `Hold ${new Date().toLocaleTimeString()}`
-                })
-            });
-            if (!res.ok) throw new Error("Failed to hold sale");
+            if (isOnline) {
+                const res = await apiFetch("/api/pos/holds", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        companyId,
+                        cartData: cart,
+                        holdName: `Hold ${new Date().toLocaleTimeString()}`
+                    })
+                });
+                if (!res.ok) throw new Error("Failed to hold sale");
+            } else {
+                // Offline hold
+                await addOfflineHold(companyId, cart, selectedCustomerId, `Hold ${new Date().toLocaleTimeString()}`);
+            }
+
             setCart([]);
             setSelectedCustomerId("");
-            toast({ title: "Held", description: "Sale parked successfully" });
+            toast({ title: isOnline ? "Held" : "Held (Offline)", description: "Sale parked successfully" });
             fetchHeldSales();
         } catch (e: any) {
-            toast({ title: "Error", description: "Failed to hold sale", variant: "destructive" });
+            // Fallback to offline if API fails
+            try {
+                await addOfflineHold(companyId, cart, selectedCustomerId, `Hold ${new Date().toLocaleTimeString()}`);
+                setCart([]);
+                setSelectedCustomerId("");
+                toast({ title: "Held (Offline)", description: "Connection lost. Sale parked locally." });
+                fetchHeldSales();
+            } catch (offlineErr) {
+                toast({ title: "Error", description: "Failed to hold sale", variant: "destructive" });
+            }
         }
     };
 
     const resumeHold = async (hold: any) => {
         try {
-            const res = await apiFetch(`/api/pos/holds/${hold.id}`, { method: "DELETE" });
-            if (!res.ok) throw new Error("Failed to remove hold");
+            if (hold._offline) {
+                await removeOfflineHold(hold.id);
+            } else if (isOnline) {
+                const res = await apiFetch(`/api/pos/holds/${hold.id}`, { method: "DELETE" });
+                if (!res.ok) throw new Error("Failed to remove hold");
+            } else {
+                toast({ title: "Online Hold", description: "Must be online to resume cloud holds", variant: "destructive" });
+                return;
+            }
 
             setCart(hold.cartData);
             setSelectedCustomerId(hold.customerId?.toString() || "");
@@ -455,12 +682,73 @@ export default function POSPage() {
         return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
     }, []);
 
+    // ─── Cache reference data to IndexedDB when fetched online ───────────
+    useEffect(() => {
+        if (!companyId || !isOnline) return;
+        let step = 0;
+        const total = 5;
+        const runCache = async () => {
+            setCacheProgress({ current: 0, total, label: 'Preparing offline data...', active: true, done: false });
+
+            if (products) {
+                setCacheProgress(p => ({ ...p, current: ++step, label: 'Caching products...' }));
+                await cacheProducts(companyId, products as any[]);
+            }
+            if (customers) {
+                setCacheProgress(p => ({ ...p, current: ++step, label: 'Caching customers...' }));
+                await cacheCustomers(companyId, customers as any[]);
+            }
+            if (currencies) {
+                setCacheProgress(p => ({ ...p, current: ++step, label: 'Caching currencies...' }));
+                await cacheCurrencies(companyId, currencies as any[]);
+            }
+            if (taxTypes?.data) {
+                setCacheProgress(p => ({ ...p, current: ++step, label: 'Caching tax config...' }));
+                await cacheTaxConfig(companyId, taxTypes.data);
+            }
+            if (company) {
+                setCacheProgress(p => ({ ...p, current: ++step, label: 'Caching company settings...' }));
+                await cacheCompanySettings(companyId, company);
+            }
+
+            const now = Date.now();
+            await setLastCacheTime(companyId, now);
+            refreshCacheTime();
+
+            setCacheProgress({ current: total, total, label: 'Offline data ready!', active: true, done: true });
+            setTimeout(() => setCacheProgress(p => ({ ...p, active: false })), 2500);
+        };
+
+        // Only run when all data is loaded and not recently cached
+        if (products && customers && currencies && taxTypes?.data && company) {
+            // Avoid re-running if cached in the last 60 seconds
+            const lastCached = parseInt(localStorage.getItem(`last_cache_run_${companyId}`) || "0");
+            if (Date.now() - lastCached > 60000) {
+                runCache();
+                localStorage.setItem(`last_cache_run_${companyId}`, Date.now().toString());
+            }
+        }
+    }, [products, customers, currencies, taxTypes, company, companyId, isOnline, refreshCacheTime]);
+
+    // ─── Load cached data when offline ──────────────────────────────────
+    useEffect(() => {
+        if (!isOnline && companyId) {
+            getCachedProducts(companyId).then(d => d && setOfflineProducts(d));
+            getCachedCustomers(companyId).then(d => d && setOfflineCustomers(d));
+            getCachedCurrencies(companyId).then(d => d && setOfflineCurrencies(d));
+            getCachedTaxConfig(companyId).then(d => d && setOfflineTaxTypes(d));
+            getCachedCompanySettings(companyId).then(d => d && setOfflineCompany(d));
+        }
+    }, [isOnline, companyId]);
+
     // Sync Settings from Company
     useEffect(() => {
-        if (company?.posSettings) {
-            const settings = company.posSettings as any;
+        const src = company || offlineCompany;
+        if (src?.posSettings) {
+            const settings = src.posSettings as any;
             setPosSettings(prev => ({
                 ...prev,
+                printingEnabled: settings.printingEnabled ?? true,
                 autoPrint: settings.autoPrint ?? true,
                 silentPrinting: settings.silentPrinting ?? false,
                 printServerUrl: settings.printServerUrl || "http://localhost:12312",
@@ -471,7 +759,7 @@ export default function POSPage() {
 
     // Auto-Print Effect
     useEffect(() => {
-        if (lastSuccessfulInvoice && posSettings.autoPrint) {
+        if (lastSuccessfulInvoice && posSettings.printingEnabled && posSettings.autoPrint) {
             if (posSettings.silentPrinting) {
                 handleSilentPrint();
             } else {
@@ -482,7 +770,7 @@ export default function POSPage() {
                 return () => clearTimeout(timer);
             }
         }
-    }, [lastSuccessfulInvoice, posSettings.autoPrint, posSettings.silentPrinting]);
+    }, [lastSuccessfulInvoice, posSettings.printingEnabled, posSettings.autoPrint, posSettings.silentPrinting]);
 
     // Fetch available printers when settings dialog opens
     useEffect(() => {
@@ -567,7 +855,7 @@ export default function POSPage() {
         const settings = company?.posSettings as any;
         if (settings?.defaultCustomerId && !selectedCustomerId && customers) {
             // Only set if exists in customers list
-            const exists = customers.find(c => c.id.toString() === settings.defaultCustomerId);
+            const exists = resolvedCustomers.find((c: any) => c.id.toString() === settings.defaultCustomerId);
             if (exists) {
                 setSelectedCustomerId(settings.defaultCustomerId);
             }
@@ -688,9 +976,9 @@ export default function POSPage() {
                                             {item.discountAmount > 0 && (
                                                 <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-1 rounded">-{item.discountAmount.toFixed(2)}</span>
                                             )}
-                                            {products?.find(p => p.id === item.productId)?.isTracked && (
+                                            {resolvedProducts?.find((p: any) => p.id === item.productId)?.isTracked && (
                                                 <span className="text-[9px] font-black text-slate-300 bg-slate-50 px-1 rounded uppercase tracking-tighter">
-                                                    Stock: {(products?.find(p => p.id === item.productId)?.stockLevel || 0) - (cart.find(c => c.productId === item.productId)?.quantity || 0)}
+                                                    Stock: {(resolvedProducts?.find((p: any) => p.id === item.productId)?.stockLevel || 0) - (cart.find(c => c.productId === item.productId)?.quantity || 0)}
                                                 </span>
                                             )}
                                         </div>
@@ -817,6 +1105,86 @@ export default function POSPage() {
                     title={pendingOverride?.type === "DISCOUNT" ? "Authorize Discount" : "Authorize Void"}
                     description={pendingOverride?.type === "DISCOUNT" ? "Manager PIN required for high discount" : "Manager PIN required to void cart"}
                 />
+
+                {/* ─── Initial Cache Progress Bar ─── */}
+                {cacheProgress.active && (
+                    <div className="px-3 md:px-6 py-2 bg-indigo-500 text-white shrink-0 z-40 print:hidden animate-in slide-in-from-top-2 duration-300">
+                        <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest">
+                                {cacheProgress.done
+                                    ? <><CheckCircle2 className="h-3.5 w-3.5" /> {cacheProgress.label}</>
+                                    : <><Loader2 className="h-3.5 w-3.5 animate-spin" /> {cacheProgress.label}</>
+                                }
+                            </div>
+                            <span className="text-[10px] font-bold opacity-80">{cacheProgress.current}/{cacheProgress.total}</span>
+                        </div>
+                        <div className="w-full bg-white/20 rounded-full h-1.5 overflow-hidden">
+                            <div
+                                className="h-full bg-white rounded-full transition-all duration-500 ease-out"
+                                style={{ width: `${(cacheProgress.current / cacheProgress.total) * 100}%` }}
+                            />
+                        </div>
+                    </div>
+                )}
+
+                {/* ─── Stale Data Warning ─── */}
+                {lastCacheTime && (Date.now() - lastCacheTime > 24 * 60 * 60 * 1000) && (
+                    <div className="px-3 md:px-6 py-1 bg-red-600 text-white shrink-0 z-40 print:hidden flex items-center justify-center gap-2 text-[10px] font-bold uppercase tracking-tighter animate-pulse">
+                        <AlertTriangle className="h-3 w-3" />
+                        Warning: Offline data is over 24h old. Refresh required for accurate pricing/stock.
+                        <Button
+                            variant="link"
+                            className="h-auto p-0 text-white underline text-[10px] font-black"
+                            onClick={() => window.location.reload()}
+                        >
+                            Refresh Now
+                        </Button>
+                    </div>
+                )}
+
+                {/* ─── Offline / Sync Status Banner ─── */}
+                {(!isOnline || pendingSalesCount > 0 || syncStatus === 'syncing') && (
+                    <div className={cn(
+                        "px-3 md:px-6 py-2 shrink-0 z-40 print:hidden transition-colors animate-in slide-in-from-top-2 duration-300",
+                        !isOnline
+                            ? "bg-amber-500 text-white"
+                            : syncStatus === 'syncing'
+                                ? "bg-blue-500 text-white"
+                                : "bg-emerald-500 text-white"
+                    )}>
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest">
+                                {!isOnline ? (
+                                    <><WifiOff className="h-4 w-4" /> Offline Mode — Sales will be queued</>
+                                ) : syncStatus === 'syncing' ? (
+                                    <><Loader2 className="h-4 w-4 animate-spin" /> Syncing {syncProgress.synced}/{syncProgress.total}...</>
+                                ) : (
+                                    <><CloudUpload className="h-4 w-4" /> {pendingSalesCount} Pending Sale{pendingSalesCount !== 1 ? 's' : ''}</>
+                                )}
+                            </div>
+                            {isOnline && pendingSalesCount > 0 && syncStatus !== 'syncing' && (
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 px-3 text-[10px] font-black text-white hover:bg-white/20 rounded-lg"
+                                    onClick={() => triggerSync()}
+                                >
+                                    <RefreshCw className="h-3 w-3 mr-1" /> Sync Now
+                                </Button>
+                            )}
+                        </div>
+                        {/* Sync Progress Bar */}
+                        {syncStatus === 'syncing' && syncProgress.total > 0 && (
+                            <div className="w-full bg-white/20 rounded-full h-1.5 mt-2 overflow-hidden">
+                                <div
+                                    className="h-full bg-white rounded-full transition-all duration-500 ease-out"
+                                    style={{ width: `${(syncProgress.synced / syncProgress.total) * 100}%` }}
+                                />
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 {/* High-End Command Center Header */}
                 <div className="bg-white border-b border-slate-200/60 px-3 md:px-6 py-2 md:py-4 shrink-0 backdrop-blur-md sticky top-0 z-30 shadow-sm">
                     <div className="flex flex-col md:flex-row gap-2 md:gap-6 items-stretch md:items-center">
@@ -828,8 +1196,22 @@ export default function POSPage() {
                                         <Package className="h-4 w-4 md:h-6 md:w-6 text-white" />
                                     </div>
                                     <div className="flex flex-col">
-                                        <h1 className="text-xs md:text-lg font-black text-slate-900 leading-none truncate max-w-[80px] md:max-w-none">{company?.name || "Premium POS"}</h1>
-                                        <p className="text-[8px] md:text-[10px] uppercase tracking-[0.2em] text-primary font-black mt-0.5 md:mt-1 hidden md:block">Elite Terminal</p>
+                                        <h1 className="text-xs md:text-lg font-black text-slate-900 leading-none truncate max-w-[80px] md:max-w-none">{resolvedCompany?.name || "Premium POS"}</h1>
+                                        <div className="flex items-center gap-1.5 mt-0.5 md:mt-1">
+                                            <p className="text-[8px] md:text-[10px] uppercase tracking-[0.2em] text-primary font-black hidden md:block">Elite Terminal</p>
+                                            <div className={cn(
+                                                "flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[8px] md:text-[9px] font-black uppercase tracking-wider",
+                                                isOnline
+                                                    ? "bg-emerald-100 text-emerald-700"
+                                                    : "bg-amber-100 text-amber-700"
+                                            )}>
+                                                <div className={cn(
+                                                    "w-1.5 h-1.5 rounded-full",
+                                                    isOnline ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
+                                                )} />
+                                                {isOnline ? <><Wifi className="h-2.5 w-2.5" /> Online</> : <><WifiOff className="h-2.5 w-2.5" /> Offline</>}
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -840,7 +1222,7 @@ export default function POSPage() {
                                             <Button variant="ghost" size="sm" className="h-8 px-2 gap-1 text-xs font-bold text-slate-700 bg-slate-100/50 hover:bg-slate-100 rounded-lg border border-slate-200/50">
                                                 <User className="h-3 w-3 text-slate-500" />
                                                 <span className="truncate max-w-[60px]">
-                                                    {customers?.find(c => c.id.toString() === selectedCustomerId)?.name.split(' ')[0] || "Guest"}
+                                                    {resolvedCustomers?.find((c: any) => c.id.toString() === selectedCustomerId)?.name.split(' ')[0] || "Guest"}
                                                 </span>
                                             </Button>
                                         </DialogTrigger>
@@ -853,7 +1235,7 @@ export default function POSPage() {
                                                     variant="outline"
                                                     className="w-full justify-start gap-2 h-12"
                                                     onClick={() => {
-                                                        const walkIn = customers?.find(c => c.name.toLowerCase().includes("walk-in") || c.name.toLowerCase().includes("cash"));
+                                                        const walkIn = resolvedCustomers?.find((c: any) => c.name.toLowerCase().includes("walk-in") || c.name.toLowerCase().includes("cash"));
                                                         if (walkIn) setSelectedCustomerId(walkIn.id.toString());
                                                     }}
                                                 >
@@ -867,7 +1249,7 @@ export default function POSPage() {
                                                             <SelectValue placeholder="Select Customer" />
                                                         </SelectTrigger>
                                                         <SelectContent>
-                                                            {customers?.map(c => (
+                                                            {resolvedCustomers?.map((c: any) => (
                                                                 <SelectItem key={c.id} value={c.id.toString()}>
                                                                     {c.name}
                                                                 </SelectItem>
@@ -1043,7 +1425,7 @@ export default function POSPage() {
                                     size="sm"
                                     className="h-10 w-10 rounded-xl bg-white shadow-sm border border-slate-200 text-slate-600 hover:text-primary hover:bg-white"
                                     onClick={() => {
-                                        const walkIn = customers?.find(c => c.name.toLowerCase().includes("walk-in") || c.name.toLowerCase().includes("cash"));
+                                        const walkIn = resolvedCustomers?.find((c: any) => c.name.toLowerCase().includes("walk-in") || c.name.toLowerCase().includes("cash"));
                                         if (walkIn) setSelectedCustomerId(walkIn.id.toString());
                                         else toast({ title: "No Walk-in Customer", description: "Create 'Walk-in' first." });
                                     }}
@@ -1058,7 +1440,7 @@ export default function POSPage() {
                                         </div>
                                     </SelectTrigger>
                                     <SelectContent className="rounded-xl border-slate-200 shadow-2xl">
-                                        {customers?.map(c => (
+                                        {resolvedCustomers?.map((c: any) => (
                                             <SelectItem key={c.id} value={c.id.toString()} className="focus:bg-primary/5 rounded-lg py-2.5">
                                                 <div className="font-bold text-slate-700">{c.name}</div>
                                             </SelectItem>
@@ -1759,11 +2141,17 @@ export default function POSPage() {
                         <div className="bg-emerald-500 p-12 text-center text-white relative print:hidden">
                             <div className="absolute top-0 left-0 w-full h-full opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white to-transparent" />
                             <div className="relative z-10 flex flex-col items-center">
-                                <div className="w-24 h-24 bg-white/20 backdrop-blur-xl rounded-full flex items-center justify-center mb-6 shadow-2xl ring-4 ring-white/10 scale-110">
-                                    <CheckCircle2 className="h-12 w-12 text-white" />
+                                <div className={cn("w-24 h-24 backdrop-blur-xl rounded-full flex items-center justify-center mb-6 shadow-2xl ring-4 ring-white/10 scale-110", lastSuccessfulInvoice?._offline ? 'bg-amber-500/30' : 'bg-white/20')}>
+                                    {lastSuccessfulInvoice?._offline ? <WifiOff className="h-12 w-12 text-white" /> : <CheckCircle2 className="h-12 w-12 text-white" />}
                                 </div>
-                                <h3 className="text-3xl font-black leading-tight mb-2">Sale Perfect!</h3>
-                                <p className="text-emerald-100 text-sm font-bold uppercase tracking-widest">Transaction Fiscalized</p>
+                                <h3 className="text-3xl font-black leading-tight mb-2">{lastSuccessfulInvoice?._offline ? 'Saved Offline' : 'Sale Perfect!'}</h3>
+                                <p className="text-emerald-100 text-sm font-bold uppercase tracking-widest">
+                                    {lastSuccessfulInvoice?._offline
+                                        ? 'Will sync when reconnected'
+                                        : lastSuccessfulInvoice?.fiscalCode
+                                            ? 'Transaction Fiscalized'
+                                            : 'Sale Complete'}
+                                </p>
                             </div>
                         </div>
 
@@ -1772,19 +2160,21 @@ export default function POSPage() {
                             <div className="hidden print:block w-full">
                                 <Receipt48
                                     invoice={lastSuccessfulInvoice}
-                                    company={company}
-                                    customer={customers?.find(c => c.id === lastSuccessfulInvoice?.customerId)}
+                                    company={resolvedCompany}
+                                    customer={resolvedCustomers?.find((c: any) => c.id === lastSuccessfulInvoice?.customerId)}
                                     items={lastSuccessfulInvoice?.items}
                                     user={user}
                                 />
                             </div>
 
                             <div className="flex flex-col gap-3 w-full print:hidden">
-                                <Button className="h-16 rounded-2xl bg-slate-900 hover:bg-black text-white font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-3"
-                                    onClick={() => posSettings.silentPrinting ? handleSilentPrint() : window.print()}>
-                                    <Printer className="h-5 w-5" />
-                                    {posSettings.silentPrinting ? "Silent Print" : "Print Receipt"}
-                                </Button>
+                                {posSettings.printingEnabled && (
+                                    <Button className="h-16 rounded-2xl bg-slate-900 hover:bg-black text-white font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-3"
+                                        onClick={() => posSettings.silentPrinting ? handleSilentPrint() : window.print()}>
+                                        <Printer className="h-5 w-5" />
+                                        {posSettings.silentPrinting ? "Silent Print" : "Print Receipt"}
+                                    </Button>
+                                )}
                                 <Button variant="ghost" className="h-14 rounded-2xl font-black uppercase tracking-widest text-xs text-slate-400 hover:text-primary hover:bg-primary/5" onClick={() => setLastSuccessfulInvoice(null)}>
                                     Proceed to Next Customer
                                 </Button>
@@ -1800,8 +2190,8 @@ export default function POSPage() {
                     <Receipt48
                         id="silent-receipt-48"
                         invoice={lastSuccessfulInvoice}
-                        company={company}
-                        customer={customers?.find(c => c.id === lastSuccessfulInvoice?.customerId)}
+                        company={resolvedCompany}
+                        customer={resolvedCustomers?.find((c: any) => c.id === lastSuccessfulInvoice?.customerId)}
                         items={lastSuccessfulInvoice?.items}
                         user={user}
                     />

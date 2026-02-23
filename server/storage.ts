@@ -16,13 +16,18 @@ import {
   posShifts, type PosShift, type InsertPosShift,
   posHolds, type PosHold, type InsertPosHold,
   productCategories, type ProductCategory, type InsertProductCategory,
-  resetTokens, insertResetTokenSchema
+  resetTokens, insertResetTokenSchema,
+  suppliers, inventoryTransactions, expenses,
+  type Supplier, type InsertSupplier,
+  type InventoryTransaction, type InsertInventoryTransaction,
+  type Expense, type InsertExpense
 } from "../shared/schema.js";
 import { db } from "./db.js";
 import { eq, and, desc, lte, gte, lt, ne, or, isNull, sql, ilike, count } from "drizzle-orm";
 import { type FiscalDayCounter } from "./zimra.js";
 import { scrypt, randomBytes } from "crypto";
 import { promisify } from "util";
+import { format } from "date-fns";
 
 const scryptAsync = promisify(scrypt);
 
@@ -178,6 +183,25 @@ export interface IStorage {
 
   // Maintenance
   clearTestInvoices(companyId: number): Promise<number>;
+
+  // Suppliers
+  getSuppliers(companyId: number): Promise<Supplier[]>;
+  getSupplier(id: number): Promise<Supplier | undefined>;
+  createSupplier(data: InsertSupplier & { companyId: number }): Promise<Supplier>;
+  updateSupplier(id: number, data: Partial<InsertSupplier>): Promise<Supplier | undefined>;
+
+  // Inventory Transactions
+  getInventoryTransactions(companyId: number, productId?: number): Promise<InventoryTransaction[]>;
+  createInventoryTransaction(data: InsertInventoryTransaction & { companyId: number }): Promise<InventoryTransaction>;
+
+  // Expenses
+  getExpenses(companyId: number): Promise<Expense[]>;
+  createExpense(data: InsertExpense & { companyId: number }): Promise<Expense>;
+  updateExpense(id: number, data: Partial<InsertExpense>): Promise<Expense | undefined>;
+
+  // Reports & Analytics
+  getStockValuationReport(companyId: number): Promise<any[]>;
+  getFinancialSummary(companyId: number, dateFrom?: Date, dateTo?: Date): Promise<any>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -269,24 +293,6 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-
-  async setUserPin(userId: string, pin: string): Promise<void> {
-    const salt = randomBytes(16).toString("hex");
-    const buf = (await scryptAsync(pin, salt, 64)) as Buffer;
-    const hash = `${buf.toString("hex")}.${salt}`;
-    await db.update(users).set({ pin: hash }).where(eq(users.id, userId));
-  }
-
-  async verifyUserPin(userId: string, pin: string): Promise<boolean> {
-    const user = await this.getUser(userId);
-    if (!user || !user.pin) return false;
-
-    const [salt, key] = user.pin.split(":");
-    if (!salt || !key) return false;
-
-    const derivedKey = (await scryptAsync(pin, salt, 64)) as Buffer;
-    return key === derivedKey.toString("hex");
-  }
 
   async createResetToken(userId: string): Promise<string> {
     const token = randomBytes(32).toString("hex");
@@ -618,31 +624,63 @@ export class DatabaseStorage implements IStorage {
         dueDate: new Date(invoiceData.dueDate), // Ensure Date object
       }).returning();
 
-      if (items.length > 0) {
-        await tx.insert(invoiceItems).values(
-          items.map(item => ({ ...item, invoiceId: invoice.id }))
-        );
+      const { calculateCOGS } = await import("./lib/inventory.js");
 
-        // Inventory Management: Deduct/Restore stock for tracked products
+      if (items.length > 0) {
+        // We will process items one by one to calculate COGS for each
         for (const item of items) {
+          let cogsAmount: number | null = null;
+
           if (item.productId) {
             const [product] = await tx.select().from(products).where(eq(products.id, item.productId));
             if (product && product.isTracked) {
               const quantity = parseFloat(item.quantity.toString());
-              let stockChange = 0;
 
-              if (invoiceData.transactionType === 'CreditNote') {
-                stockChange = quantity; // Restore stock
+              if (invoiceData.transactionType !== 'CreditNote') {
+                // Calculate and deduct for sales
+                cogsAmount = await calculateCOGS(item.productId, quantity, invoiceData.companyId);
+
+                // Record the STOCK_OUT transaction
+                await tx.insert(inventoryTransactions).values({
+                  companyId: invoiceData.companyId,
+                  productId: item.productId,
+                  type: "STOCK_OUT",
+                  quantity: (-quantity).toString(),
+                  referenceType: "INVOICE",
+                  referenceId: invoice.id.toString(),
+                  notes: `Sale - Invoice ${invoice.invoiceNumber}`
+                });
               } else {
-                stockChange = -quantity; // Deduct stock
+                // Restoring stock for Credit Note
+                // Simplification for now: just record as STOCK_IN without specific batch tracking for returns
+                // but incrementing stock level
+                await tx.insert(inventoryTransactions).values({
+                  companyId: invoiceData.companyId,
+                  productId: item.productId,
+                  type: "ADJUSTMENT",
+                  quantity: quantity.toString(),
+                  referenceType: "INVOICE",
+                  referenceId: invoice.id.toString(),
+                  notes: `Return - Credit Note ${invoice.invoiceNumber}`,
+                  remainingQuantity: quantity.toString()
+                });
               }
 
+              // Update stock level on product
+              const stockChange = invoiceData.transactionType === 'CreditNote' ? quantity : -quantity;
               const newStockLevel = (parseFloat(product.stockLevel || "0") + stockChange).toString();
               await tx.update(products)
                 .set({ stockLevel: newStockLevel })
                 .where(eq(products.id, item.productId));
             }
           }
+
+          // Insert the invoice item with COGS
+          await tx.insert(invoiceItems).values({
+            ...item,
+            invoiceId: invoice.id,
+            cogsAmount: cogsAmount?.toString() || null
+          });
         }
       }
 
@@ -680,7 +718,6 @@ export class DatabaseStorage implements IStorage {
       }
 
       // 3. Fetch Items with Products
-      // We inserted items, but we need the generated IDs and product details
       const invoiceItemsRows = await tx
         .select({
           item: invoiceItems,
@@ -929,7 +966,7 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  // Currencies
+
   async getCurrencies(companyId: number): Promise<Currency[]> {
     return await db.select().from(currencies).where(eq(currencies.companyId, companyId)).orderBy(currencies.id);
   }
@@ -1536,15 +1573,6 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getSalesReport(companyId: number, startDate: Date, endDate: Date): Promise<Invoice[]> {
-    const allInvoices = await this.getInvoices(companyId);
-    return allInvoices.filter(inv => {
-      if (!inv.issueDate) return false;
-      const date = new Date(inv.issueDate);
-      return date >= startDate && date <= endDate;
-    });
-  }
-
   async getPaymentsReport(companyId: number, startDate: Date, endDate: Date): Promise<Payment[]> {
     const results = await db
       .select()
@@ -1886,18 +1914,7 @@ export class DatabaseStorage implements IStorage {
       .returning();
     return updated;
   }
-  async getCompanyUsers(companyId: number): Promise<(User & { role: string })[]> {
-    const result = await db
-      .select({
-        ...users,
-        role: companyUsers.role,
-      })
-      .from(companyUsers)
-      .innerJoin(users, eq(companyUsers.userId, users.id))
-      .where(eq(companyUsers.companyId, companyId));
 
-    return result as (User & { role: string })[];
-  }
 
   async addCompanyUser(userId: string, companyId: number, role: string): Promise<void> {
     await db.insert(companyUsers).values({
@@ -2228,6 +2245,143 @@ export class DatabaseStorage implements IStorage {
 
       return result.length;
     });
+  }
+
+  // Suppliers
+  async getSuppliers(companyId: number): Promise<Supplier[]> {
+    return await db.select().from(suppliers).where(eq(suppliers.companyId, companyId)).orderBy(suppliers.name);
+  }
+
+  async getSupplier(id: number): Promise<Supplier | undefined> {
+    const [supplier] = await db.select().from(suppliers).where(eq(suppliers.id, id));
+    return supplier;
+  }
+
+  async createSupplier(data: InsertSupplier & { companyId: number }): Promise<Supplier> {
+    const [supplier] = await db.insert(suppliers).values(data).returning();
+    return supplier;
+  }
+
+  async updateSupplier(id: number, data: Partial<InsertSupplier>): Promise<Supplier | undefined> {
+    const [updated] = await db.update(suppliers).set(data).where(eq(suppliers.id, id)).returning();
+    return updated;
+  }
+
+  // Inventory Transactions
+  async getInventoryTransactions(companyId: number, productId?: number): Promise<InventoryTransaction[]> {
+    const filters = [eq(inventoryTransactions.companyId, companyId)];
+    if (productId) filters.push(eq(inventoryTransactions.productId, productId));
+    return await db.select().from(inventoryTransactions).where(and(...filters)).orderBy(desc(inventoryTransactions.createdAt));
+  }
+
+  async createInventoryTransaction(data: InsertInventoryTransaction & { companyId: number }): Promise<InventoryTransaction> {
+    const [transaction] = await db.insert(inventoryTransactions).values(data).returning();
+    return transaction;
+  }
+
+  // Expenses
+  async getExpenses(companyId: number): Promise<Expense[]> {
+    return await db.select().from(expenses).where(eq(expenses.companyId, companyId)).orderBy(desc(expenses.expenseDate));
+  }
+
+  async createExpense(data: InsertExpense & { companyId: number }): Promise<Expense> {
+    const [expense] = await db.insert(expenses).values(data).returning();
+    return expense;
+  }
+
+  async updateExpense(id: number, data: Partial<InsertExpense>): Promise<Expense | undefined> {
+    const [updated] = await db.update(expenses).set(data).where(eq(expenses.id, id)).returning();
+    return updated;
+  }
+
+  // Reports
+  async getStockValuationReport(companyId: number) {
+    const trackedProducts = await db
+      .select()
+      .from(products)
+      .where(and(eq(products.companyId, companyId), eq(products.isTracked, true)));
+
+    return trackedProducts.map(p => ({
+      productId: p.id,
+      name: p.name,
+      sku: p.sku,
+      stockLevel: p.stockLevel || "0",
+      unitCost: p.costPrice || "0",
+      totalValuation: Number(p.stockLevel || 0) * Number(p.costPrice || 0)
+    }));
+  }
+
+  async getFinancialSummary(companyId: number, dateFrom?: Date, dateTo?: Date) {
+    // 1. Revenue (Sum of Invoices - Sum of Credit Notes)
+    const invoiceFilters = [eq(invoices.companyId, companyId)];
+    if (dateFrom) invoiceFilters.push(gte(invoices.createdAt, dateFrom));
+    if (dateTo) invoiceFilters.push(lte(invoices.createdAt, dateTo));
+
+    const companyInvoices = await db
+      .select()
+      .from(invoices)
+      .where(and(...invoiceFilters));
+
+    let revenue = 0;
+    companyInvoices.forEach(inv => {
+      const amount = Number(inv.total);
+      if (inv.transactionType === 'CreditNote') {
+        revenue -= amount;
+      } else {
+        revenue += amount;
+      }
+    });
+
+    // 2. COGS (Sum of totalCost in inventory_transactions for 'STOCK_OUT')
+    const txFilters = [
+      eq(inventoryTransactions.companyId, companyId),
+      eq(inventoryTransactions.type, 'STOCK_OUT')
+    ];
+    if (dateFrom) txFilters.push(gte(inventoryTransactions.createdAt, dateFrom));
+    if (dateTo) txFilters.push(lte(inventoryTransactions.createdAt, dateTo));
+
+    const salesTransactions = await db
+      .select()
+      .from(inventoryTransactions)
+      .where(and(...txFilters));
+
+    const cogs = salesTransactions.reduce((acc, curr) => acc + Number(curr.totalCost || 0), 0);
+
+    // 3. Expenses
+    const expenseFilters = [eq(expenses.companyId, companyId)];
+    if (dateFrom) expenseFilters.push(gte(expenses.expenseDate, dateFrom));
+    if (dateTo) expenseFilters.push(lte(expenses.expenseDate, dateTo));
+
+    const companyExpenses = await db
+      .select()
+      .from(expenses)
+      .where(and(...expenseFilters));
+
+    const totalExpenses = companyExpenses.reduce((acc, curr) => acc + Number(curr.amount), 0);
+
+    // 4. Expense Breakdown
+    const breakdownMap = new Map<string, number>();
+    companyExpenses.forEach(e => {
+      const current = breakdownMap.get(e.category) || 0;
+      breakdownMap.set(e.category, current + Number(e.amount));
+    });
+
+    const expenseBreakdown = Array.from(breakdownMap.entries()).map(([category, amount]) => ({
+      category,
+      amount
+    })).sort((a, b) => b.amount - a.amount);
+
+    const grossProfit = revenue - cogs;
+    const netProfit = grossProfit - totalExpenses;
+
+    return {
+      revenue,
+      cogs,
+      grossProfit,
+      expenses: totalExpenses,
+      netProfit,
+      expenseBreakdown
+    };
   }
 }
 

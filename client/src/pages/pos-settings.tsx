@@ -41,6 +41,7 @@ export default function PosSettingsPage() {
     const updateCompany = useUpdateCompany(companyId);
 
     interface PosSettings {
+        printingEnabled: boolean;
         autoPrint: boolean;
         terminalId: string;
         receiptHeader: string;
@@ -57,6 +58,7 @@ export default function PosSettingsPage() {
     // POS Settings Form State
     const [availablePrinters, setAvailablePrinters] = useState<any[]>([]);
     const [posConfig, setPosConfig] = useState<PosSettings>({
+        printingEnabled: true,
         autoPrint: false,
         terminalId: "POS-01",
         receiptHeader: "",
@@ -76,6 +78,7 @@ export default function PosSettingsPage() {
         if (currentCompany?.posSettings) {
             const settings = currentCompany.posSettings as any;
             setPosConfig({
+                printingEnabled: settings.printingEnabled ?? true,
                 autoPrint: settings.autoPrint ?? false,
                 terminalId: settings.terminalId || "POS-01",
                 receiptHeader: settings.receiptHeader || "",
@@ -363,12 +366,24 @@ export default function PosSettingsPage() {
 
                                 <div className="flex items-center justify-between">
                                     <div className="space-y-0.5">
-                                        <Label className="text-sm">Auto-Print Receipt</Label>
+                                        <Label className="text-sm">Printing Enabled</Label>
+                                        <p className="text-[10px] text-slate-500">Master toggle — disables all receipt printing when off</p>
+                                    </div>
+                                    <Switch
+                                        checked={posConfig.printingEnabled}
+                                        onCheckedChange={(checked) => setPosConfig({ ...posConfig, printingEnabled: checked })}
+                                    />
+                                </div>
+
+                                <div className="flex items-center justify-between">
+                                    <div className="space-y-0.5">
+                                        <Label className={`text-sm ${!posConfig.printingEnabled ? 'text-slate-300' : ''}`}>Auto-Print Receipt</Label>
                                         <p className="text-[10px] text-slate-500">Print immediately after sale completion</p>
                                     </div>
                                     <Switch
                                         checked={posConfig.autoPrint}
                                         onCheckedChange={(checked) => setPosConfig({ ...posConfig, autoPrint: checked })}
+                                        disabled={!posConfig.printingEnabled}
                                     />
                                 </div>
 

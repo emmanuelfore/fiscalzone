@@ -1,8 +1,6 @@
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/api";
-import { useActiveCompany } from "@/hooks/use-active-company";
+import { useStockValuation } from "@/hooks/use-reports";
 import { Layout } from "@/components/layout";
 import {
     Card,
@@ -28,7 +26,8 @@ import {
     DollarSign,
     Search,
     ArrowLeft,
-    Download
+    Download,
+    BarChart3
 } from "lucide-react";
 import {
     PieChart,
@@ -41,50 +40,23 @@ import {
 import { format } from "date-fns";
 
 export default function InventoryReportsPage() {
-    const { activeCompany } = useActiveCompany();
-    const companyId = activeCompany?.id;
+    const companyId = parseInt(localStorage.getItem("selectedCompanyId") || "0");
     const [searchTerm, setSearchTerm] = useState("");
-
-    // Fetch Products
-    const { data: products, isLoading: isLoadingProducts } = useQuery({
-        queryKey: ["products", companyId],
-        queryFn: async () => {
-            const res = await apiFetch(`/api/companies/${companyId}/products`);
-            if (!res.ok) throw new Error("Failed to fetch products");
-            return await res.json();
-        },
-        enabled: !!companyId
-    });
+    const { data: products, isLoading } = useStockValuation(companyId);
 
     // Calculations
-    const trackedProducts = products?.filter((p: any) => p.isTracked) || [];
-    const lowStockItems = trackedProducts.filter((p: any) =>
-        Number(p.stockLevel) <= Number(p.lowStockThreshold) && Number(p.stockLevel) > 0
-    );
-    const outOfStockItems = trackedProducts.filter((p: any) => Number(p.stockLevel) <= 0);
+    const lowStockItems = products?.filter((p: any) => Number(p.stockLevel) <= 5) || [];
+    const outOfStockItems = products?.filter((p: any) => Number(p.stockLevel) <= 0) || [];
 
-    const totalStockValue = products?.reduce((acc: number, p: any) =>
-        acc + (Number(p.stockLevel) * Number(p.price)), 0) || 0;
+    const totalCostValue = products?.reduce((acc: number, p: any) => acc + p.totalValuation, 0) || 0;
 
-    const totalCostValue = products?.reduce((acc: number, p: any) =>
-        acc + (Number(p.stockLevel) * (Number(p.costPrice) || 0)), 0) || 0;
+    // Valuation by Product for Chart (top 5)
+    const chartData = products?.slice(0, 5).map(p => ({
+        name: p.name,
+        value: p.totalValuation
+    })) || [];
 
-    const potentialProfit = totalStockValue - totalCostValue;
-
-    // Valuation by Category for Chart
-    const categoryValuation = products?.reduce((acc: any, p: any) => {
-        const cat = p.category || "Uncategorized";
-        if (!acc[cat]) acc[cat] = 0;
-        acc[cat] += (Number(p.stockLevel) * Number(p.price));
-        return acc;
-    }, {}) || {};
-
-    const chartData = Object.entries(categoryValuation).map(([name, value]) => ({
-        name,
-        value
-    })).sort((a, b) => (b.value as number) - (a.value as number));
-
-    const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+    const COLORS = ['#10b981', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
     // Filtered search
     const filteredProducts = products?.filter((p: any) =>
@@ -95,15 +67,13 @@ export default function InventoryReportsPage() {
     const handleExportCsv = () => {
         if (!products || products.length === 0) return;
 
-        const headers = ["Name", "SKU", "Category", "Stock Level", "Price", "Cost", "Stock Value"];
+        const headers = ["Name", "SKU", "Stock Level", "Unit Cost", "Total Value"];
         const rows = products.map((p: any) => [
             p.name,
             p.sku || "-",
-            p.category || "Uncategorized",
             p.stockLevel,
-            p.price,
-            p.costPrice || 0,
-            (Number(p.stockLevel) * Number(p.price)).toFixed(2)
+            p.unitCost,
+            p.totalValuation.toFixed(2)
         ]);
 
         const csvContent = [
@@ -115,7 +85,7 @@ export default function InventoryReportsPage() {
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.setAttribute("href", url);
-        link.setAttribute("download", `Inventory_Report_${format(new Date(), "yyyyMMdd")}.csv`);
+        link.setAttribute("download", `Inventory_Valuation_${format(new Date(), "yyyyMMdd")}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -130,75 +100,75 @@ export default function InventoryReportsPage() {
                             <ArrowLeft className="h-5 w-5" />
                         </Button>
                         <div>
-                            <h1 className="text-2xl font-black text-slate-900 tracking-tight">Inventory Reports</h1>
-                            <p className="text-sm text-slate-500 font-medium">Stock valuation and movement analysis</p>
+                            <h1 className="text-2xl font-black text-slate-900 tracking-tight font-display text-[2.5rem] mt-2 mb-2 leading-none uppercase">Inventory Reports</h1>
+                            <p className="text-sm text-slate-500 font-medium">Cost-based stock valuation and analysis</p>
                         </div>
                     </div>
-                    <Button onClick={handleExportCsv} variant="outline" className="gap-2">
+                    <Button onClick={handleExportCsv} variant="outline" className="gap-2 rounded-2xl border-slate-200 shadow-sm hover:bg-slate-50">
                         <Download className="h-4 w-4" />
                         Export Report
                     </Button>
                 </div>
 
                 {/* Stats Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <Card className="border-none shadow-sm bg-indigo-50/50">
-                        <CardContent className="p-6">
-                            <div className="flex items-center gap-3 mb-2">
-                                <div className="p-2 bg-indigo-100 rounded-lg">
-                                    <DollarSign className="h-5 w-5 text-indigo-600" />
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <Card className="border-none shadow-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-[2rem] overflow-hidden group hover:scale-[1.02] transition-all duration-300 cursor-pointer">
+                        <CardContent className="p-8">
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-sm">
+                                    <DollarSign className="h-6 w-6 text-white" />
                                 </div>
-                                <p className="text-sm font-bold text-indigo-400 uppercase tracking-widest">Stock Value</p>
+                                <div className="text-[10px] font-black uppercase tracking-widest opacity-60 group-hover:opacity-100 transition-opacity">Total Value (Cost)</div>
                             </div>
-                            <h3 className="text-2xl font-black text-indigo-900">${totalStockValue.toFixed(2)}</h3>
+                            <h3 className="text-4xl font-black font-display tracking-tight">${totalCostValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</h3>
                         </CardContent>
                     </Card>
 
-                    <Card className="border-none shadow-sm bg-blue-50/50">
-                        <CardContent className="p-6">
-                            <div className="flex items-center gap-3 mb-2">
-                                <div className="p-2 bg-blue-100 rounded-lg">
-                                    <TrendingUp className="h-5 w-5 text-blue-600" />
+                    <Card className="border-none shadow-xl bg-white rounded-[2rem] overflow-hidden group hover:shadow-2xl transition-all duration-500">
+                        <CardContent className="p-8">
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="p-3 bg-violet-50 rounded-2xl">
+                                    <Package className="h-6 w-6 text-violet-600" />
                                 </div>
-                                <p className="text-sm font-bold text-blue-400 uppercase tracking-widest">Est. Profit</p>
+                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tracked Items</div>
                             </div>
-                            <h3 className="text-2xl font-black text-blue-900">${potentialProfit.toFixed(2)}</h3>
+                            <h3 className="text-4xl font-black text-slate-900 font-display tracking-tight">{products?.length || 0}</h3>
                         </CardContent>
                     </Card>
 
-                    <Card className="border-none shadow-sm bg-amber-50/50">
-                        <CardContent className="p-6">
-                            <div className="flex items-center gap-3 mb-2">
-                                <div className="p-2 bg-amber-100 rounded-lg">
-                                    <AlertTriangle className="h-5 w-5 text-amber-600" />
+                    <Card className="border-none shadow-xl bg-white rounded-[2rem] overflow-hidden group hover:shadow-2xl transition-all duration-500">
+                        <CardContent className="p-8">
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="p-3 bg-amber-50 rounded-2xl">
+                                    <AlertTriangle className="h-6 w-6 text-amber-600" />
                                 </div>
-                                <p className="text-sm font-bold text-amber-400 uppercase tracking-widest">Low Stock</p>
+                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Low Stock</div>
                             </div>
-                            <h3 className="text-2xl font-black text-amber-900">{lowStockItems.length} Items</h3>
+                            <h3 className="text-4xl font-black text-amber-600 font-display tracking-tight">{lowStockItems.length}</h3>
                         </CardContent>
                     </Card>
 
-                    <Card className="border-none shadow-sm bg-rose-50/50">
-                        <CardContent className="p-6">
-                            <div className="flex items-center gap-3 mb-2">
-                                <div className="p-2 bg-rose-100 rounded-lg">
-                                    <Package className="h-5 w-5 text-rose-600" />
+                    <Card className="border-none shadow-xl bg-white rounded-[2rem] overflow-hidden group hover:shadow-2xl transition-all duration-500">
+                        <CardContent className="p-8">
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="p-3 bg-rose-50 rounded-2xl">
+                                    <AlertTriangle className="h-6 w-6 text-rose-600" />
                                 </div>
-                                <p className="text-sm font-bold text-rose-400 uppercase tracking-widest">Out of Stock</p>
+                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Out of Stock</div>
                             </div>
-                            <h3 className="text-2xl font-black text-rose-900">{outOfStockItems.length} Items</h3>
+                            <h3 className="text-4xl font-black text-rose-600 font-display tracking-tight">{outOfStockItems.length}</h3>
                         </CardContent>
                     </Card>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     {/* Valuation by Category Chart */}
-                    <Card className="lg:col-span-1 border-none shadow-sm">
-                        <CardHeader>
-                            <CardTitle className="text-lg font-bold">Valuation by Category</CardTitle>
-                            <CardDescription>Based on selling price</CardDescription>
+                    <Card className="lg:col-span-1 border-none shadow-xl bg-white rounded-[2rem] overflow-hidden">
+                        <CardHeader className="p-8 pb-0">
+                            <CardTitle className="text-xl font-black text-slate-900 font-display uppercase tracking-tight">Top Value Assets</CardTitle>
+                            <CardDescription className="text-slate-400 font-medium">Highest value products in stock</CardDescription>
                         </CardHeader>
-                        <CardContent className="h-[300px]">
+                        <CardContent className="h-[300px] p-8 pt-0">
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
                                     <Pie
@@ -215,6 +185,7 @@ export default function InventoryReportsPage() {
                                         ))}
                                     </Pie>
                                     <RechartsTooltip
+                                        contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)' }}
                                         formatter={(value: number) => [`$${value.toFixed(2)}`, 'Value']}
                                     />
                                     <Legend />
@@ -224,38 +195,41 @@ export default function InventoryReportsPage() {
                     </Card>
 
                     {/* Low Stock Alerts */}
-                    <Card className="lg:col-span-2 border-none shadow-sm">
-                        <CardHeader className="flex flex-row items-center justify-between">
+                    <Card className="lg:col-span-2 border-none shadow-xl bg-white rounded-[2rem] overflow-hidden">
+                        <CardHeader className="p-8 border-b border-slate-50 flex flex-row items-center justify-between bg-slate-50/50">
                             <div>
-                                <CardTitle className="text-lg font-bold">Low Stock Alerts</CardTitle>
-                                <CardDescription>Products reaching threshold</CardDescription>
+                                <CardTitle className="text-xl font-black text-slate-900 font-display uppercase tracking-tight">Stock Warnings</CardTitle>
+                                <CardDescription className="text-slate-400 font-medium">Critical replenishment required</CardDescription>
                             </div>
-                            <AlertTriangle className="h-5 w-5 text-amber-500" />
+                            <div className="p-3 bg-white rounded-2xl shadow-sm">
+                                <AlertTriangle className="h-5 w-5 text-amber-500" />
+                            </div>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="p-0">
                             <Table>
-                                <TableHeader>
+                                <TableHeader className="bg-slate-50/50 hover:bg-slate-50/50 border-b border-slate-100">
                                     <TableRow>
-                                        <TableHead>Product</TableHead>
-                                        <TableHead>SKU</TableHead>
-                                        <TableHead className="text-right">Current Stock</TableHead>
-                                        <TableHead className="text-right">Threshold</TableHead>
-                                        <TableHead className="text-right">Value</TableHead>
+                                        <TableHead className="p-6 font-bold text-slate-400 uppercase tracking-widest text-[10px]">Product</TableHead>
+                                        <TableHead className="p-6 font-bold text-slate-400 uppercase tracking-widest text-[10px] text-right">Current Stock</TableHead>
+                                        <TableHead className="p-6 font-bold text-slate-400 uppercase tracking-widest text-[10px] text-right">Unit Cost</TableHead>
+                                        <TableHead className="p-6 font-bold text-slate-400 uppercase tracking-widest text-[10px] text-right">Valuation</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {lowStockItems.slice(0, 5).map((p: any) => (
-                                        <TableRow key={p.id}>
-                                            <TableCell className="font-medium text-slate-800">{p.name}</TableCell>
-                                            <TableCell className="text-slate-500 font-mono text-xs">{p.sku}</TableCell>
-                                            <TableCell className="text-right font-bold text-amber-600">{p.stockLevel}</TableCell>
-                                            <TableCell className="text-right text-slate-500">{p.lowStockThreshold}</TableCell>
-                                            <TableCell className="text-right font-bold text-slate-900">${(Number(p.stockLevel) * Number(p.price)).toFixed(2)}</TableCell>
+                                        <TableRow key={p.productId} className="hover:bg-slate-50/80 border-b border-slate-50 transition-colors duration-200">
+                                            <TableCell className="p-6">
+                                                <div className="font-bold text-slate-800">{p.name}</div>
+                                                <div className="text-[10px] text-slate-400 font-mono tracking-tighter">{p.sku}</div>
+                                            </TableCell>
+                                            <TableCell className="p-6 text-right font-black text-amber-600">{p.stockLevel}</TableCell>
+                                            <TableCell className="p-6 text-right text-slate-500 font-medium text-sm">${Number(p.unitCost).toFixed(2)}</TableCell>
+                                            <TableCell className="p-6 text-right font-black text-slate-900 font-display">${p.totalValuation.toFixed(2)}</TableCell>
                                         </TableRow>
                                     ))}
                                     {lowStockItems.length === 0 && (
                                         <TableRow>
-                                            <TableCell colSpan={5} className="text-center py-8 text-slate-400">
+                                            <TableCell colSpan={4} className="p-12 text-center text-slate-400 font-medium">
                                                 All stock levels are healthy
                                             </TableCell>
                                         </TableRow>
@@ -267,17 +241,17 @@ export default function InventoryReportsPage() {
                 </div>
 
                 {/* Full Valuation Table */}
-                <Card className="border-none shadow-sm overflow-hidden">
-                    <CardHeader className="bg-white border-b border-slate-100 flex flex-row items-center justify-between">
+                <Card className="border-none shadow-xl bg-white rounded-[2rem] overflow-hidden">
+                    <CardHeader className="p-8 border-b border-slate-50 flex flex-row items-center justify-between bg-slate-50/30">
                         <div>
-                            <CardTitle className="text-lg font-bold">Inventory Valuation List</CardTitle>
-                            <CardDescription>Detailed breakdown of all products</CardDescription>
+                            <CardTitle className="text-xl font-black text-slate-900 font-display uppercase tracking-tight">Full Asset Inventory</CardTitle>
+                            <CardDescription className="text-slate-400 font-medium">Detailed cost-based valuation list</CardDescription>
                         </div>
-                        <div className="relative w-64">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                        <div className="relative w-72 group">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-hover:text-primary transition-colors duration-200" />
                             <Input
-                                placeholder="Search inventory..."
-                                className="pl-9 bg-slate-50"
+                                placeholder="Search inventory assets..."
+                                className="pl-9 h-11 bg-white border-slate-200 rounded-2xl shadow-sm focus-visible:ring-primary/20"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                             />
@@ -285,35 +259,40 @@ export default function InventoryReportsPage() {
                     </CardHeader>
                     <CardContent className="p-0">
                         <Table>
-                            <TableHeader className="bg-slate-50">
+                            <TableHeader className="bg-slate-50/80 hover:bg-slate-50/80 border-b border-slate-100">
                                 <TableRow>
-                                    <TableHead className="font-bold text-slate-500 uppercase text-xs">Product</TableHead>
-                                    <TableHead className="font-bold text-slate-500 uppercase text-xs">Category</TableHead>
-                                    <TableHead className="font-bold text-slate-500 uppercase text-xs text-right">Price</TableHead>
-                                    <TableHead className="font-bold text-slate-500 uppercase text-xs text-right">Stock</TableHead>
-                                    <TableHead className="font-bold text-slate-500 uppercase text-xs text-right">Ext. Value</TableHead>
+                                    <TableHead className="p-6 font-bold text-slate-400 uppercase tracking-widest text-[10px]">Product</TableHead>
+                                    <TableHead className="p-6 font-bold text-slate-400 uppercase tracking-widest text-[10px] text-right">Quantity</TableHead>
+                                    <TableHead className="p-6 font-bold text-slate-400 uppercase tracking-widest text-[10px] text-right">Unit Cost</TableHead>
+                                    <TableHead className="p-6 font-bold text-slate-400 uppercase tracking-widest text-[10px] text-right">Total Valuation</TableHead>
+                                    <TableHead className="p-6 font-bold text-slate-400 uppercase tracking-widest text-[10px]">Status</TableHead>
                                 </TableRow>
                             </TableHeader>
-                            <TableBody>
-                                {isLoadingProducts ? (
-                                    <TableRow><TableCell colSpan={5} className="text-center py-10">Loading...</TableCell></TableRow>
+                            <TableBody className="divide-y divide-slate-50">
+                                {isLoading ? (
+                                    <tr><td colSpan={5} className="p-12 text-center text-slate-400">
+                                        <div className="flex flex-col items-center justify-center gap-4">
+                                            <div className="w-8 h-8 border-4 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+                                            <span className="font-bold text-slate-400 uppercase tracking-widest text-[10px]">Calculating stock assets...</span>
+                                        </div>
+                                    </td></tr>
                                 ) : filteredProducts?.map((p: any) => (
-                                    <TableRow key={p.id} className="hover:bg-slate-50">
-                                        <TableCell>
-                                            <div className="font-bold text-slate-800">{p.name}</div>
-                                            <div className="text-[10px] text-slate-400 font-mono tracking-tighter">{p.sku}</div>
+                                    <TableRow key={p.productId} className="group hover:bg-slate-50/50 transition-colors duration-200">
+                                        <TableCell className="p-6">
+                                            <div className="font-bold text-slate-800 text-lg leading-tight">{p.name}</div>
+                                            <div className="text-[10px] text-slate-400 font-mono tracking-tighter uppercase mt-1">{p.sku}</div>
                                         </TableCell>
-                                        <TableCell>
-                                            <span className="px-2 py-0.5 rounded text-[10px] bg-slate-100 text-slate-600 font-bold uppercase">
-                                                {p.category || "General"}
-                                            </span>
-                                        </TableCell>
-                                        <TableCell className="text-right text-slate-600 text-sm">${Number(p.price).toFixed(2)}</TableCell>
-                                        <TableCell className="text-right font-medium">
-                                            {p.stockLevel}
-                                        </TableCell>
-                                        <TableCell className="text-right font-black text-slate-900">
-                                            ${(Number(p.stockLevel) * Number(p.price)).toFixed(2)}
+                                        <TableCell className="p-6 text-right font-black text-slate-700 font-mono">{p.stockLevel}</TableCell>
+                                        <TableCell className="p-6 text-right text-slate-500 font-medium">${Number(p.unitCost).toFixed(2)}</TableCell>
+                                        <TableCell className="p-6 text-right font-black text-slate-900 text-lg font-display">${p.totalValuation.toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell>
+                                        <TableCell className="p-6">
+                                            {Number(p.stockLevel) <= 0 ? (
+                                                <span className="px-3 py-1 bg-red-50 text-red-600 text-[10px] font-black uppercase rounded-full tracking-tighter border border-red-100">Out of Stock</span>
+                                            ) : Number(p.stockLevel) <= 5 ? (
+                                                <span className="px-3 py-1 bg-amber-50 text-amber-600 text-[10px] font-black uppercase rounded-full tracking-tighter border border-amber-100">Low Stock</span>
+                                            ) : (
+                                                <span className="px-3 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-black uppercase rounded-full tracking-tighter border border-emerald-100">Healthy</span>
+                                            )}
                                         </TableCell>
                                     </TableRow>
                                 ))}
@@ -325,3 +304,4 @@ export default function InventoryReportsPage() {
         </Layout>
     );
 }
+

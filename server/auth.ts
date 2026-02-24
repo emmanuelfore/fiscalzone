@@ -18,7 +18,7 @@ export function setupAuth(app: Express) {
   // Auth Middleware
   app.use(async (req: any, res: Response, next: NextFunction) => {
     // Skip auth for public routes (if any)
-    if (!req.path.startsWith("/api")) {
+    if (!req.path.startsWith("/api") || req.path.startsWith("/api/health")) {
       return next();
     }
 

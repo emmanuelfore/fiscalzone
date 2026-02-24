@@ -467,71 +467,72 @@ export default function LandingPage() {
                 </div>
             </section>
 
-            {/* Still have questions CTA */}
-            <div className="mt-16 text-center p-12 rounded-xl bg-slate-50 border border-slate-200">
-                <h3 className="text-2xl font-bold text-slate-900 mb-3">
-                    Strategic Partnerships
-                </h3>
-                <p className="text-slate-600 mb-8 max-w-md mx-auto font-medium">
-                    Our team is ready to discuss how FiscalStack can integrate into your enterprise workflow.
-                </p>
-                <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                    <Button className="btn-gradient rounded-md px-8 h-12 font-bold" onClick={() => setContactFormOpen(true)}>
-                        <Globe className="w-4 h-4 mr-2" />
-                        Contact Enterprise Support
-                    </Button>
-                </div>
-            </div>
-        </div>
-            </section >
-
-        {/* Footer */ }
-        < footer className = "bg-white border-t border-slate-200 pt-20 pb-10 relative z-10" >
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="grid md:grid-cols-4 gap-12 mb-16">
-                    <div className="col-span-2">
-                        <img src="/fiscalstack-logo.png" alt="FiscalStack" className="h-8 mb-6" />
-                        <p className="text-slate-500 max-w-sm font-medium leading-relaxed">
-                            The definitive fiscalization platform for Zimbabwe's modern economy. Built for compliance, engineered for scale.
+            {/* CTA Section */}
+            <section className="py-20 bg-white relative z-10">
+                <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div className="text-center p-12 rounded-xl bg-slate-50 border border-slate-200">
+                        <h3 className="text-2xl font-bold text-slate-900 mb-3">
+                            Strategic Partnerships
+                        </h3>
+                        <p className="text-slate-600 mb-8 max-w-md mx-auto font-medium">
+                            Our team is ready to discuss how FiscalStack can integrate into your enterprise workflow.
                         </p>
-                    </div>
-                    <div>
-                        <h4 className="font-bold text-slate-900 mb-4 uppercase tracking-widest text-xs">Platform</h4>
-                        <ul className="space-y-2">
-                            {["Features", "Pricing", "FAQ"].map(item => (
-                                <li key={item}>
-                                    <a href={`#${item.toLowerCase()}`} className="text-slate-500 hover:text-slate-900 transition-colors font-medium">{item}</a>
-                                </li>
-                            ))}
-                        </ul>
-                    </div>
-                    <div>
-                        <h4 className="font-bold text-slate-900 mb-4 uppercase tracking-widest text-xs">Contact</h4>
-                        <p className="text-slate-500 font-medium mb-2">info@fiscalstack.co.zw</p>
-                        <p className="text-slate-500 font-medium">Harare, Zimbabwe</p>
+                        <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                            <Button className="btn-gradient rounded-md px-8 h-12 font-bold" onClick={() => setContactFormOpen(true)}>
+                                <Globe className="w-4 h-4 mr-2" />
+                                Contact Enterprise Support
+                            </Button>
+                        </div>
                     </div>
                 </div>
-                <div className="pt-8 border-t border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4">
-                    <p className="text-sm text-slate-400 font-medium">© 2026 FiscalStack. All rights reserved.</p>
-                    <div className="flex gap-6">
-                        <a href="#" className="text-sm text-slate-400 hover:text-slate-900 transition-colors font-medium">Privacy Policy</a>
-                        <a href="#" className="text-sm text-slate-400 hover:text-slate-900 transition-colors font-medium">Terms of Service</a>
+            </section>
+
+            {/* Footer */}
+            <footer className="bg-white border-t border-slate-200 pt-20 pb-10 relative z-10">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div className="grid md:grid-cols-4 gap-12 mb-16">
+                        <div className="col-span-2">
+                            <img src="/fiscalstack-logo.png" alt="FiscalStack" className="h-8 mb-6" />
+                            <p className="text-slate-500 max-w-sm font-medium leading-relaxed">
+                                The definitive fiscalization platform for Zimbabwe's modern economy. Built for compliance, engineered for scale.
+                            </p>
+                        </div>
+                        <div>
+                            <h4 className="font-bold text-slate-900 mb-4 uppercase tracking-widest text-xs">Platform</h4>
+                            <ul className="space-y-2">
+                                {["Features", "Pricing", "FAQ"].map(item => (
+                                    <li key={item}>
+                                        <a href={`#${item.toLowerCase()}`} className="text-slate-500 hover:text-slate-900 transition-colors font-medium">{item}</a>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                        <div>
+                            <h4 className="font-bold text-slate-900 mb-4 uppercase tracking-widest text-xs">Contact</h4>
+                            <p className="text-slate-500 font-medium mb-2">info@fiscalstack.co.zw</p>
+                            <p className="text-slate-500 font-medium">Harare, Zimbabwe</p>
+                        </div>
+                    </div>
+                    <div className="pt-8 border-t border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4">
+                        <p className="text-sm text-slate-400 font-medium">© 2026 FiscalStack. All rights reserved.</p>
+                        <div className="flex gap-6">
+                            <a href="#" className="text-sm text-slate-400 hover:text-slate-900 transition-colors font-medium">Privacy Policy</a>
+                            <a href="#" className="text-sm text-slate-400 hover:text-slate-900 transition-colors font-medium">Terms of Service</a>
+                        </div>
                     </div>
                 </div>
-            </div>
-            </footer >
+            </footer>
 
-        {/* Contact Form Modal */ }
-    {
-        contactFormOpen && (
-            <Suspense fallback={null}>
-                <ContactForm isOpen={contactFormOpen} onClose={() => setContactFormOpen(false)} />
-            </Suspense>
-        )
-    }
+            {/* Contact Form Modal */}
+            {contactFormOpen && (
+                <Suspense fallback={null}>
+                    <ContactForm isOpen={contactFormOpen} onClose={() => setContactFormOpen(false)} />
+                </Suspense>
+            )}
 
-    {/* WhatsApp Floating Bubble */ }
-    <WhatsAppBubble />
-        </div >
+            {/* WhatsApp Floating Bubble */}
+            <WhatsAppBubble />
+        </div>
     );
 }
+

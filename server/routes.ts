@@ -57,6 +57,11 @@ export async function registerRoutes(
 ): Promise<Server> {
   setupAuth(app);
 
+  // Connectivity Health Check (Public)
+  app.get("/api/health", (_req, res) => {
+    res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
   // CSV Upload Configuration
   const csvUpload = multer({
     storage: multer.memoryStorage(),

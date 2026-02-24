@@ -47,13 +47,71 @@ import { useAuth } from "@/hooks/use-auth";
 import { useCompanies } from "@/hooks/use-companies";
 import { useActiveCompany } from "@/hooks/use-active-company";
 import { Loader2 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+
+function useIsOnline() {
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  useEffect(() => {
+    // 1. Listen for hardware events (fastest response for Wi-Fi toggles)
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    // 2. Active Polling (backup for when hardware events are unreliable/laggy)
+    const checkConnection = async () => {
+      // If hardware is definitely offline, trust it immediately
+      if (!navigator.onLine) {
+        setIsOnline(false);
+        return;
+      }
+
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+        // Ping the public health endpoint with a cache-buster to force a real network check
+        const response = await fetch(`/api/health?_t=${Date.now()}`, {
+          method: 'GET',
+          cache: 'no-store',
+          signal: controller.signal
+        }).catch(() => null);
+
+        clearTimeout(timeoutId);
+
+        // Treat any successful non-503 response as "Online"
+        // (status 503 is returned by our SW when the network is actually unreachable)
+        if (response && response.ok && response.status !== 503) {
+          setIsOnline(true);
+        } else {
+          setIsOnline(false);
+        }
+      } catch (err) {
+        setIsOnline(false);
+      }
+    };
+
+    // Poll every 5 seconds for a tighter response loop
+    const interval = setInterval(checkConnection, 5000);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+      clearInterval(interval);
+    };
+  }, []);
+
+  return isOnline;
+}
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
   const { data: companies, isLoading: isLoadingCompanies, isSuccess: isCompaniesSuccess, isError: isCompaniesError } = useCompanies(!!user);
   const { activeCompany, isLoading: isLoadingActiveCompany } = useActiveCompany();
   const [location] = useLocation();
+  const isOnline = useIsOnline();
 
   if (isLoading || isLoadingCompanies || isLoadingActiveCompany) {
     return (
@@ -72,7 +130,7 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   // 2. The query succeeded (didn't catch an error)
   // 3. We have a non-null result that is definitely an empty array.
   // This avoids accidental redirects during network hiccups or if the offline cache is empty.
-  const isPossiblyOffline = !navigator.onLine || isCompaniesError;
+  const isPossiblyOffline = !isOnline || isCompaniesError;
   const hasConfirmedEmpty = !isPossiblyOffline && isCompaniesSuccess && Array.isArray(companies) && companies.length === 0;
 
   if (hasConfirmedEmpty) {
@@ -81,7 +139,7 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 
   // Redirection Logic
   const isPosPath = location.startsWith("/pos");
-  const isOffline = !navigator.onLine || isCompaniesError;
+  const isOffline = !isOnline || isCompaniesError;
 
   // 1. IF OFFLINE: Force POS access only
   if (isOffline && !isPosPath) {
@@ -99,12 +157,22 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
     }
   }
 
-  return <Component />;
+  return (
+    <>
+      {!isOnline && (
+        <div className="fixed top-0 left-0 right-0 z-[9999] bg-destructive text-destructive-foreground py-1 px-4 text-center text-xs font-bold animate-in slide-in-from-top duration-300">
+          OFFLINE MODE — Redirecting to POS Terminal
+        </div>
+      )}
+      <Component />
+    </>
+  );
 }
 
 function OnboardingRoute() {
   const { user, isLoading } = useAuth();
   const { data: companies, isLoading: isLoadingCompanies, isError } = useCompanies(!!user);
+  const isOnline = useIsOnline();
 
   if (isLoading || isLoadingCompanies) {
     return (
@@ -119,7 +187,7 @@ function OnboardingRoute() {
   }
 
   // Always redirect to POS as requested
-  if (!navigator.onLine || isError) {
+  if (!isOnline || isError) {
     return <Redirect to="/pos" />;
   }
 
@@ -137,11 +205,12 @@ function OnboardingRoute() {
 
 function Router() {
   const { user, isLoading } = useAuth();
+  const isOnline = useIsOnline();
 
   return (
     <Switch>
       <Route path="/auth">
-        {user ? <Redirect to={navigator.onLine ? "/dashboard" : "/pos"} /> : <AuthPage />}
+        {user ? <Redirect to={isOnline ? "/dashboard" : "/pos"} /> : <AuthPage />}
       </Route>
       <Route path="/forgot-password" component={ForgotPasswordPage} />
       <Route path="/reset-password" component={ResetPasswordPage} />

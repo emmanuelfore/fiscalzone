@@ -39,37 +39,37 @@ export default function LandingPage() {
     const y1 = useTransform(scrollY, [0, 500], [0, 200]);
     const y2 = useTransform(scrollY, [0, 500], [0, -100]);
 
-    // Colorful feature icons map
+    // Corporate feature icons map
     const featureColors = [
-        { icon: Shield, color: "text-violet-600", bg: "bg-violet-100", title: "ZIMRA Compliant", desc: "Always up to date with latest tax regulations." },
-        { icon: Zap, color: "text-amber-600", bg: "bg-amber-100", title: "FDMS Sync", desc: "Real-time fiscal device synchronization." },
-        { icon: QrCode, color: "text-blue-600", bg: "bg-blue-100", title: "Smart QR Codes", desc: "Embeds fiscal signatures automatically." },
-        { icon: Calculator, color: "text-emerald-600", bg: "bg-emerald-100", title: "Auto-Tax", desc: "VAT and multiple tax rate automated calculation." },
-        { icon: LayoutDashboard, color: "text-orange-600", bg: "bg-orange-100", title: "Smart POS", desc: "Complete Point of Sale system for retail operations." },
-        { icon: Check, color: "text-indigo-600", bg: "bg-indigo-100", title: "Inventory", desc: "Track stock levels and manage products easily." },
+        { icon: Shield, color: "text-slate-900", bg: "bg-slate-100", title: "ZIMRA Compliant", desc: "Always up to date with latest tax regulations." },
+        { icon: Zap, color: "text-slate-900", bg: "bg-slate-100", title: "FDMS Sync", desc: "Real-time fiscal device synchronization." },
+        { icon: QrCode, color: "text-slate-900", bg: "bg-slate-100", title: "Smart QR Codes", desc: "Embeds fiscal signatures automatically." },
+        { icon: Calculator, color: "text-slate-900", bg: "bg-slate-100", title: "Auto-Tax", desc: "VAT and multiple tax rate automated calculation." },
+        { icon: LayoutDashboard, color: "text-slate-900", bg: "bg-slate-100", title: "Smart POS", desc: "Complete Point of Sale system for retail operations." },
+        { icon: Check, color: "text-slate-900", bg: "bg-slate-100", title: "Inventory", desc: "Track stock levels and manage products easily." },
     ];
 
     return (
-        <div className="min-h-screen bg-slate-50 font-sans text-slate-900 selection:bg-violet-500/20 px-0 overflow-x-hidden">
+        <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-slate-900/10 px-0 overflow-x-hidden">
             {/* Top Navigation */}
-            <nav className="fixed top-0 inset-x-0 z-50 glass border-b border-white/20 transition-all duration-300">
+            <nav className="fixed top-0 inset-x-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200 transition-all duration-300">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex justify-between items-center h-20">
                         <div className="flex items-center gap-2">
-                            <img src="/fiscalstack-logo.png" alt="FiscalStack" className="h-10" />
+                            <img src="/fiscalstack-logo.png" alt="FiscalStack" className="h-8" />
                         </div>
 
                         <div className="hidden md:flex items-center space-x-8">
                             {["Features", "Pricing", "FAQ"].map((item) => (
-                                <a key={item} href={`#${item.toLowerCase()}`} className="text-sm font-medium text-slate-600 hover:text-violet-600 transition-colors">
+                                <a key={item} href={`#${item.toLowerCase()}`} className="text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors">
                                     {item}
                                 </a>
                             ))}
                             <div className="flex items-center gap-3 pl-4 border-l border-slate-200">
-                                <Button variant="ghost" className="font-medium hover:bg-violet-50 hover:text-violet-700" onClick={() => setLocation("/auth")}>
+                                <Button variant="ghost" className="font-semibold text-slate-600 hover:text-slate-900" onClick={() => setLocation("/auth")}>
                                     Sign In
                                 </Button>
-                                <Button onClick={() => setLocation("/auth?mode=signup")} className="btn-gradient rounded-full px-6">
+                                <Button onClick={() => setLocation("/auth?mode=signup")} className="btn-gradient rounded-md px-6 font-bold">
                                     Get Started
                                 </Button>
                             </div>
@@ -99,12 +99,10 @@ export default function LandingPage() {
                 </div>
             )}
 
-            {/* Premium Background */}
-            <div className="fixed inset-0 pointer-events-none z-0 bg-slate-50">
-                <div className="absolute top-0 inset-x-0 h-[600px] bg-gradient-to-b from-indigo-50/50 via-slate-50/50 to-slate-50" />
-                <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808008_1px,transparent_1px),linear-gradient(to_bottom,#80808008_1px,transparent_1px)] bg-[size:24px_24px]" />
-                <div className="absolute right-0 top-0 -z-10 h-[600px] w-[600px] rounded-full bg-violet-200/20 blur-[100px]" />
-                <div className="absolute left-0 top-1/2 -z-10 h-[400px] w-[400px] rounded-full bg-blue-200/20 blur-[100px]" />
+            {/* Simple Corporate Background */}
+            <div className="fixed inset-0 pointer-events-none z-0">
+                <div className="absolute inset-0 bg-slate-50/50" />
+                <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808005_1px,transparent_1px),linear-gradient(to_bottom,#80808005_1px,transparent_1px)] bg-[size:40px_40px]" />
             </div>
 
             {/* Hero Section */}
@@ -117,39 +115,33 @@ export default function LandingPage() {
                             transition={{ duration: 0.6 }}
                             className="text-center lg:text-left"
                         >
-                            <h1 className="text-5xl sm:text-6xl lg:text-7xl font-display font-bold text-slate-900 leading-[1.1] mb-8 tracking-tight">
-                                Fiscal Intelligence <br />
-                                <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-600 via-indigo-600 to-blue-600">
-                                    Reimagined.
+                            <Badge variant="secondary" className="mb-6 px-4 py-1.5 rounded-full bg-slate-100 text-slate-900 border-none font-bold uppercase tracking-wider text-[10px]">
+                                Enterprise Fiscalization Platform
+                            </Badge>
+                            <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold text-slate-900 leading-[1.05] mb-8 tracking-tight">
+                                Modern Fiscal <br />
+                                <span className="text-slate-500">
+                                    Software solutions.
                                 </span>
                             </h1>
 
                             <p className="text-xl text-slate-600 mb-10 leading-relaxed max-w-2xl mx-auto lg:mx-0 font-medium">
-                                The all-in-one fiscalization platform for Zimbabwe's modern businesses.
-                                Seamlessly sync with ZIMRA, manage inventory, and drive growth with smart analytics.
+                                The trusted fiscalization partner for Zimbabwe's leading enterprises.
+                                Reliable ZIMRA synchronization, advanced inventory management, and high-security compliance.
                             </p>
 
                             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-                                <Button size="lg" className="h-14 px-8 rounded-full text-lg btn-gradient border-none hover:shadow-lg hover:shadow-indigo-500/20 transition-all duration-300 transform hover:-translate-y-1" onClick={() => setLocation("/auth?mode=signup")}>
-                                    Start Free Trial <ArrowRight className="ml-2 w-5 h-5" />
+                                <Button size="lg" className="h-14 px-8 rounded-md text-lg btn-gradient border-none hover:shadow-xl transition-all duration-300" onClick={() => setLocation("/auth?mode=signup")}>
+                                    Get Started Today <ArrowRight className="ml-2 w-5 h-5" />
                                 </Button>
-                                <Button size="lg" variant="ghost" className="h-14 px-8 rounded-full text-lg text-slate-700 hover:bg-white hover:shadow-md transition-all duration-300" onClick={() => setContactFormOpen(true)}>
-                                    Book a Demo
+                                <Button size="lg" variant="outline" className="h-14 px-8 rounded-md text-lg text-slate-900 border-slate-200 hover:bg-slate-50 transition-all duration-300" onClick={() => setContactFormOpen(true)}>
+                                    Contact Sales
                                 </Button>
                             </div>
 
-                            <div className="mt-12 flex items-center justify-center lg:justify-start gap-8 border-t border-slate-200/50 pt-8">
-                                <div className="flex items-center gap-3">
-                                    <div className="flex -space-x-3">
-                                        {[1, 2, 3, 4].map(i => (
-                                            <div key={i} className={`w-8 h-8 rounded-full border-2 border-white bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-500 overflow-hidden`}>
-                                                <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${i}`} alt="Avatar" className="w-full h-full" />
-                                            </div>
-                                        ))}
-                                    </div>
-                                    <div className="text-sm font-medium text-slate-600">
-                                        Trusted by <span className="font-bold text-slate-900">500+</span> businesses
-                                    </div>
+                            <div className="mt-12 flex items-center justify-center lg:justify-start gap-8 border-t border-slate-200 pt-8">
+                                <div className="text-sm font-semibold text-slate-500 uppercase tracking-widest">
+                                    Trusted by Zimbabwe's Finest
                                 </div>
                             </div>
                         </motion.div>
@@ -314,20 +306,20 @@ export default function LandingPage() {
                 </div>
             </section>
 
-            {/* Features Colorful Grid */}
-            <section id="features" className="py-32 bg-slate-50 relative z-10">
+            {/* Features Grid */}
+            <section id="features" className="py-32 bg-white relative z-10">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="text-center max-w-3xl mx-auto mb-20">
-                        <Badge variant="outline" className="mb-4 border-indigo-200 text-indigo-600 bg-indigo-50">Power Features</Badge>
-                        <h2 className="text-4xl lg:text-5xl font-display font-bold text-slate-900 mb-6">
-                            Everything you need to <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-600 to-indigo-500">succeed.</span>
+                        <Badge variant="outline" className="mb-4 border-slate-200 text-slate-500 bg-slate-50 font-bold uppercase tracking-widest text-[10px]">Solutions</Badge>
+                        <h2 className="text-4xl lg:text-5xl font-bold text-slate-900 mb-6">
+                            Enterprise-ready <span className="text-slate-500">Infrastructure.</span>
                         </h2>
-                        <p className="text-xl text-slate-600">
-                            Built for speed, compliance, and growth.
+                        <p className="text-xl text-slate-600 font-medium">
+                            Robust, compliant, and scalable fiscal solutions for every business size.
                         </p>
                     </div>
 
-                    <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
                         {featureColors.map((f, i) => (
                             <motion.div
                                 key={i}
@@ -335,12 +327,12 @@ export default function LandingPage() {
                                 whileInView={{ opacity: 1, y: 0 }}
                                 viewport={{ once: true }}
                                 transition={{ delay: i * 0.1 }}
-                                className={`group p-8 rounded-3xl bg-white border border-slate-100 hover:border-indigo-100/50 hover:shadow-2xl hover:shadow-indigo-500/10 hover:-translate-y-1 transition-all duration-300 ${i === 0 || i === 3 ? 'md:col-span-2' : ''}`}
+                                className="group p-10 rounded-xl bg-white border border-slate-200 hover:border-slate-300 hover:shadow-xl transition-all duration-300"
                             >
-                                <div className={`w-14 h-14 rounded-2xl ${f.bg} flex items-center justify-center ${f.color} mb-6 transition-transform group-hover:scale-110 group-hover:rotate-3 duration-300`}>
-                                    <f.icon className="w-7 h-7" />
+                                <div className={`w-12 h-12 rounded-lg ${f.bg} flex items-center justify-center ${f.color} mb-6 transition-transform group-hover:scale-105 duration-300`}>
+                                    <f.icon className="w-6 h-6" />
                                 </div>
-                                <h3 className="text-xl font-bold text-slate-900 mb-3 font-display">{f.title}</h3>
+                                <h3 className="text-xl font-bold text-slate-900 mb-3">{f.title}</h3>
                                 <p className="text-slate-600 leading-relaxed font-medium opacity-80">
                                     {f.desc}
                                 </p>
@@ -351,21 +343,21 @@ export default function LandingPage() {
             </section>
 
             {/* Pricing Section */}
-            <section id="pricing" className="py-32 bg-white relative z-10">
+            <section id="pricing" className="py-32 bg-slate-50 relative z-10">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="text-center mb-20 px-4">
-                        <Badge variant="outline" className="mb-4 border-indigo-200 text-indigo-600 bg-indigo-50">Pricing</Badge>
-                        <h2 className="text-4xl lg:text-5xl font-display font-bold text-slate-900 mb-4">
-                            Transparent Pricing
+                        <Badge variant="outline" className="mb-4 border-slate-200 text-slate-500 bg-white font-bold uppercase tracking-widest text-[10px]">Investment Plans</Badge>
+                        <h2 className="text-4xl lg:text-5xl font-bold text-slate-900 mb-4">
+                            Transparent Corporate Pricing
                         </h2>
-                        <p className="text-xl text-slate-600">Start for free, scale as you grow.</p>
+                        <p className="text-xl text-slate-600 font-medium">Scalable solutions for growing enterprises.</p>
                     </div>
 
                     <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
                         {[
-                            { name: "Test Mode", price: "Free", desc: "For development & testing", features: ["Unlimited Invoices (Test)", "Sandboxed FDMS", "API Access", "Dev Support"] },
-                            { name: "Production", price: "$150", popular: true, desc: "Per device / year", features: ["Unlimited Invoices", "Live FDMS Sync", "Priority Support", "ZIMRA Compliant"] },
-                            { name: "Enterprise", price: "Custom", desc: "For large organizations", features: ["Unlimited Users", "Dedicated Manager", "SLA Assurance", "Custom Integration"] },
+                            { name: "Development", price: "Free", desc: "System testing & integration", features: ["Unlimited Invoices (Test)", "Sandboxed FDMS Sync", "API Documentation", "Community Support"] },
+                            { name: "Professional", price: "$150", popular: true, desc: "Per device / per annum", features: ["Unlimited Invoices", "Real-time FDMS Sync", "Standard Support", "Full Compliance"] },
+                            { name: "Enterprise", price: "Custom", desc: "Large scale deployment", features: ["Unlimited Users", "Dedicated Account Manager", "SLA Agreements", "White-glove Setups"] },
                         ].map((plan, i) => (
                             <motion.div
                                 key={i}
@@ -373,27 +365,27 @@ export default function LandingPage() {
                                 whileInView={{ opacity: 1, y: 0 }}
                                 viewport={{ once: true }}
                                 transition={{ delay: i * 0.1 }}
-                                className={`relative p-10 rounded-[2.5rem] bg-slate-50 border ${plan.popular ? 'border-indigo-500 ring-4 ring-indigo-500/10 shadow-2xl shadow-indigo-500/10' : 'border-slate-200'} flex flex-col hover:scale-105 transition-transform duration-300`}
+                                className={`relative p-10 rounded-xl bg-white border ${plan.popular ? 'border-slate-900 ring-1 ring-slate-900 shadow-2xl' : 'border-slate-200'} flex flex-col hover:translate-y-[-4px] transition-all duration-300`}
                             >
-                                {plan.popular && <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-indigo-600 text-white px-6 py-2 rounded-full text-xs font-bold uppercase tracking-wide shadow-lg shadow-indigo-500/30">Most Popular</div>}
+                                {plan.popular && <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 text-white px-4 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest shadow-lg">Recommended</div>}
                                 <div className="mb-8">
-                                    <h3 className="text-2xl font-bold font-display text-slate-900">{plan.name}</h3>
-                                    <p className="text-sm text-slate-500 mb-6 font-medium">{plan.desc}</p>
+                                    <h3 className="text-2xl font-bold text-slate-900">{plan.name}</h3>
+                                    <p className="text-sm text-slate-500 mb-6 font-semibold">{plan.desc}</p>
                                     <div className="flex items-baseline gap-1">
                                         <span className="text-5xl font-bold text-slate-900 tracking-tight">{plan.price}</span>
-                                        {plan.price !== "Custom" && <span className="text-slate-500 font-medium">/yr</span>}
+                                        {plan.price !== "Custom" && <span className="text-slate-500 font-bold uppercase text-xs">/ Year</span>}
                                     </div>
                                 </div>
                                 <ul className="space-y-4 mb-10 flex-1">
                                     {plan.features.map((feat) => (
-                                        <li key={feat} className="flex items-center gap-3 text-sm text-slate-700 font-medium">
-                                            <div className={`w-6 h-6 rounded-full ${plan.popular ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-200 text-slate-600'} flex items-center justify-center flex-shrink-0`}><Check className="w-3.5 h-3.5" /></div>
+                                        <li key={feat} className="flex items-center gap-3 text-sm text-slate-700 font-semibold">
+                                            <div className="w-5 h-5 rounded-full bg-slate-100 text-slate-900 flex items-center justify-center flex-shrink-0"><Check className="w-3 h-3" /></div>
                                             {feat}
                                         </li>
                                     ))}
                                 </ul>
-                                <Button size="lg" className={`w-full h-14 rounded-2xl font-bold text-base ${plan.popular ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/25' : 'bg-white border-2 border-slate-200 text-slate-900 hover:border-slate-300 hover:bg-slate-50'}`} onClick={() => setLocation("/auth?mode=signup")}>
-                                    {plan.price === "Custom" ? "Contact Sales" : "Get Started"}
+                                <Button size="lg" className={`w-full h-14 rounded-md font-bold text-sm ${plan.popular ? 'bg-slate-900 hover:bg-slate-800 text-white' : 'bg-white border border-slate-200 text-slate-900 hover:bg-slate-50'}`} onClick={() => setLocation("/auth?mode=signup")}>
+                                    {plan.price === "Custom" ? "Talk to Sales" : "Get Started"}
                                 </Button>
                             </motion.div>
                         ))}
@@ -403,25 +395,20 @@ export default function LandingPage() {
 
             {/* FAQ Section */}
             <section id="faq" className="py-24 bg-white relative z-10 overflow-hidden">
-                {/* Background Decoration */}
-                <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-violet-500/10 to-cyan-500/10 rounded-full blur-3xl -z-10" />
-                <div className="absolute bottom-0 left-0 w-96 h-96 bg-gradient-to-tr from-fuchsia-500/10 to-orange-500/10 rounded-full blur-3xl -z-10" />
-
                 <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="text-center mb-16">
-                        <Badge variant="outline" className="mb-4 border-violet-200 text-violet-600 bg-violet-50">
-                            <HelpCircle className="w-3 h-3 mr-1" />
-                            FAQ
+                        <Badge variant="outline" className="mb-4 border-slate-200 text-slate-500 bg-slate-50 font-bold uppercase tracking-widest text-[10px]">
+                            Resources
                         </Badge>
-                        <h2 className="text-4xl font-display font-bold text-slate-900 mb-4">
-                            Frequently Asked <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-600 to-cyan-500">Questions</span>
+                        <h2 className="text-4xl font-bold text-slate-900 mb-4">
+                            Frequently Asked <span className="text-slate-500">Questions.</span>
                         </h2>
-                        <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-                            Everything you need to know about FiscalStack and ZIMRA compliance.
+                        <p className="text-lg text-slate-600 max-w-2xl mx-auto font-medium">
+                            Expert insights into Zimbabwe's fiscal landscape.
                         </p>
                     </div>
 
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                         {[
                             {
                                 question: "What is ZIMRA compliance and why do I need it?",
@@ -433,11 +420,7 @@ export default function LandingPage() {
                             },
                             {
                                 question: "Can I try FiscalStack before committing to a paid plan?",
-                                answer: "Absolutely! Our Starter plan is completely free and allows you to create up to 10 invoices per month. This is perfect for freelancers or small businesses just getting started. You can upgrade to Pro or Enterprise at any time as your business grows."
-                            },
-                            {
-                                question: "What happens to my data if I cancel my subscription?",
-                                answer: "Your data is always yours. If you cancel, you'll have 30 days to export all your invoices, customer data, and reports. We provide easy export options in multiple formats (PDF, Excel, CSV). After 30 days, data is securely deleted from our servers."
+                                answer: "Absolutely! Our Development plan is free and allows you to integrate and test your systems in a sandboxed environment. You can upgrade to Professional or Enterprise at any time as your business requirements evolve."
                             },
                             {
                                 question: "Is my financial data secure?",
@@ -445,39 +428,25 @@ export default function LandingPage() {
                             },
                             {
                                 question: "Can I use FiscalStack for multiple businesses?",
-                                answer: "Yes! Our Pro and Enterprise plans support multiple company profiles under one account. You can easily switch between businesses, and each company maintains its own invoices, customers, and reports. This is perfect for accountants or entrepreneurs managing multiple ventures."
+                                answer: "Yes! Our Enterprise plans support multi-entity management. You can manage multiple company profiles, branch locations, and fiscal devices from a single unified dashboard."
                             },
                             {
-                                question: "Do you provide customer support?",
-                                answer: "We offer comprehensive support across all plans. Starter users get email support with 48-hour response times. Pro users receive priority email support with 24-hour responses. Enterprise customers get dedicated account managers, phone support, and guaranteed SLAs with same-day responses."
-                            },
-                            {
-                                question: "Can I customize my invoice templates?",
-                                answer: "Yes! FiscalStack allows you to customize invoice templates with your company logo, brand colors, and custom fields. You can create multiple templates for different types of invoices or clients. All customizations maintain ZIMRA compliance automatically."
+                                question: "Do you provide dedicated support?",
+                                answer: "We provide professional support across all plans. Professional users get priority assistance, while Enterprise clients receive dedicated account management, phone support, and guaranteed service level agreements (SLAs)."
                             }
                         ].map((faq, index) => (
-                            <motion.div
+                            <div
                                 key={index}
-                                initial={{ opacity: 0, y: 20 }}
-                                whileInView={{ opacity: 1, y: 0 }}
-                                viewport={{ once: true }}
-                                transition={{ delay: index * 0.05 }}
-                                className="bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden hover:shadow-lg transition-shadow duration-300"
+                                className="bg-white border border-slate-200 rounded-lg overflow-hidden transition-all duration-200 hover:border-slate-300"
                             >
                                 <button
                                     onClick={() => setOpenFaqIndex(openFaqIndex === index ? null : index)}
-                                    className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-white transition-colors duration-200"
+                                    className="w-full px-6 py-5 flex items-center justify-between text-left"
                                 >
-                                    <span className="font-semibold text-slate-900 pr-4 text-lg">
+                                    <span className="font-bold text-slate-900 pr-4 text-base">
                                         {faq.question}
                                     </span>
-                                    <motion.div
-                                        animate={{ rotate: openFaqIndex === index ? 180 : 0 }}
-                                        transition={{ duration: 0.3 }}
-                                        className="flex-shrink-0"
-                                    >
-                                        <ChevronDown className={`w-5 h-5 ${openFaqIndex === index ? 'text-violet-600' : 'text-slate-400'}`} />
-                                    </motion.div>
+                                    <ChevronDown className={`w-5 h-5 transition-transform duration-300 ${openFaqIndex === index ? 'rotate-180 text-slate-900' : 'text-slate-400'}`} />
                                 </button>
                                 <motion.div
                                     initial={false}
@@ -488,61 +457,81 @@ export default function LandingPage() {
                                     transition={{ duration: 0.3, ease: "easeInOut" }}
                                     className="overflow-hidden"
                                 >
-                                    <div className="px-6 pb-5 text-slate-600 leading-relaxed border-t border-slate-200 pt-4">
+                                    <div className="px-6 pb-6 text-slate-600 leading-relaxed font-medium border-t border-slate-100 pt-4">
                                         {faq.answer}
                                     </div>
                                 </motion.div>
-                            </motion.div>
+                            </div>
                         ))}
                     </div>
-
-                    {/* Still have questions CTA */}
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true }}
-                        className="mt-16 text-center p-8 rounded-3xl bg-gradient-to-br from-violet-50 to-cyan-50 border border-violet-100"
-                    >
-                        <h3 className="text-2xl font-bold text-slate-900 mb-3">
-                            Still have questions?
-                        </h3>
-                        <p className="text-slate-600 mb-6 max-w-md mx-auto">
-                            Our support team is here to help. Get in touch and we'll respond as soon as possible.
-                        </p>
-                        <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                            <Button className="btn-gradient rounded-full px-6" onClick={() => setContactFormOpen(true)}>
-                                <Globe className="w-4 h-4 mr-2" />
-                                Contact Support
-                            </Button>
-                        </div>
-                    </motion.div>
                 </div>
             </section>
 
-            {/* Footer */}
-            <footer className="bg-white border-t border-slate-200 pt-16 pb-8 relative z-10">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-                        <div className="flex items-center gap-2">
-                            <img src="/fiscalstack-logo.png" alt="FiscalStack" className="h-8" />
-                        </div>
-                        <div className="flex flex-col items-end gap-1">
-                            <a href="mailto:info@fiscalstack.co.zw" className="text-sm text-slate-600 hover:text-violet-600 transition-colors">info@fiscalstack.co.zw</a>
-                            <p className="text-sm text-slate-500">© 2026 FiscalStack. Made with ❤️ in Zimbabwe.</p>
-                        </div>
+            {/* Still have questions CTA */}
+            <div className="mt-16 text-center p-12 rounded-xl bg-slate-50 border border-slate-200">
+                <h3 className="text-2xl font-bold text-slate-900 mb-3">
+                    Strategic Partnerships
+                </h3>
+                <p className="text-slate-600 mb-8 max-w-md mx-auto font-medium">
+                    Our team is ready to discuss how FiscalStack can integrate into your enterprise workflow.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                    <Button className="btn-gradient rounded-md px-8 h-12 font-bold" onClick={() => setContactFormOpen(true)}>
+                        <Globe className="w-4 h-4 mr-2" />
+                        Contact Enterprise Support
+                    </Button>
+                </div>
+            </div>
+        </div>
+            </section >
+
+        {/* Footer */ }
+        < footer className = "bg-white border-t border-slate-200 pt-20 pb-10 relative z-10" >
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="grid md:grid-cols-4 gap-12 mb-16">
+                    <div className="col-span-2">
+                        <img src="/fiscalstack-logo.png" alt="FiscalStack" className="h-8 mb-6" />
+                        <p className="text-slate-500 max-w-sm font-medium leading-relaxed">
+                            The definitive fiscalization platform for Zimbabwe's modern economy. Built for compliance, engineered for scale.
+                        </p>
+                    </div>
+                    <div>
+                        <h4 className="font-bold text-slate-900 mb-4 uppercase tracking-widest text-xs">Platform</h4>
+                        <ul className="space-y-2">
+                            {["Features", "Pricing", "FAQ"].map(item => (
+                                <li key={item}>
+                                    <a href={`#${item.toLowerCase()}`} className="text-slate-500 hover:text-slate-900 transition-colors font-medium">{item}</a>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 className="font-bold text-slate-900 mb-4 uppercase tracking-widest text-xs">Contact</h4>
+                        <p className="text-slate-500 font-medium mb-2">info@fiscalstack.co.zw</p>
+                        <p className="text-slate-500 font-medium">Harare, Zimbabwe</p>
                     </div>
                 </div>
-            </footer>
+                <div className="pt-8 border-t border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4">
+                    <p className="text-sm text-slate-400 font-medium">© 2026 FiscalStack. All rights reserved.</p>
+                    <div className="flex gap-6">
+                        <a href="#" className="text-sm text-slate-400 hover:text-slate-900 transition-colors font-medium">Privacy Policy</a>
+                        <a href="#" className="text-sm text-slate-400 hover:text-slate-900 transition-colors font-medium">Terms of Service</a>
+                    </div>
+                </div>
+            </div>
+            </footer >
 
-            {/* Contact Form Modal */}
-            {contactFormOpen && (
-                <Suspense fallback={null}>
-                    <ContactForm isOpen={contactFormOpen} onClose={() => setContactFormOpen(false)} />
-                </Suspense>
-            )}
+        {/* Contact Form Modal */ }
+    {
+        contactFormOpen && (
+            <Suspense fallback={null}>
+                <ContactForm isOpen={contactFormOpen} onClose={() => setContactFormOpen(false)} />
+            </Suspense>
+        )
+    }
 
-            {/* WhatsApp Floating Bubble */}
-            <WhatsAppBubble />
-        </div>
+    {/* WhatsApp Floating Bubble */ }
+    <WhatsAppBubble />
+        </div >
     );
 }

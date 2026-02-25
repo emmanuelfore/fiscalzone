@@ -141,9 +141,16 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   const isPosPath = location.startsWith("/pos");
   const isOffline = !isOnline || isCompaniesError;
 
-  // 1. IF OFFLINE: Force POS access only
+  // hard-reload on disconnect
+  useEffect(() => {
+    if (isOffline && !isPosPath) {
+      window.location.href = "/pos";
+    }
+  }, [isOffline, isPosPath]);
+
+  // 1. IF OFFLINE: Force POS access only (extra fallback)
   if (isOffline && !isPosPath) {
-    return <Redirect to="/pos" />;
+    return null; // Let useEffect handle reload
   }
 
   // 2. IF ONLINE: Normal role-based restrictions
@@ -157,16 +164,7 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
     }
   }
 
-  return (
-    <>
-      {!isOnline && (
-        <div className="fixed top-0 left-0 right-0 z-[9999] bg-destructive text-destructive-foreground py-1 px-4 text-center text-xs font-bold animate-in slide-in-from-top duration-300">
-          OFFLINE MODE — Redirecting to POS Terminal
-        </div>
-      )}
-      <Component />
-    </>
-  );
+  return <Component />;
 }
 
 function OnboardingRoute() {

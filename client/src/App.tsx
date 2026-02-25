@@ -113,6 +113,16 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   const [location] = useLocation();
   const isOnline = useIsOnline();
 
+  const isPosPath = location.startsWith("/pos");
+  const isOffline = !isOnline || isCompaniesError;
+
+  // hard-reload on disconnect
+  useEffect(() => {
+    if (isOffline && !isPosPath) {
+      window.location.href = "/pos";
+    }
+  }, [isOffline, isPosPath]);
+
   if (isLoading || isLoadingCompanies || isLoadingActiveCompany) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -138,16 +148,6 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   }
 
   // Redirection Logic
-  const isPosPath = location.startsWith("/pos");
-  const isOffline = !isOnline || isCompaniesError;
-
-  // hard-reload on disconnect
-  useEffect(() => {
-    if (isOffline && !isPosPath) {
-      window.location.href = "/pos";
-    }
-  }, [isOffline, isPosPath]);
-
   // 1. IF OFFLINE: Force POS access only (extra fallback)
   if (isOffline && !isPosPath) {
     return null; // Let useEffect handle reload

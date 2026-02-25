@@ -29,11 +29,13 @@ export function useAuth() {
       setIsSupabaseLoading(false);
       if (session) {
         queryClient.invalidateQueries({ queryKey: ["/api/user"] });
-      } else {
-        // Clear EVERYTHING on session loss
+      } else if (navigator.onLine) {
+        // ONLY Clear everything if we are definitely online but session is lost
         queryClient.clear();
         // Clear company selection on session loss
         localStorage.removeItem("selectedCompanyId");
+      } else {
+        console.warn("[Auth] Session change while offline - preserving cache");
       }
     });
 

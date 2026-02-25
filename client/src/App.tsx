@@ -135,7 +135,11 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   }
 
   if (!user) {
-    return <Redirect to="/auth" />;
+    // Only redirect to auth if we are definitely online
+    // If we are offline and on the POS path, we want to stay there
+    if (!isOffline || !isPosPath) {
+      return <Redirect to="/auth" />;
+    }
   }
 
   // Redirect to onboarding ONLY if:

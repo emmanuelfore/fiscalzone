@@ -560,6 +560,14 @@ export default function POSPage() {
                 setPaidAmount("");
                 setIsCheckoutOpen(false);
                 clearPersistedSession();
+
+                // Register Background Sync
+                if ('serviceWorker' in navigator && 'SyncManager' in window) {
+                    navigator.serviceWorker.ready.then(reg => {
+                        return (reg as any).sync.register('sync-sales');
+                    }).catch(err => console.error("[Sync] Registration failed:", err));
+                }
+
                 await refreshPendingCount();
                 return;
             }
@@ -630,6 +638,14 @@ export default function POSPage() {
                     setPaidAmount("");
                     setIsCheckoutOpen(false);
                     clearPersistedSession();
+
+                    // Register Background Sync
+                    if ('serviceWorker' in navigator && 'SyncManager' in window) {
+                        navigator.serviceWorker.ready.then(reg => {
+                            return (reg as any).sync.register('sync-sales');
+                        }).catch(err => console.error("[Sync] Registration failed:", err));
+                    }
+
                     await refreshPendingCount();
                     return;
                 } catch (offlineError) {

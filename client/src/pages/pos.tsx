@@ -125,6 +125,51 @@ export default function POSPage() {
     // Manager Override State
     const [pendingOverride, setPendingOverride] = useState<{ type: "DISCOUNT" | "VOID_CART", data: any } | null>(null);
 
+    // ─── POS Session Persistence ──────────────────────────────────────────
+    // Load persisted state on mount
+    useEffect(() => {
+        if (!companyId) return;
+        const prefix = `pos_session_${companyId}_`;
+
+        try {
+            const savedCart = localStorage.getItem(`${prefix}cart`);
+            const savedCustomerId = localStorage.getItem(`${prefix}customerId`);
+            const savedDiscount = localStorage.getItem(`${prefix}discount`);
+            const savedCurrency = localStorage.getItem(`${prefix}currency`);
+            const savedPaymentMethod = localStorage.getItem(`${prefix}paymentMethod`);
+
+            if (savedCart) setCart(JSON.parse(savedCart));
+            if (savedCustomerId) setSelectedCustomerId(savedCustomerId);
+            if (savedDiscount) setOrderDiscount(parseFloat(savedDiscount));
+            if (savedCurrency) setSelectedCurrencyCode(savedCurrency);
+            if (savedPaymentMethod) setPaymentMethod(savedPaymentMethod);
+        } catch (e) {
+            console.error("[POS] Failed to load persisted session:", e);
+        }
+    }, [companyId]);
+
+    // Save state on every change
+    useEffect(() => {
+        if (!companyId) return;
+        const prefix = `pos_session_${companyId}_`;
+
+        localStorage.setItem(`${prefix}cart`, JSON.stringify(cart));
+        localStorage.setItem(`${prefix}customerId`, selectedCustomerId);
+        localStorage.setItem(`${prefix}discount`, orderDiscount.toString());
+        localStorage.setItem(`${prefix}currency`, selectedCurrencyCode);
+        localStorage.setItem(`${prefix}paymentMethod`, paymentMethod);
+    }, [companyId, cart, selectedCustomerId, orderDiscount, selectedCurrencyCode, paymentMethod]);
+
+    const clearPersistedSession = () => {
+        if (!companyId) return;
+        const prefix = `pos_session_${companyId}_`;
+        localStorage.removeItem(`${prefix}cart`);
+        localStorage.removeItem(`${prefix}customerId`);
+        localStorage.removeItem(`${prefix}discount`);
+        localStorage.removeItem(`${prefix}currency`);
+        localStorage.removeItem(`${prefix}paymentMethod`);
+    };
+
     // Derived data
     const categories = useMemo(() => {
         if (!resolvedProducts || resolvedProducts.length === 0) return ["All"];
@@ -514,6 +559,7 @@ export default function POSPage() {
                 setSelectedCustomerId("");
                 setPaidAmount("");
                 setIsCheckoutOpen(false);
+                clearPersistedSession();
                 await refreshPendingCount();
                 return;
             }
@@ -530,6 +576,7 @@ export default function POSPage() {
             setSelectedCustomerId("");
             setPaidAmount("");
             setIsCheckoutOpen(false);
+            clearPersistedSession();
         } catch (error: any) {
             // If the error looks like a network failure, queue offline
             if (!navigator.onLine || error.message === 'Failed to fetch') {
@@ -582,6 +629,7 @@ export default function POSPage() {
                     setSelectedCustomerId("");
                     setPaidAmount("");
                     setIsCheckoutOpen(false);
+                    clearPersistedSession();
                     await refreshPendingCount();
                     return;
                 } catch (offlineError) {

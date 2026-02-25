@@ -1,7 +1,7 @@
 // FiscalStack Service Worker — v3
 // Cache Strategy: Network-first for API, Cache-first for static assets
 
-const CACHE_VERSION = 'v12';
+const CACHE_VERSION = 'v13';
 const STATIC_CACHE = `fiscalstack-static-${CACHE_VERSION}`;
 const FONT_CACHE = `fiscalstack-fonts-${CACHE_VERSION}`;
 

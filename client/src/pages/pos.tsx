@@ -7,6 +7,7 @@ import { useCompany } from "@/hooks/use-companies";
 import { useTaxConfig } from "@/hooks/use-tax-config";
 import { useToast } from "@/hooks/use-toast";
 import { useOffline } from "@/hooks/use-offline";
+import { usePWAInstall } from "@/hooks/use-pwa-install";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -68,6 +69,8 @@ export default function POSPage() {
         lastCacheTime,
         refreshCacheTime
     } = useOffline(companyId);
+
+    const { isInstallable, install } = usePWAInstall();
 
     // Resolved data — hooks now handle caching and fallback automatically
     const resolvedProducts = products || [];
@@ -1209,6 +1212,19 @@ export default function POSPage() {
                                                 )} />
                                                 {isOnline ? <><Wifi className="h-2.5 w-2.5" /> Online</> : <><WifiOff className="h-2.5 w-2.5" /> Offline</>}
                                             </div>
+
+                                            {/* PWA Install Button — Dynamic Glassmorphism */}
+                                            {isInstallable && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={install}
+                                                    className="h-6 px-2 gap-1.5 bg-primary/10 hover:bg-primary/20 text-primary font-black uppercase tracking-widest text-[8px] md:text-[9px] rounded-full border border-primary/20 transition-all active:scale-95 animate-in fade-in zoom-in slide-in-from-left-2 duration-500"
+                                                >
+                                                    <Plus className="h-2.5 w-2.5" />
+                                                    Install App
+                                                </Button>
+                                            )}
                                         </div>
                                     </div>
                                 </div>

@@ -1,6 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useCompanies } from "@/hooks/use-companies";
+import { usePWAInstall } from "@/hooks/use-pwa-install";
 import {
   LayoutDashboard,
   FileText,
@@ -70,6 +71,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const { data: companies } = useCompanies();
   const { activeCompany, activeCompanyId, setCompany } = useActiveCompany();
+  const { isInstallable, install } = usePWAInstall();
 
   const handleCompanyChange = (id: number) => {
     setCompany(id);
@@ -322,6 +324,21 @@ export function Layout({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
+
+        {isInstallable && (
+          <div className="px-4 py-2">
+            <Button
+              onClick={install}
+              className="w-full h-12 gap-3 bg-gradient-to-br from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white font-black rounded-2xl shadow-lg shadow-violet-500/20 transition-all active:scale-95 group relative overflow-hidden"
+            >
+              <div className="absolute inset-x-0 bottom-0 h-1 bg-white/20" />
+              <div className="p-1.5 bg-white/20 rounded-lg group-hover:scale-110 transition-transform">
+                <Plus className="w-4 h-4" />
+              </div>
+              <span className="tracking-tight uppercase text-[10px]">Install FiscalStack</span>
+            </Button>
+          </div>
+        )}
 
         <div className="p-4 bg-slate-50/50 border-t border-slate-100/50">
           <div className="flex items-center justify-center gap-1 text-[10px] font-bold text-slate-300 uppercase tracking-widest">

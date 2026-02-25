@@ -212,6 +212,14 @@ function Router() {
   const { user, isLoading } = useAuth();
   const isOnline = useIsOnline();
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <Switch>
       <Route path="/auth">
@@ -328,7 +336,7 @@ function Router() {
         {() => <ProtectedRoute component={PosSettingsPage} />}
       </Route>
       <Route path="/">
-        {user ? <Redirect to={navigator.onLine ? "/dashboard" : "/pos"} /> : <LandingPage />}
+        {user ? <Redirect to={isOnline ? "/dashboard" : "/pos"} /> : <LandingPage />}
       </Route>
 
       <Route component={NotFound} />

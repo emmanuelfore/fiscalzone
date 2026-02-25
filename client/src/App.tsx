@@ -81,10 +81,10 @@ function useIsOnline() {
 
         clearTimeout(timeoutId);
 
-        // Treat any successful non-503 response as "Online"
-        // (status 503 is returned by our SW when the network is actually unreachable)
-        if (response && response.ok && response.status !== 503) {
-          setIsOnline(true);
+        if (response && response.ok) {
+          const data = await response.json();
+          // Respect the server-side internet check (crucial for localhost)
+          setIsOnline(data.internet === true);
         } else {
           setIsOnline(false);
         }
@@ -92,6 +92,9 @@ function useIsOnline() {
         setIsOnline(false);
       }
     };
+
+    // Run immediate check on mount
+    checkConnection();
 
     // Poll every 5 seconds for a tighter response loop
     const interval = setInterval(checkConnection, 5000);

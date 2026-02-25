@@ -58,8 +58,27 @@ export async function registerRoutes(
   setupAuth(app);
 
   // Connectivity Health Check (Public)
-  app.get("/api/health", (_req, res) => {
-    res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+  app.get("/api/health", async (_req, res) => {
+    let hasInternet = false;
+    try {
+      // Check for real internet by trying a fast DNS lookup
+      await new Promise((resolve, reject) => {
+        const dns = require('dns');
+        dns.lookup('google.com', (err: any) => {
+          if (err && err.code === 'ENOTFOUND') reject(err);
+          else resolve(true);
+        });
+      });
+      hasInternet = true;
+    } catch (e) {
+      hasInternet = false;
+    }
+
+    res.status(200).json({
+      status: "ok",
+      internet: hasInternet,
+      timestamp: new Date().toISOString()
+    });
   });
 
   // CSV Upload Configuration

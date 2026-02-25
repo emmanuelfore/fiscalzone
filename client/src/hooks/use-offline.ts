@@ -52,8 +52,9 @@ export function useOffline(companyId: number): UseOfflineReturn {
 
                 clearTimeout(timeoutId);
 
-                if (response && response.ok && response.status !== 503) {
-                    setIsOnline(true);
+                if (response && response.ok) {
+                    const data = await response.json();
+                    setIsOnline(data.internet === true);
                 } else {
                     setIsOnline(false);
                 }
@@ -61,6 +62,9 @@ export function useOffline(companyId: number): UseOfflineReturn {
                 setIsOnline(false);
             }
         };
+
+        // Immediate check
+        checkConnection();
 
         const interval = setInterval(checkConnection, 5000);
 
@@ -91,6 +95,7 @@ export function useOffline(companyId: number): UseOfflineReturn {
         if (!companyId) return;
         try {
             const time = await getLastCacheTime(companyId);
+            console.log(`[useOffline] company:${companyId} lastCacheTime:`, time ? new Date(time).toLocaleString() : 'null');
             if (time) setLastCacheTimeState(time);
         } catch (e) {
             console.error('Failed to get cache time:', e);

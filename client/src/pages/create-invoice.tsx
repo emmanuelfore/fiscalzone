@@ -1,4 +1,4 @@
-﻿import { Layout } from "@/components/layout";
+﻿﻿import { Layout } from "@/components/layout";
 import { useCustomers, useCreateCustomer } from "@/hooks/use-customers";
 import { useProducts, useCreateProduct } from "@/hooks/use-products";
 import { useCreateInvoice, useInvoice, useUpdateInvoice } from "@/hooks/use-invoices";
@@ -31,7 +31,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -793,208 +793,190 @@ export default function CreateInvoicePage() {
 
   return (
     <Layout>
-      <div className="bg-slate-50/40 min-h-screen pb-32">
+      <div className="bg-slate-50/50 min-h-screen pb-20">
         {isLockedByOther && (
-          <div className="bg-amber-50 border-l-4 border-amber-500 p-4 mb-8 rounded-r-xl shadow-sm animate-in slide-in-from-top duration-300">
+          <div className="bg-amber-50 border-l-4 border-amber-500 p-4 mb-4 rounded-r shadow-sm">
             <div className="flex">
               <div className="flex-shrink-0">
                 <Lock className="h-5 w-5 text-amber-500" aria-hidden="true" />
               </div>
               <div className="ml-3">
-                <p className="text-sm text-amber-900 font-bold">
+                <p className="text-sm text-amber-700">
                   {lockStatus}
-                  <span className="block mt-1 text-xs opacity-75 font-medium">You can view this invoice but cannot make changes.</span>
+                  <span className="block mt-1 text-xs opacity-75">You can view this invoice but cannot make changes.</span>
                 </p>
               </div>
             </div>
           </div>
         )}
-        <div className="mb-6 flex items-center justify-between no-print pt-4">
-          <Button variant="ghost" onClick={() => setLocation("/invoices")} className="px-3 hover:bg-white/50 text-slate-500 hover:text-slate-900 transition-all rounded-xl h-12">
-            <ArrowLeft className="w-5 h-5 mr-2" />
-            <span className="text-sm font-black uppercase tracking-widest">Back to Matrix</span>
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="rounded-xl hover:bg-white/50 text-slate-500 h-12 w-12 flex"
-            onClick={() => setIsPreviewOpen(true)}
-            title="Preview PDF"
-          >
-            <Eye className="w-5 h-5" />
-          </Button>
+
+        <div className="mb-6 flex flex-col md:flex-row gap-4 items-center justify-between no-print">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" onClick={() => setLocation("/invoices")} className="pl-0 hover:pl-0 hover:bg-transparent text-slate-500 hover:text-slate-900">
+              <ArrowLeft className="w-4 h-4 mr-2" /> Back
+            </Button>
+            <h1 className="text-2xl font-bold text-slate-900">
+              {isEditing
+                ? (existingInvoice?.status === "quote" ? "Edit Quotation" : (existingInvoice?.transactionType === "CreditNote" ? "Edit Credit Note" : (existingInvoice?.transactionType === "DebitNote" ? "Edit Debit Note" : "Edit Invoice")))
+                : (searchParams.get('type') === 'quote' ? "New Quotation" : "New Invoice")
+              }
+            </h1>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => handleActionClick('draft')}
+              disabled={loadingAction !== null || isLockedByOther}
+            >
+              {loadingAction === 'draft' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ShieldCheck className="w-4 h-4 mr-2" />}
+              Save Draft
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => handleActionClick('quote')}
+              disabled={loadingAction !== null || isLockedByOther}
+              className="hover:bg-slate-50"
+            >
+              {loadingAction === 'quote' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ClipboardList className="w-4 h-4 mr-2" />}
+              Save as Quotation
+            </Button>
+            <Button
+              onClick={() => handleActionClick('issue')}
+              disabled={loadingAction !== null || isLockedByOther}
+              className="bg-primary hover:bg-primary/90 text-white"
+            >
+              {loadingAction === 'issue' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+              Issue Invoice
+            </Button>
+            <Button variant="outline" className="gap-2" onClick={() => setIsPreviewOpen(true)}>
+              <Eye className="w-4 h-4" />
+              Preview PDF
+            </Button>
+
+
+          </div>
         </div>
 
-        <div className="max-w-7xl mx-auto px-0 md:px-0">
-          <div className="bg-white shadow-3xl shadow-slate-200 border-none rounded-[2.5rem] overflow-hidden">
+        <div className="max-w-7xl mx-auto px-6 py-8">
+          <div className="bg-white shadow-xl border border-slate-200 rounded-2xl overflow-hidden">
             {/* Header Section */}
-            <div className="bg-slate-900 px-8 md:px-16 py-12 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-primary/20 blur-[120px] -mr-32 -mt-32 rounded-full animate-pulse" />
-              <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-500/10 blur-[100px] -ml-32 -mb-32 rounded-full" />
-
-              <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-8 relative z-10">
-                <div className="space-y-4">
-                  <div className="flex items-center gap-4">
-                    <div className={cn("p-3.5 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 shadow-inner", searchParams.get('type') === 'quote' ? "text-blue-400" : "text-violet-400")}>
-                      {searchParams.get('type') === 'quote' || existingInvoice?.status === 'quote' ? <ClipboardList className="w-8 h-8" /> : <ShieldCheck className="w-8 h-8" />}
-                    </div>
-                    <div>
-                      <h1 className="text-4xl font-display font-black text-white tracking-tight uppercase leading-none">
-                        {searchParams.get('type') === 'quote' || existingInvoice?.status === 'quote'
-                          ? "Official Quotation"
-                          : (existingInvoice?.fiscalCode
-                            ? (existingInvoice?.transactionType === "CreditNote" ? "Fiscal Credit Note" : (existingInvoice?.transactionType === "DebitNote" ? "Fiscal Debit Note" : (company?.vatRegistered ? "Fiscal Tax Invoice" : "Fiscal Invoice")))
-                            : (existingInvoice?.transactionType === "CreditNote" ? "Credit Note" : (existingInvoice?.transactionType === "DebitNote" ? "Debit Note" : "Tax Invoice")))
-                        }
-                      </h1>
-                      <div className="flex items-center gap-2 mt-2">
-                        <Badge variant="outline" className="border-white/20 text-white/60 font-black uppercase tracking-widest text-[10px] bg-white/5 px-2 py-0.5">
-                          Draft Mode
-                        </Badge>
-                        <div className="w-1 h-1 rounded-full bg-white/20" />
-                        <p className="text-white/40 font-bold text-xs uppercase tracking-widest">Document ID: <span className="font-mono text-white/60">{isEditing && existingInvoice ? existingInvoice.invoiceNumber : 'NEW-INV'}</span></p>
-                      </div>
-                    </div>
-                  </div>
+            <div className="bg-gradient-to-r from-slate-50 to-white border-b border-slate-100 px-8 md:px-12 py-8">
+              <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-6">
+                <div className="space-y-2">
+                  <h1 className="text-4xl font-bold text-slate-900 tracking-tight">
+                    {searchParams.get('type') === 'quote' || existingInvoice?.status === 'quote'
+                      ? "OFFICIAL QUOTATION"
+                      : (existingInvoice?.fiscalCode
+                        ? (existingInvoice?.transactionType === "CreditNote" ? "FISCAL CREDIT NOTE" : (existingInvoice?.transactionType === "DebitNote" ? "FISCAL DEBIT NOTE" : (company?.vatRegistered ? "FISCAL TAX INVOICE" : "FISCAL INVOICE")))
+                        : (existingInvoice?.transactionType === "CreditNote" ? "CREDIT NOTE" : (existingInvoice?.transactionType === "DebitNote" ? "DEBIT NOTE" : "TAX INVOICE")))
+                    }
+                  </h1>
+                  <p className="text-slate-600 text-lg">Create and customize your document</p>
                 </div>
 
-                <div className="flex flex-col items-start lg:items-end gap-6">
-                  <div className="flex gap-3 w-full md:w-auto">
+                <div className="flex flex-col items-start lg:items-end gap-4">
+                  <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
                     <Button
-                      variant="outline"
-                      onClick={() => handleActionClick('draft')}
-                      disabled={loadingAction !== null || isLockedByOther}
-                      className="rounded-xl border-white/20 bg-white/5 backdrop-blur-md text-white hover:bg-white/10 transition-all font-black text-[10px] uppercase tracking-widest h-12 px-6"
-                    >
-                      {loadingAction === 'draft' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ClipboardList className="w-4 h-4 mr-2 text-white/40" />}
-                      Save Draft
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => handleActionClick('quote')}
-                      disabled={loadingAction !== null || isLockedByOther}
-                      className="rounded-xl border-white/20 bg-white/5 backdrop-blur-md text-white hover:bg-white/10 transition-all font-black text-[10px] uppercase tracking-widest h-12 px-6"
-                    >
-                      {loadingAction === 'quote' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2 text-blue-400" />}
-                      Quotation
-                    </Button>
-                    <Button
-                      onClick={() => handleActionClick('issue')}
-                      disabled={loadingAction !== null || isLockedByOther}
-                      className="btn-gradient rounded-xl shadow-2xl shadow-primary/20 transition-all font-black text-[10px] uppercase tracking-[0.2em] h-12 px-8"
-                    >
-                      {loadingAction === 'issue' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />}
-                      Issue & Fiscalize
-                    </Button>
-                  </div>
-                  <div className="flex items-center gap-2 bg-white/5 backdrop-blur-xl p-1 rounded-2xl border border-white/10 shadow-inner">
-                    <Button
-                      variant="ghost"
+                      variant={taxInclusive ? "ghost" : "default"}
                       size="sm"
                       onClick={() => setTaxInclusive(false)}
-                      className={cn("rounded-xl text-[10px] font-black uppercase tracking-widest px-5 h-10 transition-all", !taxInclusive ? "bg-white text-slate-900 shadow-xl" : "text-white/60 hover:text-white hover:bg-white/10")}
+                      className="text-sm font-medium px-4 py-2"
                     >
-                      Exclusive
+                      Tax Exclusive
                     </Button>
                     <Button
-                      variant="ghost"
+                      variant={taxInclusive ? "default" : "ghost"}
                       size="sm"
                       onClick={() => setTaxInclusive(true)}
-                      className={cn("rounded-xl text-[10px] font-black uppercase tracking-widest px-5 h-10 transition-all", taxInclusive ? "bg-white text-slate-900 shadow-xl" : "text-white/60 hover:text-white hover:bg-white/10")}
+                      className="text-sm font-medium px-4 py-2"
                     >
-                      Inclusive
+                      Tax Inclusive
                     </Button>
                   </div>
+                  <p className="text-xs text-slate-500">Choose your tax calculation method</p>
                 </div>
               </div>
             </div>
 
             {/* Main Content */}
-            <div className="px-8 md:px-16 py-12 space-y-16 bg-slate-50/30">
+            <div className="px-8 md:px-12 py-10 space-y-12">
 
               {/* Invoice Details Header */}
-              <div className="glass-card rounded-3xl p-8 border-none relative overflow-hidden group">
-                <div className="absolute top-0 left-0 w-1.5 h-full bg-primary/20 transition-all group-hover:bg-primary group-hover:w-2" />
-                <h3 className="text-xs font-black text-slate-400 mb-8 flex items-center gap-3 uppercase tracking-[0.2em]">
-                  <span className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black text-[10px] shadow-lg">01</span>
-                  Document Configuration
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-10">
-                  <div className="space-y-2.5">
-                    <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Reference No</Label>
-                    <div className="font-mono font-black text-primary bg-indigo-50/50 px-5 py-4 rounded-2xl border border-indigo-100/50 shadow-inner group-hover:scale-[1.02] transition-transform cursor-context-menu">
-                      {isEditing && existingInvoice ? existingInvoice.invoiceNumber : <span className="text-slate-300 italic opacity-50">AUTO-GEN</span>}
+              <div className="bg-slate-50/30 rounded-2xl p-8 border border-slate-200">
+                <h3 className="text-lg font-semibold text-slate-800 mb-6 uppercase tracking-wide">Document Details</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Invoice No</Label>
+                    <div className="font-mono font-bold text-slate-700 bg-white/50 px-2 py-1 rounded border border-slate-100">
+                      {isEditing && existingInvoice ? existingInvoice.invoiceNumber : "[Auto-Generated]"}
                     </div>
                   </div>
 
-                  <div className="space-y-2.5">
-                    <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Fiscal ID</Label>
-                    <div className="font-mono font-black text-slate-900 bg-slate-100/50 px-5 py-4 rounded-2xl border border-slate-200/50 shadow-inner transition-all group-hover:bg-white text-sm">
-                      {isEditing && existingInvoice ? (existingInvoice.fiscalDayNo || "-") : <span className="text-slate-300 italic opacity-50">STBY</span>}
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Fiscal Day</Label>
+                    <div className="font-mono font-bold text-slate-700 bg-white/50 px-2 py-1 rounded border border-slate-100">
+                      {isEditing && existingInvoice ? (existingInvoice.fiscalDayNo || "-") : "[Auto-Generated]"}
                     </div>
                   </div>
 
-                  <div className="space-y-2.5">
-                    <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Issue Timestamp</Label>
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Date</Label>
                     <Input
                       type="date"
                       value={issueDate}
                       onChange={(e) => setIssueDate(e.target.value)}
-                      className="h-14 rounded-2xl bg-white border-slate-200 focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all font-black text-sm uppercase tracking-tight shadow-sm"
+                      className="h-9 py-0 px-3 w-40 bg-white border-slate-200"
                       required
                     />
                   </div>
 
-                  <div className="space-y-2.5">
-                    <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Expiry/Due Date</Label>
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Due Date</Label>
                     <Input
                       type="date"
                       value={dueDate}
                       onChange={(e) => setDueDate(e.target.value)}
-                      className="h-14 rounded-2xl bg-white border-slate-200 focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all font-black text-sm uppercase tracking-tight shadow-sm"
+                      className="h-9 py-0 px-3 w-40 bg-white border-slate-200"
                       required
                     />
                   </div>
 
-                  <div className="space-y-2.5">
-                    <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Base Currency</Label>
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Currency</Label>
                     <Select value={currencyCode} onValueChange={handleCurrencyChange}>
-                      <SelectTrigger className="h-14 rounded-2xl bg-white border-slate-200 focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all font-black tracking-tight text-sm shadow-sm">
+                      <SelectTrigger className="h-9 py-0 px-3 w-32 bg-white border-slate-200">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent className="rounded-2xl shadow-2xl border-slate-100 p-2">
+                      <SelectContent>
                         {currencies?.map(c => (
-                          <SelectItem key={c.id} value={c.code} className="font-bold rounded-xl py-3 px-4">{c.code} ({c.symbol})</SelectItem>
+                          <SelectItem key={c.id} value={c.code}>{c.code} ({c.symbol})</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
 
-                  <div className="space-y-2.5">
-                    <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Settlement Method</Label>
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Payment Method</Label>
                     <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                      <SelectTrigger className="h-14 rounded-2xl bg-white border-slate-200 focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all font-black tracking-tight text-sm shadow-sm">
+                      <SelectTrigger className="h-9 py-0 px-3 w-44 bg-white border-slate-200">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent className="rounded-2xl shadow-2xl border-slate-100 p-2">
-                        <SelectItem value="CASH" className="font-bold rounded-xl py-3 px-4">Cash Liquidity</SelectItem>
-                        <SelectItem value="CARD" className="font-bold rounded-xl py-3 px-4">Digital Card</SelectItem>
-                        <SelectItem value="TRANSFER" className="font-bold rounded-xl py-3 px-4">Swift Transfer</SelectItem>
-                        <SelectItem value="ECOCASH" className="font-bold rounded-xl py-3 px-4">Mobile Money</SelectItem>
-                        <SelectItem value="OTHER" className="font-bold rounded-xl py-3 px-4">Other Protocol</SelectItem>
+                      <SelectContent>
+                        <SelectItem value="CASH">Cash</SelectItem>
+                        <SelectItem value="CARD">Card / Swipe</SelectItem>
+                        <SelectItem value="TRANSFER">Bank Transfer</SelectItem>
+                        <SelectItem value="ECOCASH">Ecocash / Mobile</SelectItem>
+                        <SelectItem value="OTHER">Other</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
-                  <div className="space-y-2.5 lg:col-span-2">
-                    <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Hardware Authorization</Label>
-                    <div className="text-slate-900 font-mono font-black bg-slate-900 text-white/90 px-5 py-4 rounded-2xl border border-slate-800 text-xs flex items-center justify-between shadow-2xl">
-                      <div className="flex items-center gap-3">
-                        <div className={cn("w-2 h-2 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.3)]", company?.fdmsDeviceId ? "bg-emerald-400 shadow-emerald-400/50" : "bg-amber-400 shadow-amber-400/50")}></div>
-                        <span className="tracking-widest uppercase opacity-60">Status: Registered</span>
-                      </div>
-                      <span className="font-mono text-[10px] text-white/40">{company?.fdmsDeviceId || "DEATHSTAR-UNMOD"}</span>
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Fiscal Device ID</Label>
+                    <div className="text-slate-900 font-mono font-medium pt-1">
+                      {company?.fdmsDeviceId || "Not Registered"}
                     </div>
+
                   </div>
                 </div>
               </div>
@@ -1002,26 +984,22 @@ export default function CreateInvoicePage() {
               {/* Seller & Buyer Section */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
                 {/* Seller Details */}
-                <div className="glass-card rounded-[2rem] p-10 border-none relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 -mr-16 -mt-16 rounded-full transition-transform group-hover:scale-150" />
-                  <div className="flex items-center gap-5 mb-10">
-                    <div className="p-4 bg-slate-900 rounded-2xl shadow-xl shadow-blue-500/10">
-                      <svg className="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                       </svg>
                     </div>
-                    <div>
-                      <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest leading-none mb-1.5">Primary Entity</h3>
-                      <p className="text-xl font-display font-black text-slate-900 tracking-tight uppercase">Seller Profile</p>
-                    </div>
+                    <h3 className="text-lg font-semibold text-slate-800 uppercase tracking-wide">Seller</h3>
                   </div>
-                  <div className="flex flex-col sm:flex-row gap-8 items-start">
+                  <div className="flex gap-6 items-start">
                     {company?.logoUrl && (
-                      <div className="flex-shrink-0 group-hover:rotate-2 transition-transform">
+                      <div className="flex-shrink-0">
                         <img
                           src={company.logoUrl}
                           alt="Company Logo"
-                          className="h-28 w-44 object-contain rounded-3xl bg-white shadow-2xl shadow-slate-200/50 p-4 border border-slate-100"
+                          className="h-20 w-32 object-contain rounded-lg border border-slate-100"
                           onError={(e) => {
                             console.error("Logo load error:", e);
                             e.currentTarget.style.display = 'none';
@@ -1029,125 +1007,108 @@ export default function CreateInvoicePage() {
                         />
                       </div>
                     )}
-                    <div className="flex-1 space-y-5">
-                      <h4 className="text-2xl font-display font-black text-slate-900 tracking-tighter uppercase leading-tight">{company?.tradingName || company?.name || "Company Name"}</h4>
-                      <div className="space-y-4">
-                        <div className="flex flex-wrap gap-4">
-                          <div className="bg-slate-50 px-4 py-2.5 rounded-2xl border border-slate-100 shadow-inner">
-                            <span className="text-[10px] font-black text-slate-400 uppercase block mb-0.5">Tax Node</span>
-                            <span className="font-mono font-black text-slate-900 text-sm tracking-tight">{company?.tin || "-"}</span>
-                          </div>
-                          <div className="bg-slate-50 px-4 py-2.5 rounded-2xl border border-slate-100 shadow-inner">
-                            <span className="text-[10px] font-black text-slate-400 uppercase block mb-0.5">VAT Registry</span>
-                            <span className="font-mono font-black text-slate-900 text-sm tracking-tight">{company?.vatNumber || "-"}</span>
-                          </div>
+                    <div className="flex-1 space-y-3">
+                      <h4 className="text-xl font-bold text-slate-900">{company?.tradingName || company?.name || "Company Name"}</h4>
+                      <div className="text-slate-600 space-y-2 text-sm">
+                        <div className="grid grid-cols-2 gap-4">
+                          <p><span className="font-medium text-slate-500">TIN:</span> <span className="font-mono text-slate-900">{company?.tin || "-"}</span></p>
+                          <p><span className="font-medium text-slate-500">VAT:</span> <span className="font-mono text-slate-900">{company?.vatNumber || "-"}</span></p>
                         </div>
-                        <div className="space-y-1.5 pt-2">
-                          <div className="flex items-start gap-3">
-                            <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5" />
-                            <p className="text-sm font-bold text-slate-600 line-clamp-2 uppercase tracking-tight">{company?.address || "Address Line 1"}, {company?.city}</p>
-                          </div>
-                          <div className="flex items-start gap-3">
-                            <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5" />
-                            <p className="text-sm font-bold text-slate-500 lowerecase">{company?.email} {company?.phone && `| ${company?.phone}`}</p>
-                          </div>
-                        </div>
+                        <p><span className="font-medium text-slate-500">Address:</span> {company?.address || "Address Line 1"}, {company?.city}</p>
+                        <p><span className="font-medium text-slate-500">Contact:</span> {company?.email} {company?.phone && `| ${company?.phone}`}</p>
                       </div>
                     </div>
                   </div>
                 </div>
 
                 {/* Buyer Details */}
-                <div className="glass-card rounded-[2rem] p-10 border-none relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 -mr-16 -mt-16 rounded-full transition-transform group-hover:scale-150" />
-                  <div className="flex items-center gap-5 mb-10">
-                    <div className="p-4 bg-slate-900 rounded-2xl shadow-xl shadow-emerald-500/10">
-                      <svg className="w-8 h-8 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="p-2 bg-green-100 rounded-lg">
+                      <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                       </svg>
                     </div>
-                    <div>
-                      <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest leading-none mb-1.5">Counterparty</h3>
-                      <p className="text-xl font-display font-black text-slate-900 tracking-tight uppercase">Buyer Profile</p>
-                    </div>
+                    <h3 className="text-lg font-semibold text-slate-800 uppercase tracking-wide">Buyer</h3>
                   </div>
-                  <div className="space-y-8">
+                  <div className="space-y-4">
                     <div className="space-y-3">
-                      <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Target Entity Selection</Label>
-                      <div className="relative">
+                      <Label className="text-sm font-semibold text-slate-700 block">Select Customer</Label>
+                      <div className="flex gap-2">
                         <Popover open={open} onOpenChange={setOpen}>
                           <PopoverTrigger asChild>
                             <Button
                               variant="outline"
                               role="combobox"
                               aria-expanded={open}
-                              className="w-full justify-between bg-white border-slate-200 h-16 rounded-2xl text-lg font-black px-6 hover:bg-slate-50 hover:border-emerald-300 hover:ring-4 hover:ring-emerald-500/5 transition-all text-slate-900 tracking-tight uppercase"
+                              className="flex-1 justify-between bg-white border-slate-200 h-12 text-sm"
                             >
                               {customerId
                                 ? customers?.find((customer) => customer.id.toString() === customerId)?.name
-                                : <span className="text-slate-300 font-bold opacity-50">Initialize Customer Selection...</span>}
-                              <ChevronsUpDown className="ml-2 h-5 w-5 shrink-0 opacity-20" />
+                                : "Select a client or search..."}
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                             </Button>
                           </PopoverTrigger>
-                          <PopoverContent className="w-[450px] p-0 rounded-[2rem] shadow-3xl border-slate-100 overflow-hidden" align="start">
-                            <Command className="rounded-none">
+                          <PopoverContent className="w-[300px] p-0" align="start">
+                            <Command>
                               <CommandInput
-                                placeholder="Query neural network for customer identity..."
+                                placeholder="Search customer..."
                                 value={customerSearch}
                                 onValueChange={setCustomerSearch}
-                                className="h-16 text-lg font-bold border-none"
                               />
-                              <CommandList className="max-h-[400px] scrollbar-thin scrollbar-thumb-slate-200">
-                                <CommandEmpty className="py-12 px-6 text-sm text-center text-slate-400 flex flex-col items-center gap-4">
-                                  <div className="p-5 bg-slate-50 rounded-3xl">
-                                    <Plus className="w-10 h-10 opacity-20" />
+                              <CommandList>
+                                <CommandEmpty className="p-0">
+                                  <div className="p-4 text-sm text-center text-slate-500">
+                                    No customer found.
                                   </div>
-                                  <span className="font-bold uppercase tracking-widest text-[10px]">No matches found in matrix</span>
                                   {customerSearch.trim() && (
-                                    <Button
-                                      onClick={async () => {
-                                        try {
-                                          const newC = await createCustomer.mutateAsync({
-                                            name: customerSearch,
-                                            customerType: "individual"
-                                          });
-                                          setCustomerId(newC.id.toString());
-                                          setCustomerSearch("");
-                                          setOpen(false);
-                                          toast({ title: "Entity Created", description: `${newC.name} synced to registry.` });
-                                        } catch (e) { console.error(e); }
-                                      }}
-                                      className="btn-gradient px-8 h-12 rounded-xl text-xs font-black uppercase tracking-widest"
-                                    >
-                                      Create "{customerSearch}"
-                                    </Button>
+                                    <div className="p-1 border-t">
+                                      <Button
+                                        variant="ghost"
+                                        className="w-full justify-start h-9 text-xs font-medium text-primary hover:text-primary hover:bg-primary/5"
+                                        onClick={async () => {
+                                          try {
+                                            const newC = await createCustomer.mutateAsync({
+                                              name: customerSearch,
+                                              customerType: "individual"
+                                            });
+                                            setCustomerId(newC.id.toString());
+                                            setCustomerSearch("");
+                                            setOpen(false);
+                                            toast({ title: "Customer Added", description: `${newC.name} has been created.` });
+                                          } catch (e) {
+                                            console.error(e);
+                                          }
+                                        }}
+                                      >
+                                        <Plus className="w-3 h-3 mr-2" /> Add "{customerSearch}" as new customer
+                                      </Button>
+                                    </div>
                                   )}
                                 </CommandEmpty>
-                                <CommandGroup className="p-2">
+                                <CommandGroup>
                                   {customers?.map((customer) => (
                                     <CommandItem
                                       key={customer.id}
                                       value={`${customer.name} ${customer.tin || ""} ${customer.email || ""}`}
-                                      className="py-4 px-5 cursor-pointer aria-selected:bg-emerald-50 rounded-2xl transition-all"
                                       onSelect={() => {
                                         setCustomerId(customer.id.toString());
                                         setOpen(false);
                                       }}
                                     >
-                                      <div className="flex items-center gap-4 w-full">
-                                        <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm transition-all shadow-inner", customerId === customer.id.toString() ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-400")}>
-                                          {customer.name.charAt(0).toUpperCase()}
-                                        </div>
-                                        <div className="flex flex-col flex-1 gap-1">
-                                          <span className="font-black text-slate-900 uppercase tracking-tight leading-none">{customer.name}</span>
-                                          {(customer.tin || customer.email) && (
-                                            <div className="flex items-center gap-3 text-[10px]">
-                                              {customer.tin && <span className="font-mono font-black text-emerald-600 bg-emerald-50 px-1.5 rounded">{customer.tin}</span>}
-                                              {customer.email && <span className="font-bold text-slate-400">{customer.email}</span>}
-                                            </div>
-                                          )}
-                                        </div>
-                                        {customerId === customer.id.toString() && <Check className="w-5 h-5 text-emerald-500" />}
+                                      <Check
+                                        className={cn(
+                                          "mr-2 h-4 w-4",
+                                          customerId === customer.id.toString() ? "opacity-100" : "opacity-0"
+                                        )}
+                                      />
+                                      <div className="flex flex-col">
+                                        <span className="font-medium">{customer.name}</span>
+                                        {(customer.tin || customer.email) && (
+                                          <span className="text-xs text-muted-foreground">
+                                            {[customer.tin, customer.email].filter(Boolean).join(" | ")}
+                                          </span>
+                                        )}
                                       </div>
                                     </CommandItem>
                                   ))}
@@ -1164,28 +1125,15 @@ export default function CreateInvoicePage() {
                       const c = customers?.find(cust => cust.id.toString() === customerId);
                       if (!c) return null;
                       return (
-                        <div className="bg-emerald-500/5 rounded-3xl p-6 border border-emerald-500/10 transition-all animate-in zoom-in-95 duration-500 group/buyer hover:bg-emerald-500/10">
-                          <div className="flex justify-between items-start mb-4">
-                            <h4 className="text-xl font-display font-black text-slate-900 tracking-tight uppercase leading-none">{c.name}</h4>
-                            <Badge className="bg-emerald-500 text-white border-none font-black text-[9px] uppercase tracking-[0.2em] px-2 py-0.5 shadow-lg shadow-emerald-500/20">Verified</Badge>
-                          </div>
-                          <div className="grid grid-cols-2 gap-6 pt-2">
-                            <div className="space-y-1">
-                              <span className="text-[10px] font-black text-slate-400 uppercase block tracking-widest">Registry ID</span>
-                              <span className="font-mono font-black text-slate-900 text-sm tracking-tight bg-white px-2 py-1 rounded-lg border border-emerald-100/50 shadow-sm block w-fit">{c.tin || "UNREGISTERED"}</span>
+                        <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                          <h4 className="text-lg font-bold text-slate-900 mb-3">{c.name}</h4>
+                          <div className="text-slate-600 space-y-2 text-sm">
+                            <div className="grid grid-cols-2 gap-4">
+                              <p><span className="font-medium text-slate-500">TIN:</span> <span className="font-mono text-slate-900">{c.tin || "-"}</span></p>
+                              <p><span className="font-medium text-slate-500">VAT:</span> <span className="font-mono text-slate-900">{c.vatNumber || "-"}</span></p>
                             </div>
-                            <div className="space-y-1">
-                              <span className="text-[10px] font-black text-slate-400 uppercase block tracking-widest">VAT Protocol</span>
-                              <span className="font-mono font-black text-slate-900 text-sm tracking-tight bg-white px-2 py-1 rounded-lg border border-emerald-100/50 shadow-sm block w-fit">{c.vatNumber || "NON-VAT"}</span>
-                            </div>
-                            <div className="col-span-2 pt-2 space-y-3">
-                              <div className="flex items-start gap-4">
-                                <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center shadow-sm border border-emerald-100/50">
-                                  <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                                </div>
-                                <p className="text-xs font-black text-slate-600 uppercase tracking-tight pt-1.5">{c.address || "No Physical Coordinates Registered"}, {c.city}</p>
-                              </div>
-                            </div>
+                            <p><span className="font-medium text-slate-500">Address:</span> {c.address || "No Address"}, {c.city}</p>
+                            <p><span className="font-medium text-slate-500">Contact:</span> {c.email} {c.phone && `| ${c.phone}`}</p>
                           </div>
                         </div>
                       );
@@ -1195,227 +1143,241 @@ export default function CreateInvoicePage() {
               </div>
 
               {/* Invoice Items Section */}
-              <div className="glass-card rounded-[2rem] p-10 border-none overflow-hidden">
-                <div className="flex items-center justify-between mb-10">
-                  <div className="flex items-center gap-5">
-                    <div className="p-4 bg-slate-900 rounded-2xl shadow-xl shadow-violet-500/10">
-                      <svg className="w-8 h-8 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                      </svg>
-                    </div>
-                    <div>
-                      <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest leading-none mb-1.5">Inventory manifest</h3>
-                      <p className="text-xl font-display font-black text-slate-900 tracking-tight uppercase">Line Items & Allocation</p>
-                    </div>
+              <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-purple-100 rounded-lg">
+                    <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
                   </div>
+                  <h3 className="text-lg font-semibold text-slate-800 uppercase tracking-wide">Invoice Items</h3>
                 </div>
+                <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
+                  <Table>
+                    <TableHeader className="bg-slate-50 border-b border-slate-100">
+                      <TableRow className="hover:bg-slate-50">
+                        <TableHead className="w-[240px] pl-4">Item (Search Name/Code)</TableHead>
+                        <TableHead className="min-w-[150px]">Description</TableHead>
+                        <TableHead className="w-[100px] text-center">Qty</TableHead>
+                        <TableHead className="w-[140px] text-right">
+                          <div>Unit Price {taxInclusive ? '(Incl)' : '(Excl)'}</div>
+                          <div className="text-[10px] lowercase font-normal text-slate-400 no-underline">(Neg. for discount)</div>
+                        </TableHead>
+                        <TableHead className="w-[120px] text-right">Total Amount (incl. tax)</TableHead>
+                        <TableHead className="w-[50px]"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      <AnimatePresence mode="popLayout">
+                        {items.map((item, index) => {
+                          const lineVal = item.quantity * item.unitPrice;
+                          let vatAmt = 0;
+                          let totalAmt = 0;
 
-                <div className="border border-slate-100 rounded-[2rem] overflow-hidden bg-white/50 backdrop-blur-sm shadow-2xl">
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader className="bg-slate-900">
-                        <TableRow className="hover:bg-slate-900 border-none">
-                          <TableHead className="w-[350px] pl-8 py-5 text-[10px] font-black uppercase tracking-widest text-white/40">Product / Service Description</TableHead>
-                          <TableHead className="w-[120px] text-center py-5 text-[10px] font-black uppercase tracking-widest text-white/40">Quantity</TableHead>
-                          <TableHead className="w-[180px] text-right py-5 text-[10px] font-black uppercase tracking-widest text-white/40">
-                            Unit Cost <span className="opacity-30">({taxInclusive ? 'Gross' : 'Net'})</span>
-                          </TableHead>
-                          <TableHead className="w-[180px] text-right py-5 text-[10px] font-black uppercase tracking-widest text-white/40 pr-8">Ext. Amount</TableHead>
-                          <TableHead className="w-[80px] py-5"></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        <AnimatePresence mode="popLayout">
-                          {items.length === 0 && (
+                          if (taxInclusive) {
+                            totalAmt = lineVal;
+                          } else {
+                            vatAmt = lineVal * (item.taxRate / 100);
+                            totalAmt = lineVal + vatAmt;
+                          }
+
+                          // Determine Tax Status
+                          const matchingType = taxTypes.data?.find((t: any) => t.id == item.taxTypeId);
+                          const isExempt = matchingType?.zimraTaxId == 1 || matchingType?.zimraTaxId == "1" || matchingType?.zimraCode === 'C' || matchingType?.zimraCode === 'E' || matchingType?.name?.toLowerCase().includes('exempt');
+                          const isZeroRated = matchingType?.zimraTaxId == 2 || matchingType?.zimraTaxId == "2" || matchingType?.zimraCode === 'D' || matchingType?.name?.toLowerCase().includes('zero rated') || (!isExempt && item.taxRate === 0);
+
+                          return (
                             <motion.tr
-                              initial={{ opacity: 0 }}
-                              animate={{ opacity: 1 }}
-                              exit={{ opacity: 0 }}
+                              key={item.localId}
+                              initial={{ opacity: 0, y: -10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, x: -20 }}
+                              transition={{ duration: 0.2 }}
+                              className="group hover:bg-slate-50/30 transition-colors border-b border-slate-50"
                             >
-                              <TableCell colSpan={5} className="h-64 text-center text-slate-400 border-none">
-                                <div className="flex flex-col items-center justify-center gap-4">
-                                  <div className="p-6 bg-slate-50 rounded-[2rem]">
-                                    <ClipboardList className="w-12 h-12 opacity-10" />
-                                  </div>
-                                  <p className="font-bold uppercase tracking-widest text-[10px]">Matrix empty: Initializing required</p>
-                                </div>
+                              <TableCell className="align-middle pl-4 py-3 max-w-[240px]">
+                                <Popover
+                                  open={openRowIndex === index}
+                                  onOpenChange={(isOpen) => setOpenRowIndex(isOpen ? index : null)}
+                                >
+                                  <PopoverTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      role="combobox"
+                                      className={cn(
+                                        "w-full justify-between bg-white h-9 px-3 font-normal overflow-hidden",
+                                        !item.productId && "text-muted-foreground"
+                                      )}
+                                    >
+                                      <div className="flex items-center gap-2 overflow-hidden">
+                                        {item.hsCode && (
+                                          <Badge variant="secondary" className="text-[9px] h-4 py-0 px-1 font-mono opacity-60">
+                                            {item.hsCode}
+                                          </Badge>
+                                        )}
+                                        <span className="truncate">
+                                          {item.productId
+                                            ? products?.find((p) => p.id === item.productId)?.name || "Select Item"
+                                            : "Select Item"}
+                                        </span>
+                                      </div>
+                                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-[300px] p-0" align="start">
+                                    <Command>
+                                      <CommandInput
+                                        placeholder="Search items..."
+                                        value={productSearch[item.localId] || ""}
+                                        onValueChange={(val) => setProductSearch(prev => ({ ...prev, [item.localId]: val }))}
+                                      />
+                                      <CommandList>
+                                        <CommandEmpty className="p-0">
+                                          <div className="p-4 text-sm text-center text-slate-500">
+                                            No item found.
+                                          </div>
+                                          {productSearch[item.localId]?.trim() && (
+                                            <div className="p-1 border-t">
+                                              <Button
+                                                variant="ghost"
+                                                className="w-full justify-start h-9 text-xs font-medium text-primary hover:text-primary hover:bg-primary/5"
+                                                onClick={async () => {
+                                                  try {
+                                                    const newP = await createProduct.mutateAsync({
+                                                      name: productSearch[item.localId],
+                                                      price: "0",
+                                                      taxRate: "15",
+                                                      productType: "good",
+                                                      sku: `AUTO-${Date.now().toString().slice(-4)}`
+                                                    });
+                                                    handleProductSelect(item.localId, newP.id.toString());
+                                                    setProductSearch(prev => {
+                                                      const next = { ...prev };
+                                                      delete next[item.localId];
+                                                      return next;
+                                                    });
+                                                    setOpenRowIndex(null);
+                                                    toast({ title: "Product Added", description: `${newP.name} has been created.` });
+                                                  } catch (e) {
+                                                    console.error(e);
+                                                  }
+                                                }}
+                                              >
+                                                <Plus className="w-3 h-3 mr-2" /> Add "{productSearch[item.localId]}" as new product
+                                              </Button>
+                                            </div>
+                                          )}
+                                        </CommandEmpty>
+                                        <CommandGroup heading="Products">
+                                          {products?.filter(p => !p.productType || p.productType === 'good').map((product) => (
+                                            <CommandItem
+                                              key={product.id}
+                                              value={`product ${product.name} ${product.sku || ""}`}
+                                              onSelect={() => {
+                                                handleProductSelect(item.localId, product.id.toString());
+                                                setOpenRowIndex(null);
+                                              }}
+                                            >
+                                              <Check
+                                                className={cn(
+                                                  "mr-2 h-4 w-4",
+                                                  item.productId === product.id ? "opacity-100" : "opacity-0"
+                                                )}
+                                              />
+                                              <div className="flex flex-col flex-1">
+                                                <span className="font-medium text-sm">{product.name}</span>
+                                                <div className="flex justify-between w-full text-xs text-muted-foreground mt-0.5">
+                                                  <span>{product.sku}</span>
+                                                  <span className="font-mono">${Number(product.price).toFixed(2)}</span>
+                                                </div>
+                                              </div>
+                                            </CommandItem>
+                                          ))}
+                                        </CommandGroup>
+                                        <CommandGroup heading="Services">
+                                          {products?.filter(p => p.productType === 'service').map((service) => (
+                                            <CommandItem
+                                              key={service.id}
+                                              value={`service ${service.name} ${service.sku || ""}`}
+                                              onSelect={() => {
+                                                handleProductSelect(item.localId, service.id.toString());
+                                                setOpenRowIndex(null);
+                                              }}
+                                            >
+                                              <Check
+                                                className={cn(
+                                                  "mr-2 h-4 w-4",
+                                                  item.productId === service.id ? "opacity-100" : "opacity-0"
+                                                )}
+                                              />
+                                              <div className="flex flex-col flex-1">
+                                                <span className="font-medium text-sm">{service.name}</span>
+                                                <div className="flex justify-between w-full text-xs text-muted-foreground mt-0.5">
+                                                  <span>{service.sku || 'Service'}</span>
+                                                  <span className="font-mono">${Number(service.price).toFixed(2)}</span>
+                                                </div>
+                                              </div>
+                                            </CommandItem>
+                                          ))}
+                                        </CommandGroup>
+                                      </CommandList>
+                                    </Command>
+                                  </PopoverContent>
+                                </Popover>
+                              </TableCell>
+                              <TableCell className="align-middle py-3">
+                                <Input
+                                  placeholder="Description..."
+                                  value={item.description}
+                                  onChange={(e) => updateItem(item.localId, 'description', e.target.value)}
+                                  className="bg-transparent border-transparent hover:border-slate-200 focus:border-primary focus:bg-white h-9 px-2 text-sm transition-all"
+                                />
+                              </TableCell>
+                              <TableCell className="align-middle py-3">
+                                <Input
+                                  type="number"
+                                  min="1"
+                                  value={item.quantity}
+                                  onChange={(e) => updateItem(item.localId, 'quantity', parseFloat(e.target.value) || 0)}
+                                  className="bg-transparent border-transparent hover:border-slate-200 focus:border-primary focus:bg-white h-9 px-2 text-center text-sm font-medium w-full transition-all"
+                                />
+                              </TableCell>
+                              <TableCell className="align-middle py-3">
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  value={Number(item.unitPrice)}
+                                  onChange={(e) => updateItem(item.localId, 'unitPrice', parseFloat(e.target.value) || 0)}
+                                  onBlur={(e) => {
+                                    // Allow negative values for discounts
+                                    const val = parseFloat(e.target.value) || 0;
+                                    updateItem(item.localId, 'unitPrice', parseFloat(val.toFixed(2)));
+                                  }}
+                                  className="bg-transparent border-transparent hover:border-slate-200 focus:border-primary focus:bg-white h-9 px-2 text-right text-sm font-mono w-full transition-all"
+                                />
+                              </TableCell>
+                              <TableCell className="text-right font-bold font-mono text-slate-900 align-middle py-3 pr-4">
+                                {totalAmt.toFixed(2)}
+                              </TableCell>
+                              <TableCell className="align-middle py-3">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                  onClick={() => handleRemoveItem(item.localId)}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
                               </TableCell>
                             </motion.tr>
-                          )}
-                          {items.map((item, index) => {
-                            const lineVal = item.quantity * item.unitPrice;
-                            let vatAmt = 0;
-                            let totalAmt = 0;
-
-                            if (taxInclusive) {
-                              totalAmt = lineVal;
-                            } else {
-                              vatAmt = lineVal * (item.taxRate / 100);
-                              totalAmt = lineVal + vatAmt;
-                            }
-
-                            return (
-                              <motion.tr
-                                key={item.localId}
-                                initial={{ opacity: 0, scale: 0.98 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                exit={{ opacity: 0, x: -50 }}
-                                className="group hover:bg-slate-50 transition-all border-b border-slate-50 last:border-none"
-                              >
-                                <TableCell className="align-top pl-8 py-6">
-                                  <div className="space-y-3">
-                                    <Popover
-                                      open={openRowIndex === index}
-                                      onOpenChange={(isOpen) => setOpenRowIndex(isOpen ? index : null)}
-                                    >
-                                      <PopoverTrigger asChild>
-                                        <Button
-                                          variant="outline"
-                                          role="combobox"
-                                          className={cn(
-                                            "w-full justify-between bg-white h-14 px-5 font-black uppercase tracking-tighter text-sm rounded-2xl border-slate-200 hover:border-violet-400 hover:ring-4 hover:ring-violet-500/5 transition-all text-left shadow-sm",
-                                            !item.productId && "text-slate-300"
-                                          )}
-                                        >
-                                          <div className="flex items-center gap-3 overflow-hidden w-full">
-                                            {item.hsCode && (
-                                              <Badge className="text-[9px] font-mono font-black bg-slate-900 text-white border-none py-0.5 px-2 tracking-widest leading-none">
-                                                HS:{item.hsCode}
-                                              </Badge>
-                                            )}
-                                            <span className="truncate flex-1">
-                                              {item.productId
-                                                ? products?.find((p) => p.id === item.productId)?.name || "Select Item Identity"
-                                                : "Select Item Identity"}
-                                            </span>
-                                          </div>
-                                          <ChevronsUpDown className="ml-2 h-5 w-5 shrink-0 opacity-10" />
-                                        </Button>
-                                      </PopoverTrigger>
-                                      <PopoverContent className="w-[450px] p-0 rounded-[2rem] shadow-3xl border-slate-100 overflow-hidden" align="start">
-                                        <Command>
-                                          <CommandInput
-                                            placeholder="Querying item registries..."
-                                            value={productSearch[item.localId] || ""}
-                                            onValueChange={(val) => setProductSearch(prev => ({ ...prev, [item.localId]: val }))}
-                                            className="h-16 text-lg font-bold"
-                                          />
-                                          <CommandList className="max-h-[400px]">
-                                            <CommandEmpty className="p-10 text-center">
-                                              <span className="font-black uppercase tracking-widest text-[10px] text-slate-400 block mb-4">No matching records found</span>
-                                              {productSearch[item.localId]?.trim() && (
-                                                <Button
-                                                  onClick={async () => {
-                                                    try {
-                                                      const newP = await createProduct.mutateAsync({
-                                                        name: productSearch[item.localId],
-                                                        price: "0",
-                                                        taxRate: "15",
-                                                        productType: "good",
-                                                        sku: `SKU-${Date.now().toString().slice(-4)}`
-                                                      });
-                                                      handleProductSelect(item.localId, newP.id.toString());
-                                                      setProductSearch(prev => {
-                                                        const next = { ...prev };
-                                                        delete next[item.localId];
-                                                        return next;
-                                                      });
-                                                      setOpenRowIndex(null);
-                                                      toast({ title: "Registry Updated", description: `${newP.name} added to catalog.` });
-                                                    } catch (e) { console.error(e); }
-                                                  }}
-                                                  className="btn-gradient px-8 h-12 rounded-xl text-xs font-black uppercase tracking-widest"
-                                                >
-                                                  Add "{productSearch[item.localId]}"
-                                                </Button>
-                                              )}
-                                            </CommandEmpty>
-                                            <CommandGroup heading="Material Goods" className="p-2">
-                                              {products?.filter(p => !p.productType || p.productType === 'good').map((product) => (
-                                                <CommandItem
-                                                  key={product.id}
-                                                  value={`product ${product.name} ${product.sku || ""}`}
-                                                  className="py-4 px-5 cursor-pointer aria-selected:bg-violet-50 rounded-2xl"
-                                                  onSelect={() => {
-                                                    handleProductSelect(item.localId, product.id.toString());
-                                                    setOpenRowIndex(null);
-                                                  }}
-                                                >
-                                                  <div className="flex items-center gap-4 w-full">
-                                                    <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center font-black transition-all shadow-inner", item.productId === product.id ? "bg-violet-500 text-white" : "bg-slate-100 text-slate-400")}>
-                                                      {product.name.charAt(0).toUpperCase()}
-                                                    </div>
-                                                    <div className="flex flex-col flex-1 gap-1">
-                                                      <span className="font-black text-slate-900 uppercase tracking-tight leading-none">{product.name}</span>
-                                                      <div className="flex justify-between items-center pr-2">
-                                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{product.sku}</span>
-                                                        <span className="font-mono font-black text-violet-600">${Number(product.price).toFixed(2)}</span>
-                                                      </div>
-                                                    </div>
-                                                  </div>
-                                                </CommandItem>
-                                              ))}
-                                            </CommandGroup>
-                                          </CommandList>
-                                        </Command>
-                                      </PopoverContent>
-                                    </Popover>
-                                    <Input
-                                      placeholder="Custom description overlay..."
-                                      value={item.description}
-                                      onChange={(e) => updateItem(item.localId, 'description', e.target.value)}
-                                      className="bg-white border-slate-200 h-11 px-4 text-xs font-bold uppercase tracking-tight transition-all rounded-xl shadow-sm focus:ring-4 focus:ring-slate-100"
-                                    />
-                                  </div>
-                                </TableCell>
-                                <TableCell className="align-top py-6">
-                                  <Input
-                                    type="number"
-                                    min="1"
-                                    value={item.quantity}
-                                    onChange={(e) => updateItem(item.localId, 'quantity', parseFloat(e.target.value) || 0)}
-                                    className="bg-white border-slate-200 h-14 px-2 text-center text-lg font-black text-slate-900 w-full transition-all rounded-2xl shadow-sm focus:ring-4 focus:ring-slate-100"
-                                  />
-                                </TableCell>
-                                <TableCell className="align-top py-6">
-                                  <div className="relative">
-                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 font-mono font-black text-slate-300 text-sm">$</span>
-                                    <Input
-                                      type="number"
-                                      step="0.01"
-                                      value={Number(item.unitPrice)}
-                                      onChange={(e) => updateItem(item.localId, 'unitPrice', parseFloat(e.target.value) || 0)}
-                                      onBlur={(e) => {
-                                        const val = parseFloat(e.target.value) || 0;
-                                        updateItem(item.localId, 'unitPrice', parseFloat(val.toFixed(2)));
-                                      }}
-                                      className="bg-white border-slate-200 h-14 pl-8 pr-4 text-right text-lg font-mono font-black text-slate-900 w-full transition-all rounded-2xl shadow-sm focus:ring-4 focus:ring-slate-100"
-                                    />
-                                  </div>
-                                </TableCell>
-                                <TableCell className="text-right font-black font-mono text-slate-900 align-top py-8 pr-8 text-xl tracking-tighter">
-                                  {totalAmt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </TableCell>
-                                <TableCell className="align-top py-8">
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-10 w-10 text-slate-200 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
-                                    onClick={() => handleRemoveItem(item.localId)}
-                                  >
-                                    <Trash2 className="w-5 h-5" />
-                                  </Button>
-                                </TableCell>
-                              </motion.tr>
-                            );
-                          })}
-                        </AnimatePresence>
-                      </TableBody>
-                    </Table>
-                  </div>
-                  <div className="p-6 bg-slate-900/5 backdrop-blur-md">
-                    <Button variant="ghost" size="lg" onClick={handleAddItem} className="bg-white hover:bg-slate-900 hover:text-white text-slate-900 w-full justify-center h-16 rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] border-2 border-dashed border-slate-200 hover:border-slate-900 transition-all shadow-lg active:scale-95">
-                      <Plus className="w-5 h-5 mr-3" /> Append Data Stream
+                          );
+                        })}
+                      </AnimatePresence>
+                    </TableBody>
+                  </Table>
+                  <div className="p-2 border-t border-slate-100 bg-slate-50/30">
+                    <Button variant="ghost" size="sm" onClick={handleAddItem} className="text-primary hover:text-primary hover:bg-primary/5 w-full justify-start h-8">
+                      <Plus className="w-3.5 h-3.5 mr-2" /> Add Line Item
                     </Button>
                   </div>
                 </div>
@@ -1424,177 +1386,169 @@ export default function CreateInvoicePage() {
               {/* Notes & Banking Section */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
                 {/* Notes Section */}
-                <div className="glass-card rounded-[2rem] p-10 border-none relative overflow-hidden group">
-                  <div className="absolute top-0 left-0 w-1.5 h-full bg-amber-400 opacity-20 transition-all group-hover:opacity-100" />
-                  <div className="flex items-start gap-5 mb-8">
-                    <div className="p-4 bg-slate-900 rounded-2xl shadow-xl shadow-amber-500/10">
-                      <svg className="w-8 h-8 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="p-2 bg-amber-100 rounded-lg">
+                      <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                       </svg>
                     </div>
-                    <div className="flex-1 pt-1">
-                      <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest leading-none mb-1.5">Extended Protocol</h3>
-                      <p className="text-xl font-display font-black text-slate-900 tracking-tight uppercase">Manual Notes & Conditions</p>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-slate-800 uppercase tracking-wide">Notes</h3>
                       {(existingInvoice?.transactionType === "CreditNote" || existingInvoice?.transactionType === "DebitNote") && (
-                        <div className="flex items-center gap-2 text-[10px] font-black text-amber-600 bg-amber-50 px-3 py-1 rounded-xl w-fit mt-3 uppercase tracking-widest border border-amber-100">
-                          <AlertCircle className="w-4 h-4" />
-                          <span>Validation Required for CN/DN</span>
-                        </div>
+                        <span className="text-xs font-bold text-red-500 uppercase tracking-tight">Required for CN/DN</span>
                       )}
                     </div>
                   </div>
                   <Textarea
-                    placeholder="Append manual override notes, legal disclaimers, or specific settlement protocols..."
-                    className="bg-white/50 backdrop-blur-sm min-h-[180px] resize-none text-sm font-bold rounded-2xl border-slate-200 focus:border-amber-400 focus:ring-4 focus:ring-amber-400/10 transition-all shadow-inner"
+                    placeholder="Invoice notes, terms and conditions, payment instructions, etc."
+                    className="bg-slate-50 border-slate-200 min-h-[120px] resize-none text-sm rounded-lg"
                     value={notes}
                     onChange={e => setNotes(e.target.value)}
                   />
+                  <p className="text-xs text-slate-500 mt-2">These notes will appear on the invoice</p>
                 </div>
 
                 {/* Banking Details Section */}
-                <div className="glass-card rounded-[2rem] p-10 border-none relative overflow-hidden group">
-                  <div className="absolute top-0 left-0 w-1.5 h-full bg-emerald-500 opacity-20 transition-all group-hover:opacity-100" />
-                  <div className="flex items-start gap-5 mb-8">
-                    <div className="p-4 bg-slate-900 rounded-2xl shadow-xl shadow-emerald-500/10">
-                      <svg className="w-8 h-8 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="p-2 bg-emerald-100 rounded-lg">
+                      <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                       </svg>
                     </div>
-                    <div className="pt-1">
-                      <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest leading-none mb-1.5">Fiat Settlement</h3>
-                      <p className="text-xl font-display font-black text-slate-900 tracking-tight uppercase">Bank Wire Parameters</p>
-                    </div>
+                    <h3 className="text-lg font-semibold text-slate-800 uppercase tracking-wide">Banking Details</h3>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
-                    <div className="space-y-3">
-                      <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Financial Institution</Label>
-                      <Input
-                        placeholder="e.g. CORE-BANK-A"
-                        value={bankName}
-                        onChange={e => setBankName(e.target.value)}
-                        className="bg-white border-slate-200 h-14 rounded-2xl font-black uppercase tracking-tight text-sm focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all shadow-sm"
-                      />
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-xs font-semibold uppercase text-slate-400">Bank Name</Label>
+                        <Input
+                          placeholder="e.g. Stanbic, CBZ"
+                          value={bankName}
+                          onChange={e => setBankName(e.target.value)}
+                          className="bg-white border-slate-200 h-10"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs font-semibold uppercase text-slate-400">Account Name</Label>
+                        <Input
+                          placeholder="Beneficiary Name"
+                          value={accountName}
+                          onChange={e => setAccountName(e.target.value)}
+                          className="bg-white border-slate-200 h-10"
+                        />
+                      </div>
                     </div>
-                    <div className="space-y-3">
-                      <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Target Account Name</Label>
-                      <Input
-                        placeholder="ENTITY NAME"
-                        value={accountName}
-                        onChange={e => setAccountName(e.target.value)}
-                        className="bg-white border-slate-200 h-14 rounded-2xl font-black uppercase tracking-tight text-sm focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all shadow-sm"
-                      />
-                    </div>
-                    <div className="space-y-3">
-                      <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Node/Account Number</Label>
-                      <Input
-                        placeholder="0000-0000-0000"
-                        value={accountNumber}
-                        onChange={e => setAccountNumber(e.target.value)}
-                        className="bg-white border-slate-200 h-14 rounded-2xl font-mono font-black text-sm focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all shadow-sm"
-                      />
-                    </div>
-                    <div className="space-y-3">
-                      <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Gateway/Branch Code</Label>
-                      <Input
-                        placeholder="ROUTE-001"
-                        value={branchCode}
-                        onChange={e => setBranchCode(e.target.value)}
-                        className="bg-white border-slate-200 h-14 rounded-2xl font-black uppercase tracking-widest text-xs focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all shadow-sm"
-                      />
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-xs font-semibold uppercase text-slate-400">Account Number</Label>
+                        <Input
+                          placeholder="Account Number"
+                          value={accountNumber}
+                          onChange={e => setAccountNumber(e.target.value)}
+                          className="bg-white border-slate-200 h-10 font-mono"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs font-semibold uppercase text-slate-400">Branch Code</Label>
+                        <Input
+                          placeholder="Sort Code"
+                          value={branchCode}
+                          onChange={e => setBranchCode(e.target.value)}
+                          className="bg-white border-slate-200 h-10"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* Totals & Verification Section */}
-              <div className="glass-card rounded-[3rem] p-12 border-none relative overflow-hidden shadow-3xl shadow-slate-200/50 bg-slate-900 group">
-                <div className="absolute top-0 right-0 w-96 h-96 bg-primary/20 blur-[150px] -mr-48 -mt-48 rounded-full animate-pulse" />
-                <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-500/10 blur-[100px] -ml-32 -mb-32 rounded-full" />
+              <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-indigo-100 rounded-lg">
+                    <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-800 uppercase tracking-wide">Invoice Summary</h3>
+                </div>
 
-                <div className="flex flex-col lg:flex-row gap-16 relative z-10">
-                  <div className="flex-1 space-y-10">
-                    <div className="flex items-center gap-6">
-                      <div className="p-5 bg-white/5 backdrop-blur-xl rounded-[2rem] border border-white/10 shadow-2xl">
-                        <ShieldCheck className="w-10 h-10 text-primary" />
-                      </div>
-                      <div>
-                        <h3 className="text-xs font-black text-white/40 uppercase tracking-[0.3em] leading-none mb-2">Security & Compliance</h3>
-                        <p className="text-2xl font-display font-black text-white tracking-tight uppercase">Fiscal Verification</p>
-                      </div>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center py-3 border-b border-slate-100">
+                    <span className="text-slate-600 font-medium">{!taxInclusive ? "Total (excl. tax)" : "Subtotal"}</span>
+                    <span className="font-mono font-bold text-slate-900">{currentSymbol}{subtotal.toFixed(2)}</span>
+                  </div>
+
+                  <div className="bg-slate-50 rounded-lg p-3 border border-slate-200 my-4">
+                    <h4 className="text-[10px] font-bold text-slate-700 uppercase mb-2 text-center">Tax Analysis</h4>
+                    <div className="grid grid-cols-4 gap-2 text-[9px] font-bold text-slate-500 uppercase mb-1 border-b border-slate-200 pb-1">
+                      <div className="text-left font-bold text-slate-500 uppercase">VAT %</div>
+                      <div className="text-right">Net.Amt</div>
+                      <div className="text-right">VAT</div>
+                      <div className="text-right">Amount</div>
                     </div>
+                    <div className="space-y-1">
+                      {Object.entries(taxBreakdown).map(([key, vals]) => {
+                        const mTax = taxTypes.data?.find((t: any) => t.id == vals.taxTypeId);
+                        // Strict check for Exempt first
+                        const isExempt = mTax?.zimraTaxId == 1 || mTax?.zimraTaxId == "1" || mTax?.zimraCode === 'C' || mTax?.zimraCode === 'E' || mTax?.name?.toLowerCase().includes('exempt');
+                        // If not explicitly exempt, and rate is 0, default to Zero Rated (matches backend)
+                        const isZeroRated = mTax?.zimraTaxId == 2 || mTax?.zimraTaxId == "2" || mTax?.zimraCode === 'D' || mTax?.name?.toLowerCase().includes('zero rated') || (!isExempt && vals.rate === 0);
 
-                    <div className="bg-white/5 backdrop-blur-3xl rounded-[2.5rem] p-8 border border-white/10 shadow-2xl space-y-6">
-                      <div className="flex items-center gap-6">
-                        <div className="bg-white rounded-3xl h-24 w-24 flex items-center justify-center p-4 flex-shrink-0 shadow-3xl">
-                          <div className="grid grid-cols-3 gap-1 w-full h-full opacity-10">
-                            {[...Array(9)].map((_, i) => <div key={i} className="bg-slate-900 rounded-sm" />)}
+                        return (
+                          <div key={key} className="grid grid-cols-4 gap-2 text-[10px] items-center py-1 border-b border-slate-100 last:border-0">
+                            <div className="text-slate-600 truncate">
+                              {isExempt ? (mTax?.name || "Exempt") : `${Number(vals.rate).toFixed(2)}%`}
+                            </div>
+                            <div className="text-right font-mono text-slate-700">
+                              {vals.net.toFixed(2)}
+                            </div>
+                            <div className="text-right font-mono text-slate-700">
+                              {isExempt ? "-" : vals.tax.toFixed(2)}
+                            </div>
+                            <div className="text-right font-mono font-bold text-slate-900">
+                              {(vals.net + vals.tax).toFixed(2)}
+                            </div>
                           </div>
-                        </div>
-                        <div className="space-y-2">
-                          <p className="font-black text-white uppercase tracking-widest text-xs">Digital DNA Encapsulation</p>
-                          <p className="text-xs font-bold text-white/40 leading-relaxed max-w-sm uppercase tracking-tight">
-                            Upon final execution, a unique ZIMRA-signed identity and encrypted QR matrix will be merged into this document for legal persistence.
-                          </p>
-                        </div>
-                      </div>
+                        );
+                      })}
                     </div>
                   </div>
 
-                  <div className="flex-1 lg:max-w-md">
-                    <div className="bg-white/5 backdrop-blur-3xl rounded-[2.5rem] p-10 space-y-8 border border-white/10 shadow-2xl relative overflow-hidden">
-                      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
+                  <div className="flex justify-between items-center py-3 border-b border-slate-100">
+                    <span className="text-slate-600 font-medium">Total Tax</span>
+                    <span className="font-mono font-bold text-slate-900">{currentSymbol}{taxAmount.toFixed(2)}</span>
+                  </div>
 
-                      <div className="space-y-4">
-                        <div className="flex justify-between items-center px-2">
-                          <span className="text-white/40 font-black uppercase tracking-widest text-[10px]">{!taxInclusive ? "Basis Amount" : "Combined Total"}</span>
-                          <span className="font-mono font-black text-white text-xl tracking-tighter">{currentSymbol}{subtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                        </div>
+                  <div className="flex justify-between items-center py-4 bg-slate-50 rounded-lg px-4">
+                    <span className="text-xl font-bold text-slate-900">Total</span>
+                    <span className="text-xl font-mono font-bold text-slate-900">{currentSymbol}{total.toFixed(2)}</span>
+                  </div>
+                </div>
 
-                        <div className="bg-black/20 rounded-3xl p-6 border border-white/5 shadow-inner">
-                          <h4 className="text-[10px] font-black text-primary uppercase tracking-[0.3em] mb-6 border-b border-white/5 pb-3">Duty Breakdown</h4>
-                          <div className="space-y-5">
-                            {Object.entries(taxBreakdown).length > 0 ? Object.entries(taxBreakdown).map(([key, vals]) => {
-                              const mTax = taxTypes.data?.find((t: any) => t.id == vals.taxTypeId);
-                              const isExempt = mTax?.zimraTaxId == "1" || mTax?.zimraCode === 'C' || mTax?.zimraCode === 'E' || mTax?.name?.toLowerCase().includes('exempt');
+                <div className="mt-6 pt-6 border-t border-slate-100">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-semibold text-slate-800">Verification</h4>
+                      <p className="text-xs text-slate-500">Will be generated on submission</p>
+                    </div>
+                  </div>
 
-                              return (
-                                <div key={key} className="flex justify-between items-center text-xs">
-                                  <div className="flex items-center gap-3">
-                                    <div className={cn("w-2 h-2 rounded-full", isExempt ? "bg-white/20" : "bg-primary shadow-[0_0_8px_rgba(var(--primary),0.5)]")}></div>
-                                    <span className="text-white/60 font-black uppercase tracking-widest text-[10px]">
-                                      {isExempt ? (mTax?.name || "Tax Exempt") : `VAT NODE (${Number(vals.rate).toFixed(1)}%)`}
-                                    </span>
-                                  </div>
-                                  <span className="font-mono font-black text-white/90">
-                                    {isExempt ? "-" : `${currentSymbol}${vals.tax.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                                  </span>
-                                </div>
-                              );
-                            }) : (
-                              <div className="flex justify-between items-center text-xs opacity-30">
-                                <span className="text-white/40 font-black uppercase tracking-widest text-[10px]">No duties applied</span>
-                                <span className="font-mono font-black text-white/90">-</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
+                  <div className="bg-slate-50 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="bg-white border-2 border-slate-100 rounded-lg h-16 w-16 flex items-center justify-center text-[10px] text-slate-400 text-center p-1 flex-shrink-0">
+                        [QR]
                       </div>
-
-                      <div className="pt-6 border-t border-white/10">
-                        <div className="flex justify-between items-end">
-                          <div>
-                            <span className="text-primary font-black uppercase tracking-[0.4em] text-[10px] block mb-1">Final Settlement</span>
-                            <span className="text-white/40 font-bold text-[10px] uppercase tracking-widest">Total Liability</span>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-4xl font-display font-black text-white tracking-tighter leading-none mb-1">
-                              {currentSymbol}{total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </div>
-                            <div className="text-[10px] font-mono font-black text-primary/60 uppercase tracking-widest">
-                              {currencyCode} EQUIVALENT
-                            </div>
-                          </div>
-                        </div>
+                      <div className="text-xs text-slate-600 leading-relaxed">
+                        <p className="font-medium mb-1">Digital Verification</p>
+                        <p>QR code and fiscal signature will be automatically generated when you submit this invoice to ZIMRA for compliance verification.</p>
                       </div>
                     </div>
                   </div>
@@ -1604,227 +1558,188 @@ export default function CreateInvoicePage() {
           </div>
         </div>
 
-      </div >
+      </div>
 
       {/* Validation Warning Dialog */}
-      < Dialog open={showValidationDialog} onOpenChange={setShowValidationDialog} >
-        <DialogContent className="sm:max-w-md rounded-3xl border-0 shadow-2xl p-6">
-          <DialogHeader className="mb-4">
-            <div className="mx-auto w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center mb-3">
-              <AlertCircle className="h-6 w-6 text-amber-600" />
-            </div>
-            <DialogTitle className="text-center text-xl font-bold text-slate-800">
+      <Dialog open={showValidationDialog} onOpenChange={setShowValidationDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600">
+              <AlertCircle className="h-5 w-5" />
               Validation Warnings
             </DialogTitle>
-            <DialogDescription className="text-sm text-slate-500 text-center mt-1">
-              Please review the following potential issues before proceeding
-            </DialogDescription>
+            <div className="text-sm text-slate-500 mt-2">
+              Please review the following potential issues before proceeding:
+            </div>
           </DialogHeader>
-          <div className="space-y-3 bg-amber-50/50 p-4 rounded-2xl border border-amber-100/50">
+          <div className="py-4 space-y-3">
             {validationWarnings.map((warning, index) => (
-              <div key={index} className="flex items-start gap-3 text-sm text-amber-700">
-                <span className="mt-1.5 w-1.5 h-1.5 bg-amber-400 rounded-full flex-shrink-0"></span>
-                <span className="leading-relaxed font-medium">{warning.replace('⚠️ ', '')}</span>
+              <div key={index} className="flex items-start gap-3 p-3 bg-amber-50 rounded-lg text-amber-800 text-sm border border-amber-100">
+                <span className="mt-0.5">•</span>
+                <span>{warning.replace('⚠️ ', '')}</span>
               </div>
             ))}
           </div>
-          <div className="flex gap-3 mt-6">
-            <Button variant="outline" onClick={() => setShowValidationDialog(false)} className="flex-1 rounded-xl h-11 border-slate-200 hover:bg-slate-50 font-medium text-slate-700">
+          <div className="flex justify-end gap-3 mt-4">
+            <Button variant="outline" onClick={() => setShowValidationDialog(false)}>
               Back to Edit
             </Button>
             <Button
-              className="flex-1 rounded-xl h-11 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold shadow-lg shadow-amber-200"
+              className="bg-amber-600 hover:bg-amber-700 text-white"
               onClick={() => pendingAction && executeAction(pendingAction)}
             >
               Proceed Anyway
             </Button>
           </div>
         </DialogContent>
-      </Dialog >
+      </Dialog>
 
       {/* PDF Preview Dialog */}
-      < Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen} >
-        <DialogContent className="max-w-5xl h-[92vh] p-0 rounded-3xl overflow-hidden border-0 shadow-2xl flex flex-col bg-slate-50">
-          <div className="px-6 py-4 bg-white border-b border-slate-100 flex items-center justify-between shrink-0 z-10">
-            <div className="flex items-center gap-4">
-              <div className="p-2 bg-violet-100/50 rounded-xl">
-                <Eye className="w-5 h-5 text-violet-600" />
-              </div>
-              <div>
-                <DialogTitle className="text-lg font-bold text-slate-900">Document Preview</DialogTitle>
-                <DialogDescription className="text-xs font-medium text-slate-500">Live preview of your generated document</DialogDescription>
-              </div>
+      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+        <DialogContent className="max-w-4xl h-[90vh]">
+          <DialogHeader>
+            <DialogTitle>Invoice Preview - Debug Info</DialogTitle>
+            <div className="text-xs text-slate-500 mt-2">
+              Customer: {customerId ? 'âœ…' : 'âŒ'} |
+              Company: {company ? 'âœ…' : 'âŒ'} |
+              Items: {items.length} |
+              Subtotal: {subtotal} |
+              Tax: {taxAmount} |
+              Total: {total}
             </div>
-
-            <div className="flex items-center gap-2">
-              <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-lg border border-slate-100 mr-2">
-                <div className="flex items-center gap-1.5">
-                  <div className={cn("w-2 h-2 rounded-full", customerId ? "bg-emerald-500" : "bg-slate-300")}></div>
-                  <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wide">Customer</span>
-                </div>
-                <div className="w-px h-3 bg-slate-200 mx-1"></div>
-                <div className="flex items-center gap-1.5">
-                  <div className={cn("w-2 h-2 rounded-full", company ? "bg-emerald-500" : "bg-slate-300")}></div>
-                  <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wide">Company</span>
-                </div>
-                <div className="w-px h-3 bg-slate-200 mx-1"></div>
-                <div className="flex items-center gap-1.5">
-                  <div className={cn("w-2 h-2 rounded-full", items.length > 0 ? "bg-emerald-500" : "bg-slate-300")}></div>
-                  <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wide">Items: {items.length}</span>
-                </div>
-              </div>
-
-              <Button variant="ghost" onClick={() => setIsPreviewOpen(false)} className="h-9 w-9 p-0 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-              </Button>
-            </div>
-          </div>
-
-          <div className="flex-1 bg-slate-100/50 overflow-hidden relative">
+          </DialogHeader>
+          <div className="flex-1 h-full min-h-[500px] w-full bg-slate-100 rounded-md overflow-hidden">
             {customerId && company && items.length > 0 ? (
-              <div className="w-full h-full p-4 lg:p-8 flex justify-center overflow-auto custom-scrollbar">
-                <div className="shadow-2xl shadow-slate-300/50 rounded-sm overflow-hidden bg-white w-full max-w-[800px] h-fit min-h-full">
-                  <PDFViewer width="100%" height="100%" className="w-full h-[800px] lg:h-full min-h-[80vh] border-none">
-                    <InvoicePDF
-                      invoice={{
-                        invoiceNumber: "DRAFT",
-                        issueDate: issueDate ? new Date(issueDate).toISOString() : new Date().toISOString(),
-                        dueDate: dueDate ? new Date(dueDate).toISOString() : new Date().toISOString(),
-                        status: "draft",
-                        items: items.map(item => ({
-                          ...item,
-                          lineTotal: (item.quantity * item.unitPrice).toString(),
-                          product: { hsCode: item.hsCode }
-                        })),
-                        subtotal: subtotal.toString(),
-                        taxAmount: taxAmount.toString(),
-                        total: total.toString(),
-                        currency: currencyCode,
-                        taxInclusive,
-                        notes,
-                        currencySymbol: currentSymbol
-                      }}
-                      company={{
-                        ...company,
-                        bankName,
-                        accountName,
-                        accountNumber,
-                        branchCode
-                      }}
-                      customer={customers?.find(c => c.id.toString() === customerId)}
-                      taxTypes={taxTypes.data}
-                    />
-                  </PDFViewer>
+              <div className="w-full h-full relative">
+                {/* PDF Preview Placeholder */}
+                <div className="w-full h-full bg-white flex items-center justify-center">
+                  <div className="text-center p-8 max-w-md">
+                    <div className="mb-6">
+                      <svg className="w-16 h-16 mx-auto text-slate-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <h3 className="text-lg font-medium text-slate-900 mb-2">PDF Preview</h3>
+                      <p className="text-sm text-slate-600">
+                        PDF preview is not available in development mode. Use the download button below to test PDF generation.
+                      </p>
+                    </div>
+                    <div className="bg-slate-50 rounded-lg p-4 text-left">
+                      <h4 className="text-sm font-medium text-slate-900 mb-2">Invoice Details:</h4>
+                      <div className="text-xs text-slate-600 space-y-1">
+                        <p><strong>Number:</strong> DRAFT</p>
+                        <p><strong>Customer:</strong> {customers?.find(c => c.id.toString() === customerId)?.name}</p>
+                        <p><strong>Items:</strong> {items.length}</p>
+                        <p><strong>Total:</strong> {currentSymbol}{total.toFixed(2)}</p>
+                        <p><strong>Currency:</strong> {currencyCode}</p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             ) : (
-              <div className="flex items-center justify-center h-full">
-                <div className="bg-white p-8 rounded-3xl shadow-xl border border-slate-100 max-w-md w-full text-center">
-                  <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <ClipboardList className="w-8 h-8 text-slate-300" />
+              <div className="flex items-center justify-center h-full text-slate-400 text-center p-8">
+                <div>
+                  <p className="text-lg font-medium mb-2 text-slate-600">PDF Preview Unavailable</p>
+                  <p className="mb-4">Please ensure all requirements are met to preview PDF.</p>
+                  <div className="space-y-1 text-sm max-w-md">
+                    {!customerId && <p className="text-red-600">âŒ Customer not selected</p>}
+                    {customerId && !company && <p className="text-red-600">âŒ Company details not loaded</p>}
+                    {items.length === 0 && <p className="text-red-600">âŒ No invoice items added</p>}
+                    {customerId && company && items.length > 0 && <p className="text-green-600">âœ… All requirements met - PDF should work</p>}
                   </div>
-                  <h3 className="text-lg font-bold text-slate-900 mb-2">Preview Unavailable</h3>
-                  <p className="text-slate-500 mb-6 text-sm leading-relaxed">Please ensure all required information is provided to generate the document preview.</p>
-
-                  <div className="space-y-3">
-                    {!customerId && (
-                      <div className="flex items-center gap-3 p-3 bg-red-50 rounded-xl text-red-700 text-sm font-medium">
-                        <div className="w-2 h-2 bg-red-500 rounded-full"></div> Customer not selected
-                      </div>
-                    )}
-                    {customerId && !company && (
-                      <div className="flex items-center gap-3 p-3 bg-red-50 rounded-xl text-red-700 text-sm font-medium">
-                        <div className="w-2 h-2 bg-red-500 rounded-full"></div> Company details missing
-                      </div>
-                    )}
-                    {items.length === 0 && (
-                      <div className="flex items-center gap-3 p-3 bg-red-50 rounded-xl text-red-700 text-sm font-medium">
-                        <div className="w-2 h-2 bg-red-500 rounded-full"></div> No items added
-                      </div>
-                    )}
-                  </div>
-
-                  <Button variant="outline" onClick={() => setIsPreviewOpen(false)} className="mt-8 w-full rounded-xl h-11 border-slate-200">
-                    Back to Editor
-                  </Button>
                 </div>
               </div>
             )}
           </div>
-
-          <div className="p-4 bg-white border-t border-slate-200 shrink-0 z-10 flex justify-end gap-3">
+          <div className="flex justify-end gap-2 mt-4">
             {customerId && company && items.length > 0 && (
-              <div className="flex gap-3 w-full sm:w-auto">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    console.log('Testing PDF generation');
-                  }}
-                  className="hidden sm:flex rounded-xl h-11 border-slate-200 hover:bg-slate-50 font-medium text-slate-600"
-                >
-                  Test Console
-                </Button>
-
-                <PDFDownloadLink
-                  document={
-                    <InvoicePDF
-                      invoice={{
-                        invoiceNumber: "DRAFT",
-                        issueDate: issueDate ? new Date(issueDate).toISOString() : new Date().toISOString(),
-                        dueDate: dueDate ? new Date(dueDate).toISOString() : new Date().toISOString(),
-                        status: "draft",
-                        items: items.map(item => ({
-                          ...item,
-                          lineTotal: (item.quantity * item.unitPrice).toString(),
-                          product: { hsCode: item.hsCode }
-                        })),
-                        subtotal: subtotal.toString(),
-                        taxAmount: taxAmount.toString(),
-                        total: total.toString(),
-                        currency: currencyCode,
-                        taxInclusive,
-                        notes,
-                        currencySymbol: currentSymbol
-                      }}
-                      company={{
-                        ...company,
-                        bankName,
-                        accountName,
-                        accountNumber,
-                        branchCode
-                      }}
-                      customer={customers?.find(c => c.id.toString() === customerId)}
-                      taxTypes={taxTypes.data}
-                    />
-                  }
-                  fileName={`Invoice-Draft-${Date.now()}.pdf`}
-                  className="w-full sm:w-auto"
-                >
-                  {({ blob, url, loading, error }) => {
-                    if (loading) {
-                      return (
-                        <Button disabled className="w-full rounded-xl h-11 bg-slate-100 text-slate-400 font-bold shadow-none">
-                          <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                          Processing...
-                        </Button>
-                      );
-                    }
+              <PDFDownloadLink
+                document={
+                  <InvoicePDF
+                    invoice={{
+                      invoiceNumber: "DRAFT",
+                      issueDate: issueDate ? new Date(issueDate).toISOString() : new Date().toISOString(),
+                      dueDate: dueDate ? new Date(dueDate).toISOString() : new Date().toISOString(),
+                      status: "draft",
+                      items: items.map(item => ({
+                        ...item,
+                        lineTotal: (item.quantity * item.unitPrice).toString(),
+                        product: { hsCode: item.hsCode }
+                      })),
+                      subtotal: subtotal.toString(),
+                      taxAmount: taxAmount.toString(),
+                      total: total.toString(),
+                      currency: currencyCode,
+                      taxInclusive,
+                      notes,
+                      currencySymbol: currentSymbol
+                    }}
+                    company={{
+                      ...company,
+                      bankName,
+                      accountName,
+                      accountNumber,
+                      branchCode
+                    }}
+                    customer={customers?.find(c => c.id.toString() === customerId)}
+                    taxTypes={taxTypes.data}
+                  />
+                }
+                fileName={`Invoice-Draft-${Date.now()}.pdf`}
+              >
+                {({ blob, url, loading, error }) => {
+                  if (error) {
+                    console.error('PDF Generation Error:', error);
                     return (
-                      <Button className="w-full rounded-xl h-11 bg-slate-900 hover:bg-slate-800 text-white font-bold shadow-lg shadow-slate-200">
-                        <Download className="w-4 h-4 mr-2" />
-                        Download PDF
+                      <div className="space-y-2">
+                        <Button disabled className="gap-2 bg-red-100 text-red-700 border-red-200 w-full">
+                          <Download className="w-4 h-4" />
+                          PDF Generation Failed
+                        </Button>
+                        <p className="text-xs text-red-600">Check browser console for details</p>
+                      </div>
+                    );
+                  }
+                  if (loading) {
+                    return (
+                      <Button disabled className="gap-2 w-full">
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Generating PDF...
                       </Button>
                     );
-                  }}
-                </PDFDownloadLink>
-              </div>
+                  }
+                  return (
+                    <Button className="gap-2 w-full">
+                      <Download className="w-4 h-4" />
+                      Download PDF ({(blob?.size || 0) > 0 ? `${Math.round((blob?.size || 0) / 1024)}KB` : 'Ready'})
+                    </Button>
+                  );
+                }}
+              </PDFDownloadLink>
             )}
-            <Button variant="ghost" onClick={() => setIsPreviewOpen(false)} className="rounded-xl h-11 text-slate-500 hover:text-slate-800 font-medium hidden sm:flex">
-              Close Preview
-            </Button>
+
+            {/* Additional download button for testing */}
+            {customerId && company && items.length > 0 && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  console.log('Testing PDF generation with:', {
+                    customerId,
+                    company: !!company,
+                    itemsCount: items.length,
+                    hasSubtotal: !!subtotal,
+                    currency: currencyCode
+                  });
+                }}
+                className="gap-2"
+              >
+                Test PDF
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => setIsPreviewOpen(false)}>Close</Button>
           </div>
         </DialogContent>
-      </Dialog >
+      </Dialog>
     </Layout >
   );
 }

@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import LandingPage from "@/pages/landing";
+import NuraLandingPage from "@/pages/nura-landing";
 import AuthPage from "@/pages/auth";
 import ForgotPasswordPage from "@/pages/forgot-password";
 import ResetPasswordPage from "@/pages/reset-password";
@@ -336,6 +337,7 @@ function Router() {
       <Route path="/pos-settings">
         {() => <ProtectedRoute component={PosSettingsPage} />}
       </Route>
+      <Route path="/nura-landing" component={NuraLandingPage} />
       <Route path="/">
         {user ? <Redirect to={isOnline ? "/dashboard" : "/pos"} /> : <LandingPage />}
       </Route>

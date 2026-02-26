@@ -1,538 +1,722 @@
-
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import {
-    Shield,
-    Zap,
-    QrCode,
-    Calculator,
-    BarChart3,
-    Users,
-    Menu,
-    X,
-    ArrowRight,
-    LayoutDashboard,
-    Check,
-    CreditCard,
-    Globe,
-    FileText,
-    Receipt,
-    Server,
-    Cloud,
-    Wifi,
-    ChevronDown,
-    HelpCircle
-} from "lucide-react";
-import { useState, lazy, Suspense } from "react";
+import { useState, useEffect, type CSSProperties } from "react";
 import { useLocation } from "wouter";
-import { motion, useScroll, useTransform } from "framer-motion";
-import { WhatsAppBubble } from "@/components/ui/whatsapp-bubble";
 
-const ContactForm = lazy(() => import("@/components/contact-form").then(module => ({ default: module.ContactForm })));
+// ─── Design Tokens ─────────────────────────────────────────────────────────────
+const C = {
+  navy:      "#0D1B2A",
+  gold:      "#2563EB",
+  goldLight: "#3B82F6",
+  slate:     "#1E2D3D",
+  ash:       "#F0EEE9",
+  steel:     "#6B7F96",
+  emerald:   "#16A34A",
+  charcoal:  "#0A0F14",
+  white:     "#FFFFFF",
+} as const;
 
-export default function LandingPage() {
-    const [, setLocation] = useLocation();
-    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-    const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
-    const [contactFormOpen, setContactFormOpen] = useState(false);
-    const { scrollY } = useScroll();
-    const y1 = useTransform(scrollY, [0, 500], [0, 200]);
-    const y2 = useTransform(scrollY, [0, 500], [0, -100]);
-
-    // Corporate feature icons map
-    const featureColors = [
-        { icon: Shield, color: "text-slate-900", bg: "bg-slate-100", title: "ZIMRA Compliant", desc: "Always up to date with latest tax regulations." },
-        { icon: Zap, color: "text-slate-900", bg: "bg-slate-100", title: "FDMS Sync", desc: "Real-time fiscal device synchronization." },
-        { icon: QrCode, color: "text-slate-900", bg: "bg-slate-100", title: "Smart QR Codes", desc: "Embeds fiscal signatures automatically." },
-        { icon: Calculator, color: "text-slate-900", bg: "bg-slate-100", title: "Auto-Tax", desc: "VAT and multiple tax rate automated calculation." },
-        { icon: LayoutDashboard, color: "text-slate-900", bg: "bg-slate-100", title: "Smart POS", desc: "Complete Point of Sale system for retail operations." },
-        { icon: Check, color: "text-slate-900", bg: "bg-slate-100", title: "Inventory", desc: "Track stock levels and manage products easily." },
-    ];
-
-    return (
-        <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-slate-900/10 px-0 overflow-x-hidden">
-            {/* Top Navigation */}
-            <nav className="fixed top-0 inset-x-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200 transition-all duration-300">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex justify-between items-center h-20">
-                        <div className="flex items-center gap-2">
-                            <img src="/fiscalstack-logo.png" alt="FiscalStack" className="h-8" />
-                        </div>
-
-                        <div className="hidden md:flex items-center space-x-8">
-                            {["Features", "Pricing", "FAQ"].map((item) => (
-                                <a key={item} href={`#${item.toLowerCase()}`} className="text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors">
-                                    {item}
-                                </a>
-                            ))}
-                            <div className="flex items-center gap-3 pl-4 border-l border-slate-200">
-                                <Button variant="ghost" className="font-semibold text-slate-600 hover:text-slate-900" onClick={() => setLocation("/auth")}>
-                                    Sign In
-                                </Button>
-                                <Button onClick={() => setLocation("/auth?mode=signup")} className="btn-gradient rounded-md px-6 font-bold">
-                                    Get Started
-                                </Button>
-                            </div>
-                        </div>
-
-                        <button className="md:hidden p-2 text-slate-600" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
-                            {mobileMenuOpen ? <X /> : <Menu />}
-                        </button>
-                    </div>
-                </div>
-            </nav>
-
-            {/* Mobile Menu */}
-            {mobileMenuOpen && (
-                <div className="fixed inset-0 z-40 bg-white pt-24 px-6 md:hidden">
-                    <div className="space-y-4">
-                        {["Features", "Pricing", "FAQ"].map((item) => (
-                            <a key={item} href={`#${item.toLowerCase()}`} className="block text-2xl font-bold text-slate-900" onClick={() => setMobileMenuOpen(false)}>
-                                {item}
-                            </a>
-                        ))}
-                        <div className="pt-8 grid gap-4">
-                            <Button size="lg" className="w-full btn-gradient" onClick={() => setLocation("/auth?mode=signup")}>Get Started</Button>
-                            <Button size="lg" variant="outline" className="w-full" onClick={() => setLocation("/auth")}>Sign In</Button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Simple Corporate Background */}
-            <div className="fixed inset-0 pointer-events-none z-0">
-                <div className="absolute inset-0 bg-slate-50/50" />
-                <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808005_1px,transparent_1px),linear-gradient(to_bottom,#80808005_1px,transparent_1px)] bg-[size:40px_40px]" />
-            </div>
-
-            {/* Hero Section */}
-            <section className="relative pt-32 pb-20 lg:pt-40 lg:pb-32 overflow-visible z-10">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
-                    <div className="grid lg:grid-cols-2 gap-16 items-center">
-                        <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.6 }}
-                            className="text-center lg:text-left"
-                        >
-                            <Badge variant="secondary" className="mb-6 px-4 py-1.5 rounded-full bg-slate-100 text-slate-900 border-none font-bold uppercase tracking-wider text-[10px]">
-                                Enterprise Fiscalization Platform
-                            </Badge>
-                            <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold text-slate-900 leading-[1.05] mb-8 tracking-tight">
-                                Modern Fiscal <br />
-                                <span className="text-slate-500">
-                                    Software solutions.
-                                </span>
-                            </h1>
-
-                            <p className="text-xl text-slate-600 mb-10 leading-relaxed max-w-2xl mx-auto lg:mx-0 font-medium">
-                                The trusted fiscalization partner for Zimbabwe's leading enterprises.
-                                Reliable ZIMRA synchronization, advanced inventory management, and high-security compliance.
-                            </p>
-
-                            <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-                                <Button size="lg" className="h-14 px-8 rounded-md text-lg btn-gradient border-none hover:shadow-xl transition-all duration-300" onClick={() => setLocation("/auth?mode=signup")}>
-                                    Get Started Today <ArrowRight className="ml-2 w-5 h-5" />
-                                </Button>
-                                <Button size="lg" variant="outline" className="h-14 px-8 rounded-md text-lg text-slate-900 border-slate-200 hover:bg-slate-50 transition-all duration-300" onClick={() => setContactFormOpen(true)}>
-                                    Contact Sales
-                                </Button>
-                            </div>
-
-                            <div className="mt-12 flex items-center justify-center lg:justify-start gap-8 border-t border-slate-200 pt-8">
-                                <div className="text-sm font-semibold text-slate-500 uppercase tracking-widest">
-                                    Trusted by Zimbabwe's Finest
-                                </div>
-                            </div>
-                        </motion.div>
-
-                        {/* Infographic Hero Visual */}
-                        <div className="relative lg:h-[600px] flex items-center justify-center perspective-1000">
-
-                            {/* Connection Curve (SVG) - Infographic Element */}
-                            <svg className="absolute w-[120%] h-[120%] top-[-10%] left-[-10%] z-0 pointer-events-none opacity-40">
-                                <path
-                                    d="M 100 400 C 150 150, 450 450, 500 100"
-                                    stroke="url(#gradient-line)"
-                                    strokeWidth="3"
-                                    fill="none"
-                                    strokeDasharray="8 8"
-                                />
-                                <defs>
-                                    <linearGradient id="gradient-line" x1="0%" y1="0%" x2="100%" y2="0%">
-                                        <stop offset="0%" stopColor="#8b5cf6" />
-                                        <stop offset="100%" stopColor="#06b6d4" />
-                                    </linearGradient>
-                                </defs>
-                                {/* Moving Packet */}
-                                <circle r="4" fill="#06b6d4">
-                                    <animateMotion
-                                        dur="4s"
-                                        repeatCount="indefinite"
-                                        path="M 100 400 C 150 150, 450 450, 500 100"
-                                    />
-                                </circle>
-                            </svg>
-
-                            {/* ZIMRA Cloud Node */}
-                            <motion.div
-                                animate={{ y: [0, -10, 0] }}
-                                transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                                className="absolute top-10 right-0 bg-white p-4 rounded-2xl shadow-lg border border-slate-100 z-40 flex items-center gap-2"
-                            >
-                                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600">
-                                    <Cloud className="w-5 h-5" />
-                                </div>
-                                <div>
-                                    <div className="text-[10px] uppercase font-bold text-slate-400">FDMS</div>
-                                    <div className="font-bold text-sm text-slate-800">Connected</div>
-                                </div>
-                                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse ml-2" />
-                            </motion.div>
-
-                            {/* Main Floating Invoice */}
-                            <motion.div
-                                initial={{ opacity: 0, y: 50, rotateX: 10 }}
-                                animate={{ opacity: 1, y: 0, rotateX: 0 }}
-                                transition={{ duration: 0.8, type: "spring" }}
-                                style={{ y: y2 }}
-                                className="relative w-full max-w-md bg-white rounded-xl shadow-2xl border border-slate-100 overflow-hidden z-20"
-                            >
-                                {
-                                    /* Scanner Beam Removed */
-                                }
-
-                                {/* Invoice Header */}
-                                <div className="bg-slate-900 p-6 border-b border-slate-800 flex justify-between items-start text-white">
-                                    <div className="flex gap-4 items-center">
-                                        <div className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center">
-                                            <div className="w-5 h-5 border-2 border-white rounded-full" />
-                                        </div>
-                                        <div>
-                                            <div className="font-bold text-base">TechSolutions Ltd</div>
-                                            <div className="text-xs text-slate-400">VAT: 123456789</div>
-                                        </div>
-                                    </div>
-                                    <div className="text-right">
-                                        <div className="text-sm font-mono text-slate-300">#INV-2024-001</div>
-                                    </div>
-                                </div>
-
-                                {/* Invoice Body */}
-                                <div className="p-6 space-y-5 bg-white">
-                                    {/* Line Items */}
-                                    <div className="space-y-3">
-                                        <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-2">
-                                            <span>Description</span>
-                                            <span>Amount</span>
-                                        </div>
-                                        {[
-                                            { desc: "Web Development", price: "$1,200.00" },
-                                            { desc: "Hosting (Yearly)", price: "$250.00" },
-                                            { desc: "Maintenance", price: "$1,000.00" }
-                                        ].map((item, i) => (
-                                            <motion.div
-                                                key={i}
-                                                initial={{ opacity: 0, x: -10 }}
-                                                animate={{ opacity: 1, x: 0 }}
-                                                transition={{ delay: 0.8 + (i * 0.2) }}
-                                                className="flex justify-between text-sm py-1"
-                                            >
-                                                <span className="text-slate-700">{item.desc}</span>
-                                                <span className="text-slate-900 font-bold font-mono">{item.price}</span>
-                                            </motion.div>
-                                        ))}
-                                    </div>
-
-                                    {/* Totals */}
-                                    <div className="pt-4 border-t border-slate-100 space-y-2">
-                                        <div className="flex justify-between text-sm">
-                                            <span className="text-slate-500">Subtotal</span>
-                                            <span className="text-slate-700 font-mono">$2,450.00</span>
-                                        </div>
-                                        <div className="flex justify-between text-sm">
-                                            <span className="text-slate-500">VAT (15%)</span>
-                                            <span className="text-slate-700 font-mono">$367.50</span>
-                                        </div>
-                                        <div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-100">
-                                            <span className="text-slate-900 font-bold text-sm">Total</span>
-                                            <span className="text-violet-600 font-bold text-lg font-mono">$2,817.50</span>
-                                        </div>
-                                    </div>
-
-                                    {/* Footer / QR / Stamp */}
-                                    <div className="flex justify-between items-center pt-2">
-                                        <div className="flex items-center gap-3">
-                                            <QrCode className="w-10 h-10 text-slate-800" />
-                                            <div className="text-[10px] text-slate-400 leading-tight">
-                                                Scan to verify<br />Fiscal Signature
-                                            </div>
-                                        </div>
-
-                                        <motion.div
-                                            initial={{ scale: 3, opacity: 0 }}
-                                            animate={{ scale: 1, opacity: 1 }}
-                                            transition={{ delay: 2, type: "spring", stiffness: 200, damping: 15 }}
-                                            className="px-3 py-1 border-2 border-green-600 text-green-700 rounded-md font-bold uppercase text-xs tracking-wider transform -rotate-6 bg-green-50"
-                                        >
-                                            Fiscalized
-                                        </motion.div>
-                                    </div>
-                                </div>
-                            </motion.div>
-
-                            {/* Floating Device Node */}
-                            <motion.div
-                                animate={{ y: [0, 10, 0] }}
-                                transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
-                                className="absolute bottom-10 -left-4 bg-white p-4 rounded-2xl shadow-lg border border-slate-100 z-30 flex items-center gap-2"
-                            >
-                                <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center text-amber-600">
-                                    <Server className="w-5 h-5" />
-                                </div>
-                                <div>
-                                    <div className="text-[10px] uppercase font-bold text-slate-400">Device Status</div>
-                                    <div className="font-bold text-sm text-slate-800">Online • Synced</div>
-                                </div>
-                                <Wifi className="w-4 h-4 text-green-500 animate-pulse ml-2" />
-                            </motion.div>
-
-                            {/* Decorative Blobs */}
-                            <motion.div
-                                className="absolute -right-12 top-20 w-32 h-32 bg-cyan-400/20 rounded-full blur-2xl -z-10"
-                            />
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            {/* Features Grid */}
-            <section id="features" className="py-32 bg-white relative z-10">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="text-center max-w-3xl mx-auto mb-20">
-                        <Badge variant="outline" className="mb-4 border-slate-200 text-slate-500 bg-slate-50 font-bold uppercase tracking-widest text-[10px]">Solutions</Badge>
-                        <h2 className="text-4xl lg:text-5xl font-bold text-slate-900 mb-6">
-                            Enterprise-ready <span className="text-slate-500">Infrastructure.</span>
-                        </h2>
-                        <p className="text-xl text-slate-600 font-medium">
-                            Robust, compliant, and scalable fiscal solutions for every business size.
-                        </p>
-                    </div>
-
-                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-                        {featureColors.map((f, i) => (
-                            <motion.div
-                                key={i}
-                                initial={{ opacity: 0, y: 20 }}
-                                whileInView={{ opacity: 1, y: 0 }}
-                                viewport={{ once: true }}
-                                transition={{ delay: i * 0.1 }}
-                                className="group p-10 rounded-xl bg-white border border-slate-200 hover:border-slate-300 hover:shadow-xl transition-all duration-300"
-                            >
-                                <div className={`w-12 h-12 rounded-lg ${f.bg} flex items-center justify-center ${f.color} mb-6 transition-transform group-hover:scale-105 duration-300`}>
-                                    <f.icon className="w-6 h-6" />
-                                </div>
-                                <h3 className="text-xl font-bold text-slate-900 mb-3">{f.title}</h3>
-                                <p className="text-slate-600 leading-relaxed font-medium opacity-80">
-                                    {f.desc}
-                                </p>
-                            </motion.div>
-                        ))}
-                    </div>
-                </div>
-            </section>
-
-            {/* Pricing Section */}
-            <section id="pricing" className="py-32 bg-slate-50 relative z-10">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="text-center mb-20 px-4">
-                        <Badge variant="outline" className="mb-4 border-slate-200 text-slate-500 bg-white font-bold uppercase tracking-widest text-[10px]">Investment Plans</Badge>
-                        <h2 className="text-4xl lg:text-5xl font-bold text-slate-900 mb-4">
-                            Transparent Corporate Pricing
-                        </h2>
-                        <p className="text-xl text-slate-600 font-medium">Scalable solutions for growing enterprises.</p>
-                    </div>
-
-                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
-                        {[
-                            { name: "Development", price: "Free", desc: "System testing & integration", features: ["Unlimited Invoices (Test)", "Sandboxed FDMS Sync", "API Documentation", "Community Support"] },
-                            { name: "Professional", price: "$150", popular: true, desc: "Per device / per annum", features: ["Unlimited Invoices", "Real-time FDMS Sync", "Standard Support", "Full Compliance"] },
-                            { name: "Enterprise", price: "Custom", desc: "Large scale deployment", features: ["Unlimited Users", "Dedicated Account Manager", "SLA Agreements", "White-glove Setups"] },
-                        ].map((plan, i) => (
-                            <motion.div
-                                key={i}
-                                initial={{ opacity: 0, y: 20 }}
-                                whileInView={{ opacity: 1, y: 0 }}
-                                viewport={{ once: true }}
-                                transition={{ delay: i * 0.1 }}
-                                className={`relative p-10 rounded-xl bg-white border ${plan.popular ? 'border-slate-900 ring-1 ring-slate-900 shadow-2xl' : 'border-slate-200'} flex flex-col hover:translate-y-[-4px] transition-all duration-300`}
-                            >
-                                {plan.popular && <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 text-white px-4 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest shadow-lg">Recommended</div>}
-                                <div className="mb-8">
-                                    <h3 className="text-2xl font-bold text-slate-900">{plan.name}</h3>
-                                    <p className="text-sm text-slate-500 mb-6 font-semibold">{plan.desc}</p>
-                                    <div className="flex items-baseline gap-1">
-                                        <span className="text-5xl font-bold text-slate-900 tracking-tight">{plan.price}</span>
-                                        {plan.price !== "Custom" && <span className="text-slate-500 font-bold uppercase text-xs">/ Year</span>}
-                                    </div>
-                                </div>
-                                <ul className="space-y-4 mb-10 flex-1">
-                                    {plan.features.map((feat) => (
-                                        <li key={feat} className="flex items-center gap-3 text-sm text-slate-700 font-semibold">
-                                            <div className="w-5 h-5 rounded-full bg-slate-100 text-slate-900 flex items-center justify-center flex-shrink-0"><Check className="w-3 h-3" /></div>
-                                            {feat}
-                                        </li>
-                                    ))}
-                                </ul>
-                                <Button size="lg" className={`w-full h-14 rounded-md font-bold text-sm ${plan.popular ? 'bg-slate-900 hover:bg-slate-800 text-white' : 'bg-white border border-slate-200 text-slate-900 hover:bg-slate-50'}`} onClick={() => setLocation("/auth?mode=signup")}>
-                                    {plan.price === "Custom" ? "Talk to Sales" : "Get Started"}
-                                </Button>
-                            </motion.div>
-                        ))}
-                    </div>
-                </div>
-            </section>
-
-            {/* FAQ Section */}
-            <section id="faq" className="py-24 bg-white relative z-10 overflow-hidden">
-                <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="text-center mb-16">
-                        <Badge variant="outline" className="mb-4 border-slate-200 text-slate-500 bg-slate-50 font-bold uppercase tracking-widest text-[10px]">
-                            Resources
-                        </Badge>
-                        <h2 className="text-4xl font-bold text-slate-900 mb-4">
-                            Frequently Asked <span className="text-slate-500">Questions.</span>
-                        </h2>
-                        <p className="text-lg text-slate-600 max-w-2xl mx-auto font-medium">
-                            Expert insights into Zimbabwe's fiscal landscape.
-                        </p>
-                    </div>
-
-                    <div className="space-y-3">
-                        {[
-                            {
-                                question: "What is ZIMRA compliance and why do I need it?",
-                                answer: "ZIMRA (Zimbabwe Revenue Authority) compliance requires all businesses to fiscalize their invoices through approved systems. FiscalStack ensures your invoices meet all ZIMRA requirements, including proper tax calculations, fiscal signatures, and QR codes for verification. Non-compliance can result in penalties and legal issues."
-                            },
-                            {
-                                question: "How does the FDMS integration work?",
-                                answer: "Our Fiscal Device Management System (FDMS) integration connects directly with ZIMRA's servers in real-time. Every invoice you create is automatically fiscalized, receives a unique fiscal signature, and is registered with ZIMRA. This happens seamlessly in the background, so you can focus on your business."
-                            },
-                            {
-                                question: "Can I try FiscalStack before committing to a paid plan?",
-                                answer: "Absolutely! Our Development plan is free and allows you to integrate and test your systems in a sandboxed environment. You can upgrade to Professional or Enterprise at any time as your business requirements evolve."
-                            },
-                            {
-                                question: "Is my financial data secure?",
-                                answer: "Security is our top priority. We use bank-level encryption (AES-256) for all data at rest and in transit. Our infrastructure is hosted on secure cloud servers with regular backups, DDoS protection, and 24/7 monitoring. We're also fully compliant with ZIMRA's security requirements."
-                            },
-                            {
-                                question: "Can I use FiscalStack for multiple businesses?",
-                                answer: "Yes! Our Enterprise plans support multi-entity management. You can manage multiple company profiles, branch locations, and fiscal devices from a single unified dashboard."
-                            },
-                            {
-                                question: "Do you provide dedicated support?",
-                                answer: "We provide professional support across all plans. Professional users get priority assistance, while Enterprise clients receive dedicated account management, phone support, and guaranteed service level agreements (SLAs)."
-                            }
-                        ].map((faq, index) => (
-                            <div
-                                key={index}
-                                className="bg-white border border-slate-200 rounded-lg overflow-hidden transition-all duration-200 hover:border-slate-300"
-                            >
-                                <button
-                                    onClick={() => setOpenFaqIndex(openFaqIndex === index ? null : index)}
-                                    className="w-full px-6 py-5 flex items-center justify-between text-left"
-                                >
-                                    <span className="font-bold text-slate-900 pr-4 text-base">
-                                        {faq.question}
-                                    </span>
-                                    <ChevronDown className={`w-5 h-5 transition-transform duration-300 ${openFaqIndex === index ? 'rotate-180 text-slate-900' : 'text-slate-400'}`} />
-                                </button>
-                                <motion.div
-                                    initial={false}
-                                    animate={{
-                                        height: openFaqIndex === index ? "auto" : 0,
-                                        opacity: openFaqIndex === index ? 1 : 0
-                                    }}
-                                    transition={{ duration: 0.3, ease: "easeInOut" }}
-                                    className="overflow-hidden"
-                                >
-                                    <div className="px-6 pb-6 text-slate-600 leading-relaxed font-medium border-t border-slate-100 pt-4">
-                                        {faq.answer}
-                                    </div>
-                                </motion.div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </section>
-
-            {/* CTA Section */}
-            <section className="py-20 bg-white relative z-10">
-                <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="text-center p-12 rounded-xl bg-slate-50 border border-slate-200">
-                        <h3 className="text-2xl font-bold text-slate-900 mb-3">
-                            Strategic Partnerships
-                        </h3>
-                        <p className="text-slate-600 mb-8 max-w-md mx-auto font-medium">
-                            Our team is ready to discuss how FiscalStack can integrate into your enterprise workflow.
-                        </p>
-                        <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                            <Button className="btn-gradient rounded-md px-8 h-12 font-bold" onClick={() => setContactFormOpen(true)}>
-                                <Globe className="w-4 h-4 mr-2" />
-                                Contact Enterprise Support
-                            </Button>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            {/* Footer */}
-            <footer className="bg-white border-t border-slate-200 pt-20 pb-10 relative z-10">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="grid md:grid-cols-4 gap-12 mb-16">
-                        <div className="col-span-2">
-                            <img src="/fiscalstack-logo.png" alt="FiscalStack" className="h-8 mb-6" />
-                            <p className="text-slate-500 max-w-sm font-medium leading-relaxed">
-                                The definitive fiscalization platform for Zimbabwe's modern economy. Built for compliance, engineered for scale.
-                            </p>
-                        </div>
-                        <div>
-                            <h4 className="font-bold text-slate-900 mb-4 uppercase tracking-widest text-xs">Platform</h4>
-                            <ul className="space-y-2">
-                                {["Features", "Pricing", "FAQ"].map(item => (
-                                    <li key={item}>
-                                        <a href={`#${item.toLowerCase()}`} className="text-slate-500 hover:text-slate-900 transition-colors font-medium">{item}</a>
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                        <div>
-                            <h4 className="font-bold text-slate-900 mb-4 uppercase tracking-widest text-xs">Contact</h4>
-                            <p className="text-slate-500 font-medium mb-2">info@fiscalstack.co.zw</p>
-                            <p className="text-slate-500 font-medium">Harare, Zimbabwe</p>
-                        </div>
-                    </div>
-                    <div className="pt-8 border-t border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4">
-                        <p className="text-sm text-slate-400 font-medium">© 2026 FiscalStack. All rights reserved.</p>
-                        <div className="flex gap-6">
-                            <a href="#" className="text-sm text-slate-400 hover:text-slate-900 transition-colors font-medium">Privacy Policy</a>
-                            <a href="#" className="text-sm text-slate-400 hover:text-slate-900 transition-colors font-medium">Terms of Service</a>
-                        </div>
-                    </div>
-                </div>
-            </footer>
-
-            {/* Contact Form Modal */}
-            {contactFormOpen && (
-                <Suspense fallback={null}>
-                    <ContactForm isOpen={contactFormOpen} onClose={() => setContactFormOpen(false)} />
-                </Suspense>
-            )}
-
-            {/* WhatsApp Floating Bubble */}
-            <WhatsAppBubble />
-        </div>
-    );
+// ─── Types ──────────────────────────────────────────────────────────────────────
+interface PlanType {
+  name: string;
+  badge: string | null;
+  price: string;
+  unit: string;
+  tagline: string;
+  features: string[];
+  cta: string;
+  highlight: boolean;
 }
 
+interface FaqType {
+  q: string;
+  a: string;
+}
+
+interface MessageType {
+  from: "bot" | "user";
+  text: string;
+}
+
+interface FeatureItem {
+  icon: string;
+  tag: string;
+  title: string;
+  desc: string;
+  color: string;
+}
+
+// ─── Config — update these to match your project ───────────────────────────────
+const WHATSAPP_NUMBER = "263771234567"; // e.g. 263771234567 (no + or spaces)
+const WHATSAPP_MESSAGE = encodeURIComponent("Hi FiscalStack! I'd like to learn more about your fiscalization platform.");
+const WHATSAPP_URL = `https://wa.me/${WHATSAPP_NUMBER}?text=${WHATSAPP_MESSAGE}`;
+
+// ── Google Fonts ────────────────────────────────────────────────────────────────
+const FontLoader = () => (
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Cormorant+Garamond:ital,wght@0,300;0,500;1,300;1,500;1,600&family=DM+Mono:wght@300;400;500&display=swap"
+  />
+);
+
+// ── Noise overlay ───────────────────────────────────────────────────────────────
+const Noise = () => (
+  <svg
+    className="pointer-events-none fixed inset-0 z-[9999] opacity-[0.032]"
+    style={{ mixBlendMode: "overlay" } as CSSProperties}
+    xmlns="http://www.w3.org/2000/svg"
+    width="100%"
+    height="100%"
+  >
+    <filter id="n">
+      <feTurbulence type="fractalNoise" baseFrequency="0.68" numOctaves="4" stitchTiles="stitch" />
+      <feColorMatrix type="saturate" values="0" />
+    </filter>
+    <rect width="100%" height="100%" filter="url(#n)" />
+  </svg>
+);
+
+// ── Navbar ──────────────────────────────────────────────────────────────────────
+const Navbar = () => {
+  const [, setLocation] = useLocation();
+  const [scrolled, setScrolled] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const fn = () => setScrolled(window.scrollY > 50);
+    window.addEventListener("scroll", fn);
+    return () => window.removeEventListener("scroll", fn);
+  }, []);
+
+  const links = ["Features", "Pricing", "FAQ"];
+
+  return (
+    <nav
+      className="fixed top-4 left-1/2 z-50 flex items-center justify-between px-5 py-3 transition-all duration-500"
+      style={{
+        transform: "translateX(-50%)",
+        width: scrolled ? "min(760px, 94vw)" : "min(960px, 96vw)",
+        borderRadius: 9999,
+        background: scrolled ? "rgba(240,238,233,0.82)" : "transparent",
+        backdropFilter: scrolled ? "blur(28px)" : "none",
+        border: scrolled ? "1px solid rgba(37,99,235,0.18)" : "1px solid transparent",
+        boxShadow: scrolled ? "0 4px 48px rgba(0,0,0,0.13)" : "none",
+      }}
+    >
+      {/* Logo */}
+      <span style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 800, fontSize: 18, color: scrolled ? C.navy : "#fff", letterSpacing: "-0.03em" }}>
+        Fiscal<span style={{ color: C.gold }}>Stack</span>
+      </span>
+
+      {/* Desktop links */}
+      <div className="hidden md:flex items-center gap-6">
+        {links.map(l => (
+          <a key={l} href={`#${l.toLowerCase()}`} style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 14, fontWeight: 500, color: scrolled ? C.slate : "rgba(255,255,255,0.78)", textDecoration: "none", transition: "color 0.2s" }}>
+            {l}
+          </a>
+        ))}
+      </div>
+
+      {/* Desktop actions */}
+      <div className="hidden md:flex items-center gap-3">
+        <button
+          onClick={() => setLocation("/auth")}
+          style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 13, fontWeight: 600, color: scrolled ? C.slate : "rgba(255,255,255,0.8)", background: "none", border: "none", cursor: "pointer", textDecoration: "none" }}
+        >
+          Sign In
+        </button>
+        <button
+          onClick={() => setLocation("/auth?mode=signup")}
+          style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 13, fontWeight: 700, padding: "8px 20px", borderRadius: 9999, background: C.gold, color: "#fff", border: "none", cursor: "pointer", transition: "transform 0.2s, box-shadow 0.2s", boxShadow: "0 2px 12px rgba(37,99,235,0.35)" }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "scale(1.05)"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)"; }}
+        >
+          Get Started
+        </button>
+      </div>
+
+      {/* Mobile hamburger */}
+      <button
+        className="md:hidden"
+        onClick={() => setMenuOpen(m => !m)}
+        style={{ background: "none", border: "none", cursor: "pointer", color: scrolled ? C.navy : "#fff", fontSize: 22 }}
+      >
+        {menuOpen ? "✕" : "☰"}
+      </button>
+
+      {/* Mobile menu */}
+      {menuOpen && (
+        <div style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, right: 0, background: "rgba(240,238,233,0.97)", backdropFilter: "blur(20px)", borderRadius: 20, border: "1px solid rgba(37,99,235,0.18)", padding: "16px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
+          {links.map(l => (
+            <a key={l} href={`#${l.toLowerCase()}`} onClick={() => setMenuOpen(false)} style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 15, fontWeight: 500, color: C.slate, textDecoration: "none" }}>{l}</a>
+          ))}
+          <hr style={{ border: "none", borderTop: "1px solid rgba(0,0,0,0.08)" }} />
+          <button onClick={() => { setLocation("/auth"); setMenuOpen(false); }} style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 14, color: C.slate, background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: 0 }}>Sign In</button>
+          <button onClick={() => { setLocation("/auth?mode=signup"); setMenuOpen(false); }} style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 14, fontWeight: 700, padding: "10px", borderRadius: 9999, background: C.gold, color: "#fff", border: "none", cursor: "pointer" }}>Get Started</button>
+        </div>
+      )}
+    </nav>
+  );
+};
+
+// ── Live Invoice Widget ─────────────────────────────────────────────────────────
+const InvoiceWidget = () => (
+  <div style={{ background: "#fff", borderRadius: 16, boxShadow: "0 24px 80px rgba(0,0,0,0.22)", width: 280, padding: 20, fontFamily: "'Plus Jakarta Sans',sans-serif", position: "relative" }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+      <div>
+        <div style={{ fontSize: 10, fontFamily: "'DM Mono',monospace", color: C.steel, letterSpacing: "0.1em", marginBottom: 2 }}>TechSolutions Ltd</div>
+        <div style={{ fontSize: 9, color: "#aaa", fontFamily: "'DM Mono',monospace" }}>VAT: 123456789</div>
+      </div>
+      <span style={{ background: "#dcfce7", color: "#16a34a", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 99, letterSpacing: "0.08em" }}>FISCALIZED</span>
+    </div>
+    <div style={{ fontSize: 11, fontWeight: 700, color: C.navy, marginBottom: 10 }}>#INV-2024-001</div>
+    <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 10 }}>
+      <thead>
+        <tr style={{ borderBottom: "1px solid #f0f0f0" }}>
+          <th style={{ textAlign: "left", fontSize: 9, color: "#aaa", fontWeight: 500, padding: "3px 0", fontFamily: "'DM Mono',monospace" }}>DESCRIPTION</th>
+          <th style={{ textAlign: "right", fontSize: 9, color: "#aaa", fontWeight: 500, padding: "3px 0", fontFamily: "'DM Mono',monospace" }}>AMOUNT</th>
+        </tr>
+      </thead>
+      <tbody>
+        {([["Web Development", "$1,200.00"], ["Hosting (Yearly)", "$250.00"], ["Maintenance", "$1,000.00"]] as [string, string][]).map(([d, a]) => (
+          <tr key={d}>
+            <td style={{ fontSize: 10, color: C.slate, padding: "4px 0" }}>{d}</td>
+            <td style={{ fontSize: 10, color: C.slate, textAlign: "right", fontFamily: "'DM Mono',monospace" }}>{a}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+    <div style={{ borderTop: "1px solid #f0f0f0", paddingTop: 8 }}>
+      {([["Subtotal", "$2,450.00", false], ["VAT (15%)", "$367.50", false], ["Total", "$2,817.50", true]] as [string, string, boolean][]).map(([l, v, bold]) => (
+        <div key={l} style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+          <span style={{ fontSize: bold ? 11 : 9, fontWeight: bold ? 700 : 400, color: bold ? C.navy : "#aaa", fontFamily: bold ? "'Plus Jakarta Sans',sans-serif" : "'DM Mono',monospace" }}>{l}</span>
+          <span style={{ fontSize: bold ? 11 : 9, fontWeight: bold ? 700 : 400, color: bold ? C.gold : "#aaa", fontFamily: "'DM Mono',monospace" }}>{v}</span>
+        </div>
+      ))}
+    </div>
+    <div style={{ marginTop: 12, padding: "8px", background: C.ash, borderRadius: 8, textAlign: "center" }}>
+      <div style={{ fontSize: 9, color: C.steel, fontFamily: "'DM Mono',monospace", marginBottom: 4 }}>Scan to verify Fiscal Signature</div>
+      <div style={{ width: 44, height: 44, margin: "0 auto", background: C.navy, borderRadius: 4, display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 1, padding: 4 }}>
+        {Array.from({ length: 36 }).map((_, i) => (
+          <div key={i} style={{ background: i % 3 === 0 || i % 5 === 0 ? "#fff" : "transparent", borderRadius: 1 }} />
+        ))}
+      </div>
+    </div>
+    {/* FDMS badge */}
+    <div style={{ position: "absolute", top: -12, right: 16, background: C.navy, borderRadius: 99, padding: "4px 10px", display: "flex", alignItems: "center", gap: 5 }}>
+      <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#22c55e", display: "inline-block", animation: "pulse 1.5s infinite" }} />
+      <span style={{ fontSize: 9, color: "#fff", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em" }}>FDMS Connected</span>
+    </div>
+  </div>
+);
+
+// ── Hero ────────────────────────────────────────────────────────────────────────
+const Hero = () => {
+  const [, setLocation] = useLocation();
+  const [vis, setVis] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setVis(true), 80);
+    return () => clearTimeout(t);
+  }, []);
+
+  const fu = (d: number): CSSProperties => ({
+    opacity: vis ? 1 : 0,
+    transform: vis ? "translateY(0)" : "translateY(28px)",
+    transition: `opacity 0.85s ease ${d}s, transform 0.85s ease ${d}s`,
+  });
+
+  return (
+    <section style={{ minHeight: "100dvh", background: C.navy, position: "relative", display: "flex", alignItems: "center", overflow: "hidden", padding: "100px 0 60px" }}>
+      <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse 80% 60% at 70% 50%, rgba(37,99,235,0.1) 0%, transparent 70%), radial-gradient(ellipse 50% 80% at 10% 80%, rgba(26,107,82,0.1) 0%, transparent 60%)` }} />
+      <div style={{ position: "absolute", top: "10%", right: "5%", width: 500, height: 500, borderRadius: "50%", background: "rgba(37,99,235,0.04)", border: "1px solid rgba(37,99,235,0.1)", transform: "rotate(-15deg)" }} />
+
+      <div style={{ maxWidth: 1180, margin: "0 auto", padding: "0 24px", width: "100%", display: "grid", gridTemplateColumns: "1fr auto", gap: 40, alignItems: "center" }}>
+        {/* Left */}
+        <div>
+          <div style={{ ...fu(0.1), display: "inline-flex", alignItems: "center", gap: 8, background: "rgba(37,99,235,0.1)", border: "1px solid rgba(37,99,235,0.25)", borderRadius: 9999, padding: "5px 14px", marginBottom: 28 }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#22c55e", display: "inline-block", animation: "pulse 1.5s infinite" }} />
+            <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.gold, letterSpacing: "0.12em" }}>ZIMRA COMPLIANT · ZIMBABWE</span>
+          </div>
+
+          <h1 style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", lineHeight: 1 }}>
+            <span style={{ ...fu(0.2), display: "block", fontSize: "clamp(2.6rem,5.5vw,4.2rem)", fontWeight: 800, color: "#fff", letterSpacing: "-0.03em" }}>
+              Fiscal Intelligence
+            </span>
+            <em style={{ ...fu(0.35), display: "block", fontFamily: "'Cormorant Garamond',serif", fontWeight: 300, fontStyle: "italic", fontSize: "clamp(3rem,6.5vw,5.2rem)", color: C.gold, letterSpacing: "-0.02em", lineHeight: 1 }}>
+              Reimagined.
+            </em>
+          </h1>
+
+          <p style={{ ...fu(0.5), fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 17, color: "rgba(255,255,255,0.52)", lineHeight: 1.7, maxWidth: 480, marginTop: 20 }}>
+            The all-in-one fiscalization platform for Zimbabwe's modern businesses. Seamlessly sync with ZIMRA, manage inventory, and drive growth with smart analytics.
+          </p>
+
+          <div style={{ ...fu(0.65), display: "flex", flexWrap: "wrap", gap: 12, marginTop: 32 }}>
+            <button
+              onClick={() => setLocation("/auth?mode=signup")}
+              style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 700, fontSize: 14, padding: "13px 28px", borderRadius: 9999, background: C.gold, color: "#fff", border: "none", cursor: "pointer", transition: "transform 0.2s, box-shadow 0.2s", boxShadow: "0 4px 20px rgba(37,99,235,0.4)" }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "scale(1.05)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 6px 28px rgba(37,99,235,0.5)"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 20px rgba(37,99,235,0.4)"; }}
+            >
+              Start Free Trial
+            </button>
+            <button
+              onClick={() => setLocation("/auth?mode=signup")}
+              style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 600, fontSize: 14, padding: "13px 28px", borderRadius: 9999, background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.85)", border: "1px solid rgba(255,255,255,0.15)", cursor: "pointer", transition: "all 0.2s" }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.12)"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.07)"; }}
+            >
+              Book a Demo →
+            </button>
+          </div>
+
+          <div style={{ ...fu(0.8), display: "flex", alignItems: "center", gap: 12, marginTop: 28 }}>
+            <div style={{ display: "flex" }}>
+              {["#2563eb", "#7c3aed", "#db2777", "#ea580c", "#16a34a"].map((c, i) => (
+                <div key={i} style={{ width: 28, height: 28, borderRadius: "50%", background: c, border: "2px solid " + C.navy, marginLeft: i > 0 ? -8 : 0 }} />
+              ))}
+            </div>
+            <span style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 13, color: "rgba(255,255,255,0.45)" }}>
+              Trusted by <strong style={{ color: "rgba(255,255,255,0.75)" }}>500+</strong> businesses
+            </span>
+          </div>
+        </div>
+
+        {/* Right — invoice widget */}
+        <div style={{ ...fu(0.45), display: "flex", justifyContent: "center" }} className="hidden lg:flex">
+          <InvoiceWidget />
+        </div>
+      </div>
+
+      {/* Bottom stats */}
+      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, borderTop: "1px solid rgba(255,255,255,0.05)", background: "rgba(255,255,255,0.02)", backdropFilter: "blur(8px)" }}>
+        <div style={{ maxWidth: 1180, margin: "0 auto", padding: "18px 24px", display: "flex", flexWrap: "wrap", gap: 24, justifyContent: "space-between" }}>
+          {([["500+", "Businesses Active"], ["$12M+", "Invoices Processed"], ["99.9%", "FDMS Uptime"], ["< 1s", "Sync Latency"]] as [string, string][]).map(([v, l]) => (
+            <div key={l} style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+              <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 18, fontWeight: 500, color: C.gold }}>{v}</span>
+              <span style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 12, color: "rgba(255,255,255,0.35)" }}>{l}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+};
+
+// ── Features ────────────────────────────────────────────────────────────────────
+const featureList: FeatureItem[] = [
+  { icon: "🏛️", tag: "COMPLIANCE",   title: "ZIMRA Compliant",      desc: "Always up to date with the latest tax regulations. Automatic updates keep you compliant without lifting a finger.", color: "#16a34a" },
+  { icon: "📡", tag: "INTEGRATION",  title: "FDMS Sync",            desc: "Real-time fiscal device synchronization with Zimbabwe's FDMS infrastructure. Zero manual steps.", color: C.gold },
+  { icon: "⬡",  tag: "VERIFICATION", title: "Smart QR Codes",       desc: "Every invoice embeds a cryptographically signed fiscal QR code for instant ZIMRA verification.", color: "#7c3aed" },
+  { icon: "🧮", tag: "AUTOMATION",   title: "Auto-Tax Engine",       desc: "VAT, withholding tax, and multiple rate tiers — calculated automatically on every transaction.", color: "#2563eb" },
+  { icon: "🖥️", tag: "POINT OF SALE",title: "Smart POS · Offline",  desc: "Complete offline-capable POS for retail. Queues transactions locally, syncs the moment connectivity returns.", color: "#db2777" },
+  { icon: "📦", tag: "STOCK CONTROL",title: "Inventory Management", desc: "Track stock levels, set reorder alerts, and manage products across multiple locations in real time.", color: "#ea580c" },
+  { icon: "✉️", tag: "COMMUNICATION",title: "Email Hosting",         desc: "Professional business email under your domain — fully integrated with invoicing and client communications.", color: "#0ea5e9" },
+  { icon: "📊", tag: "ANALYTICS",    title: "Smart Analytics",       desc: "Revenue trends, tax liabilities, and growth insights — presented in clear dashboards built for action.", color: C.goldLight },
+];
+
+const Features = () => {
+  const [hovered, setHovered] = useState<number | null>(null);
+  return (
+    <section id="features" style={{ background: C.ash, padding: "100px 24px" }}>
+      <div style={{ maxWidth: 1180, margin: "0 auto" }}>
+        <div style={{ textAlign: "center", marginBottom: 60 }}>
+          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, letterSpacing: "0.18em", color: C.steel, display: "block", marginBottom: 12 }}>POWER FEATURES</span>
+          <h2 style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: "clamp(2rem,4vw,3rem)", fontWeight: 800, color: C.navy, letterSpacing: "-0.03em", lineHeight: 1.1 }}>
+            Everything you need{" "}
+            <em style={{ fontFamily: "'Cormorant Garamond',serif", fontWeight: 300, fontStyle: "italic", color: C.gold }}>to succeed.</em>
+          </h2>
+          <p style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 16, color: C.steel, marginTop: 14, maxWidth: 480, margin: "14px auto 0" }}>
+            Built for speed, compliance, and growth.
+          </p>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 16 }}>
+          {featureList.map((f, i) => (
+            <div
+              key={f.title}
+              onMouseEnter={() => setHovered(i)}
+              onMouseLeave={() => setHovered(null)}
+              style={{
+                background: hovered === i ? C.navy : "#fff",
+                border: `1px solid ${hovered === i ? "transparent" : "rgba(13,27,42,0.07)"}`,
+                borderRadius: 24,
+                padding: "28px 24px",
+                cursor: "default",
+                transition: "all 0.35s ease",
+                transform: hovered === i ? "translateY(-4px)" : "translateY(0)",
+                boxShadow: hovered === i ? "0 20px 60px rgba(0,0,0,0.18)" : "none",
+              }}
+            >
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: `${f.color}18`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, marginBottom: 16 }}>
+                {f.icon}
+              </div>
+              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: "0.14em", color: hovered === i ? f.color : C.steel, marginBottom: 8 }}>{f.tag}</div>
+              <h3 style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 16, fontWeight: 700, color: hovered === i ? "#fff" : C.navy, letterSpacing: "-0.02em", marginBottom: 8 }}>{f.title}</h3>
+              <p style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 13, lineHeight: 1.65, color: hovered === i ? "rgba(255,255,255,0.55)" : C.steel }}>{f.desc}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+};
+
+// ── POS Highlight ───────────────────────────────────────────────────────────────
+const POSHighlight = () => {
+  const [status, setStatus] = useState<"online" | "offline">("online");
+  const [queue, setQueue] = useState(0);
+
+  useEffect(() => {
+    const iv = setInterval(() => {
+      setStatus(s => s === "online" ? "offline" : "online");
+      setQueue(q => q === 0 ? 3 : 0);
+    }, 3000);
+    return () => clearInterval(iv);
+  }, []);
+
+  return (
+    <section style={{ background: C.navy, padding: "100px 24px", position: "relative", overflow: "hidden" }}>
+      <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse 60% 70% at 90% 50%, rgba(37,99,235,0.08) 0%, transparent 70%)` }} />
+      <div style={{ maxWidth: 1180, margin: "0 auto", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 60, alignItems: "center" }} className="grid-cols-1 md:grid-cols-2">
+
+        {/* POS Mock */}
+        <div style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 28, padding: 28, fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>Smart POS Terminal</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, background: status === "online" ? "rgba(22,163,74,0.15)" : "rgba(239,68,68,0.15)", padding: "4px 10px", borderRadius: 99 }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: status === "online" ? "#22c55e" : "#ef4444", animation: "pulse 1.5s infinite", display: "inline-block" }} />
+              <span style={{ fontSize: 10, color: status === "online" ? "#22c55e" : "#ef4444", fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em" }}>
+                {status === "online" ? "Online · Synced" : "Offline · Queued"}
+              </span>
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 16 }}>
+            {["Bread — $0.80", "Milk — $1.20", "Eggs ×6 — $2.50", "Sugar 1kg — $1.00", "Cooking Oil — $3.40", "Chicken — $5.80"].map(item => (
+              <div key={item} style={{ background: "rgba(255,255,255,0.05)", borderRadius: 10, padding: "10px 8px", fontSize: 10, color: "rgba(255,255,255,0.65)", textAlign: "center", border: "1px solid rgba(255,255,255,0.05)" }}>
+                {item}
+              </div>
+            ))}
+          </div>
+          <div style={{ background: "rgba(37,99,235,0.08)", borderRadius: 14, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <div style={{ fontSize: 11, color: C.steel, marginBottom: 2 }}>Cart Total (incl. VAT)</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: C.gold, fontFamily: "'DM Mono',monospace" }}>$14.70</div>
+            </div>
+            <button style={{ background: C.gold, color: "#fff", fontWeight: 700, fontSize: 12, padding: "10px 18px", borderRadius: 99, border: "none", cursor: "pointer" }}>
+              Fiscalize & Print
+            </button>
+          </div>
+          {queue > 0 && (
+            <div style={{ marginTop: 12, fontSize: 11, color: "rgba(239,68,68,0.8)", fontFamily: "'DM Mono',monospace", textAlign: "center" }}>
+              ⚡ {queue} transactions queued — will sync when online
+            </div>
+          )}
+        </div>
+
+        {/* Text */}
+        <div>
+          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, letterSpacing: "0.18em", color: "rgba(37,99,235,0.7)", display: "block", marginBottom: 14 }}>POINT OF SALE</span>
+          <h2 style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: "clamp(1.8rem,3.5vw,2.8rem)", fontWeight: 800, color: "#fff", letterSpacing: "-0.03em", lineHeight: 1.15, marginBottom: 16 }}>
+            Works offline.{" "}
+            <em style={{ fontFamily: "'Cormorant Garamond',serif", fontWeight: 300, fontStyle: "italic", color: C.gold }}>Syncs instantly.</em>
+          </h2>
+          <p style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 15, color: "rgba(255,255,255,0.45)", lineHeight: 1.75, marginBottom: 24 }}>
+            Internet outages shouldn't stop your business. FiscalStack's POS operates fully offline — recording every sale, printing receipts, and queuing FDMS submissions until connectivity returns.
+          </p>
+          <ul style={{ listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: 10 }}>
+            {["Instant FDMS sync when back online", "Full receipt printing — thermal & PDF", "Barcode scanner & cash drawer support", "Multi-cashier, shift management"].map(f => (
+              <li key={f} style={{ display: "flex", alignItems: "center", gap: 10, fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 13, color: "rgba(255,255,255,0.6)" }}>
+                <span style={{ color: C.gold, fontSize: 14 }}>✓</span>{f}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+// ── Pricing ─────────────────────────────────────────────────────────────────────
+const Pricing = () => {
+  const [, setLocation] = useLocation();
+
+  const plans: PlanType[] = [
+    { name: "Test Mode",   badge: null,          price: "Free",   unit: "/yr", tagline: "For development & testing", features: ["Unlimited Invoices (Test)", "Sandboxed FDMS", "API Access", "Dev Support"],                                              cta: "Get Started",  highlight: false },
+    { name: "Production",  badge: "Most Popular", price: "$150",   unit: "/yr", tagline: "Per device / year",         features: ["Unlimited Invoices", "Live FDMS Sync", "Priority Support", "ZIMRA Compliant", "Smart QR Codes", "Auto-Tax Engine"],     cta: "Get Started",  highlight: true  },
+    { name: "Enterprise",  badge: null,           price: "Custom", unit: "",    tagline: "For large organizations",   features: ["Unlimited Users", "Dedicated Manager", "SLA Assurance", "Custom Integration", "Email Hosting", "On-premise option"],    cta: "Contact Sales",highlight: false },
+  ];
+
+  return (
+    <section id="pricing" style={{ background: C.ash, padding: "100px 24px" }}>
+      <div style={{ maxWidth: 1080, margin: "0 auto" }}>
+        <div style={{ textAlign: "center", marginBottom: 56 }}>
+          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, letterSpacing: "0.18em", color: C.steel, display: "block", marginBottom: 12 }}>PRICING</span>
+          <h2 style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: "clamp(2rem,4vw,3rem)", fontWeight: 800, color: C.navy, letterSpacing: "-0.03em" }}>
+            Transparent{" "}
+            <em style={{ fontFamily: "'Cormorant Garamond',serif", fontWeight: 300, fontStyle: "italic", color: C.gold }}>pricing.</em>
+          </h2>
+          <p style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 15, color: C.steel, marginTop: 12 }}>
+            Start for free, scale as you grow.
+          </p>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 16 }}>
+          {plans.map(p => (
+            <div
+              key={p.name}
+              style={{ background: p.highlight ? C.navy : "#fff", border: `1px solid ${p.highlight ? "rgba(37,99,235,0.4)" : "rgba(13,27,42,0.08)"}`, borderRadius: 28, padding: "32px 28px", display: "flex", flexDirection: "column", position: "relative", transition: "transform 0.3s", boxShadow: p.highlight ? "0 20px 60px rgba(13,27,42,0.25)" : "none" }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.transform = "translateY(-4px)"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.transform = "translateY(0)"; }}
+            >
+              {p.badge && (
+                <div style={{ position: "absolute", top: -12, left: "50%", transform: "translateX(-50%)", background: C.gold, color: "#fff", fontSize: 10, fontWeight: 800, padding: "4px 14px", borderRadius: 99, fontFamily: "'Plus Jakarta Sans',sans-serif", whiteSpace: "nowrap" }}>
+                  {p.badge}
+                </div>
+              )}
+              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, letterSpacing: "0.14em", color: p.highlight ? C.gold : C.steel, marginBottom: 12 }}>{p.name.toUpperCase()}</div>
+              <div style={{ display: "flex", alignItems: "flex-end", gap: 4, marginBottom: 6 }}>
+                <span style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 40, fontWeight: 800, color: p.highlight ? "#fff" : C.navy, letterSpacing: "-0.04em", lineHeight: 1 }}>{p.price}</span>
+                <span style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 14, color: p.highlight ? "rgba(255,255,255,0.4)" : C.steel, marginBottom: 6 }}>{p.unit}</span>
+              </div>
+              <p style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 13, color: p.highlight ? "rgba(255,255,255,0.45)" : C.steel, marginBottom: 24, lineHeight: 1.5 }}>{p.tagline}</p>
+              <ul style={{ listStyle: "none", padding: 0, flex: 1, display: "flex", flexDirection: "column", gap: 10, marginBottom: 28 }}>
+                {p.features.map(f => (
+                  <li key={f} style={{ display: "flex", alignItems: "flex-start", gap: 9, fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 13, color: p.highlight ? "rgba(255,255,255,0.65)" : C.slate }}>
+                    <span style={{ color: C.gold, flexShrink: 0, marginTop: 1 }}>✓</span>{f}
+                  </li>
+                ))}
+              </ul>
+              <button
+                onClick={() => p.cta === "Contact Sales" ? window.open(WHATSAPP_URL, "_blank") : setLocation("/auth?mode=signup")}
+                style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 700, fontSize: 14, padding: "12px", borderRadius: 14, background: p.highlight ? C.gold : "rgba(13,27,42,0.07)", color: p.highlight ? "#fff" : C.navy, border: "none", cursor: "pointer", transition: "all 0.2s" }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = "0.88"; (e.currentTarget as HTMLButtonElement).style.transform = "scale(1.02)"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = "1"; (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)"; }}
+              >
+                {p.cta}
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+};
+
+// ── FAQ ─────────────────────────────────────────────────────────────────────────
+const faqs: FaqType[] = [
+  { q: "What is ZIMRA compliance and why do I need it?",         a: "ZIMRA (Zimbabwe Revenue Authority) requires all VAT-registered businesses to use a certified Fiscal Device Management System (FDMS) to generate tamper-proof tax receipts. Non-compliance carries heavy penalties. FiscalStack is a certified solution that handles all of this automatically." },
+  { q: "How does the FDMS integration work?",                    a: "FiscalStack connects directly to Zimbabwe's FDMS infrastructure via secure API. Every invoice is cryptographically signed and submitted to FDMS in real time. A unique QR code is embedded on every receipt for instant verification by ZIMRA officials." },
+  { q: "Can I try FiscalStack before committing to a paid plan?",a: "Yes — our Test Mode is completely free and gives you full access to a sandboxed FDMS environment, unlimited test invoices, and API access. No credit card required. When you're ready, upgrade to Production with one click." },
+  { q: "What happens to my data if I cancel my subscription?",   a: "Your data remains yours. You have a 90-day window to export all invoices, reports, and records in standard formats (PDF, CSV, JSON). We never delete data unilaterally, and you can reinstate your account at any time." },
+  { q: "Is my financial data secure?",                           a: "All data is encrypted in transit (TLS 1.3) and at rest (AES-256). We are hosted on ISO 27001-certified infrastructure with daily encrypted backups. We never share or sell your financial data." },
+  { q: "Can I use FiscalStack for multiple businesses?",         a: "Absolutely. You can manage multiple business entities under a single account, each with their own FDMS devices, VAT numbers, invoice sequences, and reporting dashboards." },
+  { q: "Do you provide customer support?",                       a: "All plans include email support. Production plans include priority support with a 4-hour response SLA. Enterprise plans receive a dedicated account manager and a guaranteed SLA for uptime and response times." },
+  { q: "Can I customize my invoice templates?",                  a: "Yes. FiscalStack's invoice builder supports full branding — logo, colors, fonts, custom line-item fields, and footer notes — while maintaining ZIMRA-required fiscal elements on every document." },
+];
+
+const FAQ = () => {
+  const [open, setOpen] = useState<number | null>(null);
+  return (
+    <section id="faq" style={{ background: C.charcoal, padding: "100px 24px" }}>
+      <div style={{ maxWidth: 780, margin: "0 auto" }}>
+        <div style={{ textAlign: "center", marginBottom: 56 }}>
+          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, letterSpacing: "0.18em", color: "rgba(37,99,235,0.6)", display: "block", marginBottom: 12 }}>FAQ</span>
+          <h2 style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: "clamp(2rem,4vw,2.8rem)", fontWeight: 800, color: "#fff", letterSpacing: "-0.03em" }}>
+            Frequently asked{" "}
+            <em style={{ fontFamily: "'Cormorant Garamond',serif", fontWeight: 300, fontStyle: "italic", color: C.gold }}>questions.</em>
+          </h2>
+          <p style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 15, color: "rgba(255,255,255,0.35)", marginTop: 12 }}>
+            Everything you need to know about FiscalStack and ZIMRA compliance.
+          </p>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {faqs.map((f, i) => (
+            <div
+              key={i}
+              style={{ background: open === i ? "rgba(37,99,235,0.07)" : "rgba(255,255,255,0.03)", border: `1px solid ${open === i ? "rgba(37,99,235,0.25)" : "rgba(255,255,255,0.05)"}`, borderRadius: 16, overflow: "hidden", transition: "all 0.3s" }}
+            >
+              <button
+                onClick={() => setOpen(open === i ? null : i)}
+                style={{ width: "100%", padding: "18px 22px", display: "flex", justifyContent: "space-between", alignItems: "center", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}
+              >
+                <span style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 14, fontWeight: 600, color: "#fff", lineHeight: 1.4 }}>{f.q}</span>
+                <span style={{ color: C.gold, fontSize: 18, marginLeft: 16, flexShrink: 0, transition: "transform 0.3s", transform: open === i ? "rotate(45deg)" : "rotate(0)" }}>+</span>
+              </button>
+              {open === i && (
+                <div style={{ padding: "0 22px 20px", fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 13, color: "rgba(255,255,255,0.5)", lineHeight: 1.75 }}>
+                  {f.a}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Contact strip */}
+        <div style={{ marginTop: 48, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 20, padding: "28px 32px", textAlign: "center" }}>
+          <p style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 16, fontWeight: 600, color: "#fff", marginBottom: 8 }}>
+            Still have questions?
+          </p>
+          <p style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 13, color: "rgba(255,255,255,0.4)", marginBottom: 20 }}>
+            Our support team is here to help. Get in touch and we'll respond as soon as possible.
+          </p>
+          <button
+            onClick={() => window.open(WHATSAPP_URL, "_blank")}
+            style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 700, fontSize: 13, padding: "11px 24px", borderRadius: 99, background: C.gold, color: "#fff", border: "none", cursor: "pointer" }}
+          >
+            Contact Support
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+// ── Footer ──────────────────────────────────────────────────────────────────────
+const Footer = () => (
+  <footer style={{ background: C.charcoal, borderTop: "1px solid rgba(255,255,255,0.05)", padding: "56px 24px 32px", borderRadius: "3rem 3rem 0 0" }}>
+    <div style={{ maxWidth: 1180, margin: "0 auto" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1.5fr repeat(3,1fr)", gap: 40, marginBottom: 48 }} className="grid-footer">
+        <div>
+          <span style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 800, fontSize: 22, color: "#fff", letterSpacing: "-0.03em", display: "block", marginBottom: 12 }}>
+            Fiscal<span style={{ color: C.gold }}>Stack</span>
+          </span>
+          <p style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 13, color: "rgba(255,255,255,0.35)", lineHeight: 1.7, maxWidth: 240 }}>
+            Zimbabwe's intelligent fiscalization platform. Built for compliance, designed for growth.
+          </p>
+          <div style={{ marginTop: 20, display: "flex", flexDirection: "column", gap: 8 }}>
+            <a href="mailto:info@fiscalstack.co.zw" style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: "rgba(37,99,235,0.8)", textDecoration: "none", letterSpacing: "0.06em" }}>
+              info@fiscalstack.co.zw
+            </a>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 16 }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#22c55e", animation: "pulse 1.5s infinite", display: "inline-block" }} />
+            <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: "rgba(255,255,255,0.3)", letterSpacing: "0.08em" }}>System Operational</span>
+          </div>
+        </div>
+        {[
+          { title: "Platform", links: ["Invoicing", "FDMS Sync", "Smart POS", "Inventory", "Email Hosting", "Analytics"] },
+          { title: "Company",  links: ["About", "Careers", "Blog", "Press", "Partners"] },
+          { title: "Legal",    links: ["Privacy Policy", "Terms of Service", "Security", "ZIMRA Compliance"] },
+        ].map(col => (
+          <div key={col.title}>
+            <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: "0.16em", color: "rgba(255,255,255,0.2)", marginBottom: 16 }}>{col.title.toUpperCase()}</div>
+            <ul style={{ listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: 10 }}>
+              {col.links.map(l => (
+                <li key={l}>
+                  <a
+                    href="#"
+                    style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 13, color: "rgba(255,255,255,0.38)", textDecoration: "none", transition: "color 0.2s" }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = "#fff"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = "rgba(255,255,255,0.38)"; }}
+                  >{l}</a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+      <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 24, display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+        <p style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 12, color: "rgba(255,255,255,0.22)" }}>
+          &copy; 2026 FiscalStack. Made with &hearts; in Zimbabwe.
+        </p>
+        <div style={{ display: "flex", gap: 16 }}>
+          {["Privacy", "Terms", "Security"].map(l => (
+            <a key={l} href="#" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 12, color: "rgba(255,255,255,0.22)", textDecoration: "none" }}>{l}</a>
+          ))}
+        </div>
+      </div>
+    </div>
+  </footer>
+);
+
+// ── WhatsApp Chat Widget ────────────────────────────────────────────────────────
+const ChatWidget = () => {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 1000 }}>
+      {open && (
+        <div style={{ width: 300, background: "#fff", borderRadius: 20, boxShadow: "0 20px 60px rgba(0,0,0,0.25)", overflow: "hidden", marginBottom: 12, fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
+          <div style={{ background: "#25D366", padding: "14px 18px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {/* WhatsApp icon */}
+              <svg width="28" height="28" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="16" cy="16" r="16" fill="#25D366"/>
+                <path d="M22.5 9.5A8.96 8.96 0 0 0 16 7C11.03 7 7 11.03 7 16c0 1.59.42 3.13 1.2 4.49L7 25l4.63-1.21A8.95 8.95 0 0 0 16 25c4.97 0 9-4.03 9-9 0-2.4-.94-4.66-2.5-6.5zm-6.5 13.84a7.44 7.44 0 0 1-3.79-1.03l-.27-.16-2.75.72.73-2.69-.18-.28A7.44 7.44 0 0 1 8.56 16c0-4.1 3.34-7.44 7.44-7.44 1.99 0 3.86.77 5.26 2.18a7.4 7.4 0 0 1 2.18 5.26c0 4.1-3.34 7.44-7.44 7.44zm4.08-5.57c-.22-.11-1.3-.64-1.5-.71-.2-.07-.35-.11-.5.11-.15.22-.57.71-.7.86-.13.15-.26.17-.48.06-.22-.11-.94-.35-1.79-1.1-.66-.59-1.1-1.32-1.23-1.54-.13-.22-.01-.34.1-.45.1-.1.22-.26.33-.39.11-.13.15-.22.22-.37.07-.15.04-.28-.02-.39-.06-.11-.5-1.2-.68-1.64-.18-.43-.36-.37-.5-.38h-.43c-.15 0-.39.06-.6.28-.2.22-.78.76-.78 1.86s.8 2.16.91 2.31c.11.15 1.58 2.41 3.83 3.38.54.23.96.37 1.28.47.54.17 1.03.15 1.42.09.43-.07 1.3-.53 1.49-1.04.18-.51.18-.95.13-1.04-.06-.09-.2-.15-.42-.26z" fill="white"/>
+              </svg>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>FiscalStack Support</div>
+                <div style={{ fontSize: 10, color: "rgba(255,255,255,0.8)" }}>Typically replies instantly</div>
+              </div>
+            </div>
+            <button onClick={() => setOpen(false)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.8)", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>✕</button>
+          </div>
+
+          {/* Chat preview bubble */}
+          <div style={{ padding: "16px 14px", background: "#ECE5DD", minHeight: 100, display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ background: "#fff", borderRadius: "0 12px 12px 12px", padding: "10px 14px", maxWidth: "85%", boxShadow: "0 1px 2px rgba(0,0,0,0.1)" }}>
+              <p style={{ fontSize: 13, color: "#111", margin: 0, lineHeight: 1.5 }}>Hi! 👋 How can we help you today?</p>
+              <p style={{ fontSize: 10, color: "#999", margin: "4px 0 0", textAlign: "right" }}>09:41 ✓✓</p>
+            </div>
+          </div>
+
+          {/* CTA to open WhatsApp */}
+          <a
+            href={WHATSAPP_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "14px", background: "#25D366", color: "#fff", fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 700, fontSize: 13, textDecoration: "none", transition: "background 0.2s" }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = "#1ebe5d"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = "#25D366"; }}
+          >
+            <svg width="16" height="16" viewBox="0 0 32 32" fill="white" xmlns="http://www.w3.org/2000/svg">
+              <path d="M22.5 9.5A8.96 8.96 0 0 0 16 7C11.03 7 7 11.03 7 16c0 1.59.42 3.13 1.2 4.49L7 25l4.63-1.21A8.95 8.95 0 0 0 16 25c4.97 0 9-4.03 9-9 0-2.4-.94-4.66-2.5-6.5zm-6.5 13.84a7.44 7.44 0 0 1-3.79-1.03l-.27-.16-2.75.72.73-2.69-.18-.28A7.44 7.44 0 0 1 8.56 16c0-4.1 3.34-7.44 7.44-7.44 1.99 0 3.86.77 5.26 2.18a7.4 7.4 0 0 1 2.18 5.26c0 4.1-3.34 7.44-7.44 7.44z"/>
+            </svg>
+            Chat with us on WhatsApp
+          </a>
+        </div>
+      )}
+
+      {/* Float button */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{ width: 56, height: 56, borderRadius: "50%", background: "#25D366", border: "none", cursor: "pointer", boxShadow: "0 6px 24px rgba(37,211,102,0.45)", display: "flex", alignItems: "center", justifyContent: "center", transition: "transform 0.2s" }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "scale(1.1)"; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)"; }}
+        aria-label="Chat on WhatsApp"
+      >
+        <svg width="28" height="28" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M22.5 9.5A8.96 8.96 0 0 0 16 7C11.03 7 7 11.03 7 16c0 1.59.42 3.13 1.2 4.49L7 25l4.63-1.21A8.95 8.95 0 0 0 16 25c4.97 0 9-4.03 9-9 0-2.4-.94-4.66-2.5-6.5zm-6.5 13.84a7.44 7.44 0 0 1-3.79-1.03l-.27-.16-2.75.72.73-2.69-.18-.28A7.44 7.44 0 0 1 8.56 16c0-4.1 3.34-7.44 7.44-7.44 1.99 0 3.86.77 5.26 2.18a7.4 7.4 0 0 1 2.18 5.26c0 4.1-3.34 7.44-7.44 7.44zm4.08-5.57c-.22-.11-1.3-.64-1.5-.71-.2-.07-.35-.11-.5.11-.15.22-.57.71-.7.86-.13.15-.26.17-.48.06-.22-.11-.94-.35-1.79-1.1-.66-.59-1.1-1.32-1.23-1.54-.13-.22-.01-.34.1-.45.1-.1.22-.26.33-.39.11-.13.15-.22.22-.37.07-.15.04-.28-.02-.39-.06-.11-.5-1.2-.68-1.64-.18-.43-.36-.37-.5-.38h-.43c-.15 0-.39.06-.6.28-.2.22-.78.76-.78 1.86s.8 2.16.91 2.31c.11.15 1.58 2.41 3.83 3.38.54.23.96.37 1.28.47.54.17 1.03.15 1.42.09.43-.07 1.3-.53 1.49-1.04.18-.51.18-.95.13-1.04-.06-.09-.2-.15-.42-.26z" fill="white"/>
+        </svg>
+      </button>
+    </div>
+  );
+};
+
+// ── App / Default Export ────────────────────────────────────────────────────────
+export default function LandingPage() {
+  return (
+    <div style={{ background: C.ash, overflowX: "hidden" }}>
+      <style>{`
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html { scroll-behavior: smooth; }
+        body { -webkit-font-smoothing: antialiased; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        @media(max-width:768px){
+          .grid-footer { grid-template-columns: 1fr 1fr !important; }
+        }
+        @media(max-width:480px){
+          .grid-footer { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
+      <FontLoader />
+      <Noise />
+      <Navbar />
+      <Hero />
+      <Features />
+      <POSHighlight />
+      <Pricing />
+      <FAQ />
+      <Footer />
+      <ChatWidget />
+    </div>
+  );
+}

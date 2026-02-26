@@ -13,15 +13,29 @@ export function useAuth() {
 
   // Sync Supabase Session on mount
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    let isMounted = true;
+    const failSafe = window.setTimeout(() => {
+      if (!isMounted) return;
+      console.warn("[Auth] Supabase session sync timed out; continuing without blocking UI");
       setIsSupabaseLoading(false);
-      if (session) {
-        queryClient.invalidateQueries({ queryKey: ["/api/user"] });
-      }
-    }).catch((err) => {
-      console.error("Supabase Session Error:", err);
-      setIsSupabaseLoading(false);
-    });
+    }, 3000);
+
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        if (!isMounted) return;
+        window.clearTimeout(failSafe);
+        setIsSupabaseLoading(false);
+        if (session) {
+          queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+        }
+      })
+      .catch((err) => {
+        if (!isMounted) return;
+        window.clearTimeout(failSafe);
+        console.error("Supabase Session Error:", err);
+        setIsSupabaseLoading(false);
+      });
 
     const {
       data: { subscription },
@@ -39,7 +53,11 @@ export function useAuth() {
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      window.clearTimeout(failSafe);
+      subscription.unsubscribe();
+    };
   }, [queryClient]);
 
   const userQuery = useQuery({
@@ -149,7 +167,7 @@ export function useAuth() {
 
   return {
     user: userQuery.data,
-    isLoading: isSupabaseLoading || userQuery.isLoading,
+    isLoading: isSupabaseLoading || userQuery.fetchStatus === "fetching",
     loginWithGoogle,
     loginWithPassword,
     registerWithPassword,

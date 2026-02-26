@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Cormorant+Garamond:ital,wght@0,300;0,500;0,600;1,300;1,500;1,600&family=DM+Mono:wght@300;400;500&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -8,6 +8,10 @@
   --font-sans: 'Inter', sans-serif;
   --font-display: 'Outfit', sans-serif;
   --font-mono: 'Fira Code', monospace;
+
+  --font-jakarta: 'Plus Jakarta Sans', sans-serif;
+  --font-cormorant: 'Cormorant Garamond', serif;
+  --font-dmmono: 'DM Mono', monospace;
 
   /* Vibrant Professional Palette - Violet/Indigo/Cyan */
   --background: 220 30% 98%;
@@ -51,6 +55,27 @@
   h6 {
     font-family: var(--font-display);
     @apply font-bold tracking-tight text-slate-900;
+  }
+}
+
+@layer utilities {
+  .nura-noise {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 50;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.68' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)'/%3E%3C/svg%3E");
+    opacity: 0.05;
+    mix-blend-mode: overlay;
+  }
+
+  .nura-magnetic {
+    will-change: transform;
+    transform: translate3d(0, 0, 0);
+  }
+
+  .nura-magnetic:hover {
+    transform: scale(1.015);
   }
 }
 

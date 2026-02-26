@@ -1418,24 +1418,24 @@ export default function POSPage() {
                         {/* Integrated Controls & Profile - Compacted to prevent scrolling */}
                         <div className="hidden md:flex items-center gap-1 lg:gap-2 pb-1 md:pb-0 shrink-0">
                             {/* Customer Selector - Premium */}
-                            <div className="flex items-center gap-1.5 bg-slate-100/50 p-1.5 rounded-xl border border-slate-200/50">
+                            <div className="flex items-center gap-1 bg-slate-100/50 p-1 rounded-lg border border-slate-200/50 shrink-0">
                                 <Button
                                     variant="ghost"
                                     size="sm"
-                                    className="h-9 w-9 rounded-lg bg-white shadow-sm border border-slate-200 text-slate-600 hover:text-primary hover:bg-white p-0"
+                                    className="h-8 w-8 rounded-md bg-white shadow-sm border border-slate-200 text-slate-600 hover:text-primary hover:bg-white p-0"
                                     onClick={() => {
                                         const walkIn = resolvedCustomers?.find((c: any) => c.name.toLowerCase().includes("walk-in") || c.name.toLowerCase().includes("cash"));
                                         if (walkIn) setSelectedCustomerId(walkIn.id.toString());
                                         else toast({ title: "No Walk-in Customer", description: "Create 'Walk-in' first." });
                                     }}
                                 >
-                                    <UserPlus className="h-5 w-5" />
+                                    <UserPlus className="h-4 w-4" />
                                 </Button>
                                 <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId}>
-                                    <SelectTrigger className="w-28 lg:w-36 h-9 border-none bg-transparent hover:bg-slate-200/30 transition-all font-bold text-slate-700">
+                                    <SelectTrigger className="w-24 lg:w-32 h-8 border-none bg-transparent hover:bg-slate-200/30 transition-all font-bold text-slate-700 px-2">
                                         <div className="flex items-center gap-1.5 truncate">
-                                            <User className="h-4 w-4 text-slate-400 shrink-0" />
-                                            <SelectValue placeholder="Select Customer" />
+                                            <User className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                            <SelectValue placeholder="Customer" />
                                         </div>
                                     </SelectTrigger>
                                     <SelectContent className="rounded-xl border-slate-200 shadow-2xl">
@@ -1451,26 +1451,26 @@ export default function POSPage() {
                             <div className="h-6 w-px bg-slate-200 mx-0.5 hidden lg:block" />
 
                             {/* Quick Action Pills - Compact */}
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1">
                                 <Button
                                     variant="outline"
-                                    className="h-10 px-3 lg:px-4 gap-1.5 border-slate-200 rounded-xl hover:bg-slate-50 transition-all font-bold group"
+                                    className="h-9 px-2 lg:px-3 gap-1.5 border-slate-200 rounded-lg hover:bg-slate-50 transition-all font-bold group"
                                     onClick={() => setIsHoldsModalOpen(true)}
                                 >
                                     <div className="relative">
                                         <History className="h-4 w-4 text-slate-500 group-hover:rotate-[-45deg] transition-transform" />
                                         {heldSales.length > 0 && (
-                                            <span className="absolute -top-1.5 -right-1.5 h-3 w-3 bg-primary rounded-full ring-2 ring-white" />
+                                            <span className="absolute -top-1 -right-1 h-2.5 w-2.5 bg-primary rounded-full ring-2 ring-white" />
                                         )}
                                     </div>
-                                    <span className="text-slate-600">Holds</span>
-                                    <Badge variant="secondary" className="ml-1 h-5 bg-slate-100 text-slate-500 border-none px-1.5 font-black text-[10px]">
+                                    <span className="text-slate-600 hidden lg:inline">Holds</span>
+                                    <Badge variant="secondary" className="lg:ml-1 h-4 bg-slate-100 text-slate-500 border-none px-1 font-black text-[9px]">
                                         {heldSales.length}
                                     </Badge>
                                 </Button>
 
                                 <div className={cn(
-                                    "flex items-center gap-2 px-2.5 lg:px-3 h-10 rounded-xl border text-[10px] lg:text-xs font-black shrink-0 shadow-sm",
+                                    "flex items-center gap-1.5 px-2 h-9 rounded-lg border text-[10px] lg:text-xs font-black shrink-0 shadow-sm",
                                     currentShift ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-red-50 text-red-700 border-red-100"
                                 )}>
                                     <div className="relative">
@@ -1510,7 +1510,7 @@ export default function POSPage() {
                                     variant="outline"
                                     size="icon"
                                     className={cn(
-                                        "h-10 w-10 rounded-xl border-slate-200 transition-all shadow-sm",
+                                        "h-9 w-9 rounded-md border-slate-200 transition-all shadow-sm shrink-0",
                                         isFullscreen ? "bg-primary text-white border-primary" : "bg-white text-slate-500 hover:text-primary"
                                     )}
                                     onClick={toggleFullscreen}
@@ -1520,7 +1520,7 @@ export default function POSPage() {
 
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
-                                        <div className="h-10 w-10 rounded-xl bg-slate-900 flex items-center justify-center text-white cursor-pointer hover:bg-slate-800 transition-all shadow-lg group relative shrink-0">
+                                        <div className="h-9 w-9 rounded-md bg-slate-900 flex items-center justify-center text-white cursor-pointer hover:bg-slate-800 transition-all shadow-lg group relative shrink-0">
                                             <SettingsIcon className="h-4 w-4 opacity-70 group-hover:rotate-90 transition-transform" />
                                         </div>
                                     </DropdownMenuTrigger>

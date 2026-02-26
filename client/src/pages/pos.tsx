@@ -1189,12 +1189,12 @@ export default function POSPage() {
                         <div className="flex gap-2 items-center">
                             {/* Brand & Context - Hyper Compact on Mobile */}
                             <div className="flex items-center justify-between md:justify-start gap-2 md:gap-4 shrink-0 flex-1 md:flex-none">
-                                <div className="flex items-center gap-2 md:gap-4">
-                                    <div className="w-8 h-8 md:w-12 md:h-12 bg-slate-900 rounded-xl md:rounded-2xl flex items-center justify-center shadow-lg shrink-0">
-                                        <Package className="h-4 w-4 md:h-6 md:w-6 text-white" />
+                                <div className="flex items-center gap-2 md:gap-3">
+                                    <div className="w-8 h-8 md:w-10 md:h-10 bg-slate-900 rounded-xl md:rounded-xl flex items-center justify-center shadow-lg shrink-0">
+                                        <Package className="h-4 w-4 md:h-5 md:w-5 text-white" />
                                     </div>
                                     <div className="flex flex-col">
-                                        <h1 className="text-xs md:text-lg font-black text-slate-900 leading-none truncate max-w-[80px] md:max-w-none">{resolvedCompany?.name || "Premium POS"}</h1>
+                                        <h1 className="text-xs md:text-sm font-black text-slate-900 leading-none truncate max-w-[80px] md:max-w-[120px] lg:max-w-[160px]">{resolvedCompany?.name || "Premium POS"}</h1>
                                         <div className="flex items-center gap-1.5 mt-0.5 md:mt-1">
                                             <p className="text-[8px] md:text-[10px] uppercase tracking-[0.2em] text-primary font-black hidden md:block">Elite Terminal</p>
                                             <div className={cn(
@@ -1352,7 +1352,7 @@ export default function POSPage() {
                         </div>
 
                         {/* Elite Search Bar - Full width on mobile */}
-                        <div className="relative flex-1 group flex items-center gap-2 md:px-2 lg:px-4">
+                        <div className="relative flex-1 group flex items-center gap-2">
                             <div className="relative flex-1">
                                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                                     <Search className="h-4 w-4 md:h-5 md:w-5 text-slate-400 group-focus-within:text-primary transition-colors" />

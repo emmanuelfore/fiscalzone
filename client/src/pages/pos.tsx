@@ -1080,7 +1080,7 @@ export default function POSPage() {
                         </div>
 
                         <div className="flex justify-between items-center py-1.5 border-t border-slate-100 border-dashed mt-1.5">
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Grand Total</span>
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Total</span>
                             <div className="text-right">
                                 <p className="text-xl font-black text-slate-900 tracking-tight leading-none">${total.toFixed(2)}</p>
                                 <p className="text-[9px] font-bold text-emerald-600 mt-0.5 uppercase tracking-widest">{selectedCurrencyCode}</p>

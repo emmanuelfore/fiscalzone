@@ -68,8 +68,8 @@ import { useActiveCompany } from "@/hooks/use-active-company";
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
   const { user, logout } = useAuth();
-  const { data: companies } = useCompanies();
-  const { activeCompany, activeCompanyId, setCompany } = useActiveCompany();
+  const { data: companies } = useCompanies(!!user);
+  const { activeCompany, activeCompanyId, setCompany } = useActiveCompany(!!user);
 
   const handleCompanyChange = (id: number) => {
     setCompany(id);

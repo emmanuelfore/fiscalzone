@@ -102,9 +102,11 @@ const Navbar = () => {
       }}
     >
       {/* Logo */}
-      <span style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 800, fontSize: 18, color: scrolled ? C.navy : "#fff", letterSpacing: "-0.03em" }}>
-        Fiscal<span style={{ color: C.gold }}>Stack</span>
-      </span>
+      <img
+        src="/fiscalstack-logo.png"
+        alt="FiscalStack"
+        style={{ height: 34, width: "auto" }}
+      />
 
       {/* Desktop links */}
       <div className="hidden md:flex items-center gap-6">
@@ -575,12 +577,11 @@ const Footer = () => (
     <div style={{ maxWidth: 1180, margin: "0 auto" }}>
       <div style={{ display: "grid", gridTemplateColumns: "1.5fr repeat(3,1fr)", gap: 40, marginBottom: 48 }} className="grid-footer">
         <div>
-          <span style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 800, fontSize: 22, color: "#fff", letterSpacing: "-0.03em", display: "block", marginBottom: 12 }}>
-            Fiscal<span style={{ color: C.gold }}>Stack</span>
-          </span>
+          <img src="/fiscalstack-logo.png" alt="FiscalStack" style={{ height: 36, width: "auto", display: "block", marginBottom: 12 }} />
           <p style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 13, color: "rgba(255,255,255,0.35)", lineHeight: 1.7, maxWidth: 240 }}>
             Zimbabwe's intelligent fiscalization platform. Built for compliance, designed for growth.
           </p>
+
           <div style={{ marginTop: 20, display: "flex", flexDirection: "column", gap: 8 }}>
             <a href="mailto:info@fiscalstack.co.zw" style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: "rgba(37,99,235,0.8)", textDecoration: "none", letterSpacing: "0.06em" }}>
               info@fiscalstack.co.zw

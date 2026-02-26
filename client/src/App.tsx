@@ -114,7 +114,7 @@ function useIsOnline() {
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
   const { data: companies, isLoading: isLoadingCompanies, isSuccess: isCompaniesSuccess, isError: isCompaniesError } = useCompanies(!!user);
-  const { activeCompany, isLoading: isLoadingActiveCompany } = useActiveCompany();
+  const { activeCompany, isLoading: isLoadingActiveCompany } = useActiveCompany(!!user);
   const [location] = useLocation();
   const isOnline = useIsOnline();
 

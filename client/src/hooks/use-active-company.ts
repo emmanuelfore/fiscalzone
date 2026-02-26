@@ -1,9 +1,8 @@
-
 import { useState, useEffect } from "react";
 import { useCompanies } from "./use-companies";
 
-export function useActiveCompany() {
-    const { data: companies, isLoading } = useCompanies();
+export function useActiveCompany(enabled: boolean = true) {
+    const { data: companies, isLoading } = useCompanies(enabled);
     const [activeCompanyId, setActiveCompanyId] = useState<number | null>(() => {
         const stored = localStorage.getItem("selectedCompanyId");
         return stored ? parseInt(stored) : null;
@@ -48,6 +47,6 @@ export function useActiveCompany() {
         activeCompany,
         activeCompanyId: activeCompany?.id || null,
         setCompany,
-        isLoading
+        isLoading: enabled ? isLoading : false
     };
 }

@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import LandingPage from "@/pages/landing";
+import NuraLandingPage from "@/pages/nura-landing";
 import AuthPage from "@/pages/auth";
 import ForgotPasswordPage from "@/pages/forgot-password";
 import ResetPasswordPage from "@/pages/reset-password";
@@ -47,13 +48,85 @@ import { useAuth } from "@/hooks/use-auth";
 import { useCompanies } from "@/hooks/use-companies";
 import { useActiveCompany } from "@/hooks/use-active-company";
 import { Loader2 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
+
+function useIsOnline() {
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  useEffect(() => {
+    // 1. Listen for hardware events (fastest response for Wi-Fi toggles)
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    // 2. Active Polling (backup for when hardware events are unreliable/laggy)
+    const checkConnection = async () => {
+      // If hardware is definitely offline, trust it immediately
+      if (!navigator.onLine) {
+        setIsOnline(false);
+        return;
+      }
+
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+        // Ping the public health endpoint with a cache-buster to force a real network check
+        const response = await fetch(`/api/health?_t=${Date.now()}`, {
+          method: 'GET',
+          cache: 'no-store',
+          signal: controller.signal
+        }).catch(() => null);
+
+        clearTimeout(timeoutId);
+
+        if (response && response.ok) {
+          const data = await response.json();
+          // Respect the server-side internet check (crucial for localhost)
+          setIsOnline(data.internet === true);
+        } else {
+          setIsOnline(false);
+        }
+      } catch (err) {
+        setIsOnline(false);
+      }
+    };
+
+    // Run immediate check on mount
+    checkConnection();
+
+    // Poll every 5 seconds for a tighter response loop
+    const interval = setInterval(checkConnection, 5000);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+      clearInterval(interval);
+    };
+  }, []);
+
+  return isOnline;
+}
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
   const { data: companies, isLoading: isLoadingCompanies, isSuccess: isCompaniesSuccess, isError: isCompaniesError } = useCompanies(!!user);
   const { activeCompany, isLoading: isLoadingActiveCompany } = useActiveCompany();
   const [location] = useLocation();
+  const isOnline = useIsOnline();
+
+  const isPosPath = location.startsWith("/pos");
+  const isOffline = !isOnline || isCompaniesError;
+
+  // hard-reload on disconnect
+  useEffect(() => {
+    if (isOffline && !isPosPath) {
+      window.location.href = "/pos";
+    }
+  }, [isOffline, isPosPath]);
 
   if (isLoading || isLoadingCompanies || isLoadingActiveCompany) {
     return (
@@ -64,7 +137,11 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   }
 
   if (!user) {
-    return <Redirect to="/auth" />;
+    // Only redirect to auth if we are definitely online
+    // If we are offline and on the POS path, we want to stay there
+    if (!isOffline || !isPosPath) {
+      return <Redirect to="/auth" />;
+    }
   }
 
   // Redirect to onboarding ONLY if:
@@ -72,7 +149,7 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   // 2. The query succeeded (didn't catch an error)
   // 3. We have a non-null result that is definitely an empty array.
   // This avoids accidental redirects during network hiccups or if the offline cache is empty.
-  const isPossiblyOffline = !navigator.onLine || isCompaniesError;
+  const isPossiblyOffline = !isOnline || isCompaniesError;
   const hasConfirmedEmpty = !isPossiblyOffline && isCompaniesSuccess && Array.isArray(companies) && companies.length === 0;
 
   if (hasConfirmedEmpty) {
@@ -80,12 +157,9 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   }
 
   // Redirection Logic
-  const isPosPath = location.startsWith("/pos");
-  const isOffline = !navigator.onLine || isCompaniesError;
-
-  // 1. IF OFFLINE: Force POS access only
+  // 1. IF OFFLINE: Force POS access only (extra fallback)
   if (isOffline && !isPosPath) {
-    return <Redirect to="/pos" />;
+    return null; // Let useEffect handle reload
   }
 
   // 2. IF ONLINE: Normal role-based restrictions
@@ -105,6 +179,7 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 function OnboardingRoute() {
   const { user, isLoading } = useAuth();
   const { data: companies, isLoading: isLoadingCompanies, isError } = useCompanies(!!user);
+  const isOnline = useIsOnline();
 
   if (isLoading || isLoadingCompanies) {
     return (
@@ -119,7 +194,7 @@ function OnboardingRoute() {
   }
 
   // Always redirect to POS as requested
-  if (!navigator.onLine || isError) {
+  if (!isOnline || isError) {
     return <Redirect to="/pos" />;
   }
 
@@ -137,11 +212,20 @@ function OnboardingRoute() {
 
 function Router() {
   const { user, isLoading } = useAuth();
+  const isOnline = useIsOnline();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <Switch>
       <Route path="/auth">
-        {user ? <Redirect to={navigator.onLine ? "/dashboard" : "/pos"} /> : <AuthPage />}
+        {user ? <Redirect to={isOnline ? "/dashboard" : "/pos"} /> : <AuthPage />}
       </Route>
       <Route path="/forgot-password" component={ForgotPasswordPage} />
       <Route path="/reset-password" component={ResetPasswordPage} />
@@ -253,8 +337,9 @@ function Router() {
       <Route path="/pos-settings">
         {() => <ProtectedRoute component={PosSettingsPage} />}
       </Route>
+      <Route path="/nura-landing" component={NuraLandingPage} />
       <Route path="/">
-        {user ? <Redirect to={navigator.onLine ? "/dashboard" : "/pos"} /> : <LandingPage />}
+        {user ? <Redirect to={isOnline ? "/dashboard" : "/pos"} /> : <LandingPage />}
       </Route>
 
       <Route component={NotFound} />
@@ -267,6 +352,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
+        <PwaInstallPrompt />
         <Router />
       </TooltipProvider>
     </QueryClientProvider>

@@ -110,7 +110,10 @@ export async function syncPendingSales(
             const url = buildUrl(api.invoices.create.path, { companyId });
             const res = await apiFetch(url, {
                 method: 'POST',
-                body: JSON.stringify(sale.invoiceData),
+                body: JSON.stringify({
+                    ...sale.invoiceData,
+                    isOfflineSync: true // Mark as synced offline sale to bypass shift validation
+                }),
             });
 
             if (!res.ok) {

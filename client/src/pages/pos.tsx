@@ -125,6 +125,51 @@ export default function POSPage() {
     // Manager Override State
     const [pendingOverride, setPendingOverride] = useState<{ type: "DISCOUNT" | "VOID_CART", data: any } | null>(null);
 
+    // ─── POS Session Persistence ──────────────────────────────────────────
+    // Load persisted state on mount
+    useEffect(() => {
+        if (!companyId) return;
+        const prefix = `pos_session_${companyId}_`;
+
+        try {
+            const savedCart = localStorage.getItem(`${prefix}cart`);
+            const savedCustomerId = localStorage.getItem(`${prefix}customerId`);
+            const savedDiscount = localStorage.getItem(`${prefix}discount`);
+            const savedCurrency = localStorage.getItem(`${prefix}currency`);
+            const savedPaymentMethod = localStorage.getItem(`${prefix}paymentMethod`);
+
+            if (savedCart) setCart(JSON.parse(savedCart));
+            if (savedCustomerId) setSelectedCustomerId(savedCustomerId);
+            if (savedDiscount) setOrderDiscount(parseFloat(savedDiscount));
+            if (savedCurrency) setSelectedCurrencyCode(savedCurrency);
+            if (savedPaymentMethod) setPaymentMethod(savedPaymentMethod);
+        } catch (e) {
+            console.error("[POS] Failed to load persisted session:", e);
+        }
+    }, [companyId]);
+
+    // Save state on every change
+    useEffect(() => {
+        if (!companyId) return;
+        const prefix = `pos_session_${companyId}_`;
+
+        localStorage.setItem(`${prefix}cart`, JSON.stringify(cart));
+        localStorage.setItem(`${prefix}customerId`, selectedCustomerId);
+        localStorage.setItem(`${prefix}discount`, orderDiscount.toString());
+        localStorage.setItem(`${prefix}currency`, selectedCurrencyCode);
+        localStorage.setItem(`${prefix}paymentMethod`, paymentMethod);
+    }, [companyId, cart, selectedCustomerId, orderDiscount, selectedCurrencyCode, paymentMethod]);
+
+    const clearPersistedSession = () => {
+        if (!companyId) return;
+        const prefix = `pos_session_${companyId}_`;
+        localStorage.removeItem(`${prefix}cart`);
+        localStorage.removeItem(`${prefix}customerId`);
+        localStorage.removeItem(`${prefix}discount`);
+        localStorage.removeItem(`${prefix}currency`);
+        localStorage.removeItem(`${prefix}paymentMethod`);
+    };
+
     // Derived data
     const categories = useMemo(() => {
         if (!resolvedProducts || resolvedProducts.length === 0) return ["All"];
@@ -514,6 +559,15 @@ export default function POSPage() {
                 setSelectedCustomerId("");
                 setPaidAmount("");
                 setIsCheckoutOpen(false);
+                clearPersistedSession();
+
+                // Register Background Sync
+                if ('serviceWorker' in navigator && 'SyncManager' in window) {
+                    navigator.serviceWorker.ready.then(reg => {
+                        return (reg as any).sync.register('sync-sales');
+                    }).catch(err => console.error("[Sync] Registration failed:", err));
+                }
+
                 await refreshPendingCount();
                 return;
             }
@@ -530,6 +584,7 @@ export default function POSPage() {
             setSelectedCustomerId("");
             setPaidAmount("");
             setIsCheckoutOpen(false);
+            clearPersistedSession();
         } catch (error: any) {
             // If the error looks like a network failure, queue offline
             if (!navigator.onLine || error.message === 'Failed to fetch') {
@@ -582,6 +637,15 @@ export default function POSPage() {
                     setSelectedCustomerId("");
                     setPaidAmount("");
                     setIsCheckoutOpen(false);
+                    clearPersistedSession();
+
+                    // Register Background Sync
+                    if ('serviceWorker' in navigator && 'SyncManager' in window) {
+                        navigator.serviceWorker.ready.then(reg => {
+                            return (reg as any).sync.register('sync-sales');
+                        }).catch(err => console.error("[Sync] Registration failed:", err));
+                    }
+
                     await refreshPendingCount();
                     return;
                 } catch (offlineError) {
@@ -1016,7 +1080,7 @@ export default function POSPage() {
                         </div>
 
                         <div className="flex justify-between items-center py-1.5 border-t border-slate-100 border-dashed mt-1.5">
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Grand Total</span>
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Total</span>
                             <div className="text-right">
                                 <p className="text-xl font-black text-slate-900 tracking-tight leading-none">${total.toFixed(2)}</p>
                                 <p className="text-[9px] font-bold text-emerald-600 mt-0.5 uppercase tracking-widest">{selectedCurrencyCode}</p>
@@ -1125,12 +1189,12 @@ export default function POSPage() {
                         <div className="flex gap-2 items-center">
                             {/* Brand & Context - Hyper Compact on Mobile */}
                             <div className="flex items-center justify-between md:justify-start gap-2 md:gap-4 shrink-0 flex-1 md:flex-none">
-                                <div className="flex items-center gap-2 md:gap-4">
-                                    <div className="w-8 h-8 md:w-12 md:h-12 bg-slate-900 rounded-xl md:rounded-2xl flex items-center justify-center shadow-lg shrink-0">
-                                        <Package className="h-4 w-4 md:h-6 md:w-6 text-white" />
+                                <div className="flex items-center gap-2 md:gap-3">
+                                    <div className="w-8 h-8 md:w-10 md:h-10 bg-slate-900 rounded-xl md:rounded-xl flex items-center justify-center shadow-lg shrink-0">
+                                        <Package className="h-4 w-4 md:h-5 md:w-5 text-white" />
                                     </div>
                                     <div className="flex flex-col">
-                                        <h1 className="text-xs md:text-lg font-black text-slate-900 leading-none truncate max-w-[80px] md:max-w-none">{resolvedCompany?.name || "Premium POS"}</h1>
+                                        <h1 className="text-xs md:text-sm font-black text-slate-900 leading-none truncate max-w-[80px] md:max-w-[120px] lg:max-w-[160px]">{resolvedCompany?.name || "Premium POS"}</h1>
                                         <div className="flex items-center gap-1.5 mt-0.5 md:mt-1">
                                             <p className="text-[8px] md:text-[10px] uppercase tracking-[0.2em] text-primary font-black hidden md:block">Elite Terminal</p>
                                             <div className={cn(
@@ -1294,6 +1358,7 @@ export default function POSPage() {
                                     <Search className="h-4 w-4 md:h-5 md:w-5 text-slate-400 group-focus-within:text-primary transition-colors" />
                                 </div>
                                 <Input
+                                    autoFocus
                                     placeholder="Search products..."
                                     className="pl-10 md:pl-12 h-10 md:h-14 w-full bg-slate-50 border-none rounded-xl md:rounded-2xl text-xs md:text-sm font-bold text-slate-800 focus:bg-white focus:ring-4 focus:ring-primary/5 transition-all shadow-inner"
                                     value={searchQuery}
@@ -1350,27 +1415,27 @@ export default function POSPage() {
                             </div>
                         </div>
 
-                        {/* Integrated Controls & Profile - Hidden on tiny screens or wrapped */}
-                        <div className="hidden md:flex items-center gap-2 md:gap-4 overflow-x-auto no-scrollbar pb-1 md:pb-0">
+                        {/* Integrated Controls & Profile - Compacted to prevent scrolling */}
+                        <div className="hidden md:flex items-center gap-1 lg:gap-2 pb-1 md:pb-0 shrink-0">
                             {/* Customer Selector - Premium */}
-                            <div className="flex items-center gap-2 bg-slate-100/50 p-1.5 rounded-2xl border border-slate-200/50">
+                            <div className="flex items-center gap-1 bg-slate-100/50 p-1 rounded-lg border border-slate-200/50 shrink-0">
                                 <Button
                                     variant="ghost"
                                     size="sm"
-                                    className="h-10 w-10 rounded-xl bg-white shadow-sm border border-slate-200 text-slate-600 hover:text-primary hover:bg-white"
+                                    className="h-8 w-8 rounded-md bg-white shadow-sm border border-slate-200 text-slate-600 hover:text-primary hover:bg-white p-0"
                                     onClick={() => {
                                         const walkIn = resolvedCustomers?.find((c: any) => c.name.toLowerCase().includes("walk-in") || c.name.toLowerCase().includes("cash"));
                                         if (walkIn) setSelectedCustomerId(walkIn.id.toString());
                                         else toast({ title: "No Walk-in Customer", description: "Create 'Walk-in' first." });
                                     }}
                                 >
-                                    <UserPlus className="h-5 w-5" />
+                                    <UserPlus className="h-4 w-4" />
                                 </Button>
                                 <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId}>
-                                    <SelectTrigger className="w-44 lg:w-56 h-10 border-none bg-transparent hover:bg-slate-200/30 transition-all font-bold text-slate-700">
-                                        <div className="flex items-center gap-2 truncate">
-                                            <User className="h-4 w-4 text-slate-400 shrink-0" />
-                                            <SelectValue placeholder="Select Customer" />
+                                    <SelectTrigger className="w-24 lg:w-32 h-8 border-none bg-transparent hover:bg-slate-200/30 transition-all font-bold text-slate-700 px-2">
+                                        <div className="flex items-center gap-1.5 truncate">
+                                            <User className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                            <SelectValue placeholder="Customer" />
                                         </div>
                                     </SelectTrigger>
                                     <SelectContent className="rounded-xl border-slate-200 shadow-2xl">
@@ -1383,29 +1448,29 @@ export default function POSPage() {
                                 </Select>
                             </div>
 
-                            <div className="h-8 w-px bg-slate-200 mx-1 hidden lg:block" />
+                            <div className="h-6 w-px bg-slate-200 mx-0.5 hidden lg:block" />
 
-                            {/* Quick Action Pills */}
-                            <div className="flex items-center gap-2">
+                            {/* Quick Action Pills - Compact */}
+                            <div className="flex items-center gap-1">
                                 <Button
                                     variant="outline"
-                                    className="h-11 px-5 gap-2 border-slate-200 rounded-2xl hover:bg-slate-50 transition-all font-bold group"
+                                    className="h-9 px-2 lg:px-3 gap-1.5 border-slate-200 rounded-lg hover:bg-slate-50 transition-all font-bold group"
                                     onClick={() => setIsHoldsModalOpen(true)}
                                 >
                                     <div className="relative">
                                         <History className="h-4 w-4 text-slate-500 group-hover:rotate-[-45deg] transition-transform" />
                                         {heldSales.length > 0 && (
-                                            <span className="absolute -top-1.5 -right-1.5 h-3 w-3 bg-primary rounded-full ring-2 ring-white" />
+                                            <span className="absolute -top-1 -right-1 h-2.5 w-2.5 bg-primary rounded-full ring-2 ring-white" />
                                         )}
                                     </div>
-                                    <span className="text-slate-600">Holds</span>
-                                    <Badge variant="secondary" className="ml-1 h-5 bg-slate-100 text-slate-500 border-none px-1.5 font-black text-[10px]">
+                                    <span className="text-slate-600 hidden lg:inline">Holds</span>
+                                    <Badge variant="secondary" className="lg:ml-1 h-4 bg-slate-100 text-slate-500 border-none px-1 font-black text-[9px]">
                                         {heldSales.length}
                                     </Badge>
                                 </Button>
 
                                 <div className={cn(
-                                    "flex items-center gap-3 px-4 h-11 rounded-2xl border text-xs font-black shrink-0 shadow-sm",
+                                    "flex items-center gap-1.5 px-2 h-9 rounded-lg border text-[10px] lg:text-xs font-black shrink-0 shadow-sm",
                                     currentShift ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-red-50 text-red-700 border-red-100"
                                 )}>
                                     <div className="relative">
@@ -1445,7 +1510,7 @@ export default function POSPage() {
                                     variant="outline"
                                     size="icon"
                                     className={cn(
-                                        "h-11 w-11 rounded-2xl border-slate-200 transition-all shadow-sm",
+                                        "h-9 w-9 rounded-md border-slate-200 transition-all shadow-sm shrink-0",
                                         isFullscreen ? "bg-primary text-white border-primary" : "bg-white text-slate-500 hover:text-primary"
                                     )}
                                     onClick={toggleFullscreen}
@@ -1455,8 +1520,8 @@ export default function POSPage() {
 
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
-                                        <div className="h-11 w-11 rounded-2xl bg-slate-900 flex items-center justify-center text-white cursor-pointer hover:bg-slate-800 transition-all shadow-lg group relative">
-                                            <SettingsIcon className="h-5 w-5 opacity-70 group-hover:rotate-90 transition-transform" />
+                                        <div className="h-9 w-9 rounded-md bg-slate-900 flex items-center justify-center text-white cursor-pointer hover:bg-slate-800 transition-all shadow-lg group relative shrink-0">
+                                            <SettingsIcon className="h-4 w-4 opacity-70 group-hover:rotate-90 transition-transform" />
                                         </div>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end" className="w-64 rounded-2xl p-2 shadow-2xl border-slate-100">

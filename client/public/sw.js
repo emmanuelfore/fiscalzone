@@ -1,7 +1,7 @@
 // FiscalStack Service Worker — v3
 // Cache Strategy: Network-first for API, Cache-first for static assets
 
-const CACHE_VERSION = 'v6';
+const CACHE_VERSION = 'v14';
 const STATIC_CACHE = `fiscalstack-static-${CACHE_VERSION}`;
 const FONT_CACHE = `fiscalstack-fonts-${CACHE_VERSION}`;
 
@@ -13,6 +13,75 @@ const STATIC_ASSETS = [
     '/fiscalstack-logo.png',
     '/site.webmanifest'
 ];
+
+// ─────────────────────────────────────────────────────────────
+// BACKGROUND SYNC — Invisible offline processing
+// ─────────────────────────────────────────────────────────────
+const DB_NAME = 'pos-offline';
+const DB_VERSION = 5;
+
+function openDB() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => resolve(request.result);
+    });
+}
+
+async function syncSales() {
+    console.log('[SW] Starting background sync process...');
+    try {
+        const db = await openDB();
+        const tx = db.transaction('pendingSales', 'readwrite');
+        const store = tx.objectStore('pendingSales');
+
+        const sales = await new Promise((resolve, reject) => {
+            const req = store.getAll();
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+
+        if (!sales.length) {
+            console.log('[SW] No pending sales to sync.');
+            return;
+        }
+
+        for (const sale of sales) {
+            // Skip if currently being handled by another process
+            if (sale.status === 'syncing') continue;
+
+            try {
+                const response = await fetch('/api/invoices', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(sale.invoiceData)
+                });
+
+                if (response.ok) {
+                    await new Promise((resolve, reject) => {
+                        const deleteReq = store.delete(sale.id);
+                        deleteReq.onsuccess = resolve;
+                        deleteReq.onerror = reject;
+                    });
+                    console.log(`[SW] Successfully synced sale ${sale.id}`);
+                } else {
+                    console.warn(`[SW] Server rejected sale ${sale.id}: ${response.status}`);
+                }
+            } catch (err) {
+                console.error(`[SW] Fetch failed for sale ${sale.id}:`, err);
+            }
+        }
+    } catch (err) {
+        console.error('[SW] Sync process error:', err);
+    }
+}
+
+self.addEventListener('sync', (event) => {
+    if (event.tag === 'sync-sales') {
+        console.log('[SW] Background sync event triggered: sync-sales');
+        event.waitUntil(syncSales());
+    }
+});
 
 // ─────────────────────────────────────────────────────────────
 // INSTALL — Pre-cache shell with per-file resilience

@@ -9,6 +9,9 @@ export default {
         lg: ".5625rem", /* 9px */
         md: ".375rem", /* 6px */
         sm: ".1875rem", /* 3px */
+        "2xl": "2rem",
+        "3xl": "3rem",
+        "4xl": "4rem",
       },
       colors: {
         // Flat / base colors (regular buttons)
@@ -81,11 +84,19 @@ export default {
           busy: "rgb(239 68 68)",
           offline: "rgb(156 163 175)",
         },
+        nura: {
+          moss: "#2E4036",
+          clay: "#CC5833",
+          cream: "#F2F0E9",
+          charcoal: "#1A1A1A",
+        },
       },
       fontFamily: {
         sans: ["Inter", "sans-serif"],
         display: ["Outfit", "sans-serif"],
         mono: ["Fira Code", "monospace"],
+        jakarta: ["Plus Jakarta Sans", "sans-serif"],
+        cormorant: ["Cormorant Garamond", "serif"],
       },
       keyframes: {
         "accordion-down": {

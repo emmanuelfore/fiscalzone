@@ -2,7 +2,7 @@
     "name": "FiscalStack — ZIMRA Invoicing",
     "short_name": "FiscalStack",
     "description": "ZIMRA-compliant invoicing & POS for Zimbabwean businesses",
-    "start_url": "/",
+    "start_url": "/pos",
     "scope": "/",
     "display": "standalone",
     "orientation": "any",

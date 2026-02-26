@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
 import { type InsertProduct } from "@shared/schema";
 import { apiFetch } from "@/lib/api";
-import { cacheProducts, getCachedProducts } from "@/lib/offline-db";
+import { cacheProducts, getCachedProducts, setLastCacheTime } from "@/lib/offline-db";
 
 export function useProducts(companyId: number) {
   return useQuery({
@@ -13,7 +13,11 @@ export function useProducts(companyId: number) {
         const res = await apiFetch(url);
         if (!res.ok) throw new Error("Failed to fetch products");
         const products = api.products.list.responses[200].parse(await res.json());
-        if (companyId) await cacheProducts(companyId, products);
+        if (companyId) {
+          await cacheProducts(companyId, products);
+          // Update the cache timestamp so the 24h stale warning resets
+          await setLastCacheTime(companyId, Date.now());
+        }
         return products;
       } catch (err) {
         console.warn("Products fetch failed, trying offline cache...", err);

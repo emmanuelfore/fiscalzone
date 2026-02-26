@@ -26,7 +26,7 @@ export function useOffline(companyId: number): UseOfflineReturn {
     const isSyncingRef = useRef(false);
     const { toast } = useToast();
 
-    // Listen for online/offline events
+    // Unified Connectivity Probing
     useEffect(() => {
         const handleOnline = () => setIsOnline(true);
         const handleOffline = () => setIsOnline(false);
@@ -34,9 +34,44 @@ export function useOffline(companyId: number): UseOfflineReturn {
         window.addEventListener('online', handleOnline);
         window.addEventListener('offline', handleOffline);
 
+        const checkConnection = async () => {
+            if (!navigator.onLine) {
+                setIsOnline(false);
+                return;
+            }
+
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+                const response = await fetch(`/api/health?_t=${Date.now()}`, {
+                    method: 'GET',
+                    cache: 'no-store',
+                    signal: controller.signal
+                }).catch(() => null);
+
+                clearTimeout(timeoutId);
+
+                if (response && response.ok) {
+                    const data = await response.json();
+                    setIsOnline(data.internet === true);
+                } else {
+                    setIsOnline(false);
+                }
+            } catch (err) {
+                setIsOnline(false);
+            }
+        };
+
+        // Immediate check
+        checkConnection();
+
+        const interval = setInterval(checkConnection, 5000);
+
         return () => {
             window.removeEventListener('online', handleOnline);
             window.removeEventListener('offline', handleOffline);
+            clearInterval(interval);
         };
     }, []);
 
@@ -60,6 +95,7 @@ export function useOffline(companyId: number): UseOfflineReturn {
         if (!companyId) return;
         try {
             const time = await getLastCacheTime(companyId);
+            console.log(`[useOffline] company:${companyId} lastCacheTime:`, time ? new Date(time).toLocaleString() : 'null');
             if (time) setLastCacheTimeState(time);
         } catch (e) {
             console.error('Failed to get cache time:', e);

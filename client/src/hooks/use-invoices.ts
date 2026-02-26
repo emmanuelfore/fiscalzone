@@ -50,10 +50,15 @@ export function useCreateInvoice(companyId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data: CreateInvoiceRequest) => {
+      // normalize any Date objects to ISO strings
+      const payload: any = { ...data };
+      if (payload.issueDate instanceof Date) payload.issueDate = payload.issueDate.toISOString();
+      if (payload.dueDate instanceof Date) payload.dueDate = payload.dueDate.toISOString();
+
       const url = buildUrl(api.invoices.create.path, { companyId });
       const res = await apiFetch(url, {
         method: "POST",
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const error = await res.json();
@@ -75,10 +80,15 @@ export function useUpdateInvoice() {
 
   return useMutation({
     mutationFn: async ({ id, data }: { id: number; data: Partial<CreateInvoiceRequest> }) => {
+      // ensure dates are serialized properly
+      const payload: any = { ...data };
+      if (payload.issueDate instanceof Date) payload.issueDate = payload.issueDate.toISOString();
+      if (payload.dueDate instanceof Date) payload.dueDate = payload.dueDate.toISOString();
+
       const url = buildUrl(api.invoices.update.path, { id });
       const res = await apiFetch(url, {
         method: "PUT",
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         throw await res.json();

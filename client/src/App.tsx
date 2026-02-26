@@ -48,6 +48,7 @@ import { useCompanies } from "@/hooks/use-companies";
 import { useActiveCompany } from "@/hooks/use-active-company";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
 
 function useIsOnline() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -349,6 +350,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
+        <PwaInstallPrompt />
         <Router />
       </TooltipProvider>
     </QueryClientProvider>

@@ -1415,14 +1415,14 @@ export default function POSPage() {
                             </div>
                         </div>
 
-                        {/* Integrated Controls & Profile - Hidden on tiny screens or wrapped */}
-                        <div className="hidden md:flex items-center gap-2 md:gap-4 overflow-x-auto no-scrollbar pb-1 md:pb-0">
+                        {/* Integrated Controls & Profile - Compacted to prevent scrolling */}
+                        <div className="hidden md:flex items-center gap-1 lg:gap-2 pb-1 md:pb-0 shrink-0">
                             {/* Customer Selector - Premium */}
-                            <div className="flex items-center gap-2 bg-slate-100/50 p-1.5 rounded-2xl border border-slate-200/50">
+                            <div className="flex items-center gap-1.5 bg-slate-100/50 p-1.5 rounded-xl border border-slate-200/50">
                                 <Button
                                     variant="ghost"
                                     size="sm"
-                                    className="h-10 w-10 rounded-xl bg-white shadow-sm border border-slate-200 text-slate-600 hover:text-primary hover:bg-white"
+                                    className="h-9 w-9 rounded-lg bg-white shadow-sm border border-slate-200 text-slate-600 hover:text-primary hover:bg-white p-0"
                                     onClick={() => {
                                         const walkIn = resolvedCustomers?.find((c: any) => c.name.toLowerCase().includes("walk-in") || c.name.toLowerCase().includes("cash"));
                                         if (walkIn) setSelectedCustomerId(walkIn.id.toString());
@@ -1432,8 +1432,8 @@ export default function POSPage() {
                                     <UserPlus className="h-5 w-5" />
                                 </Button>
                                 <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId}>
-                                    <SelectTrigger className="w-32 lg:w-40 h-10 border-none bg-transparent hover:bg-slate-200/30 transition-all font-bold text-slate-700">
-                                        <div className="flex items-center gap-2 truncate">
+                                    <SelectTrigger className="w-28 lg:w-36 h-9 border-none bg-transparent hover:bg-slate-200/30 transition-all font-bold text-slate-700">
+                                        <div className="flex items-center gap-1.5 truncate">
                                             <User className="h-4 w-4 text-slate-400 shrink-0" />
                                             <SelectValue placeholder="Select Customer" />
                                         </div>
@@ -1448,13 +1448,13 @@ export default function POSPage() {
                                 </Select>
                             </div>
 
-                            <div className="h-8 w-px bg-slate-200 mx-1 hidden lg:block" />
+                            <div className="h-6 w-px bg-slate-200 mx-0.5 hidden lg:block" />
 
-                            {/* Quick Action Pills */}
-                            <div className="flex items-center gap-2">
+                            {/* Quick Action Pills - Compact */}
+                            <div className="flex items-center gap-1.5">
                                 <Button
                                     variant="outline"
-                                    className="h-11 px-5 gap-2 border-slate-200 rounded-2xl hover:bg-slate-50 transition-all font-bold group"
+                                    className="h-10 px-3 lg:px-4 gap-1.5 border-slate-200 rounded-xl hover:bg-slate-50 transition-all font-bold group"
                                     onClick={() => setIsHoldsModalOpen(true)}
                                 >
                                     <div className="relative">
@@ -1470,7 +1470,7 @@ export default function POSPage() {
                                 </Button>
 
                                 <div className={cn(
-                                    "flex items-center gap-3 px-4 h-11 rounded-2xl border text-xs font-black shrink-0 shadow-sm",
+                                    "flex items-center gap-2 px-2.5 lg:px-3 h-10 rounded-xl border text-[10px] lg:text-xs font-black shrink-0 shadow-sm",
                                     currentShift ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-red-50 text-red-700 border-red-100"
                                 )}>
                                     <div className="relative">
@@ -1510,7 +1510,7 @@ export default function POSPage() {
                                     variant="outline"
                                     size="icon"
                                     className={cn(
-                                        "h-11 w-11 rounded-2xl border-slate-200 transition-all shadow-sm",
+                                        "h-10 w-10 rounded-xl border-slate-200 transition-all shadow-sm",
                                         isFullscreen ? "bg-primary text-white border-primary" : "bg-white text-slate-500 hover:text-primary"
                                     )}
                                     onClick={toggleFullscreen}
@@ -1520,8 +1520,8 @@ export default function POSPage() {
 
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
-                                        <div className="h-11 w-11 rounded-2xl bg-slate-900 flex items-center justify-center text-white cursor-pointer hover:bg-slate-800 transition-all shadow-lg group relative">
-                                            <SettingsIcon className="h-5 w-5 opacity-70 group-hover:rotate-90 transition-transform" />
+                                        <div className="h-10 w-10 rounded-xl bg-slate-900 flex items-center justify-center text-white cursor-pointer hover:bg-slate-800 transition-all shadow-lg group relative shrink-0">
+                                            <SettingsIcon className="h-4 w-4 opacity-70 group-hover:rotate-90 transition-transform" />
                                         </div>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end" className="w-64 rounded-2xl p-2 shadow-2xl border-slate-100">

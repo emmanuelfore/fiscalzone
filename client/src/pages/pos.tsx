@@ -1358,6 +1358,7 @@ export default function POSPage() {
                                     <Search className="h-4 w-4 md:h-5 md:w-5 text-slate-400 group-focus-within:text-primary transition-colors" />
                                 </div>
                                 <Input
+                                    autoFocus
                                     placeholder="Search products..."
                                     className="pl-10 md:pl-12 h-10 md:h-14 w-full bg-slate-50 border-none rounded-xl md:rounded-2xl text-xs md:text-sm font-bold text-slate-800 focus:bg-white focus:ring-4 focus:ring-primary/5 transition-all shadow-inner"
                                     value={searchQuery}
@@ -1431,7 +1432,7 @@ export default function POSPage() {
                                     <UserPlus className="h-5 w-5" />
                                 </Button>
                                 <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId}>
-                                    <SelectTrigger className="w-44 lg:w-56 h-10 border-none bg-transparent hover:bg-slate-200/30 transition-all font-bold text-slate-700">
+                                    <SelectTrigger className="w-32 lg:w-40 h-10 border-none bg-transparent hover:bg-slate-200/30 transition-all font-bold text-slate-700">
                                         <div className="flex items-center gap-2 truncate">
                                             <User className="h-4 w-4 text-slate-400 shrink-0" />
                                             <SelectValue placeholder="Select Customer" />

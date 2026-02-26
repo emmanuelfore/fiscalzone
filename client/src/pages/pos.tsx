@@ -1352,7 +1352,7 @@ export default function POSPage() {
                         </div>
 
                         {/* Elite Search Bar - Full width on mobile */}
-                        <div className="relative flex-1 group flex items-center gap-2 md:px-6 lg:px-12">
+                        <div className="relative flex-1 group flex items-center gap-2 md:px-2 lg:px-4">
                             <div className="relative flex-1">
                                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                                     <Search className="h-4 w-4 md:h-5 md:w-5 text-slate-400 group-focus-within:text-primary transition-colors" />

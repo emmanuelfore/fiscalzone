@@ -129,8 +129,10 @@ export function setupAuth(app: Express) {
 
   // User profile endpoint
   app.get("/api/user", (req, res) => {
-    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
-    res.json(req.user);
+    if (!req.isAuthenticated()) {
+      return res.json({ user: null });
+    }
+    res.json({ user: req.user });
   });
 
   app.patch("/api/user", (req: any, res, next) => {

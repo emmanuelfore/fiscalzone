@@ -57,30 +57,6 @@ export async function registerRoutes(
 ): Promise<Server> {
   setupAuth(app);
 
-  // Connectivity Health Check (Public)
-  app.get("/api/health", async (_req, res) => {
-    let hasInternet = false;
-    try {
-      // Check for real internet by trying a fast DNS lookup
-      await new Promise((resolve, reject) => {
-        const dns = require('dns');
-        dns.lookup('google.com', (err: any) => {
-          if (err && err.code === 'ENOTFOUND') reject(err);
-          else resolve(true);
-        });
-      });
-      hasInternet = true;
-    } catch (e) {
-      hasInternet = false;
-    }
-
-    res.status(200).json({
-      status: "ok",
-      internet: hasInternet,
-      timestamp: new Date().toISOString()
-    });
-  });
-
   // CSV Upload Configuration
   const csvUpload = multer({
     storage: multer.memoryStorage(),
@@ -200,8 +176,6 @@ export async function registerRoutes(
     return true;
   };
 
-
-
   // TEMPORARY DEBUG ENDPOINT
   app.get("/api/debug/logs", async (_req, res) => {
     try {
@@ -217,13 +191,57 @@ export async function registerRoutes(
 
   // Health Check (Public)
   app.get("/api/health", async (_req, res) => {
+    let internet = false;
+    try {
+      const probeOnce = async (url: string): Promise<boolean> => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 1500);
+
+        try {
+          const r = await fetch(url, {
+            method: "GET",
+            cache: "no-store",
+            signal: controller.signal,
+            headers: {
+              // Some endpoints behave differently without a UA
+              "user-agent": "FiscalStackHealthProbe/1.0",
+            },
+          });
+          // Any HTTP response means we reached the internet (even if blocked/403)
+          return r.status >= 200 && r.status < 500;
+        } catch {
+          return false;
+        } finally {
+          clearTimeout(timeoutId);
+        }
+      };
+
+      const results = await Promise.all([
+        probeOnce("https://www.cloudflare.com/cdn-cgi/trace"),
+      ]);
+
+      internet = true;
+    } catch {
+      internet = false;
+    }
+
     try {
       const { pool } = await import("./db.js");
       await pool.query("SELECT 1");
-      res.json({ status: "ok", database: "connected" });
+      res.status(200).json({
+        status: "ok",
+        database: "connected",
+        internet,
+        timestamp: new Date().toISOString(),
+      });
     } catch (err) {
       console.error("Health Check Failed:", err);
-      res.status(503).json({ status: "error", database: "disconnected" });
+      res.status(503).json({
+        status: "error",
+        database: "disconnected",
+        internet,
+        timestamp: new Date().toISOString(),
+      });
     }
   });
 

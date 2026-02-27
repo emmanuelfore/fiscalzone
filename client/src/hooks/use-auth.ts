@@ -1,70 +1,127 @@
-
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { cacheUser, getCachedUser, clearCachedUser } from "@/lib/offline-db";
+import { cacheUser, getCachedUser, clearCachedUser, getPendingSalesCount } from "@/lib/offline-db";
+import { useToast } from "@/hooks/use-toast";
+
+let supabaseInitStarted = false;
+let supabaseInitDone = false;
+const supabaseInitListeners = new Set<(ready: boolean) => void>();
+let lastUserInvalidateAt = 0;
+
+function notifySupabaseInitListeners() {
+  for (const listener of supabaseInitListeners) listener(supabaseInitDone);
+}
 
 export function useAuth() {
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
-  const [isSupabaseLoading, setIsSupabaseLoading] = useState(true);
+  const { toast } = useToast();
+  // If offline, skip Supabase init entirely — we'll use cached user from IndexedDB
+  const startOffline = !navigator.onLine;
+  const [isSupabaseLoading, setIsSupabaseLoading] = useState(
+    startOffline ? false : !supabaseInitDone
+  );
 
-  // Sync Supabase Session on mount
   useEffect(() => {
-    let isMounted = true;
-    const failSafe = window.setTimeout(() => {
-      if (!isMounted) return;
-      console.warn("[Auth] Supabase session sync timed out; continuing without blocking UI");
-      setIsSupabaseLoading(false);
-    }, 3000);
+    // Offline on mount — mark supabase as ready immediately so query runs against cache
+    if (startOffline) {
+      if (!supabaseInitDone) {
+        supabaseInitDone = true;
+        notifySupabaseInitListeners();
+      }
+      return;
+    }
 
-    supabase.auth
-      .getSession()
-      .then(({ data: { session } }) => {
-        if (!isMounted) return;
-        window.clearTimeout(failSafe);
-        setIsSupabaseLoading(false);
-        if (session) {
-          queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+    const listener = (ready: boolean) => setIsSupabaseLoading(!ready);
+    supabaseInitListeners.add(listener);
+    listener(supabaseInitDone);
+
+    if (!supabaseInitStarted) {
+      supabaseInitStarted = true;
+
+      const failSafe = window.setTimeout(() => {
+        if (supabaseInitDone) return;
+        console.warn("[Auth] Supabase session sync timed out; continuing without blocking UI");
+        supabaseInitDone = true;
+        notifySupabaseInitListeners();
+      }, 4000);
+
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange((event, session) => {
+        if (event === "INITIAL_SESSION") {
+          window.clearTimeout(failSafe);
+          if (!supabaseInitDone) {
+            supabaseInitDone = true;
+            notifySupabaseInitListeners();
+          }
+          if (session) {
+            const now = Date.now();
+            if (now - lastUserInvalidateAt > 2000) {
+              lastUserInvalidateAt = now;
+              queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+            }
+          }
+        } else if (event === "SIGNED_IN") {
+          if (!supabaseInitDone) {
+            supabaseInitDone = true;
+            notifySupabaseInitListeners();
+          }
+          const now = Date.now();
+          if (now - lastUserInvalidateAt > 2000) {
+            lastUserInvalidateAt = now;
+            queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+          }
+        } else if (event === "SIGNED_OUT") {
+          window.clearTimeout(failSafe);
+          if (!supabaseInitDone) {
+            supabaseInitDone = true;
+            notifySupabaseInitListeners();
+          }
+          if (navigator.onLine) {
+            queryClient.clear();
+            localStorage.removeItem("selectedCompanyId");
+          } else {
+            console.warn("[Auth] Session change while offline - preserving cache");
+          }
         }
-      })
-      .catch((err) => {
-        if (!isMounted) return;
-        window.clearTimeout(failSafe);
-        console.error("Supabase Session Error:", err);
-        setIsSupabaseLoading(false);
       });
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setIsSupabaseLoading(false);
-      if (session) {
-        queryClient.invalidateQueries({ queryKey: ["/api/user"] });
-      } else if (navigator.onLine) {
-        // ONLY Clear everything if we are definitely online but session is lost
-        queryClient.clear();
-        // Clear company selection on session loss
-        localStorage.removeItem("selectedCompanyId");
-      } else {
-        console.warn("[Auth] Session change while offline - preserving cache");
-      }
-    });
+      return () => {
+        subscription.unsubscribe();
+      };
+    }
 
     return () => {
-      isMounted = false;
-      window.clearTimeout(failSafe);
-      subscription.unsubscribe();
+      supabaseInitListeners.delete(listener);
     };
   }, [queryClient]);
 
   const userQuery = useQuery({
     queryKey: ["/api/user"],
     queryFn: async () => {
+      // Offline: skip the network entirely and go straight to cache
+      if (!navigator.onLine) {
+        const cached = await getCachedUser();
+        if (cached) {
+          console.log("[Auth] Offline — using cached user:", cached.email);
+          return cached;
+        }
+        // No cache and offline — return null so UI shows login
+        return null;
+      }
+
       try {
         const res = await apiFetch("/api/user");
+        if (res.status === 304) {
+          const cachedFromQuery = queryClient.getQueryData(["/api/user"]);
+          if (cachedFromQuery) return cachedFromQuery;
+          const cachedFromOffline = await getCachedUser();
+          return cachedFromOffline || null;
+        }
         if (res.status === 401) {
           await clearCachedUser();
           return null;
@@ -72,35 +129,36 @@ export function useAuth() {
         if (!res.ok) {
           throw new Error("Network response was not ok");
         }
-        const user = await res.json();
+        const data = await res.json();
+        const user = typeof data === "object" && data !== null && "user" in data ? data.user : data;
         if (user) await cacheUser(user);
         return user;
       } catch (err) {
-        console.warn("User fetch failed, trying offline cache...", err);
-        const cached = await getCachedUser();
-        return cached || null;
+        // Network error while online (flaky connection) — fall back to cache
+        console.warn("[Auth] User fetch failed, trying offline cache...", err);
+        const cachedFromQuery = queryClient.getQueryData(["/api/user"]);
+        if (cachedFromQuery) return cachedFromQuery;
+        const cachedFromOffline = await getCachedUser();
+        // Return cached user instead of throwing — keeps POS accessible
+        return cachedFromOffline ?? null;
       }
     },
-    // Only fetch if we passed the initial loading check
     enabled: !isSupabaseLoading,
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    staleTime: 1000 * 60 * 5,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
   });
 
   const loginWithGoogle = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth`,
-      },
+      options: { redirectTo: `${window.location.origin}/auth` },
     });
     if (error) throw error;
   };
 
   const loginWithPassword = async ({ email, password }: any) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
   };
 
@@ -108,43 +166,38 @@ export function useAuth() {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        data: {
-          name,
-        },
-      },
+      options: { data: { name } },
     });
     if (error) throw error;
     return data;
   };
 
   const logout = async () => {
+    // Block logout when offline — cached session is needed for POS to work
+    if (!navigator.onLine) {
+      toast({
+        title: "Cannot sign out while offline",
+        description: "You must be connected to the internet to sign out. This protects access to offline POS data.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     await supabase.auth.signOut();
     await clearCachedUser();
     queryClient.clear();
-    // Clear company selection to prevent stale data across user sessions
     localStorage.removeItem("selectedCompanyId");
     setLocation("/auth");
   };
 
   const updatePassword = async (password: string) => {
-    // 1. Update in Supabase
-    const { error } = await supabase.auth.updateUser({
-      password
-    });
+    const { error } = await supabase.auth.updateUser({ password });
     if (error) throw error;
-
-    // 2. Update in our backend to clear "default password" flag
     const res = await apiFetch("/api/user/password", {
       method: "POST",
-      body: JSON.stringify({ newPassword: password })
+      body: JSON.stringify({ newPassword: password }),
     });
-
-    if (!res.ok) {
-      console.warn("Failed to sync password change status with backend");
-    }
-
-    // Refresh user data to get updated passwordChanged flag
+    if (!res.ok) console.warn("Failed to sync password change status with backend");
     queryClient.invalidateQueries({ queryKey: ["/api/user"] });
   };
 
@@ -154,20 +207,18 @@ export function useAuth() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
-
     if (!res.ok) {
       const err = await res.json();
       throw new Error(err.message || "Failed to update profile");
     }
-
     const updatedUser = await res.json();
     queryClient.setQueryData(["/api/user"], updatedUser);
     return updatedUser;
   };
 
   return {
-    user: userQuery.data,
-    isLoading: isSupabaseLoading || userQuery.fetchStatus === "fetching",
+    user: userQuery.data ?? null,
+    isLoading: isSupabaseLoading || (userQuery.isPending && userQuery.fetchStatus !== "idle"),
     loginWithGoogle,
     loginWithPassword,
     registerWithPassword,

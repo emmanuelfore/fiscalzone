@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { getPendingSalesCount, getPendingShiftsCount, getLastCacheTime } from '@/lib/offline-db';
 import { syncPendingSales, type SyncStatus, type SyncResult } from '@/lib/offline-sync';
 import { useToast } from '@/hooks/use-toast';
+import { useIsOnline } from '@/hooks/use-is-online';
 
 interface UseOfflineReturn {
     isOnline: boolean;
@@ -16,7 +17,7 @@ interface UseOfflineReturn {
 }
 
 export function useOffline(companyId: number): UseOfflineReturn {
-    const [isOnline, setIsOnline] = useState(navigator.onLine);
+    const isOnline = useIsOnline();
     const [pendingSalesCount, setPendingSalesCount] = useState(0);
     const [pendingShiftsCount, setPendingShiftsCount] = useState(0);
     const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
@@ -26,56 +27,6 @@ export function useOffline(companyId: number): UseOfflineReturn {
     const isSyncingRef = useRef(false);
     const { toast } = useToast();
 
-    // Unified Connectivity Probing
-    useEffect(() => {
-        const handleOnline = () => setIsOnline(true);
-        const handleOffline = () => setIsOnline(false);
-
-        window.addEventListener('online', handleOnline);
-        window.addEventListener('offline', handleOffline);
-
-        const checkConnection = async () => {
-            if (!navigator.onLine) {
-                setIsOnline(false);
-                return;
-            }
-
-            try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 3000);
-
-                const response = await fetch(`/api/health?_t=${Date.now()}`, {
-                    method: 'GET',
-                    cache: 'no-store',
-                    signal: controller.signal
-                }).catch(() => null);
-
-                clearTimeout(timeoutId);
-
-                if (response && response.ok) {
-                    const data = await response.json();
-                    setIsOnline(data.internet === true);
-                } else {
-                    setIsOnline(false);
-                }
-            } catch (err) {
-                setIsOnline(false);
-            }
-        };
-
-        // Immediate check
-        checkConnection();
-
-        const interval = setInterval(checkConnection, 5000);
-
-        return () => {
-            window.removeEventListener('online', handleOnline);
-            window.removeEventListener('offline', handleOffline);
-            clearInterval(interval);
-        };
-    }, []);
-
-    // Refresh pending count
     const refreshPendingCount = useCallback(async () => {
         if (!companyId) return;
         try {
@@ -90,7 +41,6 @@ export function useOffline(companyId: number): UseOfflineReturn {
         }
     }, [companyId]);
 
-    // Refresh cache time
     const refreshCacheTime = useCallback(async () => {
         if (!companyId) return;
         try {
@@ -102,18 +52,16 @@ export function useOffline(companyId: number): UseOfflineReturn {
         }
     }, [companyId]);
 
-    // Periodic pending count refresh
     useEffect(() => {
         refreshPendingCount();
         refreshCacheTime();
         const interval = setInterval(() => {
             refreshPendingCount();
             refreshCacheTime();
-        }, 10000); // every 10s
+        }, 10000);
         return () => clearInterval(interval);
     }, [refreshPendingCount, refreshCacheTime]);
 
-    // Sync function
     const triggerSync = useCallback(async () => {
         if (!companyId || isSyncingRef.current || !navigator.onLine) return;
 
@@ -136,8 +84,6 @@ export function useOffline(companyId: number): UseOfflineReturn {
 
             setSyncStatus(result.failed > 0 ? 'error' : 'complete');
             await refreshPendingCount();
-
-            // Reset to idle after a short delay
             setTimeout(() => setSyncStatus('idle'), 3000);
         } catch (error) {
             console.error('Sync failed:', error);
@@ -148,13 +94,9 @@ export function useOffline(companyId: number): UseOfflineReturn {
         }
     }, [companyId, toast, refreshPendingCount]);
 
-    // Auto-sync when coming back online
     useEffect(() => {
         if (isOnline && (pendingSalesCount > 0 || pendingShiftsCount > 0)) {
-            // Small delay to let the connection stabilize
-            const timer = setTimeout(() => {
-                triggerSync();
-            }, 2000);
+            const timer = setTimeout(() => triggerSync(), 2000);
             return () => clearTimeout(timer);
         }
     }, [isOnline, pendingSalesCount, pendingShiftsCount, triggerSync]);

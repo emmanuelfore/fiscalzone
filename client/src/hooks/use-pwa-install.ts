@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 
-// Define the BeforeInstallPromptEvent interface as it's not standard in TypeScript yet
 interface BeforeInstallPromptEvent extends Event {
     readonly platforms: string[];
     readonly userChoice: Promise<{
@@ -10,28 +9,25 @@ interface BeforeInstallPromptEvent extends Event {
     prompt(): Promise<void>;
 }
 
+const PWA_INSTALL_SOURCE_KEY = 'pwaInstallSource';
+
 export function usePwaInstall() {
     const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
     const [isInstallable, setIsInstallable] = useState(false);
     const [isInstalled, setIsInstalled] = useState(false);
 
     useEffect(() => {
-        // Check if it's already installed (e.g. running in standalone mode)
         if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone) {
             setIsInstalled(true);
         }
 
         const handleBeforeInstallPrompt = (e: Event) => {
-            // Prevent the mini-infobar from appearing on mobile
             e.preventDefault();
-            // Stash the event so it can be triggered later.
             setDeferredPrompt(e as BeforeInstallPromptEvent);
-            // Update UI notify the user they can install the PWA
             setIsInstallable(true);
         };
 
         const handleAppInstalled = () => {
-            // Log install to analytics
             console.log('PWA was installed');
             setIsInstallable(false);
             setIsInstalled(true);
@@ -47,16 +43,17 @@ export function usePwaInstall() {
         };
     }, []);
 
-    const promptInstall = async () => {
-        if (!deferredPrompt) {
-            return;
+    const promptInstall = async (source?: string) => {
+        if (!deferredPrompt) return;
+
+        // Remember where the install was triggered from
+        if (source) {
+            localStorage.setItem(PWA_INSTALL_SOURCE_KEY, source);
         }
-        // Show the install prompt
+
         deferredPrompt.prompt();
-        // Wait for the user to respond to the prompt
         const { outcome } = await deferredPrompt.userChoice;
         console.log(`User response to the install prompt: ${outcome}`);
-        // We've used the prompt, and can't use it again, throw it away
         setDeferredPrompt(null);
         if (outcome === 'accepted') {
             setIsInstallable(false);
@@ -64,4 +61,18 @@ export function usePwaInstall() {
     };
 
     return { isInstallable, isInstalled, promptInstall };
+}
+
+/** Call this on app launch to check if we should redirect to /pos */
+export function getPwaLaunchRedirect(): string | null {
+    const isStandalone =
+        window.matchMedia('(display-mode: standalone)').matches ||
+        (window.navigator as any).standalone;
+
+    if (!isStandalone) return null;
+
+    const source = localStorage.getItem(PWA_INSTALL_SOURCE_KEY);
+    if (source === 'pos') return '/pos';
+
+    return null;
 }

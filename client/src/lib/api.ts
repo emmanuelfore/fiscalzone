@@ -21,7 +21,7 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Pr
     }
 
     const controller = init?.signal ? null : new AbortController();
-    const timeoutId = controller ? window.setTimeout(() => controller.abort(), 8000) : null;
+    const timeoutId = controller ? window.setTimeout(() => controller.abort(), 30000) : null;
 
     try {
         return await fetch(input, {

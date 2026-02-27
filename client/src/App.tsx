@@ -5,7 +5,6 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import LandingPage from "@/pages/landing";
-import NuraLandingPage from "@/pages/nura-landing";
 import AuthPage from "@/pages/auth";
 import ForgotPasswordPage from "@/pages/forgot-password";
 import ResetPasswordPage from "@/pages/reset-password";
@@ -40,168 +39,100 @@ import POSPage from "@/pages/pos";
 import MySalesPage from "@/pages/my-sales";
 import PosReportsPage from "@/pages/pos-reports";
 import RecentSalesPage from "@/pages/recent-sales";
-// import InventoryReportsPage from "@/pages/inventory-reports";
 import TaxReportsPage from "@/pages/tax-reports";
 import PosSettingsPage from "@/pages/pos-settings";
 import SubscriptionPage from "@/pages/subscription";
 import { useAuth } from "@/hooks/use-auth";
+import { supabase } from "@/lib/supabase";
 import { useCompanies } from "@/hooks/use-companies";
 import { useActiveCompany } from "@/hooks/use-active-company";
 import { Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
+import { getPwaLaunchRedirect } from "@/hooks/use-pwa-install";
+import { useIsOnline } from "@/hooks/use-is-online";
 
-function useIsOnline() {
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
+// Prevents loading states from spinning forever.
+// Returns true while `loading` is true, but automatically
+// resolves to false after `maxMs` milliseconds regardless.
+function useBoundedLoading(loading: boolean, maxMs = 5000): boolean {
+  const [timedOut, setTimedOut] = useState(false);
 
   useEffect(() => {
-    // 1. Listen for hardware events (fastest response for Wi-Fi toggles)
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
+    if (!loading) {
+      setTimedOut(false);
+      return;
+    }
+    setTimedOut(false);
+    const timer = setTimeout(() => setTimedOut(true), maxMs);
+    return () => clearTimeout(timer);
+  }, [loading, maxMs]);
 
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
+  return loading && !timedOut;
+}
 
-    // 2. Active Polling (backup for when hardware events are unreliable/laggy)
-    const checkConnection = async () => {
-      // If hardware is definitely offline, trust it immediately
-      if (!navigator.onLine) {
-        setIsOnline(false);
-        return;
-      }
-
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
-
-        // Ping the public health endpoint with a cache-buster to force a real network check
-        const response = await fetch(`/api/health?_t=${Date.now()}`, {
-          method: 'GET',
-          cache: 'no-store',
-          signal: controller.signal
-        }).catch(() => null);
-
-        clearTimeout(timeoutId);
-
-        if (response && response.ok) {
-          const data = await response.json();
-          // Respect the server-side internet check (crucial for localhost)
-          setIsOnline(data.internet === true);
-        } else {
-          setIsOnline(false);
-        }
-      } catch (err) {
-        setIsOnline(false);
-      }
-    };
-
-    // Run immediate check on mount
-    checkConnection();
-
-    // Poll every 5 seconds for a tighter response loop
-    const interval = setInterval(checkConnection, 5000);
-
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-      clearInterval(interval);
-    };
-  }, []);
-
-  return isOnline;
+function LoadingScreen() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <Loader2 className="w-8 h-8 animate-spin text-primary" />
+    </div>
+  );
 }
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
-  const { user, isLoading } = useAuth();
-  const { data: companies, isLoading: isLoadingCompanies, isSuccess: isCompaniesSuccess, isError: isCompaniesError } = useCompanies(!!user);
+  const { user, isLoading: isLoadingAuth } = useAuth();
+  const {
+    data: companies,
+    isLoading: isLoadingCompanies,
+    isError: isCompaniesError,
+  } = useCompanies(!!user);
   const { activeCompany, isLoading: isLoadingActiveCompany } = useActiveCompany(!!user);
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const isOnline = useIsOnline();
+  const hasRedirectedToPosRef = useRef(false);
 
   const isPosPath = location.startsWith("/pos");
   const isOffline = !isOnline || isCompaniesError;
 
-  // hard-reload on disconnect
+  const rawLoading = isLoadingAuth || (!!user && (isLoadingCompanies || isLoadingActiveCompany));
+  const isLoading = useBoundedLoading(rawLoading);
+
   useEffect(() => {
-    if (isOffline && !isPosPath) {
-      window.location.href = "/pos";
+    if (isOffline && !isPosPath && !hasRedirectedToPosRef.current) {
+      hasRedirectedToPosRef.current = true;
+      setLocation("/pos");
     }
-  }, [isOffline, isPosPath]);
+  }, [isOffline, isPosPath, setLocation]);
 
-  if (isLoading || isLoadingCompanies || isLoadingActiveCompany) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
+  if (isLoading) return <LoadingScreen />;
 
-  if (!user) {
-    // Only redirect to auth if we are definitely online
-    // If we are offline and on the POS path, we want to stay there
-    if (!isOffline || !isPosPath) {
-      return <Redirect to="/auth" />;
-    }
-  }
+  // No user at all — if offline send to /pos (they may have cached data),
+  // if online send to /auth
+  if (!user) return <Redirect to={isOffline ? "/pos" : "/auth"} />;
 
-  // Redirect to onboarding ONLY if:
-  // 1. We are online (browser thinks we have connection)
-  // 2. The query succeeded (didn't catch an error)
-  // 3. We have a non-null result that is definitely an empty array.
-  // This avoids accidental redirects during network hiccups or if the offline cache is empty.
-  const isPossiblyOffline = !isOnline || isCompaniesError;
-  const hasConfirmedEmpty = !isPossiblyOffline && isCompaniesSuccess && Array.isArray(companies) && companies.length === 0;
-
-  if (hasConfirmedEmpty) {
-    return <Redirect to="/onboarding" />;
-  }
-
-  // Redirection Logic
-  // 1. IF OFFLINE: Force POS access only (extra fallback)
-  if (isOffline && !isPosPath) {
-    return null; // Let useEffect handle reload
-  }
-
-  // 2. IF ONLINE: Normal role-based restrictions
   if (!isOffline && activeCompany) {
     const role = (activeCompany as any).role;
     const isCashier = role === "cashier" && !user?.isSuperAdmin;
     const isAllowedPath = isPosPath || location.startsWith("/profile");
-
-    if (isCashier && !isAllowedPath) {
-      return <Redirect to="/pos" />;
-    }
+    if (isCashier && !isAllowedPath) return <Redirect to="/pos" />;
   }
 
   return <Component />;
 }
 
 function OnboardingRoute() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading: isLoadingAuth } = useAuth();
   const { data: companies, isLoading: isLoadingCompanies, isError } = useCompanies(!!user);
   const isOnline = useIsOnline();
 
-  if (isLoading || isLoadingCompanies) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
+  const rawLoading = isLoadingAuth || (!!user && isLoadingCompanies);
+  const isLoading = useBoundedLoading(rawLoading);
 
-  if (!user) {
-    return <Redirect to="/auth" />;
-  }
-
-  // Always redirect to POS as requested
-  if (!isOnline || isError) {
-    return <Redirect to="/pos" />;
-  }
+  if (isLoading) return <LoadingScreen />;
+  if (!user) return <Redirect to="/auth" />;
+  if (!isOnline || isError) return <Redirect to="/pos" />;
 
   if (companies && companies.length > 0) {
-    const isOffline = !navigator.onLine || isError;
-    if (isOffline) return <Redirect to="/pos" />;
-
     const role = (companies[0] as any).role;
     const isCashier = role === "cashier" && !user?.isSuperAdmin;
     return <Redirect to={isCashier ? "/pos" : "/dashboard"} />;
@@ -211,16 +142,15 @@ function OnboardingRoute() {
 }
 
 function Router() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading: rawAuthLoading } = useAuth();
   const isOnline = useIsOnline();
+  const isLoading = useBoundedLoading(rawAuthLoading);
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
+  // If launched as an installed PWA from /pos, go straight there
+  const pwaRedirect = getPwaLaunchRedirect();
+  if (pwaRedirect) return <Redirect to={pwaRedirect} />;
+
+  if (isLoading) return <LoadingScreen />;
 
   return (
     <Switch>
@@ -232,122 +162,71 @@ function Router() {
 
       <Route path="/onboarding" component={OnboardingRoute} />
 
-      <Route path="/dashboard">
-        {() => <ProtectedRoute component={Dashboard} />}
-      </Route>
-      <Route path="/invoices">
-        {() => <ProtectedRoute component={InvoicesPage} />}
-      </Route>
-      <Route path="/invoices/new">
-        {() => <ProtectedRoute component={CreateInvoicePage} />}
-      </Route>
-      <Route path="/invoices/:id">
-        {() => <ProtectedRoute component={InvoiceDetailsPage} />}
-      </Route>
-      <Route path="/customers">
-        {() => <ProtectedRoute component={CustomersPage} />}
-      </Route>
-      <Route path="/customers/:id">
-        {() => <ProtectedRoute component={CustomerDetailsPage} />}
-      </Route>
-      <Route path="/suppliers">
-        {() => <ProtectedRoute component={SuppliersPage} />}
-      </Route>
-      <Route path="/expenses">
-        {() => <ProtectedRoute component={ExpensesPage} />}
-      </Route>
-      <Route path="/inventory">
-        {() => <ProtectedRoute component={InventoryTransactionsPage} />}
-      </Route>
-      <Route path="/inventory/account">
-        {() => <ProtectedRoute component={InventoryAccountPage} />}
-      </Route>
-      <Route path="/reports/inventory">
-        {() => <ProtectedRoute component={InventoryReportsPage} />}
-      </Route>
-      <Route path="/reports/financial">
-        {() => <ProtectedRoute component={FinancialReportsPage} />}
-      </Route>
-      <Route path="/products">
-        {() => <ProtectedRoute component={ProductsPage} />}
-      </Route>
-      <Route path="/services">
-        {() => <ProtectedRoute component={ServicesPage} />}
-      </Route>
-      <Route path="/tax-config">
-        {() => <ProtectedRoute component={TaxConfigPage} />}
-      </Route>
-      <Route path="/settings">
-        {() => <ProtectedRoute component={SettingsPage} />}
-      </Route>
-      <Route path="/currencies">
-        {() => <ProtectedRoute component={CurrencySettingsPage} />}
-      </Route>
-      <Route path="/team-settings">
-        {() => <ProtectedRoute component={TeamSettingsPage} />}
-      </Route>
-      <Route path="/reports/pos">
-        {() => <ProtectedRoute component={PosReportsPage} />}
-      </Route>
-      /* <Route path="/reports/inventory">
-        {() => <ProtectedRoute component={InventoryReportsPage} />}
-      </Route> */
-      <Route path="/reports/tax">
-        {() => <ProtectedRoute component={TaxReportsPage} />}
-      </Route>
-      <Route path="/reports">
-        {() => <Redirect to="/reports/pos" />}
-      </Route>
-      <Route path="/profile">
-        {() => <ProtectedRoute component={UserProfilePage} />}
-      </Route>
-      <Route path="/zimra-settings">
-        {() => <ProtectedRoute component={ZimraSettingsPage} />}
-      </Route>
-      <Route path="/zimra-logs">
-        {() => <ProtectedRoute component={ZimraLogsPage} />}
-      </Route>
-      <Route path="/fdms-test">
-        {() => <ProtectedRoute component={FdmsTestPage} />}
-      </Route>
-      <Route path="/quotations">
-        {() => <ProtectedRoute component={QuotationsPage} />}
-      </Route>
-      <Route path="/quotations/new">
-        {() => <ProtectedRoute component={CreateQuotationPage} />}
-      </Route>
-      <Route path="/recurring">
-        {() => <ProtectedRoute component={RecurringInvoicesPage} />}
-      </Route>
-      <Route path="/subscription">
-        {() => <ProtectedRoute component={SubscriptionPage} />}
-      </Route>
-      <Route path="/pos/my-sales">
-        {() => <ProtectedRoute component={MySalesPage} />}
-      </Route>
-      <Route path="/pos/reports">
-        {() => <Redirect to="/reports/pos" />}
-      </Route>
-      <Route path="/pos/all-sales">
-        {() => <ProtectedRoute component={RecentSalesPage} />}
-      </Route>
-      <Route path="/pos">
-        {() => <ProtectedRoute component={POSPage} />}
-      </Route>
-      <Route path="/pos-settings">
-        {() => <ProtectedRoute component={PosSettingsPage} />}
-      </Route>
-      <Route path="/nura-landing" component={NuraLandingPage} />
+      <Route path="/dashboard">{() => <ProtectedRoute component={Dashboard} />}</Route>
+      <Route path="/invoices">{() => <ProtectedRoute component={InvoicesPage} />}</Route>
+      <Route path="/invoices/new">{() => <ProtectedRoute component={CreateInvoicePage} />}</Route>
+      <Route path="/invoices/:id">{() => <ProtectedRoute component={InvoiceDetailsPage} />}</Route>
+      <Route path="/customers">{() => <ProtectedRoute component={CustomersPage} />}</Route>
+      <Route path="/customers/:id">{() => <ProtectedRoute component={CustomerDetailsPage} />}</Route>
+      <Route path="/suppliers">{() => <ProtectedRoute component={SuppliersPage} />}</Route>
+      <Route path="/expenses">{() => <ProtectedRoute component={ExpensesPage} />}</Route>
+      <Route path="/inventory">{() => <ProtectedRoute component={InventoryTransactionsPage} />}</Route>
+      <Route path="/inventory/account">{() => <ProtectedRoute component={InventoryAccountPage} />}</Route>
+      <Route path="/reports/inventory">{() => <ProtectedRoute component={InventoryReportsPage} />}</Route>
+      <Route path="/reports/financial">{() => <ProtectedRoute component={FinancialReportsPage} />}</Route>
+      <Route path="/products">{() => <ProtectedRoute component={ProductsPage} />}</Route>
+      <Route path="/services">{() => <ProtectedRoute component={ServicesPage} />}</Route>
+      <Route path="/tax-config">{() => <ProtectedRoute component={TaxConfigPage} />}</Route>
+      <Route path="/settings">{() => <ProtectedRoute component={SettingsPage} />}</Route>
+      <Route path="/currencies">{() => <ProtectedRoute component={CurrencySettingsPage} />}</Route>
+      <Route path="/team-settings">{() => <ProtectedRoute component={TeamSettingsPage} />}</Route>
+      <Route path="/reports/pos">{() => <ProtectedRoute component={PosReportsPage} />}</Route>
+      <Route path="/reports/tax">{() => <ProtectedRoute component={TaxReportsPage} />}</Route>
+      <Route path="/reports">{() => <Redirect to="/reports/pos" />}</Route>
+      <Route path="/profile">{() => <ProtectedRoute component={UserProfilePage} />}</Route>
+      <Route path="/zimra-settings">{() => <ProtectedRoute component={ZimraSettingsPage} />}</Route>
+      <Route path="/zimra-logs">{() => <ProtectedRoute component={ZimraLogsPage} />}</Route>
+      <Route path="/fdms-test">{() => <ProtectedRoute component={FdmsTestPage} />}</Route>
+      <Route path="/quotations">{() => <ProtectedRoute component={QuotationsPage} />}</Route>
+      <Route path="/quotations/new">{() => <ProtectedRoute component={CreateQuotationPage} />}</Route>
+      <Route path="/recurring">{() => <ProtectedRoute component={RecurringInvoicesPage} />}</Route>
+      <Route path="/subscription">{() => <ProtectedRoute component={SubscriptionPage} />}</Route>
+      <Route path="/pos/my-sales">{() => <ProtectedRoute component={MySalesPage} />}</Route>
+      <Route path="/pos/reports">{() => <Redirect to="/reports/pos" />}</Route>
+      <Route path="/pos/all-sales">{() => <ProtectedRoute component={RecentSalesPage} />}</Route>
+      <Route path="/pos">{() => <ProtectedRoute component={POSPage} />}</Route>
+      <Route path="/pos-settings">{() => <ProtectedRoute component={PosSettingsPage} />}</Route>
       <Route path="/">
         {user ? <Redirect to={isOnline ? "/dashboard" : "/pos"} /> : <LandingPage />}
       </Route>
-
       <Route component={NotFound} />
-    </Switch >
+    </Switch>
   );
 }
 
+// Bridge: service worker asks for auth token during background sync
+function useSwAuthBridge() {
+  useEffect(() => {
+    if (!navigator.serviceWorker) return;
+
+    const handler = async (event: MessageEvent) => {
+      if (event.data?.type !== 'GET_AUTH_TOKEN') return;
+      try {
+        const { data } = await supabase.auth.getSession();
+        const token = data.session?.access_token ?? null;
+        event.ports[0]?.postMessage({ token });
+      } catch {
+        event.ports[0]?.postMessage({ token: null });
+      }
+    };
+
+    navigator.serviceWorker.addEventListener('message', handler);
+    return () => navigator.serviceWorker.removeEventListener('message', handler);
+  }, []);
+}
+
 function App() {
+  useSwAuthBridge();
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>

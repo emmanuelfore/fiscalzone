@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useCompanies } from "./use-companies";
 
 export function useActiveCompany(enabled: boolean = true) {
@@ -7,15 +7,15 @@ export function useActiveCompany(enabled: boolean = true) {
         const stored = localStorage.getItem("selectedCompanyId");
         return stored ? parseInt(stored) : null;
     });
+    // Use a ref to read activeCompanyId inside the effect without adding it to deps
+    const activeCompanyIdRef = useRef(activeCompanyId);
+    activeCompanyIdRef.current = activeCompanyId;
 
     useEffect(() => {
         if (!isLoading && companies && companies.length > 0) {
-            // Validate that the stored company ID actually belongs to this user
-            const storedCompany = companies.find(c => c.id === activeCompanyId);
+            const storedCompany = companies.find(c => c.id === activeCompanyIdRef.current);
 
             if (!storedCompany) {
-                // Stored company doesn't exist for this user, select the best available
-                // Priority: owner -> cashier -> member
                 const bestCompany =
                     companies.find(c => c.role === "owner") ||
                     companies.find(c => c.role === "cashier") ||
@@ -26,13 +26,12 @@ export function useActiveCompany(enabled: boolean = true) {
                 localStorage.setItem("selectedCompanyId", finalId.toString());
             }
         } else if (!isLoading && companies && companies.length === 0) {
-            // User has no companies, clear any stale localStorage value
-            if (activeCompanyId !== null) {
+            if (activeCompanyIdRef.current !== null) {
                 setActiveCompanyId(null);
                 localStorage.removeItem("selectedCompanyId");
             }
         }
-    }, [companies, isLoading, activeCompanyId]);
+    }, [companies, isLoading]); // removed activeCompanyId — read via ref to avoid loop
 
     const setCompany = (id: number) => {
         setActiveCompanyId(id);

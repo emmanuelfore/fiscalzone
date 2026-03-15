@@ -3,8 +3,9 @@ import { apiFetch } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { cacheUser, getCachedUser, clearCachedUser, getPendingSalesCount } from "@/lib/offline-db";
+import { cacheUser, getCachedUser, clearCachedUser, getPendingSalesCount, saveOfflineCredentials, verifyOfflineCredentials } from "@/lib/offline-db";
 import { useToast } from "@/hooks/use-toast";
+import { isElectron } from "@/lib/utils";
 
 let supabaseInitStarted = false;
 let supabaseInitDone = false;
@@ -158,8 +159,36 @@ export function useAuth() {
   };
 
   const loginWithPassword = async ({ email, password }: any) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (!navigator.onLine) {
+      // Try offline verification
+      const user = await verifyOfflineCredentials(email, password);
+      if (user) {
+        console.log("[Auth] Offline verification successful");
+        await cacheUser(user);
+        queryClient.setQueryData(["/api/user"], user);
+        
+        // Ensure Supabase looks ready so the app proceeds
+        if (!supabaseInitDone) {
+          supabaseInitDone = true;
+          notifySupabaseInitListeners();
+        }
+        return; // Skip Supabase call entirely
+      } else {
+        throw new Error("Invalid offline credentials or no cached local profile");
+      }
+    }
+
+    // Online path 
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
+
+    // Cache credentials for future offline access
+    if (data.user) {
+       await saveOfflineCredentials(email, password, { ...data.user, sessionStatus: 'offline_cached' });
+       // Also immediately ensure standard user cache is updated so POS can load instantly
+       await cacheUser(data.user);
+       queryClient.setQueryData(["/api/user"], data.user);
+    }
   };
 
   const registerWithPassword = async ({ email, password, name }: any) => {
@@ -173,12 +202,16 @@ export function useAuth() {
   };
 
   const logout = async () => {
-    // Block logout when offline — cached session is needed for POS to work
     if (!navigator.onLine) {
+      // Offline logout allowed now, we just clear the current active session
+      // However, offline_credentials will remain intact allowing them to log back in
+      await clearCachedUser();
+      queryClient.clear();
+      localStorage.removeItem("selectedCompanyId");
+      setLocation(isElectron() ? "/pos-login" : "/auth");
       toast({
-        title: "Cannot sign out while offline",
-        description: "You must be connected to the internet to sign out. This protects access to offline POS data.",
-        variant: "destructive",
+        title: "Logged Out (Offline)",
+        description: "You have securely logged out of the terminal. You can log back in with cached credentials.",
       });
       return;
     }
@@ -187,7 +220,7 @@ export function useAuth() {
     await clearCachedUser();
     queryClient.clear();
     localStorage.removeItem("selectedCompanyId");
-    setLocation("/auth");
+    setLocation(isElectron() ? "/pos-login" : "/auth");
   };
 
   const updatePassword = async (password: string) => {

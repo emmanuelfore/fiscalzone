@@ -42,6 +42,7 @@ import RecentSalesPage from "@/pages/recent-sales";
 import TaxReportsPage from "@/pages/tax-reports";
 import PosSettingsPage from "@/pages/pos-settings";
 import SubscriptionPage from "@/pages/subscription";
+import PosLoginPage from "@/pages/pos-login";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/lib/supabase";
 import { useCompanies } from "@/hooks/use-companies";
@@ -159,6 +160,7 @@ function Router() {
       </Route>
       <Route path="/forgot-password" component={ForgotPasswordPage} />
       <Route path="/reset-password" component={ResetPasswordPage} />
+      <Route path="/pos-login" component={PosLoginPage} />
 
       <Route path="/onboarding" component={OnboardingRoute} />
 

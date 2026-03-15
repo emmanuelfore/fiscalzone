@@ -393,6 +393,15 @@ export const api = {
       responses: {
         201: z.custom<Expense>(),
       }
+    },
+    update: {
+      method: 'PATCH' as const,
+      path: '/api/expenses/:id',
+      input: insertExpenseSchema.partial(),
+      responses: {
+        200: z.custom<Expense>(),
+        404: errorSchemas.notFound,
+      }
     }
   },
   reports: {

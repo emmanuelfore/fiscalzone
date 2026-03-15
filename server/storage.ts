@@ -201,7 +201,7 @@ export interface IStorage {
 
   // Reports & Analytics
   getStockValuationReport(companyId: number): Promise<any[]>;
-  getFinancialSummary(companyId: number, dateFrom?: Date, dateTo?: Date): Promise<any>;
+  getFinancialSummary(companyId: number, dateFrom?: Date, dateTo?: Date, cashierId?: string): Promise<any>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -414,12 +414,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createProduct(product: InsertProduct): Promise<Product> {
-    const [newProduct] = await db.insert(products).values(product).returning();
+    const data = { ...product };
+    if (data.isTracked === false) {
+      data.productType = 'service';
+    }
+    const [newProduct] = await db.insert(products).values(data).returning();
     return newProduct;
   }
 
   async updateProduct(id: number, product: Partial<InsertProduct>): Promise<Product> {
-    const [updated] = await db.update(products).set(product).where(eq(products.id, id)).returning();
+    const data = { ...product };
+    if (data.isTracked === false) {
+      data.productType = 'service';
+    }
+    const [updated] = await db.update(products).set(data).where(eq(products.id, id)).returning();
     return updated;
   }
 
@@ -646,6 +654,7 @@ export class DatabaseStorage implements IStorage {
                   productId: item.productId,
                   type: "STOCK_OUT",
                   quantity: (-quantity).toString(),
+                  totalCost: cogsAmount?.toString() || null,
                   referenceType: "INVOICE",
                   referenceId: invoice.id.toString(),
                   notes: `Sale - Invoice ${invoice.invoiceNumber}`
@@ -2109,7 +2118,7 @@ export class DatabaseStorage implements IStorage {
     ];
 
     if (isPosOnly) {
-      conditions.push(eq(invoices.isPos, true));
+      // isPosOnly is ignored now as requested to show all sales
     }
 
     const result = await db
@@ -2145,10 +2154,9 @@ export class DatabaseStorage implements IStorage {
   ): Promise<any[]> {
     const conditions = [
       eq(invoices.companyId, companyId),
-      eq(invoices.isPos, true),
       gte(invoices.issueDate, startDate),
       lte(invoices.issueDate, endDate)
-    ];
+    ] as any[];
 
     if (cashierId && cashierId !== 'all') {
       // Show sales created by this cashier, OR sales where createdBy is null 
@@ -2311,11 +2319,12 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async getFinancialSummary(companyId: number, dateFrom?: Date, dateTo?: Date) {
+  async getFinancialSummary(companyId: number, dateFrom?: Date, dateTo?: Date, cashierId?: string) {
     // 1. Revenue (Sum of Invoices - Sum of Credit Notes)
     const invoiceFilters = [eq(invoices.companyId, companyId)];
     if (dateFrom) invoiceFilters.push(gte(invoices.createdAt, dateFrom));
     if (dateTo) invoiceFilters.push(lte(invoices.createdAt, dateTo));
+    if (cashierId) invoiceFilters.push(eq(invoices.createdBy, cashierId));
 
     const companyInvoices = await db
       .select()
@@ -2333,17 +2342,36 @@ export class DatabaseStorage implements IStorage {
     });
 
     // 2. COGS (Sum of totalCost in inventory_transactions for 'STOCK_OUT')
-    const txFilters = [
+    // Note: Inventory transactions are not directly linked to cashier/user in the same way,
+    // but we can filter by reference (invoice) if needed. 
+    // For now, if cashierId is provided, we filter transactions that belong to that cashier's invoices.
+    
+    let txFilters = [
       eq(inventoryTransactions.companyId, companyId),
       eq(inventoryTransactions.type, 'STOCK_OUT')
     ];
     if (dateFrom) txFilters.push(gte(inventoryTransactions.createdAt, dateFrom));
     if (dateTo) txFilters.push(lte(inventoryTransactions.createdAt, dateTo));
 
-    const salesTransactions = await db
-      .select()
-      .from(inventoryTransactions)
-      .where(and(...txFilters));
+    let salesTransactions;
+    if (cashierId) {
+      // Filter by invoices created by this cashier
+      salesTransactions = await db
+        .select({ tx: inventoryTransactions })
+        .from(inventoryTransactions)
+        .innerJoin(invoices, eq(inventoryTransactions.referenceId, invoices.id.toString()))
+        .where(and(
+          ...txFilters,
+          eq(invoices.createdBy, cashierId),
+          eq(inventoryTransactions.referenceType, 'INVOICE')
+        ));
+      salesTransactions = salesTransactions.map(r => r.tx);
+    } else {
+      salesTransactions = await db
+        .select()
+        .from(inventoryTransactions)
+        .where(and(...txFilters));
+    }
 
     const cogs = salesTransactions.reduce((acc, curr) => acc + Number(curr.totalCost || 0), 0);
 
@@ -2351,6 +2379,8 @@ export class DatabaseStorage implements IStorage {
     const expenseFilters = [eq(expenses.companyId, companyId)];
     if (dateFrom) expenseFilters.push(gte(expenses.expenseDate, dateFrom));
     if (dateTo) expenseFilters.push(lte(expenses.expenseDate, dateTo));
+    // Assuming we might want to filter expenses by creator too, though it's less common for reports
+    // if (cashierId) expenseFilters.push(eq(expenses.createdBy, cashierId)); 
 
     const companyExpenses = await db
       .select()

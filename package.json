@@ -10,7 +10,14 @@
     "start": "cross-env NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "db:push": "drizzle-kit push",
-    "db:seed": "tsx scripts/seed.ts"
+    "db:seed": "tsx scripts/seed.ts",
+    "mobile:install": "npm --prefix mobile install",
+    "mobile:start": "npm --prefix mobile run start",
+    "mobile:android": "npm --prefix mobile run android",
+    "mobile:ios": "npm --prefix mobile run ios",
+    "desktop:install": "npm --prefix desktop install",
+    "desktop:start": "npm --prefix desktop start",
+    "desktop": "npm run desktop:start"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

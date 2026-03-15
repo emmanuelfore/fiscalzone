@@ -1,7 +1,7 @@
 import { openDB, type IDBPDatabase } from 'idb';
 
 const DB_NAME = 'pos-offline';
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 
 interface PendingSale {
     id: string;
@@ -71,6 +71,11 @@ export async function getDb(): Promise<IDBPDatabase> {
                 const store = db.createObjectStore('holds', { keyPath: 'id' });
                 store.createIndex('byCompany', 'companyId');
             }
+
+            // Offline Credentials
+            if (!db.objectStoreNames.contains('offline_credentials')) {
+                db.createObjectStore('offline_credentials', { keyPath: 'email' });
+            }
         },
         blocked() {
             console.warn('[DB] Upgrade blocked by older version open in another tab. Please close all tabs.');
@@ -113,6 +118,49 @@ export async function clearCachedUser(): Promise<void> {
     const db = await getDb();
     await db.delete('user_cache', 'current_user');
     await db.delete('companies_list', 'current_list');
+    // Note: We intentionally do NOT clear 'offline_credentials' here.
+    // This allows cashiers to log back into the POS terminal even if
+    // the internet drops after they've explicitly logged out.
+}
+
+// ─── Offline Credentials ────────────────────────────────────────────────────
+
+// Simple hashing for local offline verification. NOT meant for production backend storage,
+// but sufficient for preventing plain-text storage of local caching.
+async function hashPassword(password: string, salt: string): Promise<string> {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password + salt);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+export async function saveOfflineCredentials(email: string, password: string, user: any): Promise<void> {
+    const db = await getDb();
+    const salt = crypto.randomUUID();
+    const hash = await hashPassword(password, salt);
+    
+    await db.put('offline_credentials', {
+        email: email.toLowerCase(),
+        hash,
+        salt,
+        user,
+        lastOnlineLogin: new Date().toISOString()
+    });
+}
+
+export async function verifyOfflineCredentials(email: string, password: string): Promise<any | null> {
+    const db = await getDb();
+    const record = await db.get('offline_credentials', email.toLowerCase());
+    
+    if (!record) return null;
+    
+    const computedHash = await hashPassword(password, record.salt);
+    if (computedHash === record.hash) {
+        return record.user;
+    }
+    
+    return null;
 }
 
 // ─── Companies List ──────────────────────────────────────────────────────────

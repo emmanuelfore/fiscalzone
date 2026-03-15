@@ -1,0 +1,1656 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FieldPOS — The POS Built for Africa</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap"
+        rel="stylesheet" />
+    <style>
+        :root {
+            --clay: #C8622A;
+            --ember: #E8873A;
+            --gold: #F5B84C;
+            --sand: #F2E8D5;
+            --bark: #1A1108;
+            --soil: #261808;
+            --deep: #120D05;
+            --forest: #1A3228;
+            --white: #FFFFFF;
+            --font-display: 'DM Serif Display', Georgia, serif;
+            --font-head: 'Syne', sans-serif;
+            --font-body: 'DM Sans', sans-serif;
+            --ease: cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            background: var(--bark);
+            color: var(--sand);
+            font-family: var(--font-body);
+            font-size: 16px;
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        a {
+            text-decoration: none;
+            color: inherit;
+        }
+
+        img {
+            display: block;
+            max-width: 100%;
+        }
+
+        .container {
+            max-width: 1140px;
+            margin: 0 auto;
+            padding: 0 28px;
+        }
+
+        .kente {
+            height: 5px;
+            width: 100%;
+            background: repeating-linear-gradient(90deg, var(--clay) 0, var(--clay) 14px, var(--gold) 14px, var(--gold) 28px, var(--forest) 28px, var(--forest) 42px, var(--ember) 42px, var(--ember) 56px);
+        }
+
+        /* NAV */
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+        }
+
+        .nav-body {
+            background: rgba(18, 10, 4, 0.85);
+            backdrop-filter: blur(18px);
+            border-bottom: 1px solid rgba(200, 98, 42, 0.1);
+        }
+
+        .nav-body .container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 64px;
+        }
+
+        .logo {
+            font-family: var(--font-head);
+            font-size: 1.35rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+        }
+
+        .logo span {
+            color: var(--clay);
+        }
+
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 28px;
+        }
+
+        .nav-links a {
+            font-family: var(--font-head);
+            font-size: 0.8rem;
+            font-weight: 600;
+            letter-spacing: 0.07em;
+            text-transform: uppercase;
+            color: rgba(242, 232, 213, 0.55);
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--gold);
+        }
+
+        .btn-nav {
+            font-family: var(--font-head);
+            font-size: 0.8rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            padding: 10px 22px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: transform 0.2s var(--ease);
+            display: inline-block;
+        }
+
+        .btn-nav:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn-nav-outline {
+            background: transparent;
+            color: var(--sand);
+            border: 1.5px solid rgba(242, 232, 213, 0.2);
+        }
+
+        .btn-nav-outline:hover {
+            border-color: var(--gold);
+            color: var(--gold);
+        }
+
+        .btn-nav-fill {
+            background: var(--clay);
+            color: white;
+            border: none;
+            box-shadow: 0 3px 18px rgba(200, 98, 42, 0.3);
+        }
+
+        .btn-nav-fill:hover {
+            background: var(--ember);
+        }
+
+        /* HERO */
+        .hero {
+            min-height: 100vh;
+            padding-top: 64px;
+            display: flex;
+            align-items: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero-bg {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+        }
+
+        .hero-bg .glow-l {
+            position: absolute;
+            width: 700px;
+            height: 700px;
+            left: -200px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: radial-gradient(circle, rgba(200, 98, 42, 0.14)0%, transparent 65%);
+        }
+
+        .hero-bg .glow-r {
+            position: absolute;
+            width: 600px;
+            height: 600px;
+            right: -80px;
+            bottom: -80px;
+            background: radial-gradient(circle, rgba(26, 50, 40, 0.45)0%, transparent 65%);
+        }
+
+        .hero-bg .grid {
+            position: absolute;
+            inset: 0;
+            background-image: linear-gradient(rgba(200, 98, 42, 0.033)1px, transparent 1px), linear-gradient(90deg, rgba(200, 98, 42, 0.033)1px, transparent 1px);
+            background-size: 52px 52px;
+        }
+
+        .hero-bg .ring {
+            position: absolute;
+            border-radius: 50%;
+            border: 1px dashed rgba(245, 184, 76, 0.08);
+        }
+
+        .hero-bg .r1 {
+            width: 520px;
+            height: 520px;
+            right: 60px;
+            top: 50%;
+            transform: translateY(-50%);
+            animation: spin 50s linear infinite;
+        }
+
+        .hero-bg .r2 {
+            width: 340px;
+            height: 340px;
+            right: 150px;
+            top: 50%;
+            transform: translateY(-50%);
+            animation: spin 30s linear infinite reverse;
+        }
+
+        @keyframes spin {
+            to {
+                transform: translateY(-50%) rotate(360deg);
+            }
+        }
+
+        .hero .container {
+            position: relative;
+            z-index: 2;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            align-items: center;
+            padding-top: 48px;
+            padding-bottom: 80px;
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(200, 98, 42, 0.12);
+            border: 1px solid rgba(200, 98, 42, 0.25);
+            border-radius: 20px;
+            padding: 6px 14px;
+            font-family: var(--font-head);
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--ember);
+            margin-bottom: 24px;
+        }
+
+        .eyebrow-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--ember);
+        }
+
+        .hero h1 {
+            font-family: var(--font-display);
+            font-size: clamp(2.5rem, 4.5vw, 4rem);
+            line-height: 1.1;
+            letter-spacing: -0.02em;
+            color: var(--sand);
+            margin-bottom: 22px;
+        }
+
+        .hero h1 em {
+            font-style: italic;
+            color: var(--clay);
+        }
+
+        .hero-sub {
+            font-size: 1.05rem;
+            color: rgba(242, 232, 213, 0.6);
+            line-height: 1.75;
+            max-width: 480px;
+            margin-bottom: 36px;
+        }
+
+        /* Store buttons */
+        .store-wrap {
+            margin-bottom: 38px;
+        }
+
+        .store-row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+
+        .store-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1.5px solid rgba(242, 232, 213, 0.14);
+            border-radius: 12px;
+            padding: 12px 20px;
+            transition: all 0.25s var(--ease);
+            cursor: pointer;
+            position: relative;
+        }
+
+        .store-btn:hover {
+            border-color: rgba(200, 98, 42, 0.4);
+            background: rgba(200, 98, 42, 0.08);
+            transform: translateY(-2px);
+        }
+
+        .store-btn svg {
+            width: 24px;
+            height: 24px;
+            flex-shrink: 0;
+        }
+
+        .store-btn-label {
+            display: block;
+            font-size: 0.62rem;
+            color: rgba(242, 232, 213, 0.36);
+            font-family: var(--font-head);
+            letter-spacing: 0.07em;
+            text-transform: uppercase;
+        }
+
+        .store-btn-name {
+            display: block;
+            font-family: var(--font-head);
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: var(--sand);
+            margin-top: 1px;
+        }
+
+        .store-soon {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: var(--gold);
+            color: var(--bark);
+            font-family: var(--font-head);
+            font-size: 0.56rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            padding: 3px 7px;
+            border-radius: 5px;
+        }
+
+        .store-alt {
+            font-size: 0.78rem;
+            color: rgba(242, 232, 213, 0.27);
+            font-family: var(--font-head);
+        }
+
+        .store-alt a {
+            color: var(--ember);
+            border-bottom: 1px solid rgba(232, 135, 58, 0.22);
+        }
+
+        .store-alt a:hover {
+            color: var(--gold);
+        }
+
+        .trust {
+            display: flex;
+            gap: 22px;
+            flex-wrap: wrap;
+        }
+
+        .ti {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.77rem;
+            color: rgba(242, 232, 213, 0.36);
+            font-family: var(--font-head);
+        }
+
+        /* ─── PHONE MOCKUP ─── */
+        /* The phone image is 500×710px.
+       Screen area (measured): top=2.8%, left=31%, width=57%, height=62.7%
+       We overlay the app UI div exactly there. */
+        .phone-wrap {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+            max-width: 380px;
+            margin: 0 auto;
+            animation: float 7s ease-in-out infinite;
+            filter: drop-shadow(0 40px 80px rgba(0, 0, 0, 0.7));
+        }
+
+        @keyframes float {
+
+            0%,
+            100% {
+                transform: translateY(0)
+            }
+
+            50% {
+                transform: translateY(-14px)
+            }
+        }
+
+        .phone-wrap img.phone-img {
+            width: 100%;
+            display: block;
+            /* Pure black bg disappears against dark hero */
+            mix-blend-mode: lighten;
+            position: relative;
+            z-index: 2;
+        }
+
+        /* App screen overlay — positioned to sit inside the phone screen */
+        .phone-screen {
+            position: absolute;
+            top: 2.8%;
+            left: 31%;
+            width: 57%;
+            height: 62.7%;
+            z-index: 1;
+            /* behind the phone frame (z:2) so bezel overlaps */
+            border-radius: 4px;
+            overflow: hidden;
+            background: #0F0A05;
+            /* near-black app bg */
+        }
+
+        /* App UI inside screen */
+        .app-ui {
+            width: 100%;
+            height: 100%;
+            background: #0F0A05;
+            display: flex;
+            flex-direction: column;
+            font-family: var(--font-head);
+            overflow: hidden;
+        }
+
+        .app-topbar {
+            padding: 8% 10% 4%;
+            background: #0F0A05;
+        }
+
+        .app-brand {
+            font-size: 4.5cqw;
+            font-weight: 800;
+            color: var(--sand);
+            letter-spacing: -0.01em;
+        }
+
+        .app-brand span {
+            color: var(--gold);
+        }
+
+        .app-greeting {
+            font-size: 2.4cqw;
+            color: rgba(242, 232, 213, 0.4);
+            margin-top: 1px;
+        }
+
+        .app-total-box {
+            margin: 0 8%;
+            background: linear-gradient(135deg, var(--clay), #9E4A1A);
+            border-radius: 8px;
+            padding: 7% 8%;
+        }
+
+        .app-total-label {
+            font-size: 2.2cqw;
+            color: rgba(255, 255, 255, 0.55);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .app-total-amt {
+            font-size: 7.5cqw;
+            font-weight: 800;
+            color: white;
+            line-height: 1.1;
+            margin-top: 2px;
+        }
+
+        .app-total-change {
+            font-size: 2.2cqw;
+            color: rgba(255, 255, 255, 0.65);
+            margin-top: 3px;
+        }
+
+        .app-items {
+            margin: 4% 8% 0;
+            display: flex;
+            flex-direction: column;
+            gap: 3%;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .app-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            padding: 4% 6%;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .app-item-name {
+            font-size: 2.4cqw;
+            color: rgba(242, 232, 213, 0.75);
+        }
+
+        .app-item-qty {
+            font-size: 2.1cqw;
+            color: rgba(242, 232, 213, 0.35);
+            margin-top: 1px;
+        }
+
+        .app-item-price {
+            font-size: 2.8cqw;
+            font-weight: 700;
+            color: var(--gold);
+        }
+
+        .app-pay-btn {
+            margin: 4% 8% 6%;
+            background: var(--gold);
+            border-radius: 7px;
+            padding: 5% 0;
+            text-align: center;
+            font-size: 3.2cqw;
+            font-weight: 800;
+            color: var(--bark);
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            flex-shrink: 0;
+        }
+
+        /* Floating stat cards */
+        .hero-img-wrap {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .fc {
+            position: absolute;
+            background: var(--soil);
+            border: 1px solid rgba(200, 98, 42, 0.22);
+            border-radius: 12px;
+            padding: 12px 16px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+            animation: float 7s ease-in-out infinite;
+            z-index: 10;
+        }
+
+        .fc-1 {
+            top: 12%;
+            left: -20px;
+            animation-delay: -2s;
+        }
+
+        .fc-2 {
+            bottom: 20%;
+            right: -20px;
+            animation-delay: -4s;
+        }
+
+        .fc-label {
+            font-size: 0.62rem;
+            font-family: var(--font-head);
+            letter-spacing: 0.07em;
+            text-transform: uppercase;
+            color: rgba(242, 232, 213, 0.32);
+        }
+
+        .fc-val {
+            font-family: var(--font-head);
+            font-size: 1.3rem;
+            font-weight: 800;
+            color: var(--sand);
+            line-height: 1.2;
+        }
+
+        .fc-sub {
+            font-size: 0.68rem;
+            color: #5CB85C;
+            font-family: var(--font-head);
+            font-weight: 600;
+        }
+
+        /* SECTIONS */
+        section {
+            padding: 110px 0;
+        }
+
+        .sec-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-family: var(--font-head);
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--clay);
+            margin-bottom: 16px;
+        }
+
+        .sec-label::before {
+            content: '';
+            display: block;
+            width: 18px;
+            height: 2px;
+            background: var(--clay);
+        }
+
+        .sec-h2 {
+            font-family: var(--font-display);
+            font-size: clamp(1.9rem, 3.2vw, 2.9rem);
+            line-height: 1.15;
+            letter-spacing: -0.02em;
+            color: var(--sand);
+        }
+
+        .sec-h2 em {
+            font-style: italic;
+            color: var(--clay);
+        }
+
+        /* WHY */
+        .why {
+            background: var(--soil);
+        }
+
+        .why-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            margin-top: 60px;
+            border: 1px solid rgba(200, 98, 42, 0.1);
+            border-radius: 20px;
+            overflow: hidden;
+        }
+
+        .pillar {
+            background: var(--bark);
+            padding: 38px 26px;
+            border-right: 1px solid rgba(200, 98, 42, 0.08);
+            transition: background 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .pillar:last-child {
+            border-right: none;
+        }
+
+        .pillar:hover {
+            background: #1f1409;
+        }
+
+        .pillar::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, var(--clay), var(--gold));
+            transform: scaleX(0);
+            transform-origin: left;
+            transition: transform 0.4s var(--ease);
+        }
+
+        .pillar:hover::after {
+            transform: scaleX(1);
+        }
+
+        .pillar-icon {
+            font-size: 1.9rem;
+            margin-bottom: 18px;
+        }
+
+        .pillar h3 {
+            font-family: var(--font-head);
+            font-size: 0.98rem;
+            font-weight: 700;
+            color: var(--sand);
+            margin-bottom: 9px;
+        }
+
+        .pillar p {
+            font-size: 0.865rem;
+            color: rgba(242, 232, 213, 0.42);
+            line-height: 1.65;
+        }
+
+        /* FEATURES */
+        .features {
+            background: var(--bark);
+        }
+
+        .feat-header {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 48px;
+            align-items: end;
+            margin-bottom: 60px;
+        }
+
+        .feat-header p {
+            font-size: 1rem;
+            color: rgba(242, 232, 213, 0.48);
+            line-height: 1.75;
+        }
+
+        .bento {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 16px;
+        }
+
+        .bc {
+            background: var(--soil);
+            border: 1px solid rgba(200, 98, 42, 0.1);
+            border-radius: 18px;
+            padding: 30px;
+            position: relative;
+            overflow: hidden;
+            transition: border-color 0.3s, transform 0.3s var(--ease);
+        }
+
+        .bc:hover {
+            border-color: rgba(200, 98, 42, 0.3);
+            transform: translateY(-3px);
+        }
+
+        .bc::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, var(--clay), var(--gold));
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .bc:hover::before {
+            opacity: 1;
+        }
+
+        .bc-pat {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 100px;
+            height: 100px;
+            background: repeating-linear-gradient(45deg, rgba(200, 98, 42, 0.05)0, rgba(200, 98, 42, 0.05)5px, transparent 5px, transparent 10px, rgba(245, 184, 76, 0.05)10px, rgba(245, 184, 76, 0.05)15px, transparent 15px, transparent 20px);
+            border-radius: 0 0 18px 0;
+        }
+
+        .bc-icon {
+            font-size: 1.8rem;
+            margin-bottom: 18px;
+        }
+
+        .bc h3 {
+            font-family: var(--font-head);
+            font-size: 1.04rem;
+            font-weight: 700;
+            color: var(--sand);
+            margin-bottom: 8px;
+        }
+
+        .bc p {
+            font-size: 0.875rem;
+            color: rgba(242, 232, 213, 0.44);
+            line-height: 1.65;
+        }
+
+        .bc-1 {
+            grid-column: span 5;
+            min-height: 300px;
+        }
+
+        .bc-2 {
+            grid-column: span 4;
+        }
+
+        .bc-3 {
+            grid-column: span 3;
+        }
+
+        .bc-4 {
+            grid-column: span 4;
+        }
+
+        .bc-5 {
+            grid-column: span 4;
+        }
+
+        .bc-6 {
+            grid-column: span 4;
+        }
+
+        .mini-bars {
+            display: flex;
+            align-items: flex-end;
+            gap: 5px;
+            height: 60px;
+            margin-top: 24px;
+        }
+
+        .mb {
+            flex: 1;
+            border-radius: 3px 3px 0 0;
+            background: rgba(200, 98, 42, 0.28);
+        }
+
+        .mb.hi {
+            background: linear-gradient(to top, var(--clay), var(--ember));
+        }
+
+        .wifi-anim {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 18px;
+        }
+
+        .wifi-bars {
+            display: flex;
+            align-items: flex-end;
+            gap: 3px;
+            height: 18px;
+        }
+
+        .wb {
+            width: 5px;
+            border-radius: 2px;
+            background: var(--clay);
+        }
+
+        .wb:nth-child(1) {
+            height: 5px;
+            opacity: 0.3;
+        }
+
+        .wb:nth-child(2) {
+            height: 10px;
+            opacity: 0.6;
+        }
+
+        .wb:nth-child(3) {
+            height: 17px;
+        }
+
+        .wifi-text {
+            font-size: 0.72rem;
+            font-family: var(--font-head);
+            color: rgba(242, 232, 213, 0.35);
+        }
+
+        .price-badge {
+            display: inline-flex;
+            align-items: baseline;
+            gap: 3px;
+            margin-top: 18px;
+            background: rgba(200, 98, 42, 0.14);
+            border: 1px solid rgba(200, 98, 42, 0.22);
+            border-radius: 10px;
+            padding: 8px 14px;
+        }
+
+        .pb-sym {
+            font-family: var(--font-head);
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--clay);
+        }
+
+        .pb-num {
+            font-family: var(--font-head);
+            font-size: 2rem;
+            font-weight: 800;
+            color: var(--sand);
+            line-height: 1;
+        }
+
+        .pb-per {
+            font-size: 0.8rem;
+            color: rgba(242, 232, 213, 0.38);
+        }
+
+        .cpill {
+            padding: 5px 13px;
+            border-radius: 20px;
+            font-family: var(--font-head);
+            font-size: 0.78rem;
+            font-weight: 700;
+        }
+
+        /* PRICING */
+        .pricing {
+            background: var(--soil);
+        }
+
+        .pricing-wrap {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            max-width: 780px;
+            margin: 60px auto 0;
+        }
+
+        .pc {
+            border-radius: 20px;
+            padding: 38px;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.3s var(--ease);
+        }
+
+        .pc:hover {
+            transform: translateY(-4px);
+        }
+
+        .pc-std {
+            background: var(--bark);
+            border: 1px solid rgba(200, 98, 42, 0.14);
+        }
+
+        .pc-hot {
+            background: linear-gradient(145deg, #B8541F, #8C3D15);
+            box-shadow: 0 20px 60px rgba(200, 98, 42, 0.4);
+        }
+
+        .pc-hot::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.02)0, rgba(255, 255, 255, 0.02)3px, transparent 3px, transparent 7px);
+        }
+
+        .pc-tag {
+            display: inline-block;
+            font-family: var(--font-head);
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            padding: 4px 11px;
+            border-radius: 20px;
+            margin-bottom: 24px;
+            background: rgba(242, 232, 213, 0.07);
+            color: rgba(242, 232, 213, 0.45);
+        }
+
+        .pc-hot .pc-tag {
+            background: rgba(255, 255, 255, 0.15);
+            color: rgba(255, 255, 255, 0.85);
+        }
+
+        .pc-price {
+            display: flex;
+            align-items: baseline;
+            gap: 3px;
+            margin-bottom: 5px;
+        }
+
+        .pc-sym {
+            font-family: var(--font-head);
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: var(--clay);
+        }
+
+        .pc-hot .pc-sym {
+            color: rgba(255, 255, 255, 0.65);
+        }
+
+        .pc-amt {
+            font-family: var(--font-head);
+            font-size: 3.2rem;
+            font-weight: 800;
+            color: var(--sand);
+            line-height: 1;
+        }
+
+        .pc-hot .pc-amt {
+            color: white;
+        }
+
+        .pc-mo {
+            font-size: 0.85rem;
+            color: rgba(242, 232, 213, 0.38);
+        }
+
+        .pc-hot .pc-mo {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .pc-setup {
+            font-size: 0.78rem;
+            color: rgba(242, 232, 213, 0.28);
+            margin-bottom: 28px;
+        }
+
+        .pc-hot .pc-setup {
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .pc-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 11px;
+            margin-bottom: 32px;
+        }
+
+        .pc-list li {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            font-size: 0.875rem;
+            color: rgba(242, 232, 213, 0.58);
+        }
+
+        .pc-hot .pc-list li {
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .pc-list li::before {
+            content: '✓';
+            font-size: 0.68rem;
+            font-weight: 700;
+            width: 17px;
+            height: 17px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(245, 184, 76, 0.1);
+            color: var(--gold);
+            flex-shrink: 0;
+        }
+
+        .pc-hot .pc-list li::before {
+            background: rgba(255, 255, 255, 0.15);
+            color: white;
+        }
+
+        .btn-pc {
+            display: block;
+            text-align: center;
+            font-family: var(--font-head);
+            font-size: 0.88rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            padding: 15px;
+            border-radius: 8px;
+            transition: all 0.2s var(--ease);
+        }
+
+        .btn-pc:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn-pc-outline {
+            border: 1.5px solid rgba(242, 232, 213, 0.16);
+            color: var(--sand);
+        }
+
+        .btn-pc-outline:hover {
+            border-color: var(--gold);
+            color: var(--gold);
+        }
+
+        .btn-pc-white {
+            background: white;
+            color: var(--clay);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        /* COMPLIANCE */
+        .compliance {
+            background: var(--deep);
+            padding: 56px 0;
+        }
+
+        .comp-box {
+            display: flex;
+            align-items: center;
+            gap: 36px;
+            background: rgba(255, 255, 255, 0.025);
+            border: 1px solid rgba(242, 232, 213, 0.05);
+            border-radius: 16px;
+            padding: 34px 38px;
+        }
+
+        .comp-icon {
+            font-size: 2.2rem;
+            flex-shrink: 0;
+        }
+
+        .comp-text h4 {
+            font-family: var(--font-head);
+            font-size: 0.92rem;
+            font-weight: 700;
+            color: rgba(242, 232, 213, 0.5);
+            margin-bottom: 6px;
+        }
+
+        .comp-text p {
+            font-size: 0.84rem;
+            color: rgba(242, 232, 213, 0.28);
+            line-height: 1.65;
+        }
+
+        .comp-text a {
+            color: rgba(232, 135, 58, 0.65);
+            border-bottom: 1px solid rgba(232, 135, 58, 0.18);
+        }
+
+        .comp-text a:hover {
+            color: var(--ember);
+        }
+
+        /* CTA */
+        .cta-section {
+            background: var(--forest);
+        }
+
+        .cta-inner {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 40px;
+            padding: 80px 0;
+        }
+
+        .cta-text h2 {
+            font-family: var(--font-display);
+            font-size: clamp(1.8rem, 3vw, 2.6rem);
+            color: var(--sand);
+            line-height: 1.2;
+        }
+
+        .cta-text h2 em {
+            color: var(--gold);
+            font-style: italic;
+        }
+
+        .cta-text p {
+            margin-top: 10px;
+            font-size: 0.92rem;
+            color: rgba(242, 232, 213, 0.42);
+        }
+
+        .cta-stores {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            flex-shrink: 0;
+            align-items: center;
+        }
+
+        /* FOOTER */
+        .footer {
+            background: var(--deep);
+            padding: 36px 0;
+        }
+
+        .foot-inner {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .foot-right {
+            font-size: 0.78rem;
+            color: rgba(242, 232, 213, 0.2);
+            font-family: var(--font-head);
+        }
+
+        /* REVEAL */
+        .reveal {
+            opacity: 0;
+            transform: translateY(26px);
+            transition: opacity 0.7s var(--ease), transform 0.7s var(--ease);
+        }
+
+        .reveal.in {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .d1 {
+            transition-delay: 0.1s;
+        }
+
+        .d2 {
+            transition-delay: 0.2s;
+        }
+
+        .d3 {
+            transition-delay: 0.3s;
+        }
+
+        @media(max-width:960px) {
+
+            .hero .container,
+            .feat-header {
+                grid-template-columns: 1fr;
+            }
+
+            .why-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .bc-1,
+            .bc-2,
+            .bc-3,
+            .bc-4,
+            .bc-5,
+            .bc-6 {
+                grid-column: span 12;
+            }
+
+            .hero-img-wrap {
+                display: none;
+            }
+
+            .pricing-wrap {
+                grid-template-columns: 1fr;
+                max-width: 420px;
+            }
+
+            .cta-inner {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .comp-box {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .foot-inner {
+                flex-direction: column;
+                text-align: center;
+            }
+        }
+
+        @media(max-width:600px) {
+            .why-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .nav-links a:not(.btn-nav) {
+                display: none;
+            }
+
+            .store-row {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- NAV -->
+    <nav class="navbar">
+        <div class="kente"></div>
+        <div class="nav-body">
+            <div class="container">
+                <div class="logo">Field<span>POS</span></div>
+                <div class="nav-links">
+                    <a href="#features">Features</a>
+                    <a href="#pricing">Pricing</a>
+                    <a href="/login" class="btn-nav btn-nav-outline">Login</a>
+                    <a href="/register" class="btn-nav btn-nav-fill">Get Started</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- HERO -->
+    <section class="hero">
+        <div class="hero-bg">
+            <div class="grid"></div>
+            <div class="glow-l"></div>
+            <div class="glow-r"></div>
+            <div class="ring r1"></div>
+            <div class="ring r2"></div>
+        </div>
+        <div class="container">
+
+            <!-- LEFT: copy -->
+            <div class="hero-content">
+                <div class="eyebrow reveal"><span class="eyebrow-dot"></span>Built for Zimbabwean Businesses</div>
+                <h1 class="reveal d1">The POS that works<br>as hard as <em>you do.</em></h1>
+                <p class="hero-sub reveal d2">
+                    No bulky hardware. No expensive setup. Just a fast, beautiful point-of-sale that runs on any phone —
+                    online or offline — starting at $2 a month.
+                </p>
+
+                <div class="store-wrap reveal d2">
+                    <div class="store-row">
+                        <a href="#" class="store-btn">
+                            <span class="store-soon">Soon</span>
+                            <svg viewBox="0 0 24 24" fill="currentColor" style="color:var(--sand)">
+                                <path
+                                    d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" />
+                            </svg>
+                            <div>
+                                <span class="store-btn-label">Download on the</span>
+                                <span class="store-btn-name">App Store</span>
+                            </div>
+                        </a>
+                        <a href="#" class="store-btn">
+                            <span class="store-soon">Soon</span>
+                            <svg viewBox="0 0 24 24" fill="currentColor" style="color:var(--sand)">
+                                <path
+                                    d="M3.18 23.76c.3.17.64.22.99.14l12.5-7.19-2.55-2.55-10.94 9.6zm-1.76-20.1C1.16 4 1 4.34 1 4.75v14.5c0 .41.16.75.42 1.01l.08.07 8.12-8.12v-.19L1.5 3.59l-.08.07zM20.33 10.63l-2.77-1.6-2.85 2.85 2.85 2.85 2.79-1.61c.8-.46.8-1.22-.02-1.49zM4.17.24L16.68 7.43l-2.55 2.55L4.17.24C4.52.06 4.93.07 5.21.24z" />
+                            </svg>
+                            <div>
+                                <span class="store-btn-label">Get it on</span>
+                                <span class="store-btn-name">Google Play</span>
+                            </div>
+                        </a>
+                    </div>
+                    <p class="store-alt">Or <a href="/register">use the web app</a> — no download needed.</p>
+                </div>
+
+                <div class="trust reveal d3">
+                    <div class="ti">📱 Any phone</div>
+                    <div class="ti">📡 Offline ready</div>
+                    <div class="ti">💸 From $2/mo</div>
+                    <div class="ti">⚡ 10-sec checkout</div>
+                </div>
+            </div>
+
+            <!-- RIGHT: phone with app UI overlaid on screen -->
+            <div class="hero-img-wrap reveal d1">
+                <div class="fc fc-1">
+                    <div class="fc-label">Today's Sales</div>
+                    <div class="fc-val">$3,842</div>
+                    <div class="fc-sub">↑ 12% vs yesterday</div>
+                </div>
+
+                <div class="phone-wrap">
+                    <!-- App UI rendered inside the screen area -->
+                    <div class="phone-screen">
+                        <div class="app-ui" style="container-type:size;">
+                            <div class="app-topbar">
+                                <div class="app-brand">Field<span>POS</span></div>
+                                <div class="app-greeting">Good morning, Tendai 👋</div>
+                            </div>
+                            <div class="app-total-box">
+                                <div class="app-total-label">Today's Total</div>
+                                <div class="app-total-amt">$245.80</div>
+                                <div class="app-total-change">↑ 8 sales today</div>
+                            </div>
+                            <div class="app-items">
+                                <div class="app-item">
+                                    <div>
+                                        <div class="app-item-name">Coffee Beans ×2</div>
+                                        <div class="app-item-qty">500g bags</div>
+                                    </div>
+                                    <div class="app-item-price">$18.00</div>
+                                </div>
+                                <div class="app-item">
+                                    <div>
+                                        <div class="app-item-name">Pastry Basket</div>
+                                        <div class="app-item-qty">Assorted ×1</div>
+                                    </div>
+                                    <div class="app-item-price">$12.50</div>
+                                </div>
+                                <div class="app-item">
+                                    <div>
+                                        <div class="app-item-name">Table Lamp</div>
+                                        <div class="app-item-qty">LED ×1</div>
+                                    </div>
+                                    <div class="app-item-price">$35.00</div>
+                                </div>
+                            </div>
+                            <div class="app-pay-btn">PAY NOW — $65.50</div>
+                        </div>
+                    </div>
+                    <!-- Phone image renders on top via mix-blend-mode -->
+                    <img class="phone-img" src="./hero-phone.png" alt="FieldPOS on mobile" />
+                </div>
+
+                <div class="fc fc-2">
+                    <div class="fc-label">Items Sold</div>
+                    <div class="fc-val">247</div>
+                    <div class="fc-sub">across 3 branches</div>
+                </div>
+            </div>
+
+        </div>
+    </section>
+
+    <!-- WHY FIELDPOS -->
+    <section class="why">
+        <div class="container">
+            <div class="sec-label reveal">Why FieldPOS</div>
+            <h2 class="sec-h2 reveal d1">Built different.<br><em>On purpose.</em></h2>
+            <div class="why-grid">
+                <div class="pillar reveal">
+                    <div class="pillar-icon">📱</div>
+                    <h3>No hardware needed</h3>
+                    <p>Your phone is your POS terminal. No expensive card machines, receipt printers, or proprietary
+                        hardware to buy or lease.</p>
+                </div>
+                <div class="pillar reveal d1">
+                    <div class="pillar-icon">⚡</div>
+                    <h3>Blazing fast checkout</h3>
+                    <p>Tap, select, charge. A complete sale in under 10 seconds. Your queue will thank you.</p>
+                </div>
+                <div class="pillar reveal d2">
+                    <div class="pillar-icon">📡</div>
+                    <h3>Offline, always</h3>
+                    <p>Load shedding? Bad signal? FieldPOS keeps running. Every sale syncs automatically when you're
+                        back online.</p>
+                </div>
+                <div class="pillar reveal d3">
+                    <div class="pillar-icon">💸</div>
+                    <h3>Radically affordable</h3>
+                    <p>$2 a month. No per-transaction fees. No surprise charges. The full system for every business.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FEATURES -->
+    <section id="features" class="features">
+        <div class="container">
+            <div class="feat-header">
+                <div>
+                    <div class="sec-label reveal">Features</div>
+                    <h2 class="sec-h2 reveal d1">Everything your business<br><em>actually needs.</em></h2>
+                </div>
+                <p class="reveal d1">We built FieldPOS for the Harare CBD at 8am on a Monday, during load shedding, with
+                    a queue of customers at the door.</p>
+            </div>
+            <div class="bento">
+                <div class="bc bc-1 reveal">
+                    <div class="bc-pat"></div>
+                    <div class="bc-icon">📊</div>
+                    <h3>Real-time Analytics</h3>
+                    <p>Best-selling products, busiest hours, and profit margins — updated live. Know your business, not
+                        just your turnover.</p>
+                    <div class="mini-bars">
+                        <div class="mb" style="height:40%"></div>
+                        <div class="mb" style="height:60%"></div>
+                        <div class="mb" style="height:50%"></div>
+                        <div class="mb hi" style="height:85%"></div>
+                        <div class="mb" style="height:65%"></div>
+                        <div class="mb hi" style="height:100%"></div>
+                        <div class="mb" style="height:75%"></div>
+                    </div>
+                </div>
+                <div class="bc bc-2 reveal d1">
+                    <div class="bc-pat"></div>
+                    <div class="bc-icon">💱</div>
+                    <h3>Multi-Currency</h3>
+                    <p>USD, ZWL, ZWG. Live rates, automatic conversions, clean books. Charge in whatever your customer
+                        prefers.</p>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:18px">
+                        <span class="cpill"
+                            style="background:rgba(245,184,76,0.1);color:var(--gold);border:1px solid rgba(245,184,76,0.18)">USD</span>
+                        <span class="cpill"
+                            style="background:rgba(200,98,42,0.1);color:var(--ember);border:1px solid rgba(200,98,42,0.18)">ZWL</span>
+                        <span class="cpill"
+                            style="background:rgba(26,50,40,0.5);color:#7FC9A9;border:1px solid rgba(127,201,169,0.18)">ZWG</span>
+                    </div>
+                </div>
+                <div class="bc bc-3 reveal d2">
+                    <div class="bc-pat"></div>
+                    <div class="bc-icon">🔋</div>
+                    <h3>Offline Mode</h3>
+                    <p>Sell through load shedding and bad signal. Auto-syncs the moment you're back online.</p>
+                    <div class="wifi-anim">
+                        <div class="wifi-bars">
+                            <div class="wb"></div>
+                            <div class="wb"></div>
+                            <div class="wb"></div>
+                        </div>
+                        <div class="wifi-text">Syncing 14 sales…</div>
+                    </div>
+                </div>
+                <div class="bc bc-4 reveal">
+                    <div class="bc-pat"></div>
+                    <div class="bc-icon">📦</div>
+                    <h3>Smart Inventory</h3>
+                    <p>Live stock counts, low-stock alerts, automatic deduction on every sale. Never be caught
+                        empty-handed.</p>
+                </div>
+                <div class="bc bc-5 reveal d1" style="background:linear-gradient(135deg,#1f1409,#2a1a0d)">
+                    <div class="bc-pat"></div>
+                    <div class="bc-icon">💰</div>
+                    <h3>Insanely affordable</h3>
+                    <p>The same system, the same features — for every business regardless of size.</p>
+                    <div class="price-badge">
+                        <span class="pb-sym">$</span><span class="pb-num">2</span><span class="pb-per">/month</span>
+                    </div>
+                </div>
+                <div class="bc bc-6 reveal d2">
+                    <div class="bc-pat"></div>
+                    <div class="bc-icon">🏢</div>
+                    <h3>Multi-Branch</h3>
+                    <p>One dashboard for every location. Harare, Bulawayo, Mutare — your whole business in one view.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- PRICING -->
+    <section id="pricing" class="pricing">
+        <div class="container">
+            <div style="text-align:center">
+                <div class="sec-label reveal" style="justify-content:center">Pricing</div>
+                <h2 class="sec-h2 reveal d1" style="margin-bottom:12px">Priced for Zimbabwe.<br><em>Not Silicon
+                        Valley.</em></h2>
+                <p class="reveal d2"
+                    style="color:rgba(242,232,213,0.38);font-size:0.92rem;max-width:420px;margin:0 auto">No hardware to
+                    buy. A small monthly fee and you're live today.</p>
+            </div>
+            <div class="pricing-wrap">
+                <div class="pc pc-std reveal">
+                    <div class="pc-tag">Monthly</div>
+                    <div class="pc-price"><span class="pc-sym">$</span><span class="pc-amt">3</span><span
+                            class="pc-mo">/month</span></div>
+                    <p class="pc-setup">+ $6 one-time setup fee</p>
+                    <ul class="pc-list">
+                        <li>Full POS on any phone</li>
+                        <li>Multi-currency checkout</li>
+                        <li>Offline mode</li>
+                        <li>Inventory management</li>
+                        <li>Sales analytics</li>
+                    </ul>
+                    <a href="/register" class="btn-pc btn-pc-outline">Get Started</a>
+                </div>
+                <div class="pc pc-hot reveal d1">
+                    <div class="pc-tag">Annual · Best Value</div>
+                    <div class="pc-price">
+                        <span class="pc-sym" style="color:rgba(255,255,255,0.6)">$</span>
+                        <span class="pc-amt">2</span>
+                        <span class="pc-mo" style="color:rgba(255,255,255,0.48)">/month</span>
+                    </div>
+                    <p class="pc-setup" style="color:rgba(255,255,255,0.38)">+ $6 one-time setup · Save 33%</p>
+                    <ul class="pc-list">
+                        <li>Everything in Monthly</li>
+                        <li>Priority support</li>
+                        <li>Multi-branch dashboard</li>
+                        <li>Early access to new features</li>
+                        <li>Dedicated onboarding</li>
+                    </ul>
+                    <a href="/register" class="btn-pc btn-pc-white">Choose Annual →</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- COMPLIANCE NOTE -->
+    <div class="compliance">
+        <div class="container">
+            <div class="comp-box reveal">
+                <div class="comp-icon">🏛️</div>
+                <div class="comp-text">
+                    <h4>ZIMRA compliant — automatically, in the background.</h4>
+                    <p>FieldPOS connects to <a href="https://fiscalzone.co.zw" target="_blank">FiscalZone</a> for full
+                        FDMS fiscalization. Every receipt is legally compliant and every daily report is filed
+                        automatically. You don't have to think about it.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CTA -->
+    <section class="cta-section">
+        <div class="container">
+            <div class="cta-inner">
+                <div class="cta-text reveal">
+                    <h2>Start selling smarter <em>today.</em></h2>
+                    <p>Join hundreds of businesses already running on FieldPOS.</p>
+                </div>
+                <div class="cta-stores reveal d1">
+                    <a href="#" class="store-btn">
+                        <span class="store-soon">Soon</span>
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="22" style="color:var(--sand)">
+                            <path
+                                d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" />
+                        </svg>
+                        <div><span class="store-btn-label">Download on the</span><span class="store-btn-name">App
+                                Store</span></div>
+                    </a>
+                    <a href="#" class="store-btn">
+                        <span class="store-soon">Soon</span>
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="22" style="color:var(--sand)">
+                            <path
+                                d="M3.18 23.76c.3.17.64.22.99.14l12.5-7.19-2.55-2.55-10.94 9.6zm-1.76-20.1C1.16 4 1 4.34 1 4.75v14.5c0 .41.16.75.42 1.01l.08.07 8.12-8.12v-.19L1.5 3.59l-.08.07zM20.33 10.63l-2.77-1.6-2.85 2.85 2.85 2.85 2.79-1.61c.8-.46.8-1.22-.02-1.49zM4.17.24L16.68 7.43l-2.55 2.55L4.17.24C4.52.06 4.93.07 5.21.24z" />
+                        </svg>
+                        <div><span class="store-btn-label">Get it on</span><span class="store-btn-name">Google
+                                Play</span></div>
+                    </a>
+                    <a href="/register" class="btn-nav btn-nav-fill" style="padding:14px 24px">Use Web App →</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+        <div class="kente" style="opacity:0.4"></div>
+        <div class="container" style="padding-top:34px">
+            <div class="foot-inner">
+                <div class="logo">Field<span>POS</span></div>
+                <p class="foot-right">© 2026 FieldPOS · Built in Zimbabwe 🇿🇼</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        const obs = new IntersectionObserver(entries => {
+            entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('in'); });
+        }, { threshold: 0.1 });
+        document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+    </script>
+</body>
+
+</html>

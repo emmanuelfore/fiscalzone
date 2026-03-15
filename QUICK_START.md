@@ -41,6 +41,32 @@ Copy and paste the contents of `supabase_rls_policies.sql`, then click **Run**.
 npm run dev
 ```
 
+## 📱 Mobile (Expo) Pause App
+
+There is a companion Expo app in `mobile/` that uses:
+
+- The same **Supabase Auth** users
+- The same backend **`/api/*`** routes (Bearer token from Supabase session)
+
+Setup:
+
+```bash
+cp mobile/.env.example mobile/.env
+```
+
+Fill in:
+
+- `EXPO_PUBLIC_SUPABASE_URL`
+- `EXPO_PUBLIC_SUPABASE_ANON_KEY`
+- `EXPO_PUBLIC_API_BASE_URL` (use your PC LAN IP when testing on a phone)
+
+Run:
+
+```bash
+npm run mobile:install
+npm run mobile:start
+```
+
 ## ✅ What's Been Done
 
 - ✅ Installed Supabase dependencies

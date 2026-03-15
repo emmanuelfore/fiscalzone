@@ -57,6 +57,11 @@ export async function registerRoutes(
 ): Promise<Server> {
   setupAuth(app);
 
+  app.get("/api/health", (_req, res) => {
+    console.log(`[HEALTH] Health check from ${_req.ip}`);
+    res.json({ ok: true });
+  });
+
   // CSV Upload Configuration
   const csvUpload = multer({
     storage: multer.memoryStorage(),
@@ -3168,7 +3173,12 @@ export async function registerRoutes(
   });
 
   app.post("/api/companies/:companyId/expenses", requireAuth, async (req, res) => {
-    const input = insertExpenseSchema.parse(req.body);
+    const body = {
+      ...req.body,
+      amount: req.body.amount ? String(req.body.amount) : undefined,
+      expenseDate: req.body.expenseDate ? new Date(req.body.expenseDate) : undefined,
+    };
+    const input = insertExpenseSchema.parse(body);
     const expense = await storage.createExpense({
       ...input,
       companyId: Number(req.params.companyId)
@@ -3179,7 +3189,12 @@ export async function registerRoutes(
 
   app.patch("/api/expenses/:id", requireAuth, async (req, res) => {
     const id = Number(req.params.id);
-    const updated = await storage.updateExpense(id, req.body);
+    const body = {
+      ...req.body,
+      amount: req.body.amount ? String(req.body.amount) : undefined,
+      expenseDate: req.body.expenseDate ? new Date(req.body.expenseDate) : undefined,
+    };
+    const updated = await storage.updateExpense(id, body);
     if (!updated) return res.status(404).json({ message: "Expense not found" });
     res.json(updated);
   });
@@ -3198,10 +3213,10 @@ export async function registerRoutes(
   app.get("/api/companies/:companyId/reports/financial-summary", requireAuth, async (req, res) => {
     try {
       const companyId = parseInt(req.params.companyId);
-      const { from, to } = req.query;
+      const { from, to, cashierId } = req.query;
       const dateFrom = from ? new Date(from as string) : undefined;
       const dateTo = to ? new Date(to as string) : undefined;
-      const data = await storage.getFinancialSummary(companyId, dateFrom, dateTo);
+      const data = await storage.getFinancialSummary(companyId, dateFrom, dateTo, cashierId as string);
       res.json(data);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -3505,27 +3520,34 @@ export async function registerRoutes(
         companyId: Number(req.params.companyId)
       });
 
-      // ZIMRA Fiscalization Trigger for POS (only for VAT-registered companies)
-      if (input.isPos) {
-        const company = await storage.getCompany(Number(req.params.companyId));
-        if (company?.vatRegistered !== false) {
-          try {
-            invoice = await processInvoiceFiscalization(
-              invoice.id,
-              invoice.companyId,
-              req.user?.id,
-              (req.user as any)?.isSuperAdmin,
-              undefined, // zimraSync
-              true // isPos
-            );
-          } catch (fiscalError) {
-            console.error("POS Fiscalization Failed:", fiscalError);
-            // We swallow the error here because the invoice is already created
-            // and the user will see the failure status on the invoice.
-            // The invoice will be returned with status 'draft' or 'failed'
-          }
-        } else {
-          console.log(`[POS] Skipping fiscalization for non-VAT registered company ${req.params.companyId}`);
+      // ZIMRA Fiscalization Trigger: 
+      // 1. All POS sales for VAT registered companies
+      // 2. Any sale (POS or standard) where the customer has a VAT Number (Automated fiscalization)
+      const company = await storage.getCompany(Number(req.params.companyId));
+      let shouldFiscalize = false;
+      
+      if (input.isPos && company?.vatRegistered !== false) {
+        shouldFiscalize = true;
+      } else if (input.customerId && company?.vatRegistered !== false) {
+        const customer = await storage.getCustomer(input.customerId);
+        if (customer?.vatNumber && customer.vatNumber.trim()) {
+          shouldFiscalize = true;
+        }
+      }
+
+      if (shouldFiscalize) {
+        try {
+          console.log(`[Fiscal] Triggering auto-fiscalization for invoice ${invoice.id} (Company: ${req.params.companyId}, isPos: ${!!input.isPos})`);
+          invoice = await processInvoiceFiscalization(
+            invoice.id,
+            invoice.companyId,
+            req.user?.id,
+            (req.user as any)?.isSuperAdmin,
+            undefined, // zimraSync
+            !!input.isPos // isPos
+          );
+        } catch (fiscalError) {
+          console.error("Automated Fiscalization Failed:", fiscalError);
         }
       }
 

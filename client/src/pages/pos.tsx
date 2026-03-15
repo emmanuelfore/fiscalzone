@@ -32,6 +32,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { MySalesModal } from "@/components/pos/my-sales-modal";
+import { usePosSettings } from "@/hooks/use-pos-settings";
 
 interface CartItem {
     productId: number;
@@ -186,6 +188,20 @@ export default function POSPage() {
             return matchesSearch && matchesCategory;
         });
     }, [resolvedProducts, searchQuery, selectedCategory]);
+
+    const currencyInfo = useMemo(() => {
+        if (selectedCurrencyCode === "USD") return { symbol: "$", rate: 1 };
+        const cur = (resolvedCurrencies || []).find((c: any) => c.code === selectedCurrencyCode);
+        return {
+            symbol: cur?.symbol || selectedCurrencyCode,
+            rate: Number(cur?.exchangeRate || 1)
+        };
+    }, [selectedCurrencyCode, resolvedCurrencies]);
+
+    const fmt = (val: number) => {
+        const converted = val * currencyInfo.rate;
+        return `${currencyInfo.symbol}${converted.toFixed(2)}`;
+    };
 
     const taxInclusive = company?.vatEnabled ?? false;
 
@@ -500,7 +516,7 @@ export default function POSPage() {
         if (parseFloat(paidAmount || "0") < total) {
             toast({
                 title: "Insufficient Payment",
-                description: `Received amount ($${paidAmount}) is less than total payable ($${total.toFixed(2)})`,
+                description: `Received amount (${currencyInfo.symbol}${paidAmount}) is less than total payable (${fmt(total)})`,
                 variant: "destructive"
             });
             setIsProcessing(false);
@@ -840,19 +856,24 @@ export default function POSPage() {
 
         try {
             const html = receiptElement.outerHTML;
-            // Wrap in a basic document with styling if needed, but receipt-48 already has <style>
-            const response = await fetch(`${posSettings.printServerUrl}/print`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    html,
-                    printerName: posSettings.printerName || undefined
-                })
-            });
+            
+            if (window.electronAPI) {
+                await window.electronAPI.printReceipt(html, posSettings.printerName || undefined);
+            } else {
+                // Wrap in a basic document with styling if needed, but receipt-48 already has <style>
+                const response = await fetch(`${posSettings.printServerUrl}/print`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        html,
+                        printerName: posSettings.printerName || undefined
+                    })
+                });
 
-            if (!response.ok) {
-                const err = await response.json();
-                throw new Error(err.error || "Failed to send print job");
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.error || "Failed to send print job");
+                }
             }
 
             toast({ title: "Sent to Printer", description: "Silent print job sent successfully." });
@@ -1042,17 +1063,17 @@ export default function POSPage() {
                     <div className="space-y-1.5">
                         <div className="flex justify-between text-[10px] font-black text-slate-400 uppercase tracking-widest">
                             <span>Subtotal</span>
-                            <span className="text-slate-600">${subtotal.toFixed(2)}</span>
+                            <span className="text-slate-600">{fmt(subtotal)}</span>
                         </div>
                         <div className="flex justify-between text-[10px] font-black text-slate-400 uppercase tracking-widest">
                             <span>Tax (VAT)</span>
-                            <span className="text-slate-600">${taxAmount.toFixed(2)}</span>
+                            <span className="text-slate-600">{fmt(taxAmount)}</span>
                         </div>
 
                         {orderDiscount > 0 && (
                             <div className="flex justify-between text-[10px] font-black text-emerald-600 bg-emerald-50 p-2 rounded-xl border border-emerald-100 items-center">
                                 <span className="flex items-center gap-1.5"><Tag className="h-3.5 w-3.5" /> Discount</span>
-                                <span>-${orderDiscount.toFixed(2)}</span>
+                                <span>-{fmt(orderDiscount)}</span>
                             </div>
                         )}
 
@@ -1082,8 +1103,8 @@ export default function POSPage() {
                         <div className="flex justify-between items-center py-1.5 border-t border-slate-100 border-dashed mt-1.5">
                             <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Total</span>
                             <div className="text-right">
-                                <p className="text-xl font-black text-slate-900 tracking-tight leading-none">${total.toFixed(2)}</p>
-                                <p className="text-[9px] font-bold text-emerald-600 mt-0.5 uppercase tracking-widest">{selectedCurrencyCode}</p>
+                                <p className="text-xl font-black text-slate-900 tracking-tight leading-none">{fmt(total)}</p>
+                                <p className="text-[9px] font-bold text-emerald-600 mt-0.5 uppercase tracking-widest">{currencyInfo.symbol} {selectedCurrencyCode}</p>
                             </div>
                         </div>
                     </div>
@@ -1263,7 +1284,7 @@ export default function POSPage() {
                                 {/* Mobile Total Indicator */}
                                 {activeView === "products" && (
                                     <div className="md:hidden flex items-center gap-2 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100 shrink-0">
-                                        <span className="text-[10px] font-black text-emerald-700">${total.toFixed(2)}</span>
+                                        <span className="text-[10px] font-black text-emerald-700">{fmt(total)}</span>
                                     </div>
                                 )}
                             </div>
@@ -1311,13 +1332,21 @@ export default function POSPage() {
                                             </div>
                                         </DropdownMenuItem>
 
-                                        <DropdownMenuItem className="p-3 rounded-xl focus:bg-slate-50 cursor-pointer" onClick={() => window.open('/pos/my-sales', '_blank')}>
-                                            <Receipt className="h-4 w-4 mr-3 text-slate-500" />
-                                            <div className="flex flex-col">
-                                                <span className="text-sm font-bold text-slate-700">My Sales</span>
-                                                <span className="text-[10px] text-slate-400">View & Reprint Receipts</span>
-                                            </div>
-                                        </DropdownMenuItem>
+                                        <MySalesModal
+                                            companyId={companyId}
+                                            company={company}
+                                            posSettings={posSettings}
+                                            user={user}
+                                            trigger={
+                                                <DropdownMenuItem className="p-3 rounded-xl focus:bg-slate-50 cursor-pointer" onSelect={(e) => e.preventDefault()}>
+                                                    <Receipt className="h-4 w-4 mr-3 text-slate-500" />
+                                                    <div className="flex flex-col">
+                                                        <span className="text-sm font-bold text-slate-700">My Sales</span>
+                                                        <span className="text-[10px] text-slate-400">View & Reprint Receipts</span>
+                                                    </div>
+                                                </DropdownMenuItem>
+                                            }
+                                        />
 
                                         {currentShift ? (
                                             <DropdownMenuItem className="p-3 rounded-xl focus:bg-red-50 cursor-pointer text-red-600" onClick={() => { setShiftModalType("CLOSE"); setShiftBalance(""); setIsShiftModalOpen(true); }}>
@@ -1539,43 +1568,23 @@ export default function POSPage() {
                                             </div>
                                         </DropdownMenuItem>
 
-                                        <DropdownMenuItem className="p-3 rounded-xl focus:bg-slate-50 cursor-pointer" onClick={() => window.open('/pos/my-sales', '_blank')}>
-                                            <Receipt className="h-4 w-4 mr-3 text-slate-500" />
-                                            <div className="flex flex-col">
-                                                <span className="text-sm font-bold text-slate-700">My Sales</span>
-                                                <span className="text-[10px] text-slate-400">View & Reprint Receipts</span>
-                                            </div>
-                                        </DropdownMenuItem>
-
-                                        {!isCashier && (
-                                            <>
-                                                <DropdownMenuItem className="p-3 rounded-xl focus:bg-slate-50 cursor-pointer" onClick={() => window.open('/pos/reports', '_blank')}>
-                                                    <FileText className="h-4 w-4 mr-3 text-slate-500" />
+                                        <MySalesModal
+                                            companyId={companyId}
+                                            company={company}
+                                            posSettings={posSettings}
+                                            user={user}
+                                            trigger={
+                                                <DropdownMenuItem className="p-3 rounded-xl focus:bg-slate-50 cursor-pointer" onSelect={(e) => e.preventDefault()}>
+                                                    <Receipt className="h-4 w-4 mr-3 text-slate-500" />
                                                     <div className="flex flex-col">
-                                                        <span className="text-sm font-bold text-slate-700">Analytics Reports</span>
-                                                        <span className="text-[10px] text-slate-400">Daily Trends & Insights</span>
+                                                        <span className="text-sm font-bold text-slate-700">My Sales</span>
+                                                        <span className="text-[10px] text-slate-400">View & Reprint Receipts</span>
                                                     </div>
                                                 </DropdownMenuItem>
+                                            }
+                                        />
 
-                                                <DropdownMenuItem className="p-3 rounded-xl focus:bg-slate-50 cursor-pointer" onClick={() => window.open('/pos/all-sales', '_blank')}>
-                                                    <History className="h-4 w-4 mr-3 text-slate-500" />
-                                                    <div className="flex flex-col">
-                                                        <span className="text-sm font-bold text-slate-700">Sales Ledger</span>
-                                                        <span className="text-[10px] text-slate-400">Detailed Transaction Log</span>
-                                                    </div>
-                                                </DropdownMenuItem>
-                                            </>
-                                        )}
 
-                                        {currentShift && (
-                                            <DropdownMenuItem className="p-3 rounded-xl focus:bg-slate-50 cursor-pointer" onClick={() => { /* Open Cash Drop Modal */ }}>
-                                                <Banknote className="h-4 w-4 mr-3 text-slate-500" />
-                                                <div className="flex flex-col">
-                                                    <span className="text-sm font-bold text-slate-700">Cash Management</span>
-                                                    <span className="text-[10px] text-slate-400">Drops & Payouts</span>
-                                                </div>
-                                            </DropdownMenuItem>
-                                        )}
                                         {currentShift ? (
                                             <DropdownMenuItem className="p-3 rounded-xl focus:bg-red-50 cursor-pointer text-red-600" onClick={() => { setShiftModalType("CLOSE"); setShiftBalance(""); setIsShiftModalOpen(true); }}>
                                                 <XCircle className="h-4 w-4 mr-3" />
@@ -1611,7 +1620,7 @@ export default function POSPage() {
                                     <Calculator className="h-4 w-4 text-emerald-600" />
                                     <div className="flex flex-col">
                                         <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600/60 leading-none">Total Payable</span>
-                                        <span className="text-base font-black text-emerald-700 leading-none mt-1">${total.toFixed(2)}</span>
+                                        <span className="text-base font-black text-emerald-700 leading-none mt-1">{fmt(total)}</span>
                                     </div>
                                 </div>
                             </div>
@@ -1689,7 +1698,7 @@ export default function POSPage() {
                                                     <div className="flex flex-col gap-0.5 pb-0.5">
                                                         <h4 className="text-[8px] font-black text-slate-800 line-clamp-1 leading-tight px-0.5">{product.name}</h4>
                                                         <div className="flex items-center justify-between px-0.5">
-                                                            <span className="text-[9px] font-black text-slate-900">${Number(product.price).toFixed(2)}</span>
+                                                            <span className="text-[9px] font-black text-slate-900">{fmt(product.price)}</span>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1740,8 +1749,7 @@ export default function POSPage() {
                                                             <h4 className="text-[10px] md:text-[11px] font-black text-slate-800 line-clamp-2 mb-1 group-hover:text-primary transition-colors leading-tight min-h-[1.5rem] md:min-h-[1.75rem]">{product.name}</h4>
                                                             <div className="flex justify-between items-center mt-auto">
                                                                 <p className="text-xs md:text-sm font-black text-slate-900">
-                                                                    <span className="text-[9px] md:text-[10px] text-slate-400 mr-0.5">$</span>
-                                                                    {Number(product.price).toFixed(2)}
+                                                                    {fmt(product.price)}
                                                                 </p>
                                                                 {product.isTracked && (
                                                                     <span className={cn(
@@ -1827,16 +1835,16 @@ export default function POSPage() {
                                     <div className="hidden md:block space-y-2">
                                         <div className="flex justify-between items-center text-slate-300">
                                             <span className="text-xs font-bold uppercase tracking-widest">Subtotal</span>
-                                            <span className="font-mono text-sm">${subtotal.toFixed(2)}</span>
+                                            <span className="font-mono text-sm">{fmt(subtotal)}</span>
                                         </div>
                                         <div className="flex justify-between items-center text-slate-300">
                                             <span className="text-xs font-bold uppercase tracking-widest">Tax (VAT)</span>
-                                            <span className="font-mono text-sm">${taxAmount.toFixed(2)}</span>
+                                            <span className="font-mono text-sm">{fmt(taxAmount)}</span>
                                         </div>
                                         {orderDiscount > 0 && (
                                             <div className="flex justify-between items-center text-emerald-400">
                                                 <span className="text-xs font-bold uppercase tracking-widest">Order Discount</span>
-                                                <span className="font-mono text-sm">-${orderDiscount.toFixed(2)}</span>
+                                                <span className="font-mono text-sm">-{fmt(orderDiscount)}</span>
                                             </div>
                                         )}
                                     </div>
@@ -1846,11 +1854,11 @@ export default function POSPage() {
                                     <div className="hidden md:block h-px bg-slate-800 w-full mb-6 border-dashed" />
                                     <div
                                         className="flex flex-col gap-0 md:gap-1 cursor-pointer group/total"
-                                        onClick={() => setPaidAmount(total.toFixed(2))}
+                                        onClick={() => setPaidAmount((total * currencyInfo.rate).toFixed(2))}
                                         title="Click to pay exact amount"
                                     >
                                         <span className="hidden md:block text-[10px] font-black uppercase tracking-[0.4em] text-white group-hover/total:text-slate-200 transition-colors">Total Payable</span>
-                                        <h2 className="text-base md:text-3xl font-black tracking-tighter leading-none text-white group-hover/total:scale-105 transition-transform origin-left text-right md:text-left">${total.toFixed(2)}</h2>
+                                        <h2 className="text-base md:text-3xl font-black tracking-tighter leading-none text-white group-hover/total:scale-105 transition-transform origin-left text-right md:text-left">{fmt(total)}</h2>
                                         <p className="hidden md:block text-[10px] font-bold text-slate-500 mt-1 uppercase tracking-widest">ID: {companyId}</p>
                                     </div>
                                 </div>

@@ -1,7 +1,7 @@
 import React from "react";
 import { ActivityIndicator, Text, TouchableOpacity, ViewStyle } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { PremiumColors } from "./PremiumColors";
+import { PremiumColors as C } from "./PremiumColors";
 
 type Props = {
   title: string;
@@ -20,7 +20,7 @@ export function Button({ title, onPress, disabled, loading, style, variant = "pr
       ) : (
         <Text
           style={{
-            color: variant === "ghost" ? "rgba(255,255,255,0.85)" : "white",
+            color: variant === "ghost" ? C.text.primary : "white",
             fontWeight: "900",
             letterSpacing: 1.2,
             textTransform: "uppercase",
@@ -44,9 +44,9 @@ export function Button({ title, onPress, disabled, loading, style, variant = "pr
             borderRadius: 18,
             paddingVertical: 14,
             paddingHorizontal: 16,
-            backgroundColor: "rgba(255,255,255,0.06)",
+            backgroundColor: C.bg.hover,
             borderWidth: 1,
-            borderColor: "rgba(255,255,255,0.10)",
+            borderColor: C.border.default,
             alignItems: "center",
             justifyContent: "center"
           },
@@ -66,7 +66,7 @@ export function Button({ title, onPress, disabled, loading, style, variant = "pr
       style={[{ borderRadius: 22, overflow: "hidden" }, style]}
     >
       <LinearGradient
-        colors={disabled ? ["#2a2a2a", "#1e1e1e"] : [PremiumColors.amber.primary, "#D97000"]}
+        colors={disabled ? ["#2a2a2a", "#1e1e1e"] : [C.amber.primary, "#D97000"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={{

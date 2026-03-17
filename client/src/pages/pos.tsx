@@ -125,7 +125,10 @@ export default function POSPage() {
     }, [resolvedCustomers, selectedCustomerId]);
 
     // Manager Override State
-    const [pendingOverride, setPendingOverride] = useState<{ type: "DISCOUNT" | "VOID_CART", data: any } | null>(null);
+    const [pendingOverride, setPendingOverride] = useState<{ 
+        type: "DISCOUNT" | "VOID_CART" | "REMOVE_ITEM" | "PRICE_CHANGE" | "OPEN_DRAWER", 
+        data: any 
+    } | null>(null);
 
     // ─── POS Session Persistence ──────────────────────────────────────────
     // Load persisted state on mount
@@ -337,7 +340,33 @@ export default function POSPage() {
     };
 
     const removeFromCart = (productId: number) => {
-        setCart(prev => prev.filter(item => item.productId !== productId));
+        const settings = company?.posSettings as any;
+        if (settings?.requireOverrideForDelete) {
+            setPendingOverride({ type: "REMOVE_ITEM", data: productId });
+        } else {
+            setCart(prev => prev.filter(item => item.productId !== productId));
+        }
+    };
+
+    const updatePrice = (productId: number, newPrice: number) => {
+        const settings = company?.posSettings as any;
+        if (settings?.requireOverrideForPriceChange) {
+            setPendingOverride({ type: "PRICE_CHANGE", data: { productId, price: newPrice } });
+        } else {
+            setCart(prev => prev.map(item =>
+                item.productId === productId ? { ...item, price: newPrice } : item
+            ));
+        }
+    };
+
+    const handleOpenDrawer = () => {
+        const settings = company?.posSettings as any;
+        if (settings?.requireOverrideForOpenDrawer) {
+            setPendingOverride({ type: "OPEN_DRAWER", data: null });
+        } else {
+            toast({ title: "Drawer Opened", description: "Cash drawer opened successfully" });
+            // triggerOpenDrawer();
+        }
     };
 
     const fetchShift = async () => {
@@ -920,9 +949,10 @@ export default function POSPage() {
 
     const handleOrderDiscountChange = (val: string) => {
         const amount = parseFloat(val) || 0;
-        // Logic: If discount is being increased and is > 10% of subtotal, require override
-        // Simple heuristic: if amount > 0 and amount > subtotal * 0.1
-        if (amount > 0 && subtotal > 0 && amount > (subtotal * 0.1)) {
+        const settings = company?.posSettings as any;
+
+        // Logic: Require override if enabled in settings OR if discount is high
+        if (settings?.requireOverrideForDiscount || (amount > 0 && subtotal > 0 && amount > (subtotal * 0.1))) {
             setPendingOverride({ type: "DISCOUNT", data: amount });
         } else {
             setOrderDiscount(amount);
@@ -931,7 +961,15 @@ export default function POSPage() {
 
     const handleClearCart = () => {
         if (cart.length === 0) return;
-        setPendingOverride({ type: "VOID_CART", data: null });
+        const settings = company?.posSettings as any;
+        
+        if (settings?.requireOverrideForDelete) {
+            setPendingOverride({ type: "VOID_CART", data: null });
+        } else {
+            setCart([]);
+            setOrderDiscount(0);
+            setSelectedCustomerId("");
+        }
     };
 
     const handleOverrideSuccess = (manager: any) => {
@@ -945,6 +983,19 @@ export default function POSPage() {
             setOrderDiscount(0);
             setSelectedCustomerId("");
             toast({ title: "Cart Cleared", description: `Void approved by ${manager.name}` });
+        } else if (pendingOverride.type === "REMOVE_ITEM") {
+            const productId = pendingOverride.data;
+            setCart(prev => prev.filter(item => item.productId !== productId));
+            toast({ title: "Item Removed", description: `Approved by ${manager.name}` });
+        } else if (pendingOverride.type === "PRICE_CHANGE") {
+            const { productId, price } = pendingOverride.data;
+            setCart(prev => prev.map(item =>
+                item.productId === productId ? { ...item, price } : item
+            ));
+            toast({ title: "Price Updated", description: `Approved by ${manager.name}` });
+        } else if (pendingOverride.type === "OPEN_DRAWER") {
+            toast({ title: "Drawer Opened", description: `Approved by ${manager.name}` });
+            // triggerOpenDrawer();
         }
         setPendingOverride(null);
     };
@@ -1011,7 +1062,18 @@ export default function POSPage() {
                                             </p>
                                         </div>
                                         <div className="flex items-center gap-2 mt-1">
-                                            <span className="text-[11px] font-bold text-slate-400">${item.price.toFixed(2)}</span>
+                                            <button 
+                                                className="text-[11px] font-bold text-slate-400 hover:text-primary transition-colors hover:underline"
+                                                onClick={() => {
+                                                    const newPriceStr = prompt("Enter new price:", item.price.toString());
+                                                    if (newPriceStr) {
+                                                        const p = parseFloat(newPriceStr);
+                                                        if (!isNaN(p)) updatePrice(item.productId, p);
+                                                    }
+                                                }}
+                                            >
+                                                ${item.price.toFixed(2)}
+                                            </button>
                                             {item.discountAmount > 0 && (
                                                 <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-1 rounded">-{item.discountAmount.toFixed(2)}</span>
                                             )}
@@ -1141,8 +1203,20 @@ export default function POSPage() {
                     isOpen={!!pendingOverride}
                     onClose={() => setPendingOverride(null)}
                     onAuthorized={handleOverrideSuccess}
-                    title={pendingOverride?.type === "DISCOUNT" ? "Authorize Discount" : "Authorize Void"}
-                    description={pendingOverride?.type === "DISCOUNT" ? "Manager PIN required for high discount" : "Manager PIN required to void cart"}
+                    title={
+                        pendingOverride?.type === "DISCOUNT" ? "Authorize Discount" : 
+                        pendingOverride?.type === "VOID_CART" ? "Authorize Void" :
+                        pendingOverride?.type === "REMOVE_ITEM" ? "Authorize Delete" :
+                        pendingOverride?.type === "PRICE_CHANGE" ? "Authorize Price Change" :
+                        "Manager Authorization"
+                    }
+                    description={
+                        pendingOverride?.type === "DISCOUNT" ? "Manager PIN required for discount" : 
+                        pendingOverride?.type === "VOID_CART" ? "Manager PIN required to void cart" :
+                        pendingOverride?.type === "REMOVE_ITEM" ? "Manager PIN required to remove item" :
+                        pendingOverride?.type === "PRICE_CHANGE" ? "Manager PIN required to change price" :
+                        "Manager PIN required to proceed"
+                    }
                 />
 
 
@@ -1289,6 +1363,16 @@ export default function POSPage() {
                                 )}
                             </div>
 
+                            {/* Open Drawer Button (Visible next to logo) */}
+                            <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="h-8 md:h-10 px-2 md:px-4 rounded-lg md:rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50 transition-all font-bold text-[10px] md:text-xs gap-1.5"
+                                onClick={handleOpenDrawer}
+                            >
+                                <Banknote className="h-3.5 w-3.5 md:h-4 md:w-4" />
+                                <span className="hidden md:inline">Open Drawer</span>
+                            </Button>
                             {/* Mobile Holds Button (Visible next to logo) */}
                             <Button
                                 variant="outline"
@@ -1393,6 +1477,24 @@ export default function POSPage() {
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                 />
+                            </div>
+
+                            {/* Global Currency Switcher */}
+                            <div className="flex bg-slate-100 p-1 rounded-xl shrink-0">
+                                {['USD', 'ZWG'].map(cc => (
+                                    <button
+                                        key={cc}
+                                        onClick={() => setSelectedCurrencyCode(cc)}
+                                        className={cn(
+                                            "px-3 py-1.5 rounded-lg text-[10px] font-black transition-all",
+                                            selectedCurrencyCode === cc 
+                                                ? "bg-white text-primary shadow-sm" 
+                                                : "text-slate-400 hover:text-slate-600"
+                                        )}
+                                    >
+                                        {cc}
+                                    </button>
+                                ))}
                             </div>
 
                             {/* Mobile Category Filter Trigger */}
@@ -1867,22 +1969,7 @@ export default function POSPage() {
                             {/* Payment Input Side */}
                             <div className="flex-1 bg-white p-2 md:p-6 flex flex-col overflow-y-auto">
                                 <div className="flex items-center justify-between mb-1.5 md:mb-4 shrink-0">
-                                    <h3 className="text-[10px] md:text-base font-black text-slate-900 uppercase tracking-widest">Pay</h3>
-                                    <div className="flex gap-1">
-                                        {['USD', 'ZWG'].map(cc => (
-                                            <Button
-                                                key={cc}
-                                                variant={selectedCurrencyCode === cc ? 'default' : 'outline'}
-                                                className={cn(
-                                                    "h-6 md:h-8 px-2 rounded-md font-black text-[9px] transition-all",
-                                                    selectedCurrencyCode === cc ? "bg-primary text-white shadow-lg shadow-primary/20" : "text-slate-400 border-slate-100"
-                                                )}
-                                                onClick={() => setSelectedCurrencyCode(cc)}
-                                            >
-                                                {cc}
-                                            </Button>
-                                        ))}
-                                    </div>
+                                    <h3 className="text-[10px] md:text-base font-black text-slate-900 uppercase tracking-widest">Pay in {selectedCurrencyCode}</h3>
                                 </div>
 
                                 <div className="space-y-1.5 flex-1 flex flex-col">

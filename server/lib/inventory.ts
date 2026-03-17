@@ -141,6 +141,26 @@ export async function recordStockIn(
     supplierId?: number,
     notes?: string
 ) {
+    // Fetch current stock and cost for weighted average
+    const [product] = await db
+        .select({
+            stockLevel: products.stockLevel,
+            costPrice: products.costPrice,
+        })
+        .from(products)
+        .where(eq(products.id, productId))
+        .limit(1);
+
+    const currentQty = parseFloat(product?.stockLevel?.toString() || "0") || 0;
+    const currentCost = parseFloat(product?.costPrice?.toString() || "0") || 0;
+
+    let newCostPrice = unitCost;
+    const totalNewQty = currentQty + quantity;
+
+    if (totalNewQty > 0 && currentQty > 0) {
+        newCostPrice = ((currentQty * currentCost) + (quantity * unitCost)) / totalNewQty;
+    }
+
     // 1. Record the transaction
     await db.insert(inventoryTransactions).values({
         companyId,
@@ -160,7 +180,7 @@ export async function recordStockIn(
         .update(products)
         .set({
             stockLevel: sql`stock_level + ${quantity}`,
-            costPrice: unitCost.toString(), // Update latest cost price
+            costPrice: newCostPrice.toFixed(2), // Update to weighted average cost
         })
         .where(eq(products.id, productId));
 }
@@ -176,6 +196,26 @@ export async function recordBatchStockIn(
         for (const item of items) {
             const quantity = typeof item.quantity === 'string' ? parseFloat(item.quantity) : item.quantity;
             const unitCost = typeof item.unitCost === 'string' ? parseFloat(item.unitCost) : item.unitCost;
+
+            // Fetch current stock and cost for weighted average
+            const [product] = await tx
+                .select({
+                    stockLevel: products.stockLevel,
+                    costPrice: products.costPrice,
+                })
+                .from(products)
+                .where(eq(products.id, item.productId))
+                .limit(1);
+
+            const currentQty = parseFloat(product?.stockLevel?.toString() || "0") || 0;
+            const currentCost = parseFloat(product?.costPrice?.toString() || "0") || 0;
+
+            let newCostPrice = unitCost;
+            const totalNewQty = currentQty + quantity;
+
+            if (totalNewQty > 0 && currentQty > 0) {
+                newCostPrice = ((currentQty * currentCost) + (quantity * unitCost)) / totalNewQty;
+            }
 
             // 1. Record the transaction
             await tx.insert(inventoryTransactions).values({
@@ -196,7 +236,7 @@ export async function recordBatchStockIn(
                 .update(products)
                 .set({
                     stockLevel: sql`stock_level + ${quantity}`,
-                    costPrice: unitCost.toString(),
+                    costPrice: newCostPrice.toFixed(2),
                 })
                 .where(eq(products.id, item.productId));
         }

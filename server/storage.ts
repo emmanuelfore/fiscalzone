@@ -120,7 +120,7 @@ export interface IStorage {
     closingBalance: number;
     transactions: any[];
   }>;
-  getSalesReport(companyId: number, startDate: Date, endDate: Date): Promise<any[]>;
+  getSalesReport(companyId: number, startDate: Date, endDate: Date, cashierId?: string): Promise<any[]>;
   getPaymentsReport(companyId: number, startDate: Date, endDate: Date): Promise<Payment[]>;
 
   // Audit Logs
@@ -2031,24 +2031,33 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async getSalesReport(companyId: number, startDate: Date, endDate: Date): Promise<any[]> {
+  async getSalesReport(companyId: number, startDate: Date, endDate: Date, cashierId?: string): Promise<any[]> {
+    const filters = [
+      eq(invoices.companyId, companyId),
+      gte(invoices.issueDate, startDate),
+      lte(invoices.issueDate, endDate)
+    ];
+
+    if (cashierId && cashierId !== 'all') {
+      filters.push(eq(invoices.createdBy, cashierId));
+    }
+
     const result = await db
       .select({
         invoice: invoices,
-        customerName: customers.name
+        customerName: customers.name,
+        cashierName: users.username
       })
       .from(invoices)
       .leftJoin(customers, eq(invoices.customerId, customers.id))
-      .where(and(
-        eq(invoices.companyId, companyId),
-        gte(invoices.issueDate, startDate),
-        lte(invoices.issueDate, endDate)
-      ))
+      .leftJoin(users, eq(invoices.createdBy, users.id))
+      .where(and(...filters))
       .orderBy(desc(invoices.createdAt));
 
     return result.map(r => ({
       ...r.invoice,
-      customerName: r.customerName
+      customerName: r.customerName,
+      cashierName: r.cashierName || "System"
     }));
   }
 
@@ -2100,6 +2109,9 @@ export class DatabaseStorage implements IStorage {
       ))
       .groupBy(invoices.createdBy, users.username);
 
+    // After grouping in SQL, we might still have multiple null entries if they don't join to a user.
+    // However, groupBy(invoices.createdBy) should handle the nulls as one group.
+    
     return result.map(r => ({
       userId: r.userId || "system",
       userName: r.userName || "System",
@@ -2319,7 +2331,7 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async getFinancialSummary(companyId: number, dateFrom?: Date, dateTo?: Date, cashierId?: string) {
+  async getFinancialSummary(companyId: number, dateFrom?: Date, dateTo?: Date, cashierId?: string, drillDown?: boolean) {
     // 1. Revenue (Sum of Invoices - Sum of Credit Notes)
     const invoiceFilters = [eq(invoices.companyId, companyId)];
     if (dateFrom) invoiceFilters.push(gte(invoices.createdAt, dateFrom));
@@ -2332,20 +2344,20 @@ export class DatabaseStorage implements IStorage {
       .where(and(...invoiceFilters));
 
     let revenue = 0;
+    const revenueItems: any[] = [];
+    
     companyInvoices.forEach(inv => {
       const amount = Number(inv.total);
       if (inv.transactionType === 'CreditNote') {
         revenue -= amount;
+        if (drillDown) revenueItems.push({ ...inv, total: -amount });
       } else {
         revenue += amount;
+        if (drillDown) revenueItems.push(inv);
       }
     });
 
     // 2. COGS (Sum of totalCost in inventory_transactions for 'STOCK_OUT')
-    // Note: Inventory transactions are not directly linked to cashier/user in the same way,
-    // but we can filter by reference (invoice) if needed. 
-    // For now, if cashierId is provided, we filter transactions that belong to that cashier's invoices.
-    
     let txFilters = [
       eq(inventoryTransactions.companyId, companyId),
       eq(inventoryTransactions.type, 'STOCK_OUT')
@@ -2355,7 +2367,6 @@ export class DatabaseStorage implements IStorage {
 
     let salesTransactions;
     if (cashierId) {
-      // Filter by invoices created by this cashier
       salesTransactions = await db
         .select({ tx: inventoryTransactions })
         .from(inventoryTransactions)
@@ -2379,8 +2390,6 @@ export class DatabaseStorage implements IStorage {
     const expenseFilters = [eq(expenses.companyId, companyId)];
     if (dateFrom) expenseFilters.push(gte(expenses.expenseDate, dateFrom));
     if (dateTo) expenseFilters.push(lte(expenses.expenseDate, dateTo));
-    // Assuming we might want to filter expenses by creator too, though it's less common for reports
-    // if (cashierId) expenseFilters.push(eq(expenses.createdBy, cashierId)); 
 
     const companyExpenses = await db
       .select()
@@ -2410,7 +2419,12 @@ export class DatabaseStorage implements IStorage {
       grossProfit,
       expenses: totalExpenses,
       netProfit,
-      expenseBreakdown
+      expenseBreakdown,
+      drillDown: drillDown ? {
+        revenueItems,
+        cogsItems: salesTransactions,
+        expenseItems: companyExpenses
+      } : undefined
     };
   }
 }

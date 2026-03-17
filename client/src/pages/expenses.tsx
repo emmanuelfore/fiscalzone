@@ -3,7 +3,7 @@ import { Layout } from "@/components/layout";
 import { useExpenses } from "@/hooks/use-expenses";
 import { useSuppliers } from "@/hooks/use-suppliers";
 import { Card, CardContent } from "@/components/ui/card";
-import { ReceiptText, Search, ChevronLeft, ChevronRight, Calendar, DollarSign, Tag, User } from "lucide-react";
+import { ReceiptText, Search, ChevronLeft, ChevronRight, Calendar, DollarSign, Tag, User, FileDown } from "lucide-react";
 import { ExpenseDialog } from "@/components/expenses/expense-dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,8 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { useState } from "react";
+import { downloadExcel } from "@/lib/export-utils";
+import { format } from "date-fns";
 
 const ITEMS_PER_PAGE = 10;
 
@@ -55,23 +57,35 @@ export default function ExpensesPage() {
 
     const totalAmount = filteredExpenses?.reduce((acc, curr) => acc + Number(curr.amount), 0) || 0;
 
+    const handleExportExcel = () => {
+        downloadExcel(`/api/reports/export/expenses/${companyId}`, `Expenses_Report_${format(new Date(), "yyyyMMdd")}.xlsx`);
+    };
+
     return (
         <Layout>
-            <div className="flex items-center justify-between mb-8">
+            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between mb-8 gap-4">
                 <div>
                     <h1 className="text-3xl font-display font-bold text-slate-900">Expenses</h1>
                     <p className="text-slate-500 mt-1">Track your business spending and overheads</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 w-full lg:w-auto">
+                    <Button 
+                        variant="outline" 
+                        className="rounded-xl border-slate-200 shadow-sm hover:bg-slate-50 hover:text-indigo-600 transition-all font-bold text-xs gap-2"
+                        onClick={handleExportExcel}
+                    >
+                        <FileDown className="w-4 h-4" />
+                        Export
+                    </Button>
                     {companyId > 0 ? (
                         <ExpenseDialog companyId={companyId} />
                     ) : (
-                        <Button disabled variant="outline">Select a Company First</Button>
+                        <Button disabled variant="outline" className="flex-1 sm:flex-none">Select a Company First</Button>
                     )}
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mb-8">
                 <Card className="border-none shadow-lg bg-white rounded-3xl overflow-hidden">
                     <CardContent className="p-6">
                         <div className="flex items-center gap-4">
@@ -101,7 +115,7 @@ export default function ExpensesPage() {
             </div>
 
             <div className="flex flex-col md:flex-row gap-4 mb-8">
-                <div className="relative flex-1 max-w-sm group">
+                <div className="relative flex-1 w-full sm:max-w-sm group">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-hover:text-amber-600 transition-colors duration-200" />
                     <Input
                         placeholder="Search expenses..."
@@ -141,14 +155,14 @@ export default function ExpensesPage() {
             </div>
 
             <Card className="border-none shadow-xl bg-white/50 backdrop-blur-sm rounded-[2rem] overflow-hidden hover:shadow-2xl transition-all duration-500">
-                <CardContent className="p-0">
-                    <table className="w-full text-left border-collapse">
+                <CardContent className="p-0 overflow-x-auto">
+                    <table className="w-full text-left border-collapse min-w-[600px] md:min-w-full">
                         <thead>
                             <tr className="bg-slate-50/50 border-b border-slate-100 text-[10px] uppercase tracking-widest font-bold text-slate-500">
                                 <th className="p-6 font-bold text-slate-400">Date & Desc</th>
-                                <th className="p-6 font-bold text-slate-400">Category</th>
-                                <th className="p-6 font-bold text-slate-400">Vendor</th>
-                                <th className="p-6 font-bold text-slate-400">Reference</th>
+                                <th className="hidden sm:table-cell p-6 font-bold text-slate-400">Category</th>
+                                <th className="hidden lg:table-cell p-6 font-bold text-slate-400">Vendor</th>
+                                <th className="hidden md:table-cell p-6 font-bold text-slate-400">Reference</th>
                                 <th className="p-6 font-bold text-slate-400">Amount</th>
                                 <th className="p-6 font-bold text-slate-400 text-right">Actions</th>
                             </tr>
@@ -189,13 +203,13 @@ export default function ExpensesPage() {
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="p-6 align-middle">
+                                        <td className="hidden sm:table-cell p-6 align-middle">
                                             <Badge variant="secondary" className="bg-slate-100 text-slate-600 border-none rounded-lg py-1 px-3 flex items-center gap-1.5 w-fit font-bold text-[10px] uppercase">
                                                 <Tag className="w-3 h-3" />
                                                 {e.category}
                                             </Badge>
                                         </td>
-                                        <td className="p-6 align-middle">
+                                        <td className="hidden lg:table-cell p-6 align-middle">
                                             {supplier ? (
                                                 <div className="flex items-center gap-2 text-sm font-semibold text-slate-600">
                                                     <User className="w-3.5 h-3.5 text-slate-400" />
@@ -205,7 +219,7 @@ export default function ExpensesPage() {
                                                 <span className="text-slate-300 text-xs italic">N/A</span>
                                             )}
                                         </td>
-                                        <td className="p-6 align-middle">
+                                        <td className="hidden md:table-cell p-6 align-middle">
                                             <span className="text-sm font-mono text-slate-500">{e.reference || "—"}</span>
                                         </td>
                                         <td className="p-6 align-middle">

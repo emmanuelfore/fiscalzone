@@ -59,9 +59,9 @@ export default function QuotationsPage() {
                             <thead>
                                 <tr>
                                     <th className="data-table-header">Quote #</th>
-                                    <th className="data-table-header">Date</th>
+                                    <th className="hidden sm:table-cell data-table-header">Date</th>
                                     <th className="data-table-header">Amount</th>
-                                    <th className="data-table-header">Tax</th>
+                                    <th className="hidden md:table-cell data-table-header">Tax</th>
                                     <th className="data-table-header">Status</th>
                                     <th className="data-table-header text-right">Actions</th>
                                 </tr>
@@ -88,13 +88,13 @@ export default function QuotationsPage() {
                                         <td className="data-table-cell font-medium font-mono text-slate-700">
                                             {quote.quotationNumber}
                                         </td>
-                                        <td className="data-table-cell">
+                                        <td className="hidden sm:table-cell data-table-cell">
                                             {new Date(quote.issueDate!).toLocaleDateString()}
                                         </td>
                                         <td className="data-table-cell font-semibold text-slate-900">
                                             ${Number(quote.total).toFixed(2)}
                                         </td>
-                                        <td className="data-table-cell text-slate-500">
+                                        <td className="hidden md:table-cell data-table-cell text-slate-500">
                                             ${Number(quote.taxAmount).toFixed(2)}
                                         </td>
                                         <td className="data-table-cell">

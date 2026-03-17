@@ -9,15 +9,11 @@ import { StatusBar } from "expo-status-bar";
 import { useProducts } from "../hooks/usePosData";
 import { apiFetch } from "../lib/api";
 
-const C = {
-  bg: "#07090c", s1: "#0d1117", s2: "#141b24",
-  border: "#1f2d3d", accent: "#f0a500", text: "#e8edf5",
-  muted: "#3d5166", green: "#00d084",
-} as const;
+import { PremiumColors as C } from "../ui/PremiumColors";
 
-interface Props { onOpenDrawer: () => void; companyId: number; }
+interface Props { onOpenDrawer: () => void; onClose?: () => void; companyId: number; }
 
-export function StockInScreen({ onOpenDrawer, companyId }: Props) {
+export function StockInScreen({ onOpenDrawer, onClose, companyId }: Props) {
   const { data: products, isLoading } = useProducts(companyId);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [showPicker, setShowPicker] = useState(false);
@@ -27,10 +23,16 @@ export function StockInScreen({ onOpenDrawer, companyId }: Props) {
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const filteredProducts = (products || []).filter((p: any) =>
-    p.name?.toLowerCase().includes(productSearch.toLowerCase()) ||
-    p.sku?.toLowerCase().includes(productSearch.toLowerCase())
-  );
+  const filteredProducts = (products || []).filter((p: any) => {
+    // Only show products that track stock
+    if (!p.isTracked) return false;
+    
+    if (!productSearch) return true;
+    const searchLower = productSearch.toLowerCase();
+    const nameMatch = p.name?.toLowerCase().includes(searchLower) ?? false;
+    const skuMatch = p.sku?.toLowerCase().includes(searchLower) ?? false;
+    return nameMatch || skuMatch;
+  });
 
   const handleSubmit = useCallback(async () => {
     if (!selectedProduct) return Alert.alert("Error", "Please select a product");
@@ -59,6 +61,9 @@ export function StockInScreen({ onOpenDrawer, companyId }: Props) {
       setQuantity("");
       setUnitCost("");
       setNotes("");
+      Alert.alert("Success", "Stock recorded successfully!", [
+        { text: "OK", onPress: () => { if (onClose) onClose(); } }
+      ]);
     } catch (e: any) {
       Alert.alert("Error", e.message);
     } finally { setSaving(false); }
@@ -71,7 +76,7 @@ export function StockInScreen({ onOpenDrawer, companyId }: Props) {
       <StatusBar style="light" />
       <SafeAreaView style={{ flex: 1 }}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={onOpenDrawer} style={styles.iconBtn}><Menu size={20} color={C.text} /></TouchableOpacity>
+          <TouchableOpacity onPress={onOpenDrawer} style={styles.iconBtn}><Menu size={20} color={C.text.primary} /></TouchableOpacity>
           <Text style={styles.title}>Stock In</Text>
           <View style={{ width: 34 }} />
         </View>
@@ -84,31 +89,31 @@ export function StockInScreen({ onOpenDrawer, companyId }: Props) {
             <TouchableOpacity style={styles.selector} onPress={() => setShowPicker(true)}>
               {selectedProduct ? (
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                  <Package size={16} color={C.accent} />
+                  <Package size={16} color={C.amber.primary} />
                   <Text style={styles.selectorText} numberOfLines={1}>{selectedProduct.name} ({selectedProduct.sku})</Text>
                 </View>
               ) : (
-                <Text style={[styles.selectorText, { color: C.muted }]}>Tap to select product...</Text>
+                <Text style={[styles.selectorText, { color: C.text.secondary }]}>Tap to select product...</Text>
               )}
-              <ChevronDown size={16} color={C.muted} />
+              <ChevronDown size={16} color={C.text.secondary} />
             </TouchableOpacity>
 
             <Text style={styles.label}>Quantity *</Text>
-            <TextInput style={styles.input} keyboardType="numeric" placeholder="0" placeholderTextColor={C.muted} value={quantity} onChangeText={setQuantity} />
+            <TextInput style={styles.input} keyboardType="numeric" placeholder="0" placeholderTextColor={C.text.secondary} value={quantity} onChangeText={setQuantity} />
             
             <Text style={styles.label}>Unit Cost *</Text>
-            <TextInput style={styles.input} keyboardType="numeric" placeholder="0.00" placeholderTextColor={C.muted} value={unitCost} onChangeText={setUnitCost} />
+            <TextInput style={styles.input} keyboardType="numeric" placeholder="0.00" placeholderTextColor={C.text.secondary} value={unitCost} onChangeText={setUnitCost} />
             
             <Text style={styles.label}>Notes</Text>
-            <TextInput style={[styles.input, { height: 72, textAlignVertical: "top" }]} multiline placeholder="Optional notes..." placeholderTextColor={C.muted} value={notes} onChangeText={setNotes} />
+            <TextInput style={[styles.input, { height: 72, textAlignVertical: "top" }]} multiline placeholder="Optional notes..." placeholderTextColor={C.text.secondary} value={notes} onChangeText={setNotes} />
 
             {selectedProduct && quantity ? (
               <View style={styles.summary}>
                 <Text style={styles.summaryTitle}>Summary</Text>
                 <View style={styles.summaryRow}><Text style={styles.summaryLabel}>Product</Text><Text style={styles.summaryValue}>{selectedProduct.name}</Text></View>
                 <View style={styles.summaryRow}><Text style={styles.summaryLabel}>Current Stock</Text><Text style={styles.summaryValue}>{currentStock}</Text></View>
-                <View style={styles.summaryRow}><Text style={styles.summaryLabel}>Adding</Text><Text style={[styles.summaryValue, { color: C.green }]}>+{quantity}</Text></View>
-                <View style={[styles.summaryRow, { borderTopWidth: 1, borderTopColor: C.border, paddingTop: 8 }]}>
+                <View style={styles.summaryRow}><Text style={styles.summaryLabel}>Adding</Text><Text style={[styles.summaryValue, { color: C.status.success }]}>+{quantity}</Text></View>
+                <View style={[styles.summaryRow, { borderTopWidth: 1, borderTopColor: C.border.default, paddingTop: 8 }]}>
                   <Text style={[styles.summaryLabel, { fontWeight: "800" }]}>New Stock</Text>
                   <Text style={[styles.summaryValue, { fontWeight: "800" }]}>{currentStock + parseFloat(quantity || "0")}</Text>
                 </View>
@@ -119,7 +124,7 @@ export function StockInScreen({ onOpenDrawer, companyId }: Props) {
             ) : null}
 
           </ScrollView>
-          <View style={{ paddingHorizontal: 16, paddingBottom: 20, paddingTop: 10, borderTopWidth: 1, borderTopColor: C.border }}>
+          <View style={{ paddingHorizontal: 16, paddingBottom: 20, paddingTop: 10, borderTopWidth: 1, borderTopColor: C.border.default }}>
             <TouchableOpacity style={[styles.submitBtn, { marginTop: 0, marginBottom: 0 }]} onPress={handleSubmit} disabled={saving}>
               {saving ? <ActivityIndicator color="#000" /> : (
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -137,16 +142,16 @@ export function StockInScreen({ onOpenDrawer, companyId }: Props) {
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Select Product</Text>
-                <TouchableOpacity onPress={() => setShowPicker(false)}><X size={20} color={C.text} /></TouchableOpacity>
+                <TouchableOpacity onPress={() => setShowPicker(false)}><X size={20} color={C.text.primary} /></TouchableOpacity>
               </View>
               <View style={styles.pickerSearch}>
-                <Search size={16} color={C.muted} />
-                <TextInput style={styles.pickerSearchInput} placeholder="Search by name or SKU..." placeholderTextColor={C.muted} value={productSearch} onChangeText={setProductSearch} />
+                <Search size={16} color={C.text.secondary} />
+                <TextInput style={styles.pickerSearchInput} placeholder="Search by name or SKU..." placeholderTextColor={C.text.secondary} value={productSearch} onChangeText={setProductSearch} />
               </View>
               {isLoading ? (
-                <ActivityIndicator color={C.accent} style={{ padding: 40 }} />
+                <ActivityIndicator color={C.amber.primary} style={{ padding: 40 }} />
               ) : (
-                <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+                <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                   {filteredProducts.map((item: any) => (
                     <TouchableOpacity 
                       key={item.id} 
@@ -178,32 +183,32 @@ export function StockInScreen({ onOpenDrawer, companyId }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: C.bg },
-  header: { paddingHorizontal: 16, paddingVertical: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderBottomWidth: 1, borderBottomColor: C.border },
-  iconBtn: { width: 34, height: 34, borderRadius: 10, backgroundColor: C.s2, borderWidth: 1, borderColor: C.border, alignItems: "center", justifyContent: "center" },
-  title: { color: C.text, fontSize: 18, fontWeight: "800" },
-  label: { color: C.muted, fontSize: 11, fontWeight: "600", marginBottom: 5, marginTop: 14 },
-  input: { backgroundColor: C.s2, color: C.text, borderRadius: 12, paddingHorizontal: 14, height: 46, borderWidth: 1, borderColor: C.border, fontSize: 14 },
-  selector: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: C.s2, borderRadius: 12, paddingHorizontal: 14, height: 46, borderWidth: 1, borderColor: C.border },
-  selectorText: { color: C.text, fontSize: 14, flex: 1 },
+  container: { flex: 1, backgroundColor: C.bg.base },
+  header: { paddingHorizontal: 16, paddingVertical: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderBottomWidth: 1, borderBottomColor: C.border.default },
+  iconBtn: { width: 34, height: 34, borderRadius: 10, backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default, alignItems: "center", justifyContent: "center" },
+  title: { color: C.text.primary, fontSize: 18, fontWeight: "800" },
+  label: { color: C.text.secondary, fontSize: 11, fontWeight: "600", marginBottom: 5, marginTop: 14 },
+  input: { backgroundColor: C.bg.hover, color: C.text.primary, borderRadius: 12, paddingHorizontal: 14, height: 46, borderWidth: 1, borderColor: C.border.default, fontSize: 14 },
+  selector: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: C.bg.hover, borderRadius: 12, paddingHorizontal: 14, height: 46, borderWidth: 1, borderColor: C.border.default },
+  selectorText: { color: C.text.primary, fontSize: 14, flex: 1 },
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end" },
-  modalContent: { backgroundColor: C.s1, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: "85%", borderWidth: 1, borderColor: C.border },
+  modalContent: { backgroundColor: C.bg.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, height: "85%", borderWidth: 1, borderColor: C.border.default },
   modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 },
-  modalTitle: { color: C.text, fontSize: 18, fontWeight: "800" },
-  pickerSearch: { flexDirection: "row", alignItems: "center", backgroundColor: C.s2, borderRadius: 12, paddingHorizontal: 14, height: 46, borderWidth: 1, borderColor: C.border, gap: 10, marginBottom: 16 },
-  pickerSearchInput: { flex: 1, color: C.text, fontSize: 14 },
-  pickerItem: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.border },
-  pickerItemActive: { backgroundColor: `${C.accent}10` },
-  pickerItemText: { color: C.text, fontSize: 14, fontWeight: "600" },
-  pickerItemSub: { color: C.muted, fontSize: 11, marginTop: 2 },
-  pickerStockText: { color: C.accent, fontSize: 12, fontWeight: "700" },
-  pickerPriceText: { color: C.muted, fontSize: 11, marginTop: 2 },
-  emptyText: { color: C.muted, textAlign: "center", marginTop: 40, fontSize: 14 },
-  summary: { backgroundColor: C.s2, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: C.border, marginTop: 20 },
-  summaryTitle: { color: C.text, fontWeight: "800", fontSize: 14, marginBottom: 12 },
+  modalTitle: { color: C.text.primary, fontSize: 18, fontWeight: "800" },
+  pickerSearch: { flexDirection: "row", alignItems: "center", backgroundColor: C.bg.hover, borderRadius: 12, paddingHorizontal: 14, height: 46, borderWidth: 1, borderColor: C.border.default, gap: 10, marginBottom: 16 },
+  pickerSearchInput: { flex: 1, color: C.text.primary, fontSize: 14 },
+  pickerItem: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.border.default },
+  pickerItemActive: { backgroundColor: `${C.amber.primary}10` },
+  pickerItemText: { color: C.text.primary, fontSize: 14, fontWeight: "600" },
+  pickerItemSub: { color: C.text.secondary, fontSize: 11, marginTop: 2 },
+  pickerStockText: { color: C.amber.primary, fontSize: 12, fontWeight: "700" },
+  pickerPriceText: { color: C.text.secondary, fontSize: 11, marginTop: 2 },
+  emptyText: { color: C.text.secondary, textAlign: "center", marginTop: 40, fontSize: 14 },
+  summary: { backgroundColor: C.bg.hover, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: C.border.default, marginTop: 20 },
+  summaryTitle: { color: C.text.primary, fontWeight: "800", fontSize: 14, marginBottom: 12 },
   summaryRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 6 },
-  summaryLabel: { color: C.muted, fontSize: 13 },
-  summaryValue: { color: C.text, fontSize: 13, fontWeight: "600" },
-  submitBtn: { backgroundColor: C.accent, borderRadius: 12, paddingVertical: 16, alignItems: "center", marginTop: 20, marginBottom: 40 },
+  summaryLabel: { color: C.text.secondary, fontSize: 13 },
+  summaryValue: { color: C.text.primary, fontSize: 13, fontWeight: "600" },
+  submitBtn: { backgroundColor: C.amber.primary, borderRadius: 12, paddingVertical: 16, alignItems: "center", marginTop: 20, marginBottom: 40 },
   submitBtnText: { color: "#000", fontWeight: "800", fontSize: 15 },
 });

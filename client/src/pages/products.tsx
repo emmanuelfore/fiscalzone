@@ -93,12 +93,12 @@ export default function ProductsPage() {
 
   return (
     <Layout>
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-display font-black text-slate-900">Products</h1>
           <p className="text-slate-500 mt-1 font-medium">Inventory and goods</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 w-full lg:w-auto">
           <ManageCategoriesDialog companyId={companyId} />
           <CsvImportDialog
             type="product"
@@ -110,13 +110,13 @@ export default function ProductsPage() {
           {companyId > 0 ? (
             <CreateProductDialog companyId={companyId} defaultType="good" triggerLabel="Add Product" />
           ) : (
-            <Button disabled variant="outline" className="rounded-xl">Select a Company First</Button>
+            <Button disabled variant="outline" className="rounded-xl flex-1 sm:flex-none">Select a Company First</Button>
           )}
         </div>
       </div>
 
       <div className="flex flex-col md:flex-row gap-4 mb-6">
-        <div className="relative flex-1 max-w-sm group">
+        <div className="relative flex-1 w-full sm:max-w-sm group">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 group-hover:text-violet-500 transition-colors" />
           <Input
             placeholder="Search products..."
@@ -183,17 +183,17 @@ export default function ProductsPage() {
       </div>
 
       <Card className="border-none shadow-xl shadow-slate-200/50 bg-white/80 backdrop-blur-sm rounded-[2rem] overflow-hidden ring-1 ring-slate-100">
-        <CardContent className="p-0">
-          <table className="w-full text-left">
+        <CardContent className="p-0 overflow-x-auto">
+          <table className="w-full text-left min-w-[600px] md:min-w-full">
             <thead>
               <tr className="bg-slate-50/80 border-b border-slate-100">
                 <th className="p-5 font-black text-slate-400 uppercase tracking-widest text-xs">Name</th>
-                <th className="p-5 font-black text-slate-400 uppercase tracking-widest text-xs">Code</th>
-                <th className="p-5 font-black text-slate-400 uppercase tracking-widest text-xs">Details</th>
-                <th className="p-5 font-black text-slate-400 uppercase tracking-widest text-xs">Category</th>
+                <th className="hidden lg:table-cell p-5 font-black text-slate-400 uppercase tracking-widest text-xs">Code</th>
+                <th className="hidden xl:table-cell p-5 font-black text-slate-400 uppercase tracking-widest text-xs">Details</th>
+                <th className="hidden sm:table-cell p-5 font-black text-slate-400 uppercase tracking-widest text-xs">Category</th>
                 <th className="p-5 font-black text-slate-400 uppercase tracking-widest text-xs">Price</th>
                 <th className="p-5 font-black text-slate-400 uppercase tracking-widest text-xs">Stock</th>
-                <th className="p-5 font-black text-slate-400 uppercase tracking-widest text-xs">Tax Type</th>
+                <th className="hidden md:table-cell p-5 font-black text-slate-400 uppercase tracking-widest text-xs">Tax Type</th>
                 <th className="p-5 font-black text-slate-400 uppercase tracking-widest text-xs"></th>
               </tr>
             </thead>
@@ -246,15 +246,15 @@ export default function ProductsPage() {
                         {p.description && <span className="text-xs text-slate-400 font-medium truncate max-w-[200px]">{p.description}</span>}
                       </div>
                     </td>
-                    <td className="p-4 font-mono text-xs font-bold text-slate-500">
+                    <td className="hidden lg:table-cell p-4 font-mono text-xs font-bold text-slate-500">
                       {p.sku || "—"}
                     </td>
-                    <td className="p-4">
+                    <td className="hidden xl:table-cell p-4">
                       <div className="flex flex-col gap-1">
                         {p.hsCode && <div className="text-[10px] font-bold text-slate-400 font-mono uppercase">HS: {p.hsCode}</div>}
                       </div>
                     </td>
-                    <td className="p-4">
+                    <td className="hidden sm:table-cell p-4">
                       {p.category ? (
                         <Badge variant="secondary" className="bg-slate-100 text-slate-600 font-bold text-[10px] uppercase tracking-wider px-2 py-0.5">
                           {p.category}
@@ -278,7 +278,7 @@ export default function ProductsPage() {
                         <Badge variant="secondary" className="text-[10px] bg-slate-100 text-slate-400 font-bold uppercase tracking-wider">Unlimited</Badge>
                       )}
                     </td>
-                    <td className="p-4">
+                    <td className="hidden md:table-cell p-4">
                       {matchedType ? (
                         <Badge variant="outline" className="bg-white text-slate-600 border-slate-200 font-bold text-[10px] uppercase tracking-wider shadow-sm">
                           {matchedType.name}

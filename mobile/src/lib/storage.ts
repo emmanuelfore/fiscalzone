@@ -12,8 +12,16 @@ export async function getSelectedCompanyId(): Promise<number | null> {
   return Number.isFinite(n) ? n : null;
 }
 
-export async function setSelectedCompanyId(companyId: number) {
-  await AsyncStorage.setItem(KEYS.selectedCompanyId, String(companyId));
+export async function setSelectedCompanyId(companyId: number | null) {
+  if (companyId === null) {
+    await AsyncStorage.removeItem(KEYS.selectedCompanyId);
+  } else {
+    await AsyncStorage.setItem(KEYS.selectedCompanyId, String(companyId));
+  }
+}
+
+export async function clearSelectedCompanyId() {
+  await AsyncStorage.removeItem(KEYS.selectedCompanyId);
 }
 
 export type PausedState = {

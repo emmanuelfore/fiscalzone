@@ -21,16 +21,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
 import { supabase } from "../lib/supabase";
 
-const C = {
-  bg: "#07090c",
-  s1: "#0d1117",
-  s2: "#141b24",
-  border: "#1f2d3d",
-  accent: "#f0a500",
-  text: "#e8edf5",
-  muted: "#3d5166",
-  red: "#ff4757",
-} as const;
+import { PremiumColors as C } from "../ui/PremiumColors";
 
 interface ProfileScreenProps {
   onOpenDrawer: () => void;
@@ -68,7 +59,7 @@ export function ProfileScreen({ onOpenDrawer, userName, onLogout }: ProfileScree
       <SafeAreaView style={{ flex: 1 }}>
         <View style={styles.header}>
           <TouchableOpacity onPress={onOpenDrawer} style={styles.iconBtn}>
-            <Menu size={20} color={C.text} />
+            <Menu size={20} color={C.text.primary} />
           </TouchableOpacity>
           <Text style={styles.title}>My Profile</Text>
           <View style={{ width: 34 }} />
@@ -78,7 +69,7 @@ export function ProfileScreen({ onOpenDrawer, userName, onLogout }: ProfileScree
           <View style={styles.profileHeader}>
             <View style={styles.avatarContainer}>
               <View style={styles.avatar}>
-                <User size={40} color={C.accent} />
+                <User size={40} color={C.amber.primary} />
               </View>
               <TouchableOpacity style={styles.cameraBtn}>
                 <Camera size={14} color="#000" />
@@ -93,12 +84,12 @@ export function ProfileScreen({ onOpenDrawer, userName, onLogout }: ProfileScree
             <View style={styles.card}>
               <View style={styles.inputGroup}>
                 <View style={styles.inputIcon}>
-                  <Lock size={16} color={C.muted} />
+                  <Lock size={16} color={C.text.secondary} />
                 </View>
                 <TextInput
                   style={styles.input}
                   placeholder="New Password"
-                  placeholderTextColor={C.muted}
+                  placeholderTextColor={C.text.secondary}
                   secureTextEntry
                   value={newPassword}
                   onChangeText={setNewPassword}
@@ -111,9 +102,9 @@ export function ProfileScreen({ onOpenDrawer, userName, onLogout }: ProfileScree
               >
                 <Text style={styles.actionBtnText}>Update Password</Text>
                 {isChangingPass ? (
-                   <Text style={{color: C.accent, fontSize: 12}}>Changing...</Text>
+                   <Text style={{color: C.amber.primary, fontSize: 12}}>Changing...</Text>
                 ) : (
-                  <ChevronRight size={16} color={C.accent} />
+                  <ChevronRight size={16} color={C.amber.primary} />
                 )}
               </TouchableOpacity>
             </View>
@@ -123,7 +114,7 @@ export function ProfileScreen({ onOpenDrawer, userName, onLogout }: ProfileScree
             <Text style={styles.sectionLabel}>Danger Zone</Text>
             <TouchableOpacity onPress={onLogout} style={styles.logoutCard}>
               <View style={styles.logoutIcon}>
-                <LogOut size={18} color={C.red} />
+                <LogOut size={18} color={C.status.error} />
               </View>
               <View>
                 <Text style={styles.logoutTitle}>Logout</Text>
@@ -140,7 +131,7 @@ export function ProfileScreen({ onOpenDrawer, userName, onLogout }: ProfileScree
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: C.bg,
+    backgroundColor: C.bg.base,
   },
   header: {
     paddingHorizontal: 16,
@@ -149,20 +140,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     borderBottomWidth: 1,
-    borderBottomColor: C.border,
+    borderBottomColor: C.border.default,
   },
   iconBtn: {
     width: 34,
     height: 34,
     borderRadius: 10,
-    backgroundColor: C.s2,
+    backgroundColor: C.bg.hover,
     borderWidth: 1,
-    borderColor: C.border,
+    borderColor: C.border.default,
     alignItems: "center",
     justifyContent: "center",
   },
   title: {
-    color: C.text,
+    color: C.text.primary,
     fontSize: 18,
     fontWeight: "800",
   },
@@ -181,9 +172,9 @@ const styles = StyleSheet.create({
     width: 90,
     height: 90,
     borderRadius: 45,
-    backgroundColor: `${C.accent}12`,
+    backgroundColor: `${C.amber.primary}12`,
     borderWidth: 1,
-    borderColor: `${C.accent}30`,
+    borderColor: `${C.amber.primary}30`,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -194,20 +185,20 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: C.accent,
+    backgroundColor: C.amber.primary,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 3,
-    borderColor: C.bg,
+    borderColor: C.bg.base,
   },
   userName: {
-    color: C.text,
+    color: C.text.primary,
     fontSize: 22,
     fontWeight: "900",
     marginBottom: 4,
   },
   userRole: {
-    color: C.muted,
+    color: C.text.secondary,
     fontSize: 13,
     fontWeight: "600",
   },
@@ -215,7 +206,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   sectionLabel: {
-    color: C.muted,
+    color: C.text.secondary,
     fontSize: 11,
     fontWeight: "700",
     textTransform: "uppercase",
@@ -224,17 +215,17 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   card: {
-    backgroundColor: C.s2,
+    backgroundColor: C.bg.hover,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: C.border,
+    borderColor: C.border.default,
     overflow: "hidden",
   },
   inputGroup: {
     flexDirection: "row",
     alignItems: "center",
     borderBottomWidth: 1,
-    borderBottomColor: C.border,
+    borderBottomColor: C.border.default,
     paddingHorizontal: 16,
   },
   inputIcon: {
@@ -243,7 +234,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     height: 54,
-    color: C.text,
+    color: C.text.primary,
     fontSize: 15,
   },
   actionBtn: {
@@ -253,7 +244,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   actionBtnText: {
-    color: C.text,
+    color: C.text.primary,
     fontSize: 14,
     fontWeight: "600",
   },
@@ -276,7 +267,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   logoutTitle: {
-    color: C.red,
+    color: C.status.error,
     fontSize: 15,
     fontWeight: "700",
   },

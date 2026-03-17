@@ -12,7 +12,7 @@ import { Pause, Play, ShieldCheck, User, Wifi, WifiOff, X } from "lucide-react-n
 import { apiFetch } from "../lib/api";
 import { getPausedState, PausedState, setPausedState } from "../lib/storage";
 import { supabase } from "../lib/supabase";
-import { PremiumColors } from "../ui/PremiumColors";
+import { PremiumColors as C } from "../ui/PremiumColors";
 import { Button } from "../ui/Button";
 
 type Props = {
@@ -136,10 +136,10 @@ export function PauseScreen({ companyId, onChangeCompany, onSignOut }: Props) {
       {/* Header */}
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <View>
-          <Text style={{ color: "white", fontSize: 26, fontWeight: "900", letterSpacing: -0.5 }}>
+          <Text style={{ color: C.text.primary, fontSize: 26, fontWeight: "900", letterSpacing: -0.5 }}>
             Pause Control
           </Text>
-          <Text style={{ color: "rgba(255,255,255,0.45)", marginTop: 6, fontSize: 12, fontWeight: "700" }}>
+          <Text style={{ color: C.text.secondary, marginTop: 6, fontSize: 12, fontWeight: "700" }}>
             {user?.name || user?.email || "Signed in"}
           </Text>
         </View>
@@ -152,13 +152,13 @@ export function PauseScreen({ companyId, onChangeCompany, onSignOut }: Props) {
               borderRadius: 999,
               flexDirection: "row",
               alignItems: "center",
-              backgroundColor: online ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)",
+              backgroundColor: online ? `${C.status.success}1F` : `${C.status.error}1F`,
               borderWidth: 1,
-              borderColor: online ? "rgba(34,197,94,0.22)" : "rgba(239,68,68,0.22)"
+              borderColor: online ? `${C.status.success}38` : `${C.status.error}38`
             }}
           >
-            {online ? <Wifi size={12} color="#22c55e" /> : <WifiOff size={12} color="#ef4444" />}
-            <Text style={{ marginLeft: 6, fontSize: 10, fontWeight: "900", color: online ? "#22c55e" : "#ef4444" }}>
+            {online ? <Wifi size={12} color={C.status.success} /> : <WifiOff size={12} color={C.status.error} />}
+            <Text style={{ marginLeft: 6, fontSize: 10, fontWeight: "900", color: online ? C.status.success : C.status.error }}>
               {online ? "ONLINE" : "OFFLINE"}
             </Text>
           </View>
@@ -170,20 +170,20 @@ export function PauseScreen({ companyId, onChangeCompany, onSignOut }: Props) {
               width: 42,
               height: 42,
               borderRadius: 21,
-              backgroundColor: "rgba(255,255,255,0.07)",
+              backgroundColor: C.bg.hover,
               borderWidth: 1,
-              borderColor: "rgba(255,255,255,0.10)",
+              borderColor: C.border.default,
               alignItems: "center",
               justifyContent: "center"
             }}
           >
-            <User size={18} color="rgba(255,255,255,0.8)" />
+            <User size={18} color={C.text.primary} />
           </TouchableOpacity>
         </View>
       </View>
 
       {/* Card */}
-      <View style={{ borderRadius: 28, overflow: "hidden", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" }}>
+      <View style={{ borderRadius: 28, overflow: "hidden", borderWidth: 1, borderColor: C.border.default }}>
         <LinearGradient
           colors={pausedState.paused ? ["#2c1800", "#1e1000"] : ["#1a1208", "#130e05"]}
           start={{ x: 0, y: 0 }}
@@ -192,8 +192,8 @@ export function PauseScreen({ companyId, onChangeCompany, onSignOut }: Props) {
         >
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
             <View>
-              <Text style={{ color: "white", fontSize: 22, fontWeight: "900" }}>{title}</Text>
-              <Text style={{ color: "rgba(255,255,255,0.45)", marginTop: 6, fontSize: 12, fontWeight: "700" }}>
+              <Text style={{ color: C.text.primary, fontSize: 22, fontWeight: "900" }}>{title}</Text>
+              <Text style={{ color: C.text.secondary, marginTop: 6, fontSize: 12, fontWeight: "700" }}>
                 {subtitle}
               </Text>
             </View>
@@ -203,19 +203,19 @@ export function PauseScreen({ companyId, onChangeCompany, onSignOut }: Props) {
                 width: 62,
                 height: 62,
                 borderRadius: 22,
-                backgroundColor: pausedState.paused ? "rgba(255,149,0,0.14)" : "rgba(255,255,255,0.06)",
+                backgroundColor: pausedState.paused ? C.amber.glow : C.bg.hover,
                 borderWidth: 1,
-                borderColor: pausedState.paused ? "rgba(255,149,0,0.25)" : "rgba(255,255,255,0.10)",
+                borderColor: pausedState.paused ? C.amber.glowMd : C.border.default,
                 alignItems: "center",
                 justifyContent: "center"
               }}
             >
-              {pausedState.paused ? <Pause size={26} color={PremiumColors.amber.light} /> : <Play size={26} color="rgba(255,255,255,0.7)" />}
+              {pausedState.paused ? <Pause size={26} color={C.amber.light} /> : <Play size={26} color={C.text.secondary} />}
             </View>
           </View>
 
           {error && (
-            <Text style={{ color: "#f87171", fontSize: 12, fontWeight: "800", marginTop: 12 }}>
+            <Text style={{ color: C.status.error, fontSize: 12, fontWeight: "800", marginTop: 12 }}>
               {error}
             </Text>
           )}
@@ -256,9 +256,9 @@ export function PauseScreen({ companyId, onChangeCompany, onSignOut }: Props) {
             style={{
               borderRadius: 18,
               paddingVertical: 12,
-              backgroundColor: "rgba(255,255,255,0.04)",
+              backgroundColor: C.bg.hover,
               borderWidth: 1,
-              borderColor: "rgba(255,255,255,0.08)",
+              borderColor: C.border.default,
               alignItems: "center",
               justifyContent: "center",
               flexDirection: "row",
@@ -266,11 +266,11 @@ export function PauseScreen({ companyId, onChangeCompany, onSignOut }: Props) {
             }}
           >
             {busy ? (
-              <ActivityIndicator color={PremiumColors.amber.primary} />
+              <ActivityIndicator color={C.amber.primary} />
             ) : (
-              <ShieldCheck size={16} color="rgba(255,255,255,0.45)" />
+              <ShieldCheck size={16} color={C.text.secondary} />
             )}
-            <Text style={{ color: "rgba(255,255,255,0.6)", fontWeight: "900", letterSpacing: 1.2, textTransform: "uppercase", fontSize: 10 }}>
+            <Text style={{ color: C.text.secondary, fontWeight: "900", letterSpacing: 1.2, textTransform: "uppercase", fontSize: 10 }}>
               Refresh status
             </Text>
           </TouchableOpacity>
@@ -280,40 +280,40 @@ export function PauseScreen({ companyId, onChangeCompany, onSignOut }: Props) {
       {/* Unlock modal */}
       <Modal visible={showUnlock} transparent animationType="fade" onRequestClose={() => setShowUnlock(false)}>
         <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.80)", alignItems: "center", justifyContent: "center", padding: 24 }}>
-          <View style={{ width: "100%", maxWidth: 420, borderRadius: 28, overflow: "hidden", borderWidth: 1, borderColor: "rgba(255,255,255,0.10)" }}>
-            <LinearGradient colors={[PremiumColors.bg.card, "#130e05"]} style={{ padding: 18 }}>
+          <View style={{ width: "100%", maxWidth: 420, borderRadius: 28, overflow: "hidden", borderWidth: 1, borderColor: C.border.default }}>
+            <LinearGradient colors={[C.bg.card, "#130e05"]} style={{ padding: 18 }}>
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                <Text style={{ color: "white", fontSize: 18, fontWeight: "900" }}>Manager PIN</Text>
+                <Text style={{ color: C.text.primary, fontSize: 18, fontWeight: "900" }}>Manager PIN</Text>
                 <TouchableOpacity
                   activeOpacity={0.85}
                   onPress={() => setShowUnlock(false)}
-                  style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.07)", alignItems: "center", justifyContent: "center" }}
+                  style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: C.bg.hover, alignItems: "center", justifyContent: "center" }}
                 >
-                  <X size={18} color="white" />
+                  <X size={18} color={C.text.primary} />
                 </TouchableOpacity>
               </View>
 
-              <Text style={{ color: "rgba(255,255,255,0.45)", marginTop: 8, fontSize: 12, fontWeight: "700" }}>
+              <Text style={{ color: C.text.secondary, marginTop: 8, fontSize: 12, fontWeight: "700" }}>
                 Enter an owner/admin PIN to resume.
               </Text>
 
               <View style={{ height: 14 }} />
 
-              <View style={{ backgroundColor: "rgba(255,255,255,0.05)", borderWidth: 1, borderColor: "rgba(255,255,255,0.10)", borderRadius: 18, paddingHorizontal: 16, paddingVertical: 14 }}>
+              <View style={{ backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default, borderRadius: 18, paddingHorizontal: 16, paddingVertical: 14 }}>
                 <TextInput
                   value={pin}
                   onChangeText={setPin}
                   keyboardType="number-pad"
                   secureTextEntry
                   placeholder="••••"
-                  placeholderTextColor="rgba(255,255,255,0.25)"
-                  style={{ color: "white", fontSize: 22, fontWeight: "900", letterSpacing: 6, textAlign: "center" }}
+                  placeholderTextColor={C.text.secondary}
+                  style={{ color: C.text.primary, fontSize: 22, fontWeight: "900", letterSpacing: 6, textAlign: "center" }}
                   maxLength={8}
                 />
               </View>
 
               {pinError && (
-                <Text style={{ color: "#f87171", fontSize: 12, fontWeight: "800", marginTop: 12 }}>
+                <Text style={{ color: C.status.error, fontSize: 12, fontWeight: "800", marginTop: 12 }}>
                   {pinError}
                 </Text>
               )}

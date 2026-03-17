@@ -83,8 +83,8 @@ export default function RecurringInvoicesPage() {
                                 <tr>
                                     <th className="data-table-header">Template Description</th>
                                     <th className="data-table-header w-[120px]">Frequency</th>
-                                    <th className="data-table-header w-[140px]">Last Run</th>
-                                    <th className="data-table-header w-[140px]">Next Run</th>
+                                    <th className="hidden lg:table-cell data-table-header w-[140px]">Last Run</th>
+                                    <th className="hidden md:table-cell data-table-header w-[140px]">Next Run</th>
                                     <th className="data-table-header w-[100px]">Status</th>
                                     <th className="data-table-header w-[60px] text-right"></th>
                                 </tr>
@@ -121,10 +121,10 @@ export default function RecurringInvoicesPage() {
                                                 {r.frequency}
                                             </Badge>
                                         </td>
-                                        <td className="data-table-cell text-slate-500">
+                                        <td className="hidden lg:table-cell data-table-cell text-slate-500">
                                             {r.lastRunDate ? format(new Date(r.lastRunDate), "dd MMM yyyy") : "Never"}
                                         </td>
-                                        <td className="data-table-cell font-medium text-primary">
+                                        <td className="hidden md:table-cell data-table-cell font-medium text-primary">
                                             {r.nextRunDate ? format(new Date(r.nextRunDate), "dd MMM yyyy") : "-"}
                                         </td>
                                         <td className="data-table-cell">

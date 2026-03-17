@@ -432,7 +432,12 @@ export const api = {
           expenseBreakdown: z.array(z.object({
             category: z.string(),
             amount: z.number()
-          }))
+          })),
+          drillDown: z.object({
+            revenueItems: z.array(z.any()),
+            cogsItems: z.array(z.any()),
+            expenseItems: z.array(z.any())
+          }).optional()
         })
       }
     }

@@ -238,6 +238,24 @@ export default function PosReportsPage() {
         return methods;
     }, [sales]);
 
+    const dailySalesGroups = useMemo(() => {
+        if (!sales) return [];
+        const groups: Record<string, { date: Date, total: number, count: number, currencyTotals: Record<string, number> }> = {};
+        sales.forEach((sale: any) => {
+            const d = new Date(sale.issueDate || sale.createdAt);
+            const dateKey = format(d, 'yyyy-MM-dd');
+            if (!groups[dateKey]) {
+                groups[dateKey] = { date: startOfDay(d), total: 0, count: 0, currencyTotals: {} };
+            }
+            groups[dateKey].total += Number(sale.total || 0);
+            groups[dateKey].count += 1;
+            
+            const cur = sale.currency || "USD";
+            groups[dateKey].currencyTotals[cur] = (groups[dateKey].currencyTotals[cur] || 0) + Number(sale.total || 0);
+        });
+        return Object.values(groups).sort((a, b) => b.date.getTime() - a.date.getTime());
+    }, [sales]);
+
     const handleExportCsv = () => {
         if (!filteredSales || filteredSales.length === 0) return;
 
@@ -263,6 +281,32 @@ export default function PosReportsPage() {
         const link = document.createElement("a");
         link.setAttribute("href", url);
         link.setAttribute("download", `POS_Sales_${format(new Date(), "yyyyMMdd")}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const handleExportDailyCsv = () => {
+        if (dailySalesGroups.length === 0) return;
+
+        const headers = ["Date", "Total Sales", "Transaction Count", "Currencies Breakdown"];
+        const rows = dailySalesGroups.map((group) => [
+            format(group.date, "yyyy-MM-dd"),
+            group.total.toFixed(2),
+            group.count,
+            Object.entries(group.currencyTotals).map(([cur, amt]) => `${cur}: ${amt.toFixed(2)}`).join(" | ")
+        ]);
+
+        const csvContent = [
+            headers.join(","),
+            ...rows.map((row: any[]) => row.map((cell: any) => `"${cell || ''}"`).join(","))
+        ].join("\n");
+
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `Daily_Summary_${format(new Date(), "yyyyMMdd")}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -390,9 +434,12 @@ export default function PosReportsPage() {
                 </div>
 
                 <Tabs defaultValue="overview" className="w-full">
-                    <TabsList className="grid w-full grid-cols-3 mb-8">
+                    <TabsList className="grid w-full grid-cols-4 mb-8">
                         <TabsTrigger value="overview" className="flex items-center gap-2">
                             <BarChart3 className="w-4 h-4" /> Analytics Overview
+                        </TabsTrigger>
+                        <TabsTrigger value="daily" className="flex items-center gap-2">
+                            <CalendarIcon className="w-4 h-4" /> Daily Sales
                         </TabsTrigger>
                         <TabsTrigger value="history" className="flex items-center gap-2">
                             <History className="w-4 h-4" /> Transaction History
@@ -566,6 +613,57 @@ export default function PosReportsPage() {
                                 </CardContent>
                             </Card>
                         </div>
+                    </TabsContent>
+
+                    <TabsContent value="daily" className="space-y-6">
+                        <Card className="border-none shadow-sm overflow-hidden">
+                            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                                <div>
+                                    <h3 className="text-xl font-black text-slate-900">Daily Sales Summary</h3>
+                                    <p className="text-sm text-slate-500 font-medium">Aggregated sales performance by date</p>
+                                </div>
+                                <Button size="sm" variant="outline" className="h-9 rounded-xl font-bold flex items-center gap-2" onClick={handleExportDailyCsv}>
+                                    <Download className="w-3.5 h-3.5" />
+                                    Export Daily Summary
+                                </Button>
+                            </div>
+                            <Table>
+                                <TableHeader className="bg-slate-50/50">
+                                    <TableRow>
+                                        <TableHead className="font-bold text-slate-500">Date</TableHead>
+                                        <TableHead className="font-bold text-slate-500 text-center">Transactions</TableHead>
+                                        <TableHead className="font-bold text-slate-500">Currency Breakdown</TableHead>
+                                        <TableHead className="text-right font-bold text-slate-500">Total (Base)</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {isLoading ? (
+                                        <TableRow><TableCell colSpan={4} className="text-center py-20"><Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" /></TableCell></TableRow>
+                                    ) : dailySalesGroups.length === 0 ? (
+                                        <TableRow><TableCell colSpan={4} className="text-center py-20 text-slate-400">No data available</TableCell></TableRow>
+                                    ) : dailySalesGroups.map((group) => (
+                                        <TableRow key={group.date.toISOString()} className="hover:bg-slate-50/50">
+                                            <TableCell className="font-bold text-slate-700">{format(group.date, "EEEE, dd MMM yyyy")}</TableCell>
+                                            <TableCell className="text-center">
+                                                <Badge variant="secondary" className="font-bold">{group.count}</Badge>
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {Object.entries(group.currencyTotals).map(([cur, amt]) => (
+                                                        <Badge key={cur} variant="outline" className="border-slate-200">
+                                                            {cur}: ${amt.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                        </Badge>
+                                                    ))}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="text-right font-black text-slate-900">
+                                                ${group.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </Card>
                     </TabsContent>
 
                     <TabsContent value="history" className="space-y-6">

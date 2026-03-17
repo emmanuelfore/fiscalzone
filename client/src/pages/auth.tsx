@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Redirect } from "wouter";
 import { Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 
 export default function AuthPage() {
   const { user, isLoading, loginWithPassword, registerWithPassword } = useAuth();
@@ -163,9 +163,11 @@ export default function AuthPage() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label htmlFor="password">Password</Label>
-                    <Button variant="link" className="p-0 h-auto text-xs text-primary" type="button">
-                      Forgot password?
-                    </Button>
+                    <Link href="/forgot-password">
+                      <Button variant="link" className="p-0 h-auto text-xs text-primary" type="button">
+                        Forgot password?
+                      </Button>
+                    </Link>
                   </div>
                   <Input
                     id="password"

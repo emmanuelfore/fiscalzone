@@ -26,17 +26,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { apiFetch } from "../lib/api";
 
-const C = {
-  bg: "#07090c",
-  s1: "#0d1117",
-  s2: "#141b24",
-  border: "#1f2d3d",
-  accent: "#f0a500",
-  text: "#e8edf5",
-  muted: "#3d5166",
-  green: "#00d084",
-  red: "#ff4757",
-} as const;
+import { PremiumColors as C } from "./PremiumColors";
 
 type ScreenName = "pos" | "reports" | "profile" | "inventory" | "stockin" | "customers" | "suppliers" | "expenses";
 
@@ -109,7 +99,7 @@ export function AppDrawer({
         />
         <View style={styles.drawerContainer}>
           <LinearGradient
-            colors={[C.s1, C.bg]}
+            colors={[C.bg.card, C.bg.base]}
             style={styles.drawer}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
@@ -118,7 +108,7 @@ export function AppDrawer({
               <View style={styles.header}>
                 <Text style={styles.brand}>FieldPOS</Text>
                 <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-                  <X size={20} color={C.text} />
+                  <X size={20} color={C.text.primary} />
                 </TouchableOpacity>
               </View>
 
@@ -141,7 +131,7 @@ export function AppDrawer({
                       <View style={styles.menuItemLeft}>
                         <Icon
                           size={20}
-                          color={isActive ? C.accent : C.muted}
+                          color={isActive ? C.amber.primary : C.text.secondary}
                         />
                         <Text
                           style={[
@@ -153,7 +143,7 @@ export function AppDrawer({
                         </Text>
                       </View>
                       {isActive && (
-                        <ChevronRight size={16} color={C.accent} />
+                        <ChevronRight size={16} color={C.amber.primary} />
                       )}
                     </TouchableOpacity>
                   );
@@ -174,18 +164,18 @@ export function AppDrawer({
                 </View>
 
                 <View style={styles.healthInfo}>
-                  <View style={[styles.healthDot, { backgroundColor: isOnline === true ? C.green : isOnline === false ? C.red : C.muted }]} />
+                  <View style={[styles.healthDot, { backgroundColor: isOnline === true ? C.status.success : isOnline === false ? C.status.error : C.text.secondary }]} />
                   <Text style={styles.healthText}>
                     {isOnline === true ? "Server Online" : isOnline === false ? "Server Offline / Network Error" : "Checking Server..."}
                   </Text>
-                  {isOnline === false && <AlertTriangle size={12} color={C.red} />}
+                  {isOnline === false && <AlertTriangle size={12} color={C.status.error} />}
                 </View>
 
                 <TouchableOpacity
                   onPress={onLogout}
                   style={styles.logoutBtn}
                 >
-                  <LogOut size={18} color="#ff4757" />
+                  <LogOut size={18} color={C.status.error} />
                   <Text style={styles.logoutText}>Sign Out</Text>
                 </TouchableOpacity>
               </View>
@@ -213,7 +203,7 @@ const styles = StyleSheet.create({
   drawer: {
     flex: 1,
     borderRightWidth: 1,
-    borderRightColor: C.border,
+    borderRightColor: C.border.default,
   },
   header: {
     padding: 24,
@@ -221,10 +211,10 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     borderBottomWidth: 1,
-    borderBottomColor: C.border,
+    borderBottomColor: C.border.default,
   },
   brand: {
-    color: C.accent,
+    color: C.amber.primary,
     fontSize: 22,
     fontWeight: "900",
     letterSpacing: -1,
@@ -233,7 +223,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: C.s2,
+    backgroundColor: C.bg.card,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -250,7 +240,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   menuItemActive: {
-    backgroundColor: "rgba(240,165,0,0.1)",
+    backgroundColor: C.amber.glow,
   },
   menuItemLeft: {
     flexDirection: "row",
@@ -258,17 +248,17 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   menuLabel: {
-    color: C.muted,
+    color: C.text.secondary,
     fontSize: 15,
     fontWeight: "600",
   },
   menuLabelActive: {
-    color: C.text,
+    color: C.text.primary,
   },
   footer: {
     padding: 24,
     borderTopWidth: 1,
-    borderTopColor: C.border,
+    borderTopColor: C.border.default,
   },
   userInfo: {
     flexDirection: "row",
@@ -280,7 +270,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: C.accent,
+    backgroundColor: C.amber.primary,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -290,12 +280,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   userName: {
-    color: C.text,
+    color: C.text.primary,
     fontSize: 14,
     fontWeight: "700",
   },
   userRole: {
-    color: C.muted,
+    color: C.text.secondary,
     fontSize: 11,
   },
   healthInfo: {
@@ -311,7 +301,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   healthText: {
-    color: C.muted,
+    color: C.text.secondary,
     fontSize: 11,
     fontWeight: "600",
   },
@@ -324,7 +314,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,71,87,0.1)",
   },
   logoutText: {
-    color: "#ff4757",
+    color: C.status.error,
     fontSize: 14,
     fontWeight: "700",
   },

@@ -208,25 +208,49 @@ export function useSuppliers(companyId: number | null) {
 }
 
 export function useCompany(companyId: number | null) {
-  const [data, setData] = useState<any | null>(null);
+  const key = `pos:cache:company:${companyId || 0}`;
+  const [data, setData] = useState<any | null>(() => memCache[key] ?? null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!companyId) return;
     let cancelled = false;
     setError(null);
+
+    // Serve from memory cache immediately if available
+    if (memCache[key]) {
+      setData(memCache[key]);
+      // Still refresh in background so data stays fresh
+    } else {
+      // Try disk cache first for instant startup
+      AsyncStorage.getItem(key).then((cached) => {
+        if (cached && !cancelled) {
+          try {
+            const parsed = JSON.parse(cached);
+            memCache[key] = parsed;
+            setData(parsed);
+          } catch { /* ignore corrupt cache */ }
+        }
+      }).catch(() => {});
+    }
+
+    // Always refresh from network in background
     apiJson<any>(`/api/companies/${companyId}`)
       .then((res) => {
-        if (!cancelled) setData(res);
+        if (!cancelled) {
+          memCache[key] = res;
+          setData(res);
+          AsyncStorage.setItem(key, JSON.stringify(res)).catch(() => {});
+        }
       })
       .catch((e: any) => !cancelled && setError(e?.message ?? "Failed to load company"));
-    return () => {
-      cancelled = true;
-    };
+
+    return () => { cancelled = true; };
   }, [companyId]);
 
   return { data, error };
 }
+
 
 export function useCurrencies(companyId: number | null) {
   const key = CACHE_KEYS.currencies(companyId || 0);

@@ -5,6 +5,8 @@ import { supabase } from "./lib/supabase";
 import { apiJson } from "./lib/api";
 import { PremiumColors } from "./ui/PremiumColors";
 import { LoginScreen } from "./screens/LoginScreen";
+import { ForgotPasswordScreen } from "./screens/ForgotPasswordScreen";
+
 import { CompanySelectScreen } from "./screens/CompanySelectScreen";
 import { POSScreen } from "./screens/POSScreen";
 import { ReportsScreen } from "./screens/ReportsScreen";
@@ -14,11 +16,13 @@ import { StockInScreen } from "./screens/StockInScreen";
 import { CustomersScreen } from "./screens/CustomersScreen";
 import { SuppliersScreen } from "./screens/SuppliersScreen";
 import { ExpensesScreen } from "./screens/ExpensesScreen";
+import { OnboardingScreen } from "./screens/OnboardingScreen";
 import { AppDrawer } from "./ui/AppDrawer";
 import { BottomTabs } from "./ui/BottomTabs";
 import { getSelectedCompanyId, setSelectedCompanyId } from "./lib/storage";
 
-type Stage = "boot" | "login" | "company" | "main";
+type Stage = "boot" | "login" | "forgot-password" | "onboarding" | "company" | "main";
+
 type ScreenName = "pos" | "reports" | "profile" | "inventory" | "stockin" | "customers" | "suppliers" | "expenses";
 
 export function AppRoot() {
@@ -42,14 +46,16 @@ export function AppRoot() {
       );
       setUserId(data.user.id);
     }
-    // Fetch role from companies list
+    
     try {
-      const res = await apiJson<any[]>('/api/companies');
-      if (res && res.length > 0) {
-        const company = res.find((c: any) => c.id === companyId) || res[0];
-        if (company?.role) setUserRole(company.role);
+      const companies = await apiJson<any[]>('/api/companies');
+      if (Array.isArray(companies)) {
+        return companies;
       }
-    } catch (e) { /* ignore */ }
+      return [];
+    } catch (e) { 
+      return []; 
+    }
   };
 
   useEffect(() => {
@@ -69,26 +75,50 @@ export function AppRoot() {
 
       const session = await supabase.auth.getSession();
       const authed = !!session.data.session?.access_token;
+      
       if (!cancelled) {
-        if (!authed) setStage("login");
-        else {
-          await fetchUser();
-          if (!cachedCompanyId) setStage("company");
-          else setStage("main");
+        if (!authed) {
+          setStage("login");
+        } else {
+          const companies = await fetchUser();
+          const cachedId = await getSelectedCompanyId();
+          const validCompany = companies.find(c => c.id === cachedId);
+
+          if (validCompany) {
+            if (validCompany.role) setUserRole(validCompany.role);
+            setCompanyId(cachedId);
+            setStage("main");
+          } else {
+            await setSelectedCompanyId(null);
+            setCompanyId(null);
+            setStage(companies.length > 0 ? "company" : "onboarding");
+          }
         }
       }
     })();
 
-    const { data } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log("[Auth] Event:", event, session ? "Session active" : "No session");
       const authed = !!session?.access_token;
+      
       if (!authed) {
         setStage("login");
         return;
       }
-      await fetchUser();
-      const cachedCompanyId = await getSelectedCompanyId();
-      setCompanyId(cachedCompanyId);
-      setStage(cachedCompanyId ? "main" : "company");
+
+      const companies = await fetchUser();
+      const cachedId = await getSelectedCompanyId();
+      const validCompany = companies.find(c => c.id === cachedId);
+
+      if (validCompany) {
+        if (validCompany.role) setUserRole(validCompany.role);
+        setCompanyId(cachedId);
+        setStage("main");
+      } else {
+        await setSelectedCompanyId(null);
+        setCompanyId(null);
+        setStage(companies.length > 0 ? "company" : "onboarding");
+      }
     });
 
     return () => {
@@ -100,6 +130,7 @@ export function AppRoot() {
   const handleLogout = async () => {
     setShowDrawer(false);
     await supabase.auth.signOut();
+    await setSelectedCompanyId(null);
     setCompanyId(null);
     setStage("login");
   };
@@ -108,11 +139,11 @@ export function AppRoot() {
     if (bootError) {
       return (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24 }}>
-          <Text style={{ color: "white", fontWeight: "900", fontSize: 18, marginBottom: 12 }}>
+          <Text style={{ color: PremiumColors.text.primary, fontWeight: "900", fontSize: 18, marginBottom: 12 }}>
             Mobile app not configured
           </Text>
-          <Text style={{ color: "rgba(255,255,255,0.6)", textAlign: "center" }}>{bootError}</Text>
-          <Text style={{ color: "rgba(255,255,255,0.4)", textAlign: "center", marginTop: 10 }}>
+          <Text style={{ color: PremiumColors.text.secondary, textAlign: "center" }}>{bootError}</Text>
+          <Text style={{ color: PremiumColors.text.secondary, textAlign: "center", marginTop: 10 }}>
             Copy `mobile/.env.example` → `mobile/.env` and fill in the values.
           </Text>
         </View>
@@ -130,11 +161,41 @@ export function AppRoot() {
     if (stage === "login") {
       return (
         <LoginScreen
+          onForgotPassword={() => setStage("forgot-password")}
           onLoggedIn={async () => {
-            const cachedCompanyId = await getSelectedCompanyId();
-            setCompanyId(cachedCompanyId);
-            setStage(cachedCompanyId ? "main" : "company");
+
+            const companies = await fetchUser();
+            const cachedId = await getSelectedCompanyId();
+            const validCompany = companies.find(c => c.id === cachedId);
+
+            if (validCompany) {
+              if (validCompany.role) setUserRole(validCompany.role);
+              setCompanyId(cachedId);
+              setStage("main");
+            } else {
+              await setSelectedCompanyId(null);
+              setCompanyId(null);
+              setStage(companies.length > 0 ? "company" : "onboarding");
+            }
           }}
+        />
+      );
+    }
+
+    if (stage === "forgot-password") {
+      return <ForgotPasswordScreen onBack={() => setStage("login")} />;
+    }
+
+    if (stage === "onboarding") {
+
+      return (
+        <OnboardingScreen
+          onComplete={async (id) => {
+            await setSelectedCompanyId(id);
+            setCompanyId(id);
+            setStage("main");
+          }}
+          onSignOut={handleLogout}
         />
       );
     }
@@ -143,6 +204,10 @@ export function AppRoot() {
       return (
         <CompanySelectScreen
           onSelected={async (id) => {
+            if (id === -1) {
+              setStage("onboarding");
+              return;
+            }
             await setSelectedCompanyId(id);
             setCompanyId(id);
             setStage("main");
@@ -162,6 +227,7 @@ export function AppRoot() {
         {currentScreen === "pos" && (
           <POSScreen 
             companyId={companyId} 
+            userName={userName}
             onOpenDrawer={() => setShowDrawer(true)} 
           />
         )}
@@ -190,6 +256,7 @@ export function AppRoot() {
         {currentScreen === "stockin" && (
           <StockInScreen 
             onOpenDrawer={() => setShowDrawer(true)} 
+            onClose={() => setCurrentScreen("inventory")}
             companyId={companyId}
           />
         )}

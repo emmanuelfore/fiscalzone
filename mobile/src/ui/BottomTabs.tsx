@@ -14,15 +14,7 @@ import {
   Menu,
 } from "lucide-react-native";
 
-const C = {
-  bg: "#07090c",
-  s1: "#0d1117",
-  s2: "#141b24",
-  border: "#1f2d3d",
-  accent: "#f0a500",
-  text: "#e8edf5",
-  muted: "#3d5166",
-} as const;
+import { PremiumColors as C } from "./PremiumColors";
 
 type ScreenName = "pos" | "reports" | "profile" | "inventory" | "stockin" | "customers" | "suppliers" | "expenses";
 
@@ -87,7 +79,7 @@ export function BottomTabs({
             <View style={[styles.iconContainer, isActive && styles.activeIconContainer]}>
               <Icon
                 size={22}
-                color={isActive ? C.accent : C.muted}
+                color={isActive ? C.amber.primary : C.text.secondary}
                 strokeWidth={isActive ? 2.5 : 2}
               />
             </View>
@@ -104,11 +96,11 @@ export function BottomTabs({
 const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
-    backgroundColor: C.s1,
+    backgroundColor: C.bg.card,
     height: Platform.OS === "ios" ? 88 : 68,
     paddingBottom: Platform.OS === "ios" ? 28 : 8,
     borderTopWidth: 1,
-    borderTopColor: C.border,
+    borderTopColor: C.border.default,
     paddingHorizontal: 8,
     justifyContent: "space-around",
     alignItems: "center",
@@ -127,15 +119,15 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   activeIconContainer: {
-    backgroundColor: "rgba(240,165,0,0.1)",
+    backgroundColor: C.amber.glow,
   },
   label: {
     fontSize: 10,
     fontWeight: "600",
-    color: C.muted,
+    color: C.text.secondary,
     marginTop: 4,
   },
   activeLabel: {
-    color: C.accent,
+    color: C.amber.primary,
   },
 });

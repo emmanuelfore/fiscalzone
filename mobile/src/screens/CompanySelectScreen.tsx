@@ -52,10 +52,10 @@ export function CompanySelectScreen({ onSelected, onSignOut }: Props) {
     <View style={{ flex: 1, paddingHorizontal: 20, paddingTop: 18 }}>
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
         <View>
-          <Text style={{ color: "white", fontSize: 26, fontWeight: "900", letterSpacing: -0.5 }}>
+          <Text style={{ color: PremiumColors.text.primary, fontSize: 26, fontWeight: "900", letterSpacing: -0.5 }}>
             Companies
           </Text>
-          <Text style={{ color: "rgba(255,255,255,0.45)", marginTop: 6, fontSize: 12, fontWeight: "700" }}>
+          <Text style={{ color: PremiumColors.text.secondary, marginTop: 6, fontSize: 12, fontWeight: "700" }}>
             {subtitle}
           </Text>
         </View>
@@ -67,18 +67,25 @@ export function CompanySelectScreen({ onSelected, onSignOut }: Props) {
             width: 42,
             height: 42,
             borderRadius: 21,
-            backgroundColor: "rgba(255,255,255,0.07)",
+            backgroundColor: PremiumColors.bg.hover,
             borderWidth: 1,
-            borderColor: "rgba(255,255,255,0.10)",
+            borderColor: PremiumColors.border.default,
             alignItems: "center",
             justifyContent: "center"
           }}
         >
-          <LogOut size={18} color="rgba(255,255,255,0.8)" />
+          <LogOut size={18} color={PremiumColors.text.primary} />
         </TouchableOpacity>
       </View>
 
       <View style={{ height: 16 }} />
+
+      <Button 
+        title="Create New Company" 
+        variant="ghost" 
+        onPress={() => (onSelected as any)(-1)} // Hack: Use -1 to signal new company
+        style={{ marginBottom: 16 }}
+      />
 
       {loading ? (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
@@ -100,9 +107,9 @@ export function CompanySelectScreen({ onSelected, onSignOut }: Props) {
               activeOpacity={0.88}
               onPress={() => onSelected(item.id)}
               style={{
-                backgroundColor: "rgba(255,255,255,0.05)",
+                backgroundColor: PremiumColors.bg.hover,
                 borderWidth: 1,
-                borderColor: "rgba(255,255,255,0.08)",
+                borderColor: PremiumColors.border.default,
                 borderRadius: 22,
                 padding: 16,
                 marginBottom: 10,
@@ -117,9 +124,9 @@ export function CompanySelectScreen({ onSelected, onSignOut }: Props) {
                     width: 44,
                     height: 44,
                     borderRadius: 16,
-                    backgroundColor: "rgba(255,149,0,0.12)",
+                    backgroundColor: PremiumColors.amber.glow,
                     borderWidth: 1,
-                    borderColor: "rgba(255,149,0,0.18)",
+                    borderColor: PremiumColors.amber.glowMd,
                     alignItems: "center",
                     justifyContent: "center"
                   }}
@@ -127,15 +134,15 @@ export function CompanySelectScreen({ onSelected, onSignOut }: Props) {
                   <Building2 size={20} color={PremiumColors.amber.light} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: "white", fontSize: 14, fontWeight: "800" }} numberOfLines={1}>
+                  <Text style={{ color: PremiumColors.text.primary, fontSize: 14, fontWeight: "800" }} numberOfLines={1}>
                     {item.tradingName || item.name}
                   </Text>
-                  <Text style={{ color: "rgba(255,255,255,0.35)", fontSize: 11, fontWeight: "700", marginTop: 3 }}>
+                  <Text style={{ color: PremiumColors.text.secondary, fontSize: 11, fontWeight: "700", marginTop: 3 }}>
                     {item.zimraEnvironment ? `ZIMRA: ${item.zimraEnvironment}` : `ID: ${item.id}`}
                   </Text>
                 </View>
               </View>
-              <CheckCircle2 size={18} color="rgba(255,255,255,0.18)" />
+              <CheckCircle2 size={18} color={PremiumColors.border.default} />
             </TouchableOpacity>
           )}
           ListFooterComponent={
@@ -151,13 +158,13 @@ export function CompanySelectScreen({ onSelected, onSignOut }: Props) {
                 paddingVertical: 10,
                 paddingHorizontal: 14,
                 borderRadius: 18,
-                backgroundColor: "rgba(255,255,255,0.06)",
+                backgroundColor: PremiumColors.bg.hover,
                 borderWidth: 1,
-                borderColor: "rgba(255,255,255,0.10)"
+                borderColor: PremiumColors.border.default
               }}
             >
-              <RefreshCw size={14} color="rgba(255,255,255,0.55)" />
-              <Text style={{ color: "rgba(255,255,255,0.6)", fontWeight: "800", letterSpacing: 0.8, textTransform: "uppercase", fontSize: 10 }}>
+              <RefreshCw size={14} color={PremiumColors.text.secondary} />
+              <Text style={{ color: PremiumColors.text.secondary, fontWeight: "800", letterSpacing: 0.8, textTransform: "uppercase", fontSize: 10 }}>
                 Refresh
               </Text>
             </TouchableOpacity>

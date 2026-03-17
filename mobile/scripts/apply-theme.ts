@@ -19,7 +19,7 @@ function applyTheme() {
       'const [cashierName, setCashierName] = useState<string>("Cashier");\n  const [isDarkMode, setIsDarkMode] = useState(true);'
     );
   }
-  
+
   // 2. Add an import for Moon / Sun
   if (!content.includes("Moon") && !content.includes("Sun")) {
     content = content.replace(
@@ -35,7 +35,7 @@ function applyTheme() {
   content = content.replace(/color:\s*"rgba\(255,255,255,0\.6\)"/g, 'color: isDarkMode ? "rgba(255,255,255,0.6)" : "#4b5563"');
   content = content.replace(/color:\s*"rgba\(255,255,255,0\.65\)"/g, 'color: isDarkMode ? "rgba(255,255,255,0.65)" : "#4b5563"');
   content = content.replace(/color:\s*"rgba\(255,255,255,0\.8\)"/g, 'color: isDarkMode ? "rgba(255,255,255,0.8)" : "#374151"');
-  
+
   // Backgrounds
   content = content.replace(/backgroundColor:\s*"#0a0600"/g, 'backgroundColor: isDarkMode ? "#0a0600" : "#f3f4f6"');
   content = content.replace(/backgroundColor:\s*"#1a140a"/g, 'backgroundColor: isDarkMode ? "#1a140a" : "#ffffff"');
@@ -44,7 +44,7 @@ function applyTheme() {
   content = content.replace(/backgroundColor:\s*"rgba\(255,255,255,0\.03\)"/g, 'backgroundColor: isDarkMode ? "rgba(255,255,255,0.03)" : "#f9fafb"');
   content = content.replace(/backgroundColor:\s*"rgba\(255,255,255,0\.07\)"/g, 'backgroundColor: isDarkMode ? "rgba(255,255,255,0.07)" : "#d1d5db"');
   content = content.replace(/backgroundColor:\s*"rgba\(255,255,255,0\.08\)"/g, 'backgroundColor: isDarkMode ? "rgba(255,255,255,0.08)" : "#d1d5db"');
-  
+
   // Borders
   content = content.replace(/borderColor:\s*"rgba\(255,255,255,0\.08\)"/g, 'borderColor: isDarkMode ? "rgba(255,255,255,0.08)" : "#d1d5db"');
   content = content.replace(/borderColor:\s*"rgba\(255,255,255,0\.1\)"/g, 'borderColor: isDarkMode ? "rgba(255,255,255,0.1)" : "#d1d5db"');

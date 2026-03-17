@@ -69,21 +69,7 @@ import {
 } from "../lib/offlineQueue";
 
 // ─── v3 colour tokens ─────────────────────────────────────────────────────────
-const C = {
-  bg: "#07090c",
-  s1: "#0d1117",
-  s2: "#141b24",
-  s3: "#1c2633",
-  border: "#1f2d3d",
-  accent: "#f0a500",
-  accent2: "#ff6b35",
-  green: "#00d084",
-  red: "#ff4757",
-  blue: "#3b9eff",
-  purple: "#a78bfa",
-  text: "#e8edf5",
-  muted: "#3d5166",
-} as const;
+import { PremiumColors as C } from "../ui/PremiumColors";
 
 const CAT_PALETTE = [
   "#f0a500", "#3b9eff", "#00d084", "#ff6b35",
@@ -119,10 +105,11 @@ interface HeldSale {
 
 type Props = {
   companyId: number;
+  userName?: string;
   onOpenDrawer: () => void;
 };
 
-export function POSScreen({ companyId, onOpenDrawer }: Props) {
+export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
   const [isOnline, setIsOnline] = useState(true);
   const [queueCount, setQueueCount] = useState(0);
 
@@ -163,6 +150,7 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
   const [tempSilentPrint, setTempSilentPrint] = useState(false);
   const [tempTerminalId, setTempTerminalId] = useState("");
   const [tempTargetPrinter, setTempTargetPrinter] = useState("");
+  const [tempPaperWidth, setTempPaperWidth] = useState(58);
 
   const [printerConfig, setPrinterConfig] = useState({
     macAddress: "",
@@ -170,7 +158,8 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
     autoShowModal: true,
     silentPrint: false,
     terminalId: "POS-01",
-    targetPrinter: ""
+    targetPrinter: "",
+    paperWidth: 58
   });
 
   const [lastInvoice, setLastInvoice] = useState<any | null>(null);
@@ -189,12 +178,21 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
 
   const [pendingOverride, setPendingOverride] = useState<{ type: "DISCOUNT" | "VOID_CART"; data: any } | null>(null);
 
+  // Sync input field when orderDiscount is changed from OUTSIDE (e.g. resuming hold, manager override)
+  // Use a ref to avoid the loop: don't overwrite when the user is actively typing
+  const isTypingDiscount = React.useRef(false);
   useEffect(() => {
-    const currentInputVal = parseFloat(orderDiscountInput.replace(",", ".")) || 0;
-    if (Math.abs(currentInputVal - orderDiscount) > 0.001) {
+    if (!isTypingDiscount.current) {
       setOrderDiscountInput(orderDiscount === 0 ? "" : orderDiscount.toString());
     }
   }, [orderDiscount]);
+
+  // When currency changes while checkout is open, convert paidAmount to the new currency
+  useEffect(() => {
+    if (showCheckout) {
+      setPaidAmount((total * currencyInfo.rate).toFixed(2));
+    }
+  }, [selectedCurrency]);
 
   const resolvedProducts: any[] = productsData || [];
   const resolvedCustomers: any[] = customersData || [];
@@ -391,18 +389,22 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
   };
 
   const handleOrderDiscountChange = (val: string) => {
+    isTypingDiscount.current = true;
     setOrderDiscountInput(val);
     const amount = parseFloat(val.replace(",", ".")) || 0;
     const rawTotal = subtotal + taxAmount;
-    if (amount > rawTotal) { setOrderDiscount(rawTotal); return; }
-    if (amount <= subtotal * 0.1) setOrderDiscount(amount);
+    // Apply immediately (capped at total) so the discount shows live
+    setOrderDiscount(Math.min(amount, rawTotal));
+    isTypingDiscount.current = false;
   };
 
   const handleDiscountSubmit = () => {
+    isTypingDiscount.current = false;
     const amount = parseFloat(orderDiscountInput.replace(",", ".")) || 0;
     const rawTotal = subtotal + taxAmount;
     if (amount > rawTotal) { setOrderDiscount(rawTotal); setOrderDiscountInput(rawTotal.toString()); return; }
-    if (amount > subtotal * 0.1) setPendingOverride({ type: "DISCOUNT", data: amount });
+    // > 50% of subtotal requires manager override
+    if (amount > subtotal * 0.5) setPendingOverride({ type: "DISCOUNT", data: amount });
     else setOrderDiscount(amount);
   };
 
@@ -598,8 +600,9 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
 
   const processOrder = async () => {
     if (!selectedCustomerId) return;
+    // paid is in local currency, total is in base — compare in same unit
     const paid = parseFloat(paidAmount || "0");
-    if (paid < total) return;
+    if (paid < total * currencyInfo.rate - 0.001) return;
     const currencyObj = resolvedCurrencies.find((c: any) => c.code === selectedCurrency) || { code: "USD", exchangeRate: "1" };
     const invoiceData = {
       customerId: selectedCustomerId,
@@ -620,58 +623,64 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
         taxTypeId: item.taxTypeId
       }))
     };
+
     setIsSubmitting(true);
-    try {
-      // Auto-open shift if needed
-      if (!currentShift) {
-        const openingBalance = "0";
-        if (isOnline) {
-          try {
-            const res = await apiFetch("/api/pos/shifts/open", {
-              method: "POST",
-              body: JSON.stringify({ companyId, openingBalance })
-            });
-            if (res.ok) {
-              await fetchShift();
-            }
-          } catch (e) {
-            console.error("Auto-shift open error:", e);
-          }
-        } else {
-          await addPendingShiftAction({ companyId, type: "open", payload: { openingBalance } });
-          const provisional = { id: Date.now(), companyId, status: "OPEN", openingBalance, openedAt: new Date().toISOString(), _provisional: true };
-          setCurrentShift(provisional);
-          await setProvisionalShift(companyId, provisional);
-        }
-      }
 
-      if (!isOnline) {
-        const offlineId = await addPendingSale(companyId, invoiceData);
-        setLastInvoice({ ...invoiceData, id: offlineId, _offline: true });
-        if (printerConfig.autoShowModal) setShowSuccess(true);
+    // Auto-open shift in background — never blocks the sale
+    if (!currentShift) {
+      const openingBalance = "0";
+      // Optimistically mark a provisional shift immediately so next sale doesn't re-open
+      const provisional = { id: Date.now(), companyId, status: "OPEN", openingBalance, openedAt: new Date().toISOString(), _provisional: true };
+      setCurrentShift(provisional);
+      if (isOnline) {
+        setProvisionalShift(companyId, provisional); // not awaited
+        // fire-and-forget — don't block the sale
+        apiFetch("/api/pos/shifts/open", {
+          method: "POST",
+          body: JSON.stringify({ companyId, openingBalance })
+        }).then(async (res) => {
+          if (res.ok) fetchShift(); // quietly refresh in background
+        }).catch((e) => console.error("Auto-shift open error:", e));
       } else {
-        const created = await createInvoice(invoiceData);
-        setLastInvoice(created);
-        if (printerConfig.autoShowModal) setShowSuccess(true);
+        addPendingShiftAction({ companyId, type: "open", payload: { openingBalance } }); // not awaited
+        setProvisionalShift(companyId, provisional); // not awaited
       }
-      setCart([]); setOrderDiscount(0); setOrderDiscountInput("");
-      setShowCheckout(false); setShowCart(false); setPaidAmount("");
-      resetToDefaultCustomer();
+    }
 
-      // Ensure state updates have processed, then trigger auto-print if configured
-      if (printerConfig.autoPrint) {
-        setTimeout(() => {
-          if (printerConfig.macAddress) handlePrintThermal();
-          else handlePrintStandard();
-        }, 800);
-      }
+    // ── OPTIMISTIC UI: clear state and show success immediately ─────────────
+    setLastInvoice({ ...invoiceData, id: `optimistic_${Date.now()}`, _pending: true });
+    setCart([]); setOrderDiscount(0); setOrderDiscountInput("");
+    setShowCheckout(false); setShowCart(false); setPaidAmount("");
+    resetToDefaultCustomer();
+    setIsSubmitting(false);
+    if (printerConfig.autoShowModal) setShowSuccess(true);
 
-    } catch (e: any) {
-      Alert.alert("Error", e.message || "Failed to process order");
-    } finally {
-      setIsSubmitting(false);
+    // Trigger auto-print with a short delay now that state is already cleared
+    if (printerConfig.autoPrint) {
+      setTimeout(() => {
+        if (printerConfig.macAddress) handlePrintThermal();
+        else handlePrintStandard();
+      }, 200);
+    }
+
+    // ── BACKGROUND: post the invoice to the server ───────────────────────────
+    if (!isOnline) {
+      addPendingSale(companyId, invoiceData).then((offlineId) => {
+        setLastInvoice((prev: any) => ({ ...prev, id: offlineId, _offline: true }));
+      });
+    } else {
+      createInvoice(invoiceData)
+        .then((created: any) => {
+          setLastInvoice(created); // update so receipt printing uses the real invoice
+        })
+        .catch(async () => {
+          // Network failed after optimistic update — queue it offline silently
+          const offlineId = await addPendingSale(companyId, invoiceData);
+          setLastInvoice((prev: any) => ({ ...prev, id: offlineId, _offline: true }));
+        });
     }
   };
+
 
   const cartItemCount = cart.reduce((sum: number, item: CartItem) => sum + item.quantity, 0);
 
@@ -684,7 +693,10 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
         company,
         customer: lastInvoice.customerId ? resolvedCustomers?.find((c: any) => c.id === lastInvoice.customerId) : null,
         terminalId: printerConfig.terminalId,
-        currencySymbol: currencyInfo.symbol
+        currencySymbol: currencyInfo.symbol,
+        cashierName: userName,
+        paidAmount: parseFloat(paidAmount || "0"),
+        paperWidth: printerConfig.paperWidth
       }, printerConfig.targetPrinter, printerConfig.silentPrint);
     } catch (e: any) {
       if (e.message !== "Print preview was cancelled.") {
@@ -719,7 +731,10 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
         company,
         customer: lastInvoice.customerId ? resolvedCustomers?.find((c: any) => c.id === lastInvoice.customerId) : null,
         terminalId: printerConfig.terminalId,
-        currencySymbol: currencyInfo.symbol
+        currencySymbol: currencyInfo.symbol,
+        cashierName: userName,
+        paidAmount: parseFloat(paidAmount || "0"),
+        paperWidth: printerConfig.paperWidth
       }, printerConfig.macAddress);
     } catch (e: any) {
       Alert.alert("Thermal Error", e.message || "Failed to print to Bluetooth device");
@@ -734,24 +749,24 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
   });
 
   return (
-    <View style={{ flex: 1, backgroundColor: C.bg }}>
+    <View style={{ flex: 1, backgroundColor: C.bg.base }}>
       <StatusBar style="light" />
 
       {/* ── HEADER ─────────────────────────────────────────────────────────── */}
-      <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 0, borderBottomWidth: 1, borderBottomColor: C.border }}>
+      <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 0, borderBottomWidth: 1, borderBottomColor: C.border.default }}>
 
         {/* Row 1: brand + online pill + customer */}
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
             <TouchableOpacity onPress={onOpenDrawer}
               style={{
-                width: 36, height: 36, borderRadius: 10, backgroundColor: C.s2,
-                borderWidth: 1, borderColor: C.border, alignItems: "center", justifyContent: "center",
+                width: 36, height: 36, borderRadius: 10, backgroundColor: C.bg.hover,
+                borderWidth: 1, borderColor: C.border.default, alignItems: "center", justifyContent: "center",
                 marginRight: 4
               }}>
-              <Menu size={20} color={C.accent} />
+              <Menu size={20} color={C.amber.primary} />
             </TouchableOpacity>
-            <Text style={{ color: C.accent, fontSize: 20, fontWeight: "800", letterSpacing: -0.5 }}>
+            <Text style={{ color: C.amber.primary, fontSize: 20, fontWeight: "800", letterSpacing: -0.5 }}>
               POS
             </Text>
             <View style={{
@@ -761,11 +776,11 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
               borderWidth: 1, borderColor: isOnline ? "rgba(0,208,132,0.25)" : "rgba(255,71,87,0.25)",
             }}>
               <View style={{
-                width: 6, height: 6, borderRadius: 3, backgroundColor: isOnline ? C.green : C.red,
-                shadowColor: isOnline ? C.green : C.red, shadowOpacity: 0.8, shadowRadius: 4, shadowOffset: { width: 0, height: 0 }
+                width: 6, height: 6, borderRadius: 3, backgroundColor: isOnline ? C.status.success : C.status.error,
+                shadowColor: isOnline ? C.status.success : C.status.error, shadowOpacity: 0.8, shadowRadius: 4, shadowOffset: { width: 0, height: 0 }
               }} />
-              {isOnline ? <Wifi size={10} color={C.green} /> : <WifiOff size={10} color={C.red} />}
-              {/*<Text style={{ fontSize: 9, fontWeight: "700", color: isOnline ? C.green : C.red, textTransform: "uppercase" }}>
+              {isOnline ? <Wifi size={10} color={C.status.success} /> : <WifiOff size={10} color={C.status.error} />}
+              {/*<Text style={{ fontSize: 9, fontWeight: "700", color: isOnline ? C.status.success : C.status.error, textTransform: "uppercase" }}>
                 {isOnline ? "Online" : "Offline"}
               </Text>*/}
             </View>
@@ -790,11 +805,11 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
                   setSelectedCurrency(allCurrencies[nextIdx]);
                 }}
                 style={{
-                  height: 34, borderRadius: 10, backgroundColor: C.s2,
-                  borderWidth: 1.5, borderColor: selectedCurrency !== "USD" ? C.accent : C.border,
+                  height: 34, borderRadius: 10, backgroundColor: C.bg.hover,
+                  borderWidth: 1.5, borderColor: selectedCurrency !== "USD" ? C.amber.primary : C.border.default,
                   paddingHorizontal: 10, alignItems: "center", justifyContent: "center"
                 }}>
-                <Text style={{ color: selectedCurrency !== "USD" ? C.accent : C.muted, fontSize: 11, fontWeight: "800" }}>
+                <Text style={{ color: selectedCurrency !== "USD" ? C.amber.primary : C.text.secondary, fontSize: 11, fontWeight: "800" }}>
                   {selectedCurrency}
                 </Text>
               </TouchableOpacity>
@@ -802,8 +817,8 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
 
             {/* <TouchableOpacity activeOpacity={0.7} onPress={() => setIsDarkMode(!isDarkMode)}
               style={{
-                width: 34, height: 34, borderRadius: 10, backgroundColor: C.s2,
-                borderWidth: 1, borderColor: C.border, alignItems: "center", justifyContent: "center"
+                width: 34, height: 34, borderRadius: 10, backgroundColor: C.bg.hover,
+                borderWidth: 1, borderColor: C.border.default, alignItems: "center", justifyContent: "center"
               }}>
               {isDarkMode ? <Sun size={16} color="#fbbf24" /> : <Moon size={16} color="#6366f1" />}
             </TouchableOpacity> */}
@@ -815,18 +830,19 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
               setTempSilentPrint(printerConfig.silentPrint);
               setTempTerminalId(printerConfig.terminalId);
               setTempTargetPrinter(printerConfig.targetPrinter);
+              setTempPaperWidth(printerConfig.paperWidth || 58);
               setShowPrinterSettings(true);
             }}
               style={{
-                width: 34, height: 34, borderRadius: 10, backgroundColor: C.s2,
-                borderWidth: 1, borderColor: C.border, alignItems: "center", justifyContent: "center"
+                width: 34, height: 34, borderRadius: 10, backgroundColor: C.bg.hover,
+                borderWidth: 1, borderColor: C.border.default, alignItems: "center", justifyContent: "center"
               }}>
-              <Printer size={16} color={printerConfig.macAddress || printerConfig.targetPrinter ? C.green : C.muted} />
+              <Printer size={16} color={printerConfig.macAddress || printerConfig.targetPrinter ? C.status.success : C.text.secondary} />
               {(!!printerConfig.macAddress || !!printerConfig.targetPrinter) && (
                 <View style={{
                   position: "absolute", top: -2, right: -2,
-                  width: 8, height: 8, borderRadius: 4, backgroundColor: C.green,
-                  borderWidth: 1.5, borderColor: C.s2
+                  width: 8, height: 8, borderRadius: 4, backgroundColor: C.status.success,
+                  borderWidth: 1.5, borderColor: C.bg.hover
                 }} />
               )}
             </TouchableOpacity>
@@ -834,33 +850,33 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
             <TouchableOpacity activeOpacity={0.7} onPress={() => setShowCustomerPicker(true)}
               style={{
                 width: 34, height: 34, borderRadius: 10,
-                backgroundColor: isDefaultCustomerSelected ? "rgba(240,165,0,0.08)" : C.s2,
-                borderWidth: 1, borderColor: isDefaultCustomerSelected ? "rgba(240,165,0,0.3)" : C.border,
+                backgroundColor: isDefaultCustomerSelected ? "rgba(240,165,0,0.08)" : C.bg.hover,
+                borderWidth: 1, borderColor: isDefaultCustomerSelected ? "rgba(240,165,0,0.3)" : C.border.default,
                 alignItems: "center", justifyContent: "center"
               }}>
-              <User size={16} color={C.accent} />
+              <User size={16} color={C.amber.primary} />
               {!isDefaultCustomerSelected && (
                 <View style={{
                   position: "absolute", top: -2, right: -2,
-                  width: 8, height: 8, borderRadius: 4, backgroundColor: C.green,
-                  borderWidth: 1.5, borderColor: C.s2
+                  width: 8, height: 8, borderRadius: 4, backgroundColor: C.status.success,
+                  borderWidth: 1.5, borderColor: C.bg.hover
                 }} />
               )}
             </TouchableOpacity>
 
             <TouchableOpacity activeOpacity={0.7} onPress={() => setShowHoldsModal(true)}
               style={{
-                width: 34, height: 34, borderRadius: 10, backgroundColor: C.s2,
-                borderWidth: 1, borderColor: heldSales.length > 0 ? C.accent : C.border,
+                width: 34, height: 34, borderRadius: 10, backgroundColor: C.bg.hover,
+                borderWidth: 1, borderColor: heldSales.length > 0 ? C.amber.primary : C.border.default,
                 alignItems: "center", justifyContent: "center",
                 position: "relative"
               }}>
-              <History size={16} color={heldSales.length > 0 ? C.accent : C.muted} />
+              <History size={16} color={heldSales.length > 0 ? C.amber.primary : C.text.secondary} />
               {heldSales.length > 0 && (
                 <View style={{
                   position: "absolute", top: -2, right: -2,
-                  width: 8, height: 8, borderRadius: 4, backgroundColor: C.accent,
-                  borderWidth: 1.5, borderColor: C.s2
+                  width: 8, height: 8, borderRadius: 4, backgroundColor: C.amber.primary,
+                  borderWidth: 1.5, borderColor: C.bg.hover
                 }} />
               )}
             </TouchableOpacity>
@@ -874,27 +890,27 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
             style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
             <View style={{
               width: 7, height: 7, borderRadius: 4,
-              backgroundColor: currentShift ? C.green : "#fbbf24",
-              shadowColor: currentShift ? C.green : "#fbbf24", shadowOpacity: 0.7,
+              backgroundColor: currentShift ? C.status.success : "#fbbf24",
+              shadowColor: currentShift ? C.status.success : "#fbbf24", shadowOpacity: 0.7,
               shadowRadius: 4, shadowOffset: { width: 0, height: 0 }
             }} />
             <Text style={{ color: "rgba(232,237,245,0.6)", fontSize: 11, fontWeight: "600" }}>
               {currentShift ? "Shift active" : "Shift closed"}
             </Text>
-            <Clock size={10} color={C.muted} />
+            <Clock size={10} color={C.text.secondary} />
           </TouchableOpacity>
 
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <Text style={{ color: C.muted, fontSize: 9, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.5 }}>
+            <Text style={{ color: C.text.secondary, fontSize: 9, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.5 }}>
               {taxInclusive ? "VAT incl." : "VAT excl."}
             </Text>
             <View style={{
               flexDirection: "row", alignItems: "center", gap: 5,
-              backgroundColor: isSyncing ? C.accent : C.s2, borderRadius: 20, paddingHorizontal: 8, paddingVertical: 4,
-              borderWidth: 1, borderColor: isSyncing ? C.accent : C.border
+              backgroundColor: isSyncing ? C.amber.primary : C.bg.hover, borderRadius: 20, paddingHorizontal: 8, paddingVertical: 4,
+              borderWidth: 1, borderColor: isSyncing ? C.amber.primary : C.border.default
             }}>
-              {isSyncing ? <ActivityIndicator size="small" color="#000" style={{ transform: [{ scale: 0.6 }] }} /> : <CloudUpload size={9} color={C.accent} />}
-              <Text style={{ color: isSyncing ? "#000" : C.muted, fontSize: 9, fontWeight: "700" }}>
+              {isSyncing ? <ActivityIndicator size="small" color="#000" style={{ transform: [{ scale: 0.6 }] }} /> : <CloudUpload size={9} color={C.amber.primary} />}
+              <Text style={{ color: isSyncing ? "#000" : C.text.secondary, fontSize: 9, fontWeight: "700" }}>
                 {isSyncing ? "Syncing..." : (queueCount ? `${queueCount} queued` : "Synced")}
               </Text>
             </View>
@@ -905,23 +921,23 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
         <View style={{ flexDirection: "row", gap: 8, marginBottom: 10 }}>
           <View style={{
             flex: 1, flexDirection: "row", alignItems: "center", gap: 8,
-            backgroundColor: C.s2, borderWidth: 1, borderColor: C.border,
+            backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default,
             borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10
           }}>
-            <Search size={14} color={C.muted} />
+            <Search size={14} color={C.text.secondary} />
             <TextInput
-              style={{ flex: 1, color: C.text, fontSize: 14 }}
+              style={{ flex: 1, color: C.text.primary, fontSize: 14 }}
               placeholder="Search products…"
-              placeholderTextColor={C.muted}
+              placeholderTextColor={C.text.secondary}
               value={search}
               onChangeText={setSearch}
             />
           </View>
           <View style={{
-            width: 44, height: 44, borderRadius: 12, backgroundColor: C.s2,
-            borderWidth: 1, borderColor: C.border, alignItems: "center", justifyContent: "center"
+            width: 44, height: 44, borderRadius: 12, backgroundColor: C.bg.hover,
+            borderWidth: 1, borderColor: C.border.default, alignItems: "center", justifyContent: "center"
           }}>
-            <ScanLine size={18} color={C.accent} />
+            <ScanLine size={18} color={C.amber.primary} />
           </View>
         </View>
 
@@ -932,12 +948,12 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
             <TouchableOpacity key={cat} onPress={() => setSelectedCategory(cat)}
               style={{
                 paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20,
-                backgroundColor: selectedCategory === cat ? C.accent : C.s2,
-                borderWidth: 1, borderColor: selectedCategory === cat ? C.accent : C.border
+                backgroundColor: selectedCategory === cat ? C.amber.primary : C.bg.hover,
+                borderWidth: 1, borderColor: selectedCategory === cat ? C.amber.primary : C.border.default
               }}>
               <Text style={{
                 fontSize: 9, fontWeight: "700",
-                color: selectedCategory === cat ? "#000" : C.muted
+                color: selectedCategory === cat ? "#000" : C.text.secondary
               }}>
                 {cat === "All" ? "All" : cat}
               </Text>
@@ -947,10 +963,10 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
 
         {/* Info row */}
         <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 6 }}>
-          <Text style={{ color: C.muted, fontSize: 9, fontWeight: "600" }}>
+          <Text style={{ color: C.text.secondary, fontSize: 9, fontWeight: "600" }}>
             {filteredProducts.length} item{filteredProducts.length !== 1 ? "s" : ""}
           </Text>
-          <Text style={{ color: C.muted, fontSize: 9, fontWeight: "600" }}>
+          <Text style={{ color: C.text.secondary, fontSize: 9, fontWeight: "600" }}>
             {cashierName}
           </Text>
         </View>
@@ -960,18 +976,18 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
       <View style={{ flex: 1, paddingHorizontal: 12 }}>
         {loadingProducts ? (
           <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-            <ActivityIndicator color={C.accent} />
+            <ActivityIndicator color={C.amber.primary} />
           </View>
         ) : filteredProducts.length === 0 ? (
           <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
             <View style={{
-              width: 64, height: 64, borderRadius: 20, backgroundColor: C.s2,
+              width: 64, height: 64, borderRadius: 20, backgroundColor: C.bg.hover,
               alignItems: "center", justifyContent: "center", marginBottom: 12,
-              borderWidth: 1, borderColor: C.border
+              borderWidth: 1, borderColor: C.border.default
             }}>
-              <Tag size={28} color={C.muted} />
+              <Tag size={28} color={C.text.secondary} />
             </View>
-            <Text style={{ color: C.muted, fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 2 }}>
+            <Text style={{ color: C.text.secondary, fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 2 }}>
               No products found
             </Text>
           </View>
@@ -1001,9 +1017,9 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
                 >
                   <View style={{
                     borderRadius: 16, paddingHorizontal: 12, paddingTop: 12, paddingBottom: 10,
-                    backgroundColor: inCart ? C.s2 : C.s1,
+                    backgroundColor: inCart ? C.bg.hover : C.bg.card,
                     borderWidth: inCart ? 1.5 : 1,
-                    borderColor: inCart ? color : C.border,
+                    borderColor: inCart ? color : C.border.default,
                     overflow: "hidden",
                     shadowColor: inCart ? color : "#000",
                     shadowOpacity: inCart ? 0.28 : 0.08,
@@ -1043,7 +1059,7 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
                           borderWidth: 1,
                           borderColor: outOfStock ? "rgba(255,71,87,0.3)" : stockLow ? "rgba(251,191,36,0.25)" : "rgba(0,208,132,0.22)",
                         }}>
-                          <Text style={{ fontSize: 8, fontWeight: "800", color: outOfStock ? C.red : stockLow ? "#fbbf24" : C.green }}>
+                          <Text style={{ fontSize: 8, fontWeight: "800", color: outOfStock ? C.status.error : stockLow ? "#fbbf24" : C.status.success }}>
                             {outOfStock ? "OUT" : `${Number(item.stockLevel || 0)} left`}
                           </Text>
                         </View>
@@ -1052,7 +1068,7 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
 
                     {/* Product name — 2 lines so nothing gets cut */}
                     <Text style={{
-                      color: inCart ? C.text : "rgba(232,237,245,0.85)",
+                      color: inCart ? C.text.primary : "rgba(232,237,245,0.85)",
                       fontSize: 12, fontWeight: "700", lineHeight: 16, marginBottom: 6
                     }} numberOfLines={2}>
                       {toTitleCase(item.name)}
@@ -1074,7 +1090,7 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
                             style={{ width: 26, height: 24, alignItems: "center", justifyContent: "center" }}>
                             <Minus size={11} color={color} />
                           </TouchableOpacity>
-                          <Text style={{ color: C.text, fontSize: 11, fontWeight: "800", minWidth: 16, textAlign: "center" }}>
+                          <Text style={{ color: C.text.primary, fontSize: 11, fontWeight: "800", minWidth: 16, textAlign: "center" }}>
                             {inCartItem!.quantity}
                           </Text>
                           <TouchableOpacity
@@ -1108,12 +1124,12 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
 
         <TouchableOpacity activeOpacity={0.9} disabled={cart.length === 0} onPress={() => setShowCart(true)}>
           <LinearGradient
-            colors={cart.length === 0 ? [C.s2, C.s1] : [C.accent, C.accent2]}
+            colors={cart.length === 0 ? [C.bg.hover, C.bg.card] : [C.amber.primary, C.amber.light]}
             start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
             style={{
               borderRadius: 20, paddingVertical: 14, paddingHorizontal: 16,
-              borderWidth: 1, borderColor: cart.length === 0 ? C.border : "transparent",
-              shadowColor: cart.length === 0 ? "#000" : C.accent,
+              borderWidth: 1, borderColor: cart.length === 0 ? C.border.default : "transparent",
+              shadowColor: cart.length === 0 ? "#000" : C.amber.primary,
               shadowOpacity: cart.length === 0 ? 0 : 0.3, shadowRadius: 14,
               shadowOffset: { width: 0, height: 5 }
             }}>
@@ -1126,25 +1142,25 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
                   backgroundColor: "rgba(0,0,0,0.2)", alignItems: "center", justifyContent: "center",
                   position: "relative"
                 }}>
-                  <ShoppingCart size={16} color={cart.length === 0 ? C.muted : "#000"} />
+                  <ShoppingCart size={16} color={cart.length === 0 ? C.text.secondary : "#000"} />
                   {cart.length > 0 && (
                     <View style={{
                       position: "absolute", top: -5, right: -5,
                       backgroundColor: "#000", borderRadius: 8, minWidth: 16, height: 16,
                       alignItems: "center", justifyContent: "center", paddingHorizontal: 3
                     }}>
-                      <Text style={{ color: C.accent, fontSize: 8, fontWeight: "900" }}>
+                      <Text style={{ color: C.amber.primary, fontSize: 8, fontWeight: "900" }}>
                         {cartItemCount}
                       </Text>
                     </View>
                   )}
                 </View>
                 <View>
-                  <Text style={{ color: cart.length === 0 ? C.muted : "#000", fontSize: 13, fontWeight: "800" }}>
+                  <Text style={{ color: cart.length === 0 ? C.text.secondary : "#000", fontSize: 13, fontWeight: "800" }}>
                     {cart.length === 0 ? "Cart is empty" : `${cartItemCount} item${cartItemCount !== 1 ? "s" : ""} · Tap to checkout`}
                   </Text>
                   {cart.length === 0 && (
-                    <Text style={{ color: C.muted, fontSize: 10, marginTop: 1 }}>Tap products to add</Text>
+                    <Text style={{ color: C.text.secondary, fontSize: 10, marginTop: 1 }}>Tap products to add</Text>
                   )}
                   {cart.length > 0 && orderDiscount > 0 && (
                     <Text style={{ color: "rgba(0,0,0,0.55)", fontSize: 10, marginTop: 1 }}>
@@ -1155,7 +1171,7 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
               </View>
 
               <View style={{ alignItems: "flex-end" }}>
-                <Text style={{ color: cart.length === 0 ? C.muted : "#000", fontSize: 19, fontWeight: "900", letterSpacing: -0.5 }}>
+                <Text style={{ color: cart.length === 0 ? C.text.secondary : "#000", fontSize: 19, fontWeight: "900", letterSpacing: -0.5 }}>
                   {fmt(total)}
                 </Text>
                 {cart.length > 0 && taxAmount > 0 && (
@@ -1174,22 +1190,22 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "flex-end" }}>
           <View style={{
-            backgroundColor: C.s1, borderTopLeftRadius: 32, borderTopRightRadius: 32,
-            borderTopWidth: 1, borderColor: C.border, padding: 16, paddingBottom: 16, maxHeight: "88%", flex: 1
+            backgroundColor: C.bg.card, borderTopLeftRadius: 32, borderTopRightRadius: 32,
+            borderTopWidth: 1, borderColor: C.border.default, padding: 16, paddingBottom: 16, maxHeight: "88%", flex: 1
           }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
               <View>
-                <Text style={{ color: C.text, fontSize: 22, fontWeight: "800" }}>Cart</Text>
-                <Text style={{ color: C.muted, fontSize: 12, marginTop: 3 }}>
+                <Text style={{ color: C.text.primary, fontSize: 22, fontWeight: "800" }}>Cart</Text>
+                <Text style={{ color: C.text.secondary, fontSize: 12, marginTop: 3 }}>
                   {cart.length === 0 ? "No items added yet" : `${cartItemCount} item${cartItemCount !== 1 ? "s" : ""} ready to sell`}
                 </Text>
               </View>
               <TouchableOpacity onPress={() => setShowCart(false)}
                 style={{
-                  width: 38, height: 38, borderRadius: 12, backgroundColor: C.s2,
-                  borderWidth: 1, borderColor: C.border, alignItems: "center", justifyContent: "center"
+                  width: 38, height: 38, borderRadius: 12, backgroundColor: C.bg.hover,
+                  borderWidth: 1, borderColor: C.border.default, alignItems: "center", justifyContent: "center"
                 }}>
-                <X size={16} color={C.text} />
+                <X size={16} color={C.text.primary} />
               </TouchableOpacity>
             </View>
 
@@ -1197,12 +1213,12 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
               {cart.length === 0 ? (
                 <View style={{ alignItems: "center", paddingVertical: 48 }}>
                   <View style={{
-                    width: 56, height: 56, borderRadius: 18, backgroundColor: C.s2,
-                    borderWidth: 1, borderColor: C.border, alignItems: "center", justifyContent: "center", marginBottom: 12
+                    width: 56, height: 56, borderRadius: 18, backgroundColor: C.bg.hover,
+                    borderWidth: 1, borderColor: C.border.default, alignItems: "center", justifyContent: "center", marginBottom: 12
                   }}>
-                    <ShoppingCart size={24} color={C.muted} />
+                    <ShoppingCart size={24} color={C.text.secondary} />
                   </View>
-                  <Text style={{ color: C.muted, fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 2 }}>
+                  <Text style={{ color: C.text.secondary, fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 2 }}>
                     Start adding products
                   </Text>
                 </View>
@@ -1210,21 +1226,21 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
                 const { color } = getProductMeta(item, idx);
                 return (
                   <View key={item.productId} style={{
-                    marginBottom: 8, backgroundColor: C.s2,
-                    padding: 10, borderRadius: 14, borderWidth: 1, borderColor: C.border
+                    marginBottom: 8, backgroundColor: C.bg.hover,
+                    padding: 10, borderRadius: 14, borderWidth: 1, borderColor: C.border.default
                   }}>
                     <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between" }}>
                       <View style={{ flex: 1, marginRight: 12 }}>
-                        <Text style={{ color: C.text, fontSize: 13, fontWeight: "600" }} numberOfLines={2}>
+                        <Text style={{ color: C.text.primary, fontSize: 13, fontWeight: "600" }} numberOfLines={2}>
                           {item.name}
                         </Text>
-                        <Text style={{ color: C.muted, fontSize: 11, marginTop: 4 }}>
+                        <Text style={{ color: C.text.secondary, fontSize: 11, marginTop: 4 }}>
                           {fmt(item.price)} each
                         </Text>
                       </View>
                       <TouchableOpacity onPress={() => removeFromCart(item.productId)}
                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                        <Trash2 size={15} color={C.red} />
+                        <Trash2 size={15} color={C.status.error} />
                       </TouchableOpacity>
                     </View>
                     <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
@@ -1238,7 +1254,7 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
                           style={{ width: 30, height: 30, alignItems: "center", justifyContent: "center" }}>
                           <Minus size={12} color={color} />
                         </TouchableOpacity>
-                        <Text style={{ color: C.text, fontSize: 15, fontWeight: "800", marginHorizontal: 12, minWidth: 20, textAlign: "center" }}>
+                        <Text style={{ color: C.text.primary, fontSize: 15, fontWeight: "800", marginHorizontal: 12, minWidth: 20, textAlign: "center" }}>
                           {item.quantity}
                         </Text>
                         <TouchableOpacity
@@ -1256,19 +1272,19 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
               })}
             </ScrollView>
 
-            <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderColor: C.border }}>
+            <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderColor: C.border.default }}>
               {/* Discount row */}
               <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 10, gap: 8 }}>
                 <View style={{
-                  flex: 1, backgroundColor: C.s2, borderWidth: 1, borderColor: C.border,
+                  flex: 1, backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default,
                   borderRadius: 12, paddingHorizontal: 14, paddingVertical: 2,
                   flexDirection: "row", alignItems: "center", gap: 8
                 }}>
-                  <Tag size={13} color={C.muted} />
+                  <Tag size={13} color={C.text.secondary} />
                   <TextInput
-                    style={{ flex: 1, color: C.text, fontSize: 14, paddingVertical: 10 }}
+                    style={{ flex: 1, color: C.text.primary, fontSize: 14, paddingVertical: 10 }}
                     placeholder="Order discount…"
-                    placeholderTextColor={C.muted}
+                    placeholderTextColor={C.text.secondary}
                     keyboardType="decimal-pad"
                     returnKeyType="done"
                     onSubmitEditing={() => { Keyboard.dismiss(); handleDiscountSubmit(); }}
@@ -1280,33 +1296,33 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
                 <TouchableOpacity onPress={handleClearCart} disabled={cart.length === 0}
                   style={{
                     width: 46, height: 46, borderRadius: 12, alignItems: "center", justifyContent: "center",
-                    backgroundColor: C.s2, borderWidth: 1, borderColor: C.border
+                    backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default
                   }}>
-                  <Trash2 size={17} color={cart.length === 0 ? C.muted : C.red} />
+                  <Trash2 size={17} color={cart.length === 0 ? C.text.secondary : C.status.error} />
                 </TouchableOpacity>
               </View>
 
               {/* Totals */}
               <View style={{
-                backgroundColor: C.s2, borderRadius: 16, padding: 14,
-                marginBottom: 14, borderWidth: 1, borderColor: C.border
+                backgroundColor: C.bg.hover, borderRadius: 16, padding: 14,
+                marginBottom: 14, borderWidth: 1, borderColor: C.border.default
               }}>
                 {[
-                  { label: "Subtotal", value: fmt(subtotal), color: C.text },
-                  { label: "Tax", value: fmt(taxAmount), color: C.text },
-                  ...(orderDiscount > 0 ? [{ label: "Discount", value: `-${fmt(orderDiscount)}`, color: C.green }] : []),
+                  { label: "Subtotal", value: fmt(subtotal), color: C.text.primary },
+                  { label: "Tax", value: fmt(taxAmount), color: C.text.primary },
+                  ...(orderDiscount > 0 ? [{ label: "Discount", value: `-${fmt(orderDiscount)}`, color: C.status.success }] : []),
                 ].map(row => (
                   <View key={row.label} style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
-                    <Text style={{ color: C.muted, fontSize: 13 }}>{row.label}</Text>
+                    <Text style={{ color: C.text.secondary, fontSize: 13 }}>{row.label}</Text>
                     <Text style={{ color: row.color, fontSize: 13, fontWeight: "600" }}>{row.value}</Text>
                   </View>
                 ))}
-                <View style={{ height: 1, backgroundColor: C.border, marginVertical: 8 }} />
+                <View style={{ height: 1, backgroundColor: C.border.default, marginVertical: 8 }} />
                 <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                  <Text style={{ color: C.muted, fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                  <Text style={{ color: C.text.secondary, fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 }}>
                     Total Due
                   </Text>
-                  <Text style={{ color: C.accent, fontSize: 24, fontWeight: "900" }}>
+                  <Text style={{ color: C.amber.primary, fontSize: 24, fontWeight: "900" }}>
                     {fmt(total)}
                   </Text>
                 </View>
@@ -1318,15 +1334,15 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
                   style={{
                     flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
                     paddingVertical: 10, borderRadius: 14, borderWidth: 1,
-                    borderColor: cart.length === 0 || isParking ? C.border : `${C.accent}50`,
-                    backgroundColor: cart.length === 0 || isParking ? C.s2 : `${C.accent}12`
+                    borderColor: cart.length === 0 || isParking ? C.border.default : `${C.amber.primary}50`,
+                    backgroundColor: cart.length === 0 || isParking ? C.bg.hover : `${C.amber.primary}12`
                   }}>
                   {isParking ? (
-                    <ActivityIndicator size="small" color={C.accent} />
+                    <ActivityIndicator size="small" color={C.amber.primary} />
                   ) : (
                     <>
-                      <Download size={14} color={cart.length === 0 ? C.muted : C.accent} />
-                      <Text style={{ marginLeft: 6, fontSize: 10, fontWeight: "800", color: cart.length === 0 ? C.muted : C.accent }}>
+                      <Download size={14} color={cart.length === 0 ? C.text.secondary : C.amber.primary} />
+                      <Text style={{ marginLeft: 6, fontSize: 10, fontWeight: "800", color: cart.length === 0 ? C.text.secondary : C.amber.primary }}>
                         Park Sale
                       </Text>
                     </>
@@ -1337,11 +1353,11 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
                   style={{
                     flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
                     paddingVertical: 10, borderRadius: 14, borderWidth: 1,
-                    borderColor: heldSales.length === 0 ? C.border : C.border,
-                    backgroundColor: heldSales.length === 0 ? C.s2 : C.s3
+                    borderColor: heldSales.length === 0 ? C.border.default : C.border.default,
+                    backgroundColor: heldSales.length === 0 ? C.bg.hover : C.bg.hover
                   }}>
-                  <History size={14} color={heldSales.length === 0 ? C.muted : C.text} />
-                  <Text style={{ marginLeft: 6, fontSize: 10, fontWeight: "800", color: heldSales.length === 0 ? C.muted : C.text }}>
+                  <History size={14} color={heldSales.length === 0 ? C.text.secondary : C.text.primary} />
+                  <Text style={{ marginLeft: 6, fontSize: 10, fontWeight: "800", color: heldSales.length === 0 ? C.text.secondary : C.text.primary }}>
                     Holds ({heldSales.length})
                   </Text>
                 </TouchableOpacity>
@@ -1351,32 +1367,32 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
               <TouchableOpacity activeOpacity={0.88} disabled={cart.length === 0 || isSubmitting}
                 onPress={() => { setShowCart(false); handleCheckout(); }}>
                 <LinearGradient
-                  colors={cart.length === 0 ? [C.s2, C.s1] : [C.accent, C.accent2]}
+                  colors={cart.length === 0 ? [C.bg.hover, C.bg.card] : [C.amber.primary, C.amber.light]}
                   start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                   style={{
                     borderRadius: 20, height: 58, paddingHorizontal: 18,
                     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-                    borderWidth: 1, borderColor: cart.length === 0 ? C.border : "transparent"
+                    borderWidth: 1, borderColor: cart.length === 0 ? C.border.default : "transparent"
                   }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
                     <View style={{
                       width: 36, height: 36, borderRadius: 10,
                       backgroundColor: "rgba(0,0,0,0.2)", alignItems: "center", justifyContent: "center"
                     }}>
-                      <ShoppingCart size={16} color={cart.length === 0 ? C.muted : "#000"} />
+                      <ShoppingCart size={16} color={cart.length === 0 ? C.text.secondary : "#000"} />
                     </View>
                     <View>
-                      <Text style={{ color: cart.length === 0 ? C.muted : "#000", fontSize: 13, fontWeight: "800", textTransform: "uppercase", letterSpacing: 1.2 }}>
+                      <Text style={{ color: cart.length === 0 ? C.text.secondary : "#000", fontSize: 13, fontWeight: "800", textTransform: "uppercase", letterSpacing: 1.2 }}>
                         Checkout
                       </Text>
-                      <Text style={{ color: cart.length === 0 ? C.muted : "rgba(0,0,0,0.55)", fontSize: 10, marginTop: 2 }}>
+                      <Text style={{ color: cart.length === 0 ? C.text.secondary : "rgba(0,0,0,0.55)", fontSize: 10, marginTop: 2 }}>
                         {cart.length === 0 ? "Add items first" : `${cartItemCount} item${cartItemCount !== 1 ? "s" : ""} · ready to pay`}
                       </Text>
                     </View>
                   </View>
                   {isSubmitting
                     ? <ActivityIndicator color="#000" size="small" />
-                    : <Text style={{ color: cart.length === 0 ? C.muted : "#000", fontSize: 18, fontWeight: "900" }}>
+                    : <Text style={{ color: cart.length === 0 ? C.text.secondary : "#000", fontSize: 18, fontWeight: "900" }}>
                       {fmt(total)}
                     </Text>}
                 </LinearGradient>
@@ -1390,31 +1406,31 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
       <Modal visible={showHoldsModal} transparent animationType="slide" onRequestClose={() => setShowHoldsModal(false)}>
         <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "flex-end" }}>
           <View style={{
-            backgroundColor: C.s1, borderTopLeftRadius: 32, borderTopRightRadius: 32,
-            borderTopWidth: 1, borderColor: C.border, padding: 24, maxHeight: "75%"
+            backgroundColor: C.bg.card, borderTopLeftRadius: 32, borderTopRightRadius: 32,
+            borderTopWidth: 1, borderColor: C.border.default, padding: 24, maxHeight: "75%"
           }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <View>
-                <Text style={{ color: C.text, fontSize: 22, fontWeight: "800" }}>Parked Sales</Text>
-                <Text style={{ color: C.muted, fontSize: 12, marginTop: 3 }}>Resume any held transaction</Text>
+                <Text style={{ color: C.text.primary, fontSize: 22, fontWeight: "800" }}>Parked Sales</Text>
+                <Text style={{ color: C.text.secondary, fontSize: 12, marginTop: 3 }}>Resume any held transaction</Text>
               </View>
               <TouchableOpacity onPress={() => setShowHoldsModal(false)}
                 style={{
-                  width: 38, height: 38, borderRadius: 12, backgroundColor: C.s2,
-                  borderWidth: 1, borderColor: C.border, alignItems: "center", justifyContent: "center"
+                  width: 38, height: 38, borderRadius: 12, backgroundColor: C.bg.hover,
+                  borderWidth: 1, borderColor: C.border.default, alignItems: "center", justifyContent: "center"
                 }}>
-                <X size={16} color={C.text} />
+                <X size={16} color={C.text.primary} />
               </TouchableOpacity>
             </View>
             {heldSales.length === 0 ? (
               <View style={{ alignItems: "center", paddingVertical: 48 }}>
                 <View style={{
-                  width: 56, height: 56, borderRadius: 18, backgroundColor: C.s2,
-                  borderWidth: 1, borderColor: C.border, alignItems: "center", justifyContent: "center", marginBottom: 12
+                  width: 56, height: 56, borderRadius: 18, backgroundColor: C.bg.hover,
+                  borderWidth: 1, borderColor: C.border.default, alignItems: "center", justifyContent: "center", marginBottom: 12
                 }}>
-                  <History size={24} color={C.muted} />
+                  <History size={24} color={C.text.secondary} />
                 </View>
-                <Text style={{ color: C.muted, fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 2 }}>
+                <Text style={{ color: C.text.secondary, fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 2 }}>
                   No parked sales
                 </Text>
               </View>
@@ -1424,34 +1440,34 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
                   <TouchableOpacity key={String(hold.id)} activeOpacity={0.85}
                     onPress={() => handleResumeHold(hold)}
                     style={{
-                      marginBottom: 10, backgroundColor: C.s2, padding: 16, borderRadius: 18,
-                      borderWidth: 1, borderColor: C.border,
+                      marginBottom: 10, backgroundColor: C.bg.hover, padding: 16, borderRadius: 18,
+                      borderWidth: 1, borderColor: C.border.default,
                       flexDirection: "row", alignItems: "center", justifyContent: "space-between"
                     }}>
                     <View style={{ flexDirection: "row", alignItems: "center", flex: 1, marginRight: 12 }}>
                       <View style={{
                         width: 42, height: 42, borderRadius: 14,
-                        backgroundColor: `${C.accent}18`, alignItems: "center",
+                        backgroundColor: `${C.amber.primary}18`, alignItems: "center",
                         justifyContent: "center", marginRight: 12,
-                        borderWidth: 1, borderColor: `${C.accent}30`
+                        borderWidth: 1, borderColor: `${C.amber.primary}30`
                       }}>
-                        <ShoppingCart size={17} color={C.accent} />
+                        <ShoppingCart size={17} color={C.amber.primary} />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={{ color: C.text, fontSize: 14, fontWeight: "700" }} numberOfLines={1}>
+                        <Text style={{ color: C.text.primary, fontSize: 14, fontWeight: "700" }} numberOfLines={1}>
                           {hold.holdName}
                         </Text>
-                        <Text style={{ color: C.muted, fontSize: 11, marginTop: 3 }}>
+                        <Text style={{ color: C.text.secondary, fontSize: 11, marginTop: 3 }}>
                           {new Date(hold.createdAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
                           {" · "}{hold.cartData.length} item{hold.cartData.length !== 1 ? "s" : ""}
                         </Text>
                       </View>
                     </View>
                     <View style={{ alignItems: "flex-end" }}>
-                      <Text style={{ color: C.accent, fontSize: 16, fontWeight: "800" }}>
+                      <Text style={{ color: C.amber.primary, fontSize: 16, fontWeight: "800" }}>
                         {fmt(hold.total)}
                       </Text>
-                      <Text style={{ color: C.muted, fontSize: 10, marginTop: 3 }}>Tap to resume</Text>
+                      <Text style={{ color: C.text.secondary, fontSize: 10, marginTop: 3 }}>Tap to resume</Text>
                     </View>
                   </TouchableOpacity>
                 ))}
@@ -1466,36 +1482,36 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "flex-end" }}>
           <View style={{
-            backgroundColor: C.s1, borderTopLeftRadius: 32, borderTopRightRadius: 32,
-            borderTopWidth: 1, borderColor: C.border, maxHeight: "92%", paddingBottom: 36, flex: 1
+            backgroundColor: C.bg.card, borderTopLeftRadius: 32, borderTopRightRadius: 32,
+            borderTopWidth: 1, borderColor: C.border.default, maxHeight: "92%", paddingBottom: 36, flex: 1
           }}>
             <View style={{
               flexDirection: "row", justifyContent: "space-between", alignItems: "center",
-              padding: 18, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: C.border
+              padding: 18, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: C.border.default
             }}>
               <View>
-                <Text style={{ color: C.text, fontSize: 22, fontWeight: "800" }}>Checkout</Text>
-                <Text style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>
+                <Text style={{ color: C.text.primary, fontSize: 22, fontWeight: "800" }}>Checkout</Text>
+                <Text style={{ color: C.text.secondary, fontSize: 12, marginTop: 2 }}>
                   {cartItemCount} item{cartItemCount !== 1 ? "s" : ""} · {selectedCustomer?.name || "No customer"}
                 </Text>
               </View>
               <TouchableOpacity onPress={() => setShowCheckout(false)}
                 style={{
-                  width: 38, height: 38, borderRadius: 12, backgroundColor: C.s2,
-                  borderWidth: 1, borderColor: C.border, alignItems: "center", justifyContent: "center"
+                  width: 38, height: 38, borderRadius: 12, backgroundColor: C.bg.hover,
+                  borderWidth: 1, borderColor: C.border.default, alignItems: "center", justifyContent: "center"
                 }}>
-                <X size={16} color={C.text} />
+                <X size={16} color={C.text.primary} />
               </TouchableOpacity>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}
               contentContainerStyle={{ padding: 18, paddingTop: 12, paddingBottom: 8 }}>
-              <Text style={{ color: C.muted, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
+              <Text style={{ color: C.text.secondary, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
                 Order Summary
               </Text>
               <View style={{
-                backgroundColor: C.s2, borderRadius: 16, borderWidth: 1,
-                borderColor: C.border, overflow: "hidden", marginBottom: 14
+                backgroundColor: C.bg.hover, borderRadius: 16, borderWidth: 1,
+                borderColor: C.border.default, overflow: "hidden", marginBottom: 14
               }}>
                 {cart.map((item: CartItem, idx: number) => {
                   const lineTotal = item.price * item.quantity - item.discountAmount;
@@ -1504,53 +1520,53 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
                     <View key={item.productId} style={{
                       flexDirection: "row", alignItems: "center",
                       paddingHorizontal: 12, paddingVertical: 8,
-                      borderBottomWidth: isLast ? 0 : 1, borderBottomColor: C.border
+                      borderBottomWidth: isLast ? 0 : 1, borderBottomColor: C.border.default
                     }}>
                       <View style={{
                         width: 28, height: 28, borderRadius: 8,
-                        backgroundColor: C.s3, borderWidth: 1, borderColor: C.border,
+                        backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default,
                         alignItems: "center", justifyContent: "center", marginRight: 12
                       }}>
-                        <Text style={{ color: C.accent, fontSize: 11, fontWeight: "900" }}>{item.quantity}</Text>
+                        <Text style={{ color: C.amber.primary, fontSize: 11, fontWeight: "900" }}>{item.quantity}</Text>
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={{ color: C.text, fontSize: 13, fontWeight: "600" }} numberOfLines={1}>{item.name}</Text>
-                        <Text style={{ color: C.muted, fontSize: 10, marginTop: 1 }}>
+                        <Text style={{ color: C.text.primary, fontSize: 13, fontWeight: "600" }} numberOfLines={1}>{item.name}</Text>
+                        <Text style={{ color: C.text.secondary, fontSize: 10, marginTop: 1 }}>
                           {fmt(item.price)} each
                           {item.discountAmount > 0 ? `  ·  −${fmt(item.discountAmount)} disc` : ""}
                         </Text>
                       </View>
-                      <Text style={{ color: C.accent, fontSize: 14, fontWeight: "800", letterSpacing: -0.3 }}>
+                      <Text style={{ color: C.amber.primary, fontSize: 14, fontWeight: "800", letterSpacing: -0.3 }}>
                         {fmt(lineTotal)}
                       </Text>
                     </View>
                   );
                 })}
 
-                <View style={{ borderTopWidth: 1, borderTopColor: C.border, paddingHorizontal: 12, paddingTop: 8, paddingBottom: 10 }}>
+                <View style={{ borderTopWidth: 1, borderTopColor: C.border.default, paddingHorizontal: 12, paddingTop: 8, paddingBottom: 10 }}>
                   {[
                     { label: "Subtotal", value: fmt(subtotal) },
                     { label: "Tax", value: fmt(taxAmount) },
-                    ...(orderDiscount > 0 ? [{ label: "Discount", value: `-${fmt(orderDiscount)}`, accent: C.green }] : []),
+                    ...(orderDiscount > 0 ? [{ label: "Discount", value: `-${fmt(orderDiscount)}`, accent: C.status.success }] : []),
                   ].map(row => (
                     <View key={row.label} style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 5 }}>
-                      <Text style={{ color: C.muted, fontSize: 12 }}>{row.label}</Text>
-                      <Text style={{ color: (row as any).accent || C.text, fontSize: 12, fontWeight: "600" }}>{row.value}</Text>
+                      <Text style={{ color: C.text.secondary, fontSize: 12 }}>{row.label}</Text>
+                      <Text style={{ color: (row as any).accent || C.text.primary, fontSize: 12, fontWeight: "600" }}>{row.value}</Text>
                     </View>
                   ))}
-                  <View style={{ height: 1, backgroundColor: C.border, marginVertical: 8 }} />
+                  <View style={{ height: 1, backgroundColor: C.border.default, marginVertical: 8 }} />
                   <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                    <Text style={{ color: C.muted, fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                    <Text style={{ color: C.text.secondary, fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 }}>
                       Total Due
                     </Text>
-                    <Text style={{ color: C.accent, fontSize: 18, fontWeight: "900", letterSpacing: -0.5 }}>
+                    <Text style={{ color: C.amber.primary, fontSize: 18, fontWeight: "900", letterSpacing: -0.5 }}>
                       {fmt(total)}
                     </Text>
                   </View>
                 </View>
               </View>
 
-              <Text style={{ color: C.muted, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>
+              <Text style={{ color: C.text.secondary, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>
                 Payment Method
               </Text>
               <View style={{ flexDirection: "row", gap: 8, marginBottom: 14 }}>
@@ -1563,20 +1579,20 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
                       flex: 1, height: 56, borderRadius: 14, flexDirection: "row",
                       alignItems: "center", paddingHorizontal: 14, gap: 10,
                       borderWidth: paymentMethod === key ? 1.5 : 1,
-                      borderColor: paymentMethod === key ? C.accent : C.border,
-                      backgroundColor: paymentMethod === key ? `${C.accent}12` : C.s2
+                      borderColor: paymentMethod === key ? C.amber.primary : C.border.default,
+                      backgroundColor: paymentMethod === key ? `${C.amber.primary}12` : C.bg.hover
                     }}>
-                    <Icon size={20} color={paymentMethod === key ? C.accent : C.muted} />
+                    <Icon size={20} color={paymentMethod === key ? C.amber.primary : C.text.secondary} />
                     <View>
-                      <Text style={{ color: paymentMethod === key ? C.accent : C.text, fontSize: 13, fontWeight: "700" }}>{label}</Text>
-                      <Text style={{ color: C.muted, fontSize: 9, marginTop: 1 }}>{sub}</Text>
+                      <Text style={{ color: paymentMethod === key ? C.amber.primary : C.text.primary, fontSize: 13, fontWeight: "700" }}>{label}</Text>
+                      <Text style={{ color: C.text.secondary, fontSize: 9, marginTop: 1 }}>{sub}</Text>
                     </View>
                   </TouchableOpacity>
                 ))}
               </View>
 
               {/* Currency Selector */}
-              <Text style={{ color: C.muted, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>
+              <Text style={{ color: C.text.secondary, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>
                 Currency
               </Text>
               <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
@@ -1590,14 +1606,14 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
                       style={{
                         paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12,
                         borderWidth: isActive ? 1.5 : 1,
-                        borderColor: isActive ? C.accent : C.border,
-                        backgroundColor: isActive ? `${C.accent}14` : C.s2
+                        borderColor: isActive ? C.amber.primary : C.border.default,
+                        backgroundColor: isActive ? `${C.amber.primary}14` : C.bg.hover
                       }}>
-                      <Text style={{ color: isActive ? C.accent : C.text, fontWeight: "700", fontSize: 13 }}>
+                      <Text style={{ color: isActive ? C.amber.primary : C.text.primary, fontWeight: "700", fontSize: 13 }}>
                         {cur.code}
                       </Text>
                       {cur.code !== "USD" && (
-                        <Text style={{ color: C.muted, fontSize: 9, marginTop: 1 }}>{`@${Number(cur.exchangeRate).toFixed(2)}`}</Text>
+                        <Text style={{ color: C.text.secondary, fontSize: 9, marginTop: 1 }}>{`@${Number(cur.exchangeRate).toFixed(2)}`}</Text>
                       )}
                     </TouchableOpacity>
                   );
@@ -1609,11 +1625,11 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
                 return (
                   <View style={{
                     flexDirection: "row", justifyContent: "space-between", alignItems: "center",
-                    backgroundColor: `${C.accent}10`, borderRadius: 12, padding: 12, borderWidth: 1,
-                    borderColor: `${C.accent}30`, marginBottom: 14
+                    backgroundColor: `${C.amber.primary}10`, borderRadius: 12, padding: 12, borderWidth: 1,
+                    borderColor: `${C.amber.primary}30`, marginBottom: 14
                   }}>
-                    <Text style={{ color: C.muted, fontSize: 12 }}>Total in {selectedCurrency}</Text>
-                    <Text style={{ color: C.accent, fontSize: 18, fontWeight: "900" }}>
+                    <Text style={{ color: C.text.secondary, fontSize: 12 }}>Total in {selectedCurrency}</Text>
+                    <Text style={{ color: C.amber.primary, fontSize: 18, fontWeight: "900" }}>
                       {`${selectedCurrency} ${localTotal.toFixed(2)}`}
                     </Text>
                   </View>
@@ -1622,19 +1638,19 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
 
               {paymentMethod === "CASH" && (
                 <View style={{ marginBottom: 12 }}>
-                  <Text style={{ color: C.muted, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>
+                  <Text style={{ color: C.text.secondary, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>
                     Amount Received
                   </Text>
                   <View style={{
                     flexDirection: "row", alignItems: "center",
-                    backgroundColor: C.s2, borderWidth: 1, borderColor: C.border,
+                    backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default,
                     borderRadius: 16, paddingHorizontal: 16, paddingVertical: 4
                   }}>
-                    <Text style={{ color: C.muted, fontSize: 20, marginRight: 6, fontWeight: "300" }}>{currencyInfo.symbol}</Text>
+                    <Text style={{ color: C.text.secondary, fontSize: 20, marginRight: 6, fontWeight: "300" }}>{currencyInfo.symbol}</Text>
                     <TextInput
-                      style={{ flex: 1, color: C.text, fontSize: 26, fontWeight: "800", paddingVertical: 10 }}
+                      style={{ flex: 1, color: C.text.primary, fontSize: 26, fontWeight: "800", paddingVertical: 10 }}
                       placeholder={(total * currencyInfo.rate).toFixed(2)}
-                      placeholderTextColor={C.muted}
+                      placeholderTextColor={C.text.secondary}
                       value={paidAmount}
                       onChangeText={setPaidAmount}
                       keyboardType="decimal-pad"
@@ -1643,9 +1659,9 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
                     />
                   </View>
                   <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 10, paddingHorizontal: 4 }}>
-                    <Text style={{ color: C.muted, fontSize: 12 }}>Due: {fmt(total)}</Text>
+                    <Text style={{ color: C.text.secondary, fontSize: 12 }}>Due: {fmt(total)}</Text>
                     {parseFloat(paidAmount || "0") >= (total * currencyInfo.rate) && (
-                      <Text style={{ color: C.green, fontSize: 13, fontWeight: "700" }}>
+                      <Text style={{ color: C.status.success, fontSize: 13, fontWeight: "700" }}>
                         Change: {fmt((parseFloat(paidAmount || "0") / currencyInfo.rate) - total)}
                       </Text>
                     )}
@@ -1656,7 +1672,7 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
 
             <View style={{ paddingHorizontal: 18, paddingTop: 8 }}>
               <TouchableOpacity activeOpacity={0.85} disabled={isSubmitting} onPress={processOrder}>
-                <LinearGradient colors={[C.accent, C.accent2]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                <LinearGradient colors={[C.amber.primary, C.amber.light]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                   style={{
                     borderRadius: 20, height: 58, paddingHorizontal: 18,
                     flexDirection: "row", alignItems: "center", justifyContent: "space-between"
@@ -1695,17 +1711,17 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
       <Modal visible={showCustomerPicker} transparent animationType="slide" onRequestClose={() => setShowCustomerPicker(false)}>
         <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "flex-end" }}>
           <View style={{
-            backgroundColor: C.s1, borderTopLeftRadius: 32, borderTopRightRadius: 32,
-            borderTopWidth: 1, borderColor: C.border, padding: 24, maxHeight: "70%"
+            backgroundColor: C.bg.card, borderTopLeftRadius: 32, borderTopRightRadius: 32,
+            borderTopWidth: 1, borderColor: C.border.default, padding: 24, maxHeight: "70%"
           }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-              <Text style={{ color: C.text, fontSize: 22, fontWeight: "800" }}>Select Customer</Text>
+              <Text style={{ color: C.text.primary, fontSize: 22, fontWeight: "800" }}>Select Customer</Text>
               <TouchableOpacity onPress={() => setShowCustomerPicker(false)}
                 style={{
-                  width: 38, height: 38, borderRadius: 12, backgroundColor: C.s2,
-                  borderWidth: 1, borderColor: C.border, alignItems: "center", justifyContent: "center"
+                  width: 38, height: 38, borderRadius: 12, backgroundColor: C.bg.hover,
+                  borderWidth: 1, borderColor: C.border.default, alignItems: "center", justifyContent: "center"
                 }}>
-                <X size={16} color={C.text} />
+                <X size={16} color={C.text.primary} />
               </TouchableOpacity>
             </View>
             <FlatList
@@ -1720,33 +1736,33 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
                     style={{
                       padding: 14, borderRadius: 16, marginBottom: 8,
                       flexDirection: "row", alignItems: "center", borderWidth: 1,
-                      borderColor: isSelected ? C.accent : C.border,
-                      backgroundColor: isSelected ? `${C.accent}0f` : C.s2
+                      borderColor: isSelected ? C.amber.primary : C.border.default,
+                      backgroundColor: isSelected ? `${C.amber.primary}0f` : C.bg.hover
                     }}>
                     <View style={{
-                      width: 42, height: 42, borderRadius: 14, backgroundColor: C.s3,
-                      borderWidth: 1, borderColor: C.border,
+                      width: 42, height: 42, borderRadius: 14, backgroundColor: C.bg.hover,
+                      borderWidth: 1, borderColor: C.border.default,
                       alignItems: "center", justifyContent: "center", marginRight: 14
                     }}>
-                      <User size={18} color={isSelected ? C.accent : C.muted} />
+                      <User size={18} color={isSelected ? C.amber.primary : C.text.secondary} />
                     </View>
                     <View style={{ flex: 1 }}>
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                        <Text style={{ color: C.text, fontWeight: "700", fontSize: 14 }}>{item.name}</Text>
+                        <Text style={{ color: C.text.primary, fontWeight: "700", fontSize: 14 }}>{item.name}</Text>
                         {isDefault && (
                           <View style={{
                             paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5,
-                            backgroundColor: `${C.accent}18`, borderWidth: 1, borderColor: `${C.accent}35`
+                            backgroundColor: `${C.amber.primary}18`, borderWidth: 1, borderColor: `${C.amber.primary}35`
                           }}>
-                            <Text style={{ color: C.accent, fontSize: 8, fontWeight: "800", textTransform: "uppercase" }}>Default</Text>
+                            <Text style={{ color: C.amber.primary, fontSize: 8, fontWeight: "800", textTransform: "uppercase" }}>Default</Text>
                           </View>
                         )}
                       </View>
                       {item.phone ? (
-                        <Text style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>{item.phone}</Text>
+                        <Text style={{ color: C.text.secondary, fontSize: 12, marginTop: 2 }}>{item.phone}</Text>
                       ) : null}
                     </View>
-                    {isSelected && <CheckCircle2 size={20} color={C.accent} />}
+                    {isSelected && <CheckCircle2 size={20} color={C.amber.primary} />}
                   </TouchableOpacity>
                 );
               }}
@@ -1761,66 +1777,61 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
         transparent
         animationType="fade"
         onRequestClose={() => {
-          // Block hardware back-dismiss when silent or auto-print is active
           if (!printerConfig.silentPrint && !printerConfig.autoPrint) setShowSuccess(false);
         }}
       >
         <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.85)", alignItems: "center", justifyContent: "center", padding: 24 }}>
           <View style={{
-            backgroundColor: C.s1, borderRadius: 32, borderWidth: 1,
-            borderColor: C.border, width: "100%", maxWidth: 380, overflow: "hidden"
+            backgroundColor: C.bg.card, borderRadius: 32, borderWidth: 1,
+            borderColor: C.border.default, width: "100%", maxWidth: 380, overflow: "hidden"
           }}>
-            <LinearGradient colors={[`${C.accent}18`, "transparent"]} style={{ padding: 32, alignItems: "center" }}>
+            <LinearGradient colors={[`${C.amber.primary}18`, "transparent"]} style={{ padding: 32, alignItems: "center" }}>
               <View style={{
                 width: 80, height: 80, borderRadius: 40,
-                backgroundColor: `${C.green}18`, borderWidth: 1.5, borderColor: `${C.green}40`,
+                backgroundColor: `${C.status.success}18`, borderWidth: 1.5, borderColor: `${C.status.success}40`,
                 alignItems: "center", justifyContent: "center", marginBottom: 16
               }}>
-                <CheckCircle2 size={42} color={C.green} />
+                <CheckCircle2 size={42} color={C.status.success} />
               </View>
-              <Text style={{ color: C.text, fontSize: 26, fontWeight: "900", marginBottom: 6, letterSpacing: -0.3 }}>
+              <Text style={{ color: C.text.primary, fontSize: 26, fontWeight: "900", marginBottom: 6, letterSpacing: -0.3 }}>
                 {lastInvoice?._offline ? "Saved Offline!" : "Sale Complete!"}
               </Text>
-              <Text style={{ color: C.green, fontSize: 13, fontWeight: "600", marginBottom: 24, textAlign: "center" }}>
+              <Text style={{ color: C.status.success, fontSize: 13, fontWeight: "600", marginBottom: 24, textAlign: "center" }}>
                 {lastInvoice?._offline ? "Will sync automatically when back online." : "Transaction recorded successfully"}
               </Text>
               <View style={{
-                width: "100%", backgroundColor: C.s2, borderRadius: 18,
-                padding: 16, marginBottom: 20, borderWidth: 1, borderColor: C.border
+                width: "100%", backgroundColor: C.bg.hover, borderRadius: 18,
+                padding: 16, marginBottom: 20, borderWidth: 1, borderColor: C.border.default
               }}>
                 <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                  <Text style={{ color: C.muted, fontSize: 12 }}>
+                  <Text style={{ color: C.text.secondary, fontSize: 12 }}>
                     {lastInvoice?._offline ? "Queued Amount" : "Amount"}
                   </Text>
-                  <Text style={{ color: C.accent, fontSize: 24, fontWeight: "900" }}>
+                  <Text style={{ color: C.amber.primary, fontSize: 24, fontWeight: "900" }}>
                     {fmt(Number(lastInvoice?.total || 0))}
                   </Text>
                 </View>
               </View>
-              <View style={{ width: "100%", gap: 10, marginBottom: 20 }}>
-                <TouchableOpacity activeOpacity={0.8} onPress={handlePrintStandard} disabled={isPrinting}
-                  style={{
-                    flexDirection: "row", alignItems: "center", justifyContent: "center",
-                    gap: 10, paddingVertical: 14, borderRadius: 16,
-                    backgroundColor: C.s2, borderWidth: 1, borderColor: C.border
-                  }}>
-                  <Printer size={18} color={C.accent} />
-                  <Text style={{ color: C.text, fontWeight: "700" }}>Print Receipt</Text>
-                </TouchableOpacity>
 
-                <TouchableOpacity activeOpacity={0.8} onPress={handlePrintThermal} disabled={isPrinting}
+              <View style={{ width: "100%", gap: 10, marginBottom: 20 }}>
+                <TouchableOpacity activeOpacity={0.8}
+                  onPress={() => {
+                    if (printerConfig.macAddress) handlePrintThermal();
+                    else handlePrintStandard();
+                  }}
+                  disabled={isPrinting}
                   style={{
                     flexDirection: "row", alignItems: "center", justifyContent: "center",
                     gap: 10, paddingVertical: 14, borderRadius: 16,
-                    backgroundColor: C.s2, borderWidth: 1, borderColor: C.border
+                    backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default
                   }}>
-                  <Bluetooth size={18} color={C.accent} />
-                  <Text style={{ color: C.text, fontWeight: "700" }}>Bluetooth Thermal</Text>
+                  <Printer size={18} color={C.amber.primary} />
+                  <Text style={{ color: C.text.primary, fontWeight: "700" }}>Print Receipt</Text>
                 </TouchableOpacity>
               </View>
 
               <TouchableOpacity onPress={() => setShowSuccess(false)} style={{ width: "100%", borderRadius: 16, overflow: "hidden" }}>
-                <LinearGradient colors={[C.accent, C.accent2]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                <LinearGradient colors={[C.amber.primary, C.amber.light]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                   style={{ paddingVertical: 16, alignItems: "center" }}>
                   <Text style={{ color: "#000", fontWeight: "800", fontSize: 14, textTransform: "uppercase", letterSpacing: 1 }}>New Sale</Text>
                 </LinearGradient>
@@ -1834,32 +1845,32 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
       <Modal visible={showShiftModal} transparent animationType="slide" onRequestClose={() => setShowShiftModal(false)}>
         <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "flex-end" }}>
           <View style={{
-            backgroundColor: C.s1, borderTopLeftRadius: 32, borderTopRightRadius: 32,
-            borderTopWidth: 1, borderColor: C.border, padding: 24, paddingBottom: 36
+            backgroundColor: C.bg.card, borderTopLeftRadius: 32, borderTopRightRadius: 32,
+            borderTopWidth: 1, borderColor: C.border.default, padding: 24, paddingBottom: 36
           }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-              <Text style={{ color: C.text, fontSize: 22, fontWeight: "800" }}>
+              <Text style={{ color: C.text.primary, fontSize: 22, fontWeight: "800" }}>
                 {shiftModalType === "OPEN" ? "Open Shift" : "Close Shift"}
               </Text>
               <TouchableOpacity onPress={() => setShowShiftModal(false)}
                 style={{
-                  width: 38, height: 38, borderRadius: 12, backgroundColor: C.s2,
-                  borderWidth: 1, borderColor: C.border, alignItems: "center", justifyContent: "center"
+                  width: 38, height: 38, borderRadius: 12, backgroundColor: C.bg.hover,
+                  borderWidth: 1, borderColor: C.border.default, alignItems: "center", justifyContent: "center"
                 }}>
-                <X size={16} color={C.text} />
+                <X size={16} color={C.text.primary} />
               </TouchableOpacity>
             </View>
-            <Text style={{ color: C.muted, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>
+            <Text style={{ color: C.text.secondary, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>
               {shiftModalType === "OPEN" ? "Float / Opening Balance" : "Actual Counted Cash"}
             </Text>
             <TextInput
               style={{
-                backgroundColor: C.s2, borderWidth: 1, borderColor: C.border,
+                backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default,
                 borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14,
-                color: C.text, fontSize: 18, fontWeight: "800"
+                color: C.text.primary, fontSize: 18, fontWeight: "800"
               }}
               placeholder="0.00"
-              placeholderTextColor={C.muted}
+              placeholderTextColor={C.text.secondary}
               keyboardType="decimal-pad"
               returnKeyType="done"
               onSubmitEditing={Keyboard.dismiss}
@@ -1869,7 +1880,7 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
             <View style={{ height: 16 }} />
             <TouchableOpacity activeOpacity={0.88} onPress={shiftModalType === "OPEN" ? openShift : closeShift}>
               <LinearGradient
-                colors={shiftModalType === "OPEN" ? ["#34d399", "#10b981"] : [C.red, "#dc2626"]}
+                colors={shiftModalType === "OPEN" ? ["#34d399", "#10b981"] : [C.status.error, "#dc2626"]}
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                 style={{
                   borderRadius: 22, height: 64, paddingHorizontal: 22,
@@ -1895,7 +1906,7 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
             <TouchableOpacity onPress={() => syncQueued(true)} disabled={!isOnline || queueCount === 0}
               style={{ marginTop: 14, alignItems: "center" }}>
               <Text style={{
-                color: !isOnline || queueCount === 0 ? C.muted : "rgba(232,237,245,0.65)",
+                color: !isOnline || queueCount === 0 ? C.text.secondary : "rgba(232,237,245,0.65)",
                 fontSize: 11, fontWeight: "900", textTransform: "uppercase", letterSpacing: 1.2
               }}>
                 Sync queued now
@@ -1909,35 +1920,35 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
       <Modal visible={showPrinterSettings} transparent animationType="slide" onRequestClose={() => setShowPrinterSettings(false)}>
         <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "flex-end" }}>
           <View style={{
-            backgroundColor: C.s1, borderTopLeftRadius: 32, borderTopRightRadius: 32,
-            borderTopWidth: 1, borderColor: C.border, padding: 24, paddingBottom: 36
+            backgroundColor: C.bg.card, borderTopLeftRadius: 32, borderTopRightRadius: 32,
+            borderTopWidth: 1, borderColor: C.border.default, padding: 24, paddingBottom: 36
           }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
               <View>
-                <Text style={{ color: C.text, fontSize: 22, fontWeight: "800" }}>Printer Settings</Text>
-                <Text style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>Configure Bluetooth Hardware</Text>
+                <Text style={{ color: C.text.primary, fontSize: 22, fontWeight: "800" }}>Printer Settings</Text>
+                <Text style={{ color: C.text.secondary, fontSize: 12, marginTop: 2 }}>Configure Bluetooth Hardware</Text>
               </View>
               <TouchableOpacity onPress={() => setShowPrinterSettings(false)}
                 style={{
-                  width: 38, height: 38, borderRadius: 12, backgroundColor: C.s2,
-                  borderWidth: 1, borderColor: C.border, alignItems: "center", justifyContent: "center"
+                  width: 38, height: 38, borderRadius: 12, backgroundColor: C.bg.hover,
+                  borderWidth: 1, borderColor: C.border.default, alignItems: "center", justifyContent: "center"
                 }}>
-                <X size={16} color={C.text} />
+                <X size={16} color={C.text.primary} />
               </TouchableOpacity>
             </View>
             <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: '80%' }} contentContainerStyle={{ paddingBottom: 24 }}>
-              <Text style={{ color: C.muted, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8, marginTop: 10 }}>
+              <Text style={{ color: C.text.secondary, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8, marginTop: 10 }}>
                 Device MAC Address (e.g. 00:11:22:33:44:55)
               </Text>
               <TextInput
                 style={{
-                  backgroundColor: C.s2, borderWidth: 1, borderColor: C.border,
+                  backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default,
                   borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14,
-                  color: C.text, fontSize: 16, fontWeight: "600",
+                  color: C.text.primary, fontSize: 16, fontWeight: "600",
                   textTransform: "uppercase", marginBottom: 20
                 }}
                 placeholder="Leave blank to use OS Dialog"
-                placeholderTextColor={C.muted}
+                placeholderTextColor={C.text.secondary}
                 autoCapitalize="characters"
                 returnKeyType="done"
                 value={tempPrinterAddress}
@@ -1946,63 +1957,63 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
 
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
                 <View>
-                  <Text style={{ color: C.text, fontSize: 16, fontWeight: "700" }}>Auto-Print</Text>
-                  <Text style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>Print receipt immediately after sale</Text>
+                  <Text style={{ color: C.text.primary, fontSize: 16, fontWeight: "700" }}>Auto-Print</Text>
+                  <Text style={{ color: C.text.secondary, fontSize: 12, marginTop: 2 }}>Print receipt immediately after sale</Text>
                 </View>
                 <TouchableOpacity onPress={() => setTempAutoPrint(!tempAutoPrint)}>
-                  {tempAutoPrint ? <ToggleRight size={32} color={C.green} /> : <ToggleLeft size={32} color={C.muted} />}
+                  {tempAutoPrint ? <ToggleRight size={32} color={C.status.success} /> : <ToggleLeft size={32} color={C.text.secondary} />}
                 </TouchableOpacity>
               </View>
 
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
                 <View>
-                  <Text style={{ color: C.text, fontSize: 16, fontWeight: "700" }}>Show Success Modal</Text>
-                  <Text style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>Show ticket/print options after sale</Text>
+                  <Text style={{ color: C.text.primary, fontSize: 16, fontWeight: "700" }}>Show Success Modal</Text>
+                  <Text style={{ color: C.text.secondary, fontSize: 12, marginTop: 2 }}>Show ticket/print options after sale</Text>
                 </View>
                 <TouchableOpacity onPress={() => setTempAutoShowModal(!tempAutoShowModal)}>
-                  {tempAutoShowModal ? <ToggleRight size={32} color={C.green} /> : <ToggleLeft size={32} color={C.muted} />}
+                  {tempAutoShowModal ? <ToggleRight size={32} color={C.status.success} /> : <ToggleLeft size={32} color={C.text.secondary} />}
                 </TouchableOpacity>
               </View>
 
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
                 <View>
-                  <Text style={{ color: C.text, fontSize: 16, fontWeight: "700" }}>Silent Print (System)</Text>
-                  <Text style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>Bypass print dialog (if target specified)</Text>
+                  <Text style={{ color: C.text.primary, fontSize: 16, fontWeight: "700" }}>Silent Print (System)</Text>
+                  <Text style={{ color: C.text.secondary, fontSize: 12, marginTop: 2 }}>Bypass print dialog (if target specified)</Text>
                 </View>
                 <TouchableOpacity onPress={() => setTempSilentPrint(!tempSilentPrint)}>
-                  {tempSilentPrint ? <ToggleRight size={32} color={C.green} /> : <ToggleLeft size={32} color={C.muted} />}
+                  {tempSilentPrint ? <ToggleRight size={32} color={C.status.success} /> : <ToggleLeft size={32} color={C.text.secondary} />}
                 </TouchableOpacity>
               </View>
 
-              <Text style={{ color: C.muted, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
+              <Text style={{ color: C.text.secondary, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
                 Terminal ID
               </Text>
               <TextInput
                 style={{
-                  backgroundColor: C.s2, borderWidth: 1, borderColor: C.border,
+                  backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default,
                   borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14,
-                  color: C.text, fontSize: 16, fontWeight: "600", marginBottom: 20
+                  color: C.text.primary, fontSize: 16, fontWeight: "600", marginBottom: 20
                 }}
                 placeholder="POS-01"
-                placeholderTextColor={C.muted}
+                placeholderTextColor={C.text.secondary}
                 returnKeyType="done"
                 value={tempTerminalId}
                 onChangeText={setTempTerminalId}
               />
 
-              <Text style={{ color: C.muted, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
+              <Text style={{ color: C.text.secondary, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
                 Target System Printer URL/Name
               </Text>
 
               <View style={{ flexDirection: "row", gap: 10, marginBottom: 24 }}>
                 <TextInput
                   style={{
-                    flex: 1, backgroundColor: C.s2, borderWidth: 1, borderColor: C.border,
+                    flex: 1, backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default,
                     borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14,
-                    color: C.text, fontSize: 16, fontWeight: "600"
+                    color: C.text.primary, fontSize: 16, fontWeight: "600"
                   }}
                   placeholder="OS Printer URL"
-                  placeholderTextColor={C.muted}
+                  placeholderTextColor={C.text.secondary}
                   returnKeyType="done"
                   value={tempTargetPrinter}
                   onChangeText={setTempTargetPrinter}
@@ -2010,17 +2021,42 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
 
                 {Platform.OS !== 'web' && (
                   <TouchableOpacity onPress={handleSelectSystemPrinter} style={{
-                    backgroundColor: C.s2, borderWidth: 1, borderColor: C.border,
+                    backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default,
                     borderRadius: 14, alignItems: "center", justifyContent: "center", paddingHorizontal: 16
                   }}>
-                    <MonitorSmartphone size={20} color={C.text} />
+                    <MonitorSmartphone size={20} color={C.text.primary} />
                   </TouchableOpacity>
                 )}
               </View>
 
+              <Text style={{ color: C.text.secondary, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
+                Paper Size
+              </Text>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
+                {[30, 40, 50, 58, 80].map((w) => (
+                  <TouchableOpacity
+                    key={w}
+                    onPress={() => setTempPaperWidth(w)}
+                    style={{
+                      width: "18%", height: 44, borderRadius: 10,
+                      backgroundColor: tempPaperWidth === w ? C.amber.primary : C.bg.hover,
+                      borderWidth: 1, borderColor: tempPaperWidth === w ? C.amber.primary : C.border.default,
+                      alignItems: "center", justifyContent: "center"
+                    }}
+                  >
+                    <Text style={{
+                      color: tempPaperWidth === w ? C.bg.base : C.text.primary,
+                      fontWeight: "800", fontSize: 13
+                    }}>
+                      {w}mm
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
             </ScrollView>
 
-            <View style={{ paddingTop: 16, borderTopWidth: 1, borderTopColor: C.border, marginTop: 10 }}>
+            <View style={{ paddingTop: 16, borderTopWidth: 1, borderTopColor: C.border.default, marginTop: 10 }}>
               <TouchableOpacity activeOpacity={0.88} onPress={() => {
                 savePrinterConfig({
                   macAddress: tempPrinterAddress,
@@ -2028,12 +2064,13 @@ export function POSScreen({ companyId, onOpenDrawer }: Props) {
                   autoShowModal: tempAutoShowModal,
                   silentPrint: tempSilentPrint,
                   terminalId: tempTerminalId,
-                  targetPrinter: tempTargetPrinter
+                  targetPrinter: tempTargetPrinter,
+                  paperWidth: tempPaperWidth
                 });
                 setShowPrinterSettings(false);
               }}>
                 <LinearGradient
-                  colors={[C.accent, C.accent2]}
+                  colors={[C.amber.primary, C.amber.light]}
                   start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                   style={{
                     borderRadius: 22, height: 56, paddingHorizontal: 22,

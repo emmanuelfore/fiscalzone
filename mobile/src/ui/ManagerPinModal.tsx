@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { ActivityIndicator, Modal, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { X } from "lucide-react-native";
-import { PremiumColors } from "./PremiumColors";
+import { PremiumColors as C } from "./PremiumColors";
 import { apiFetch } from "../lib/api";
 import { Button } from "./Button";
 
@@ -47,42 +47,42 @@ export function ManagerPinModal({ visible, companyId, title, description, onClos
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.80)", alignItems: "center", justifyContent: "center", padding: 24 }}>
-        <View style={{ width: "100%", maxWidth: 420, borderRadius: 28, overflow: "hidden", borderWidth: 1, borderColor: "rgba(255,255,255,0.10)" }}>
-          <LinearGradient colors={[PremiumColors.bg.card, "#130e05"]} style={{ padding: 18 }}>
+        <View style={{ width: "100%", maxWidth: 420, borderRadius: 28, overflow: "hidden", borderWidth: 1, borderColor: C.border.default }}>
+          <LinearGradient colors={[C.bg.card, "#130e05"]} style={{ padding: 18 }}>
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-              <Text style={{ color: "white", fontSize: 18, fontWeight: "900" }}>{title}</Text>
+              <Text style={{ color: C.text.primary, fontSize: 18, fontWeight: "900" }}>{title}</Text>
               <TouchableOpacity
                 activeOpacity={0.85}
                 onPress={onClose}
-                style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.07)", alignItems: "center", justifyContent: "center" }}
+                style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: C.bg.hover, alignItems: "center", justifyContent: "center" }}
               >
-                <X size={18} color="white" />
+                <X size={18} color={C.text.primary} />
               </TouchableOpacity>
             </View>
 
             {description ? (
-              <Text style={{ color: "rgba(255,255,255,0.45)", marginTop: 8, fontSize: 12, fontWeight: "700" }}>
+              <Text style={{ color: C.text.secondary, marginTop: 8, fontSize: 12, fontWeight: "700" }}>
                 {description}
               </Text>
             ) : null}
 
             <View style={{ height: 14 }} />
 
-            <View style={{ backgroundColor: "rgba(255,255,255,0.05)", borderWidth: 1, borderColor: "rgba(255,255,255,0.10)", borderRadius: 18, paddingHorizontal: 16, paddingVertical: 14 }}>
+            <View style={{ backgroundColor: C.bg.hover, borderWidth: 1, borderColor: "rgba(255,255,255,0.10)", borderRadius: 18, paddingHorizontal: 16, paddingVertical: 14 }}>
               <TextInput
                 value={pin}
                 onChangeText={setPin}
                 keyboardType="number-pad"
                 secureTextEntry
                 placeholder="••••"
-                placeholderTextColor="rgba(255,255,255,0.25)"
-                style={{ color: "white", fontSize: 22, fontWeight: "900", letterSpacing: 6, textAlign: "center" }}
+                placeholderTextColor={C.text.secondary}
+                style={{ color: C.text.primary, fontSize: 22, fontWeight: "900", letterSpacing: 6, textAlign: "center" }}
                 maxLength={8}
               />
             </View>
 
             {error ? (
-              <Text style={{ color: "#f87171", fontSize: 12, fontWeight: "800", marginTop: 12 }}>
+              <Text style={{ color: C.status.error, fontSize: 12, fontWeight: "800", marginTop: 12 }}>
                 {error}
               </Text>
             ) : null}
@@ -91,7 +91,7 @@ export function ManagerPinModal({ visible, companyId, title, description, onClos
 
             {busy ? (
               <View style={{ paddingVertical: 10, alignItems: "center" }}>
-                <ActivityIndicator color={PremiumColors.amber.primary} />
+                <ActivityIndicator color={C.amber.primary} />
               </View>
             ) : null}
 

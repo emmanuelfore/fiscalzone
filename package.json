@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "cross-env NODE_ENV=development tsx watch server/index.ts",
     "build": "vite build && npm run build:server",
+    "build:fiscalstack": "cross-env VITE_APP_BRAND=fiscalstack vite build && npm run build:server",
+    "build:fiscalzone": "cross-env VITE_APP_BRAND=fiscalzone vite build && npm run build:server",
     "build:server": "tsx script/build.ts",
     "start": "cross-env NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
@@ -55,6 +57,7 @@
     "@tailwindcss/typography": "^0.5.15",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/react-query": "^5.60.5",
+    "@tanstack/react-virtual": "^3.13.23",
     "@types/compression": "^1.8.1",
     "@types/node-forge": "^1.3.14",
     "@types/swagger-jsdoc": "^6.0.4",

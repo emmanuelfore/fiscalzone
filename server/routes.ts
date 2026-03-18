@@ -23,7 +23,7 @@ import { startPosShift, endPosShift, addPosTransaction, getOpenShift, getShiftTr
 import { seedCompanyDefaults } from "./lib/seeding.js";
 import { processInvoiceFiscalization, getZimraLogger } from "./lib/fiscalization.js";
 import { db } from "./db";
-import { eq, and, gte, lte, ne, desc, asc, sql } from "drizzle-orm";
+import { eq, and, gte, lte, ne, desc, asc, sql, or, ilike } from "drizzle-orm";
 import { format } from "date-fns";
 import {
   invoices,
@@ -595,6 +595,7 @@ export async function registerRoutes(
       };
 
       const taxTypesList = await storage.getTaxTypes(targetCompanyId);
+      const categoriesList = await storage.getProductCategories(targetCompanyId);
 
       for (const [index, row] of records.entries()) {
         try {
@@ -604,12 +605,12 @@ export async function registerRoutes(
           const barcodeHeader = findHeader(row, ['Barcode', 'EAN', 'UPC']);
           const priceHeader = findHeader(row, ['Price', 'Unit Price', 'Rate', 'Retail Price']);
           const costHeader = findHeader(row, ['Cost Price', 'Cost', 'Unit Cost', 'Purchase Price']);
-          const taxRateHeader = findHeader(row, ['Tax Rate', 'VAT', 'TaxPercent', 'Tax']);
-          const taxTypeHeader = findHeader(row, ['Tax Type', 'Tax Code', 'VAT Code']);
+          // taxRateHeader ignored as requested
+          const taxTypeHeader = findHeader(row, ['Tax Type', 'Tax Code', 'VAT Code', 'Tax']);
           const typeHeader = findHeader(row, ['Type', 'Product Type', 'Item Type']);
           const stockHeader = findHeader(row, ['Stock', 'Quantity', 'Qty', 'Inventory', 'Stock Level']);
           const hsHeader = findHeader(row, ['HS Code', 'HSCode', 'Harmonized Code']);
-          const categoryHeader = findHeader(row, ['Category', 'Cat', 'Tax Category', 'Group']);
+          const categoryHeader = findHeader(row, ['Category', 'Cat', 'Product Category', 'Group']);
           const trackHeader = findHeader(row, ['Track Inventory', 'Track', 'Inventory Tracking']);
 
           const name = nameHeader ? (row as any)[nameHeader] : null;
@@ -622,16 +623,35 @@ export async function registerRoutes(
           const trackValue = trackHeader ? (row as any)[trackHeader].toString().toLowerCase() : "";
           const isTracked = ["yes", "true", "1", "on"].includes(trackValue);
 
-          // Resolve Tax Type ID from Code
+          // Resolve Tax Type ID and Rate
           let taxTypeId: number | undefined;
-          let taxRateValue = taxRateHeader ? cleanNum((row as any)[taxRateHeader]).toString() : "15.00";
+          let taxRateValue = "15.00"; // Default
 
           if (taxTypeHeader) {
-            const code = (row as any)[taxTypeHeader]?.toString().trim();
-            const matchedTax = taxTypesList.find(t => t.code.toLowerCase() === code.toLowerCase());
+            const rawTaxType = (row as any)[taxTypeHeader]?.toString().trim().toUpperCase();
+            
+            // Map standardized types to internal codes
+            let lookupCode = rawTaxType;
+            if (rawTaxType === 'EXEMPT') lookupCode = 'EXE';
+            
+            const matchedTax = taxTypesList.find(t => t.code.toUpperCase() === lookupCode || t.name.toUpperCase() === rawTaxType);
             if (matchedTax) {
               taxTypeId = matchedTax.id;
               taxRateValue = matchedTax.rate.toString();
+            }
+          }
+
+          // Handle Category Auto-Creation
+          const categoryName = categoryHeader ? (row as any)[categoryHeader]?.toString().trim() : "General";
+          if (categoryName && categoryName !== "") {
+            const existingCat = categoriesList.find(c => c.name.toLowerCase() === categoryName.toLowerCase());
+            if (!existingCat) {
+              const newCat = await storage.createProductCategory({
+                name: categoryName,
+                companyId: targetCompanyId,
+                isActive: true
+              });
+              categoriesList.push(newCat);
             }
           }
 
@@ -647,7 +667,7 @@ export async function registerRoutes(
             taxTypeId: taxTypeId,
             productType: type,
             hsCode: hsHeader ? (row as any)[hsHeader] : "0000.00.00",
-            category: categoryHeader ? (row as any)[categoryHeader] : "General",
+            category: categoryName || "General",
             isActive: true,
             stockLevel: stockHeader ? cleanNum((row as any)[stockHeader]).toString() : "0.00",
             isTracked: trackHeader ? isTracked : (!!stockHeader && type === 'good')
@@ -735,6 +755,82 @@ export async function registerRoutes(
 
     } catch (error: any) {
       console.error("Export Products Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Export Customers
+  app.get("/api/export/customers", requireAuth, async (req, res) => {
+    try {
+      const companyId = parseInt(req.query.companyId as string) || (req.user as any).companyId;
+      if (!companyId) return res.status(400).json({ message: "Company ID required" });
+
+      const customers = await storage.getCustomers(companyId);
+
+      // Construct CSV
+      const headers = ["Name", "Email", "Phone", "Address", "TIN", "VAT Number", "Customer Type"];
+      const rows = customers.map(c => [
+        c.name,
+        c.email || "",
+        c.phone || "",
+        c.address || "",
+        c.tin || "",
+        c.vatNumber || "",
+        c.customerType || "individual"
+      ]);
+
+      const csvContent = [
+        headers.join(","),
+        ...rows.map(r => r.map(cell => {
+          const val = String(cell).replace(/"/g, '""');
+          return val.includes(",") ? `"${val}"` : val;
+        }).join(","))
+      ].join("\n");
+
+      res.setHeader("Content-Disposition", `attachment; filename=customers_${Date.now()}.csv`);
+      res.setHeader("Content-Type", "text/csv");
+      res.send(csvContent);
+
+    } catch (error: any) {
+      console.error("Export Customers Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Export Suppliers
+  app.get("/api/export/suppliers", requireAuth, async (req, res) => {
+    try {
+      const companyId = parseInt(req.query.companyId as string) || (req.user as any).companyId;
+      if (!companyId) return res.status(400).json({ message: "Company ID required" });
+
+      const suppliers = await storage.getSuppliers(companyId);
+
+      // Construct CSV
+      const headers = ["Name", "Contact Person", "Email", "Phone", "Address", "TIN", "VAT Number"];
+      const rows = suppliers.map(s => [
+        s.name,
+        s.contactPerson || "",
+        s.email || "",
+        s.phone || "",
+        s.address || "",
+        s.tin || "",
+        s.vatNumber || ""
+      ]);
+
+      const csvContent = [
+        headers.join(","),
+        ...rows.map(r => r.map(cell => {
+          const val = String(cell).replace(/"/g, '""');
+          return val.includes(",") ? `"${val}"` : val;
+        }).join(","))
+      ].join("\n");
+
+      res.setHeader("Content-Disposition", `attachment; filename=suppliers_${Date.now()}.csv`);
+      res.setHeader("Content-Type", "text/csv");
+      res.send(csvContent);
+
+    } catch (error: any) {
+      console.error("Export Suppliers Error:", error);
       res.status(500).json({ message: error.message });
     }
   });
@@ -2075,16 +2171,12 @@ export async function registerRoutes(
         fiscalDayDate = formatHarareDateOnly(new Date(company.fiscalDayOpenedAt));
       }
 
-      // Pre-check for Red or Grey receipts
+      // Check for Red or Grey receipts (Log as warning but don't block closure as requested)
       const invalidReceipts = dayInvoices.filter(inv =>
         inv.validationStatus === 'red' || inv.validationStatus === 'grey' || inv.validationStatus === 'invalid'
       );
-
       if (invalidReceipts.length > 0) {
-        return res.status(400).json({
-          message: `Cannot close fiscal day ${fiscalDayNo}. There are ${invalidReceipts.length} receipts with 'Red' or 'Grey' validation errors that must be resolved first.`,
-          invalidReceipts: invalidReceipts.map(r => ({ id: r.id, number: r.invoiceNumber, status: r.validationStatus }))
-        });
+        console.warn(`[CloseDay] Proceeding with closure for Fiscal Day ${fiscalDayNo} despite ${invalidReceipts.length} receipts with validation issues.`);
       }
 
       // Retry mechanism for fiscal day closure
@@ -2273,11 +2365,50 @@ export async function registerRoutes(
     try {
       const companyId = Number(req.params.id);
       const company = await storage.getCompany(companyId);
-      if (!company || !company.fiscalDayOpen) {
-        return res.status(400).json({ message: "No open fiscal day" });
+      if (!company) return res.status(404).json({ message: "Company not found" });
+
+      // Build POS sales summary for today regardless of fiscal day status
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999);
+      const todaySales = await storage.getPosSales(companyId, todayStart, todayEnd);
+
+      // Summarise by payment method
+      const byPayment: Record<string, { count: number; total: number }> = {};
+      let grandTotal = 0;
+      for (const s of todaySales) {
+        const pm = s.paymentMethod || "CASH";
+        if (!byPayment[pm]) byPayment[pm] = { count: 0, total: 0 };
+        byPayment[pm].count++;
+        byPayment[pm].total += Number(s.total || 0);
+        grandTotal += Number(s.total || 0);
       }
-      const data = await storage.getZReportData(companyId, company.currentFiscalDayNo || 0);
-      res.json(data);
+
+      const posSummary = {
+        totalTransactions: todaySales.length,
+        grandTotal: Math.round(grandTotal * 100) / 100,
+        byPaymentMethod: Object.entries(byPayment).map(([method, v]) => ({
+          method,
+          count: v.count,
+          total: Math.round(v.total * 100) / 100
+        }))
+      };
+
+      // If fiscal day is open, also include fiscal counters / doc stats
+      if (company.fiscalDayOpen && company.currentFiscalDayNo) {
+        const data = await storage.getZReportData(companyId, company.currentFiscalDayNo);
+        return res.json({ ...data, posSummary });
+      }
+
+      // Non-fiscalized or no open day — return POS summary only
+      res.json({
+        fiscalDayNo: null,
+        openedAt: null,
+        counters: [],
+        docStats: [],
+        posSummary
+      });
     } catch (err: any) {
       console.error("X-Report Error:", err);
       res.status(500).json({ message: "Failed to generate X-Report: " + err.message });
@@ -4809,6 +4940,30 @@ export async function registerRoutes(
     }
   });
 
+  // Today's receipts for reprint (all POS sales by this cashier today)
+  app.get("/api/pos/last-receipt", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const companyId = parseInt(req.query.companyId as string) || user.companyId;
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const receipts = await db.query.invoices.findMany({
+        where: and(
+          eq(invoices.companyId, companyId),
+          eq(invoices.createdBy, user.id),
+          eq(invoices.isPos, true),
+          ne(invoices.status, 'cancelled'),
+          gte(invoices.createdAt, todayStart)
+        ),
+        orderBy: [desc(invoices.createdAt)],
+        with: { items: true }
+      });
+      res.json(receipts);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/pos/my-sales", requireAuth, async (req, res) => {
     try {
       const user = req.user as any;
@@ -4853,6 +5008,36 @@ export async function registerRoutes(
 
       const sales = await storage.getPosSales(companyId, startDate, endDate, cashierId, undefined, status, search);
       res.json(sales);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Invoice search for Credit/Debit Note issuance — searches ALL company invoices
+  app.get("/api/pos/invoice-search", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const companyId = parseInt(req.query.companyId as string) || user.companyId;
+      const q = (req.query.q as string || "").trim();
+      if (!q) return res.json([]);
+
+      const results = await db
+        .select({ invoice: invoices, customerName: customers.name })
+        .from(invoices)
+        .leftJoin(customers, eq(invoices.customerId, customers.id))
+        .where(and(
+          eq(invoices.companyId, companyId),
+          ne(invoices.status, 'cancelled'),
+          ne(invoices.status, 'draft'),
+          or(
+            ilike(invoices.invoiceNumber, `%${q}%`),
+            ilike(customers.name, `%${q}%`)
+          )
+        ))
+        .orderBy(desc(invoices.createdAt))
+        .limit(20);
+
+      res.json(results.map(r => ({ ...r.invoice, customerName: r.customerName })));
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

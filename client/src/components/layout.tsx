@@ -31,6 +31,7 @@ import {
   Menu,
   X
 } from "lucide-react";
+import { useBranding } from "@/hooks/use-branding";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -72,6 +73,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const { data: companies } = useCompanies(!!user);
   const { activeCompany, activeCompanyId, setCompany } = useActiveCompany(!!user);
+  const { brand } = useBranding();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Close mobile menu on location change
@@ -190,7 +192,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       )}>
         <div className="p-6 border-b border-slate-100/50 bg-white/50">
           <div className="flex items-center gap-3 mb-6 px-1">
-            <img src="/fiscalstack-logo.png" alt="FiscalStack" className="h-9" />
+            <img src={brand.logo} alt={brand.name} className="h-9" />
           </div>
 
           <DropdownMenu>
@@ -344,7 +346,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="p-4 bg-slate-50/50 border-t border-slate-100/50">
           <div className="flex items-center justify-center gap-1 text-[10px] font-bold text-slate-300 uppercase tracking-widest">
             <ShieldCheck className="w-3 h-3" />
-            <span>FiscalStack v1.2</span>
+            <span>{brand.name} v1.2</span>
           </div>
         </div>
       </aside>

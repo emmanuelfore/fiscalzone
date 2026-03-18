@@ -169,6 +169,26 @@ export default function POSPage() {
     const [shiftModalType, setShiftModalType] = useState<"OPEN" | "CLOSE">("OPEN");
     const [shiftBalance, setShiftBalance] = useState("");
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+    // Credit/Debit Note modal
+    const [isCreditNoteOpen, setIsCreditNoteOpen] = useState(false);
+    const [cnSearchQuery, setCnSearchQuery] = useState("");
+    const [cnSearchResults, setCnSearchResults] = useState<any[]>([]);
+    const [cnSearching, setCnSearching] = useState(false);
+    const [cnProcessing, setCnProcessing] = useState(false);
+    const [cnType, setCnType] = useState<"credit" | "debit">("credit");
+
+    // X/Z Report modal
+    const [isReportOpen, setIsReportOpen] = useState(false);
+    const [reportData, setReportData] = useState<any>(null);
+    const [reportLoading, setReportLoading] = useState(false);
+    const [reportType, setReportType] = useState<"x" | "z">("x");
+
+    // Reprint receipts
+    const [isReprintOpen, setIsReprintOpen] = useState(false);
+    const [reprintList, setReprintList] = useState<any[]>([]);
+    const [reprintListLoading, setReprintListLoading] = useState(false);
+    const [reprintInvoice, setReprintInvoice] = useState<any>(null);
     const [availablePrinters, setAvailablePrinters] = useState<any[]>([]);
     const [posSettings, setPosSettings] = useState({
         printingEnabled: true,
@@ -264,8 +284,18 @@ export default function POSPage() {
                 (p.sku && p.sku.toLowerCase().includes(searchQuery.toLowerCase()));
             const matchesCategory = selectedCategory === "All" || p.category === selectedCategory;
             return matchesSearch && matchesCategory;
-        });
+        }).sort(() => Math.random() - 0.5);
     }, [resolvedProducts, searchQuery, selectedCategory]);
+
+    // ── Display limit: show first 40 items; show all when searching/filtering ──
+    const INITIAL_LIMIT = 40;
+    const pagedProducts = useMemo(
+        () => searchQuery || selectedCategory !== "All"
+            ? filteredProducts
+            : filteredProducts.slice(0, INITIAL_LIMIT),
+        [filteredProducts, searchQuery, selectedCategory]
+    );
+    // ─────────────────────────────────────────────────────────────────────────
 
     const currencyInfo = useMemo(() => {
         if (selectedCurrencyCode === "USD") return { symbol: "$", rate: 1 };
@@ -1155,6 +1185,81 @@ export default function POSPage() {
         }
     };
 
+    // ── Reprint receipts ─────────────────────────────────────────────────────
+    const handleReprintLast = async () => {
+        setIsReprintOpen(true);
+        setReprintListLoading(true);
+        setReprintList([]);
+        try {
+            const res = await apiFetch(`/api/pos/last-receipt?companyId=${companyId}`);
+            if (res.ok) setReprintList(await res.json());
+            else toast({ title: "No receipts found for today", variant: "destructive" });
+        } catch {
+            toast({ title: "Failed to load receipts", variant: "destructive" });
+        }
+        setReprintListLoading(false);
+    };
+
+    // ── Credit / Debit Note search ────────────────────────────────────────────
+    const handleCnSearch = async () => {
+        if (!cnSearchQuery.trim()) return;
+        setCnSearching(true);
+        try {
+            const res = await apiFetch(`/api/pos/invoice-search?companyId=${companyId}&q=${encodeURIComponent(cnSearchQuery)}`);
+            if (res.ok) setCnSearchResults(await res.json());
+        } catch { /* ignore */ }
+        setCnSearching(false);
+    };
+
+    const handleIssueCreditDebitNote = async (originalInvoice: any) => {
+        setCnProcessing(true);
+        try {
+            const endpoint = cnType === "credit"
+                ? `/api/invoices/${originalInvoice.id}/credit-note`
+                : `/api/invoices/${originalInvoice.id}/debit-note`;
+            const res = await apiFetch(endpoint, { method: "POST" });
+            if (!res.ok) {
+                const err = await res.json();
+                toast({ title: "Failed", description: err.message, variant: "destructive" });
+                return;
+            }
+            const note = await res.json();
+            toast({ title: cnType === "credit" ? "Credit Note Created" : "Debit Note Created", description: `${note.invoiceNumber} — issued successfully` });
+            setIsCreditNoteOpen(false);
+            setCnSearchQuery("");
+            setCnSearchResults([]);
+            // Show receipt for the note
+            setReprintInvoice({ ...note, originalInvoice });
+        } catch {
+            toast({ title: "Error", description: "Could not create note", variant: "destructive" });
+        }
+        setCnProcessing(false);
+    };
+
+    // ── X / Z Report ─────────────────────────────────────────────────────────
+    const handleLoadReport = async (type: "x" | "z") => {
+        setReportType(type);
+        setReportLoading(true);
+        setReportData(null);
+        setIsReportOpen(true);
+        try {
+            const endpoint = type === "x"
+                ? `/api/companies/${companyId}/zimra/day/x-report`
+                : `/api/companies/${companyId}/zimra/day/z-report`;
+            const res = await apiFetch(endpoint);
+            if (!res.ok) {
+                const err = await res.json();
+                setReportData({ error: err.message });
+            } else {
+                setReportData(await res.json());
+            }
+        } catch (e: any) {
+            setReportData({ error: e.message });
+        }
+        setReportLoading(false);
+    };
+    // ─────────────────────────────────────────────────────────────────────────
+
     const handleOverrideSuccess = (manager: any) => {
         if (!pendingOverride) return;
 
@@ -1634,6 +1739,28 @@ export default function POSPage() {
                                         )}
 
                                         <DropdownMenuSeparator className="bg-slate-50" />
+                                        <DropdownMenuItem className="p-3 rounded-xl focus:bg-blue-50 cursor-pointer" onClick={handleReprintLast}>
+                                            <Printer className="h-4 w-4 mr-3 text-blue-500" />
+                                            <div className="flex flex-col">
+                                                <span className="text-sm font-bold">Reprint Last Receipt</span>
+                                                <span className="text-[10px] text-slate-400">Reprint most recent sale</span>
+                                            </div>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem className="p-3 rounded-xl focus:bg-amber-50 cursor-pointer" onClick={() => { setCnType("credit"); setIsCreditNoteOpen(true); }}>
+                                            <FileText className="h-4 w-4 mr-3 text-amber-500" />
+                                            <div className="flex flex-col">
+                                                <span className="text-sm font-bold">Credit / Debit Note</span>
+                                                <span className="text-[10px] text-slate-400">Issue return or adjustment</span>
+                                            </div>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem className="p-3 rounded-xl focus:bg-purple-50 cursor-pointer" onClick={() => handleLoadReport("x")}>
+                                            <LayoutGrid className="h-4 w-4 mr-3 text-purple-500" />
+                                            <div className="flex flex-col">
+                                                <span className="text-sm font-bold">X-Report</span>
+                                                <span className="text-[10px] text-slate-400">Current day summary</span>
+                                            </div>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator className="bg-slate-50" />
                                         <DropdownMenuItem className="p-3 rounded-xl focus:bg-slate-50 cursor-pointer text-slate-400" onClick={() => setIsSettingsOpen(true)}>
                                             <SettingsIcon className="h-4 w-4 mr-3" />
                                             <span className="text-sm font-bold">Device Settings</span>
@@ -1889,6 +2016,28 @@ export default function POSPage() {
                                             </DropdownMenuItem>
                                         )}
                                         <DropdownMenuSeparator className="bg-slate-50" />
+                                        <DropdownMenuItem className="p-3 rounded-xl focus:bg-blue-50 cursor-pointer" onClick={handleReprintLast}>
+                                            <Printer className="h-4 w-4 mr-3 text-blue-500" />
+                                            <div className="flex flex-col">
+                                                <span className="text-sm font-bold">Reprint Last Receipt</span>
+                                                <span className="text-[10px] text-slate-400">Reprint most recent sale</span>
+                                            </div>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem className="p-3 rounded-xl focus:bg-amber-50 cursor-pointer" onClick={() => { setCnType("credit"); setIsCreditNoteOpen(true); }}>
+                                            <FileText className="h-4 w-4 mr-3 text-amber-500" />
+                                            <div className="flex flex-col">
+                                                <span className="text-sm font-bold">Credit / Debit Note</span>
+                                                <span className="text-[10px] text-slate-400">Issue return or adjustment</span>
+                                            </div>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem className="p-3 rounded-xl focus:bg-purple-50 cursor-pointer" onClick={() => handleLoadReport("x")}>
+                                            <LayoutGrid className="h-4 w-4 mr-3 text-purple-500" />
+                                            <div className="flex flex-col">
+                                                <span className="text-sm font-bold">X-Report</span>
+                                                <span className="text-[10px] text-slate-400">Current day summary</span>
+                                            </div>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator className="bg-slate-50" />
                                         <DropdownMenuItem className="p-3 rounded-xl focus:bg-slate-50 cursor-pointer text-slate-400" onClick={() => setIsSettingsOpen(true)}>
                                             <SettingsIcon className="h-4 w-4 mr-3" />
                                             <span className="text-sm font-bold">Device Settings</span>
@@ -1969,14 +2118,13 @@ export default function POSPage() {
                                 </div>
                             ) : (
                                 <>
-                                    {/* Mobile View: High-Density Ultra-Compact Grid */}
+                                    {/* Mobile View */}
                                     <div className="md:hidden grid grid-cols-3 gap-1 pb-24 px-1 select-none touch-manipulation">
-                                        {(filteredProducts as any[]).map(product => {
+                                        {(pagedProducts as any[]).map(product => {
                                             const hash = product.name.split("").reduce((acc: number, char: string) => char.charCodeAt(0) + ((acc << 5) - acc), 0);
                                             const hue = Math.abs(hash % 360);
                                             const bgColor = `hsl(${hue}, 70%, 95%)`;
                                             const iconColor = `hsl(${hue}, 60%, 60%)`;
-
                                             return (
                                                 <div
                                                     key={product.id}
@@ -2007,15 +2155,13 @@ export default function POSPage() {
                                         })}
                                     </div>
 
-                                    {/* Desktop View: Grid with Images */}
-                                    <div className="hidden md:grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2 pb-8">
-                                        {(filteredProducts as any[]).map(product => {
-                                            // Generate pastel color based on product name
+                                    {/* Desktop View */}
+                                    <div className="hidden md:grid gap-2 pb-8" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(160px, 160px))" }}>
+                                        {(pagedProducts as any[]).map(product => {
                                             const hash = product.name.split("").reduce((acc: number, char: string) => char.charCodeAt(0) + ((acc << 5) - acc), 0);
                                             const hue = Math.abs(hash % 360);
                                             const bgColor = `hsl(${hue}, 70%, 95%)`;
                                             const iconColor = `hsl(${hue}, 60%, 60%)`;
-
                                             return (
                                                 <Card
                                                     key={product.id}
@@ -2023,8 +2169,7 @@ export default function POSPage() {
                                                     onClick={() => addToCart(product)}
                                                 >
                                                     <CardContent className="p-0 flex flex-col h-full">
-                                                        {/* Image Container with Glass Overlay */}
-                                                        <div className="aspect-square flex items-center justify-center shrink-0 relative overflow-hidden" style={{ backgroundColor: product.imageUrl ? '#f8fafc' : bgColor }}>
+                                                        <div className="aspect-square max-h-24 flex items-center justify-center shrink-0 relative overflow-hidden" style={{ backgroundColor: product.imageUrl ? '#f8fafc' : bgColor }}>
                                                             {product.imageUrl ? (
                                                                 <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
                                                             ) : (
@@ -2032,20 +2177,15 @@ export default function POSPage() {
                                                                     <Package className="h-6 w-6 md:h-8 md:w-8" style={{ color: iconColor }} />
                                                                 </div>
                                                             )}
-
-                                                            {/* Compact Hover Overlay */}
                                                             <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                                                 <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-lg">
                                                                     <Plus className="h-5 w-5 text-primary" />
                                                                 </div>
                                                             </div>
-
                                                             {product.isTracked && Number(product.stockLevel) <= Number(product.lowStockThreshold) && (
                                                                 <Badge className="absolute top-2 right-2 bg-red-500 text-[8px] font-black h-4 px-1 border-none">OUT</Badge>
                                                             )}
                                                         </div>
-
-                                                        {/* Product Info */}
                                                         <div className="p-2 flex flex-col flex-1 bg-white">
                                                             <h4 className="text-[10px] md:text-[11px] font-black text-slate-800 line-clamp-2 mb-1 group-hover:text-primary transition-colors leading-tight min-h-[1.5rem] md:min-h-[1.75rem]">{product.name}</h4>
                                                             <div className="flex justify-between items-center mt-auto">
@@ -2507,6 +2647,295 @@ export default function POSPage() {
                     />
                 )}
             </div>
+
+            {/* Hidden Reprint Receipt */}
+            <div className="fixed -left-[9999px] top-0 pointer-events-none overflow-hidden" style={{ width: '80mm' }}>
+                {reprintInvoice && (
+                    <Receipt48
+                        id="reprint-receipt-48"
+                        invoice={reprintInvoice}
+                        company={resolvedCompany}
+                        customer={resolvedCustomers?.find((c: any) => c.id === reprintInvoice?.customerId)}
+                        items={reprintInvoice?.items}
+                        originalInvoice={reprintInvoice?.originalInvoice}
+                        user={user}
+                    />
+                )}
+            </div>
+
+            {/* Reprint — single receipt confirm */}
+            <Dialog open={!!reprintInvoice} onOpenChange={() => setReprintInvoice(null)}>
+                <DialogContent className="sm:max-w-[400px] rounded-3xl p-0 overflow-hidden border-none">
+                    <div className="bg-slate-900 p-6 text-white relative">
+                        <button onClick={() => setReprintInvoice(null)} className="absolute top-4 right-4 h-8 w-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all">
+                            <XCircle className="h-4 w-4 text-white" />
+                        </button>
+                        <Printer className="h-8 w-8 mb-2 text-white/70" />
+                        <h3 className="text-lg font-black">Reprint Receipt</h3>
+                        <p className="text-slate-400 text-xs mt-0.5 font-bold">{reprintInvoice?.invoiceNumber}</p>
+                    </div>
+                    <div className="p-6 bg-white space-y-3">
+                        <div className="text-sm text-slate-600 space-y-1.5">
+                            <div className="flex justify-between"><span className="font-bold text-slate-400">Customer</span><span className="font-black">{resolvedCustomers?.find((c: any) => c.id === reprintInvoice?.customerId)?.name || "Walk-in"}</span></div>
+                            <div className="flex justify-between"><span className="font-bold text-slate-400">Total</span><span className="font-black text-emerald-600">{fmt(Number(reprintInvoice?.total || 0))}</span></div>
+                            <div className="flex justify-between"><span className="font-bold text-slate-400">Payment</span><span className="font-black">{reprintInvoice?.paymentMethod}</span></div>
+                            <div className="flex justify-between"><span className="font-bold text-slate-400">Type</span><span className="font-black">{reprintInvoice?.transactionType || "Invoice"}</span></div>
+                        </div>
+                        <Button className="w-full h-12 rounded-xl bg-slate-900 hover:bg-black text-white font-black uppercase tracking-widest"
+                            onClick={() => {
+                                if (posSettings.silentPrinting) {
+                                    const el = document.getElementById('reprint-receipt-48');
+                                    if (el && window.electronAPI) window.electronAPI.printReceipt(el.outerHTML, posSettings.printerName || undefined);
+                                    else window.print();
+                                } else { window.print(); }
+                            }}>
+                            <Printer className="h-4 w-4 mr-2" /> Print
+                        </Button>
+                        <Button variant="ghost" className="w-full h-10 rounded-xl font-black text-xs text-slate-400" onClick={() => setReprintInvoice(null)}>Back to List</Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Today's Receipts List */}
+            <Dialog open={isReprintOpen} onOpenChange={v => { setIsReprintOpen(v); if (!v) setReprintList([]); }}>
+                <DialogContent className="sm:max-w-[480px] rounded-3xl p-0 overflow-hidden border-none max-h-[85vh] flex flex-col">
+                    <div className="bg-slate-900 p-6 text-white relative shrink-0">
+                        <button onClick={() => setIsReprintOpen(false)} className="absolute top-4 right-4 h-8 w-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all">
+                            <XCircle className="h-4 w-4 text-white" />
+                        </button>
+                        <Printer className="h-8 w-8 mb-2 text-white/70" />
+                        <h3 className="text-lg font-black">Today's Receipts</h3>
+                        <p className="text-slate-400 text-xs mt-0.5 font-bold">Select a receipt to reprint</p>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-4 bg-white space-y-2">
+                        {reprintListLoading && (
+                            <div className="flex items-center justify-center py-12">
+                                <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+                            </div>
+                        )}
+                        {!reprintListLoading && reprintList.length === 0 && (
+                            <div className="text-center py-12">
+                                <Receipt className="h-10 w-10 text-slate-200 mx-auto mb-3" />
+                                <p className="text-slate-400 font-bold text-sm">No receipts today</p>
+                            </div>
+                        )}
+                        {reprintList.map((inv: any) => (
+                            <button key={inv.id}
+                                className="w-full flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:border-slate-300 hover:bg-slate-50 transition-all text-left"
+                                onClick={() => { setReprintInvoice(inv); setIsReprintOpen(false); }}>
+                                <div>
+                                    <p className="text-sm font-black text-slate-800">{inv.invoiceNumber}</p>
+                                    <p className="text-xs text-slate-400 font-bold">
+                                        {resolvedCustomers?.find((c: any) => c.id === inv.customerId)?.name || "Walk-in"} · {inv.paymentMethod}
+                                    </p>
+                                    <p className="text-[10px] text-slate-300 font-bold">{new Date(inv.createdAt).toLocaleTimeString()}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-sm font-black text-emerald-600">{fmt(Number(inv.total))}</p>
+                                    <p className="text-[10px] text-slate-400 font-bold">{inv.transactionType || "Invoice"}</p>
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                    <div className="p-4 border-t border-slate-100 bg-slate-50 shrink-0">
+                        <Button variant="ghost" className="w-full h-10 rounded-xl font-black text-xs text-slate-400" onClick={() => setIsReprintOpen(false)}>Close</Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Credit / Debit Note Modal */}
+            <Dialog open={isCreditNoteOpen} onOpenChange={setIsCreditNoteOpen}>
+                <DialogContent className="sm:max-w-[520px] rounded-3xl p-0 overflow-hidden border-none max-h-[85vh] flex flex-col">
+                    <div className="bg-amber-500 p-6 text-white relative shrink-0">
+                        <button onClick={() => { setIsCreditNoteOpen(false); setCnSearchResults([]); setCnSearchQuery(""); }} className="absolute top-4 right-4 h-8 w-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-all">
+                            <XCircle className="h-4 w-4 text-white" />
+                        </button>
+                        <FileText className="h-8 w-8 mb-2 text-white/80" />
+                        <h3 className="text-xl font-black">Issue Credit / Debit Note</h3>
+                        <p className="text-amber-100 text-xs mt-1">Search for the original invoice to reverse or adjust</p>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-6 bg-white space-y-4">
+                        {/* Note type toggle */}
+                        <div className="flex bg-slate-100 p-1 rounded-xl">
+                            {(["credit", "debit"] as const).map(t => (
+                                <button key={t} onClick={() => setCnType(t)}
+                                    className={cn("flex-1 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all",
+                                        cnType === t ? "bg-white text-amber-600 shadow-sm" : "text-slate-400")}>
+                                    {t === "credit" ? "Credit Note (Return)" : "Debit Note (Adjustment)"}
+                                </button>
+                            ))}
+                        </div>
+                        {/* Search */}
+                        <div className="flex gap-2">
+                            <Input
+                                placeholder="Invoice number or customer name..."
+                                value={cnSearchQuery}
+                                onChange={e => setCnSearchQuery(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && handleCnSearch()}
+                                className="flex-1 h-10 rounded-xl border-slate-200 text-sm font-bold"
+                            />
+                            <Button onClick={handleCnSearch} disabled={cnSearching} className="h-10 px-4 rounded-xl font-black text-xs">
+                                {cnSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : "Search"}
+                            </Button>
+                        </div>
+                        {/* Results */}
+                        {cnSearchResults.length > 0 && (
+                            <div className="space-y-2 max-h-[280px] overflow-y-auto">
+                                {cnSearchResults.map((inv: any) => (
+                                    <div key={inv.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:border-amber-200 hover:bg-amber-50 transition-all">
+                                        <div>
+                                            <p className="text-sm font-black text-slate-800">{inv.invoiceNumber}</p>
+                                            <p className="text-xs text-slate-400 font-bold">{inv.customerName || resolvedCustomers?.find((c: any) => c.id === inv.customerId)?.name || "Customer"} · {fmt(Number(inv.total))}</p>
+                                            <p className="text-[10px] text-slate-300 font-bold">{inv.paymentMethod} · {new Date(inv.issueDate || inv.createdAt).toLocaleDateString()}</p>
+                                        </div>
+                                        <Button size="sm" disabled={cnProcessing}
+                                            className="h-8 px-3 rounded-lg font-black text-xs bg-amber-500 hover:bg-amber-600 text-white"
+                                            onClick={() => handleIssueCreditDebitNote(inv)}>
+                                            {cnProcessing ? <Loader2 className="h-3 w-3 animate-spin" /> : `Issue ${cnType === "credit" ? "CN" : "DN"}`}
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        {cnSearchResults.length === 0 && cnSearchQuery && !cnSearching && (
+                            <p className="text-center text-slate-400 text-sm font-bold py-4">No invoices found</p>
+                        )}
+                    </div>
+                    <div className="p-4 border-t border-slate-100 bg-slate-50 shrink-0">
+                        <Button variant="ghost" className="w-full h-10 rounded-xl font-black text-xs text-slate-400" onClick={() => { setIsCreditNoteOpen(false); setCnSearchResults([]); setCnSearchQuery(""); }}>Cancel</Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* X / Z Report Modal */}
+            <Dialog open={isReportOpen} onOpenChange={setIsReportOpen}>
+                <DialogContent className="sm:max-w-[560px] rounded-3xl p-0 overflow-hidden border-none max-h-[90vh] flex flex-col">
+                    <div className="bg-purple-600 p-6 text-white relative shrink-0">
+                        <button onClick={() => setIsReportOpen(false)} className="absolute top-4 right-4 h-8 w-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-all">
+                            <XCircle className="h-4 w-4 text-white" />
+                        </button>
+                        <div className="flex items-end justify-between pr-10">
+                            <div>
+                                <h3 className="text-xl font-black">{reportType === "x" ? "X-Report" : "Z-Report"}</h3>
+                                <p className="text-purple-200 text-xs mt-1">{reportType === "x" ? "Current day summary" : "Closed day summary"}</p>
+                            </div>
+                            <div className="flex bg-purple-700/50 p-1 rounded-xl">
+                                {(["x", "z"] as const).map(t => (
+                                    <button key={t} onClick={() => handleLoadReport(t)}
+                                        className={cn("px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all",
+                                            reportType === t ? "bg-white text-purple-600" : "text-purple-200")}>
+                                        {t.toUpperCase()}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-6 bg-white space-y-4">
+                        {reportLoading && (
+                            <div className="flex items-center justify-center py-12">
+                                <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
+                            </div>
+                        )}
+                        {reportData?.error && (
+                            <div className="bg-red-50 border border-red-100 rounded-2xl p-4 text-center">
+                                <XCircle className="h-8 w-8 text-red-400 mx-auto mb-2" />
+                                <p className="text-sm font-black text-red-600">{reportData.error}</p>
+                            </div>
+                        )}
+                        {reportData && !reportData.error && (
+                            <>
+                                {/* POS Sales Summary — always shown */}
+                                {reportData.posSummary && (
+                                    <div className="border border-purple-100 rounded-2xl overflow-hidden">
+                                        <div className="bg-purple-600 px-4 py-2 flex items-center justify-between">
+                                            <span className="text-xs font-black text-white uppercase tracking-widest">Today's Sales Summary</span>
+                                            <span className="text-xs font-black text-purple-200">{reportData.posSummary.totalTransactions} transactions</span>
+                                        </div>
+                                        <div className="divide-y divide-slate-50">
+                                            {reportData.posSummary.byPaymentMethod.map((pm: any) => (
+                                                <div key={pm.method} className="flex items-center justify-between px-4 py-3">
+                                                    <span className="text-sm font-bold text-slate-600">{pm.method}</span>
+                                                    <div className="flex items-center gap-4">
+                                                        <span className="text-xs font-black text-slate-400">{pm.count} sales</span>
+                                                        <span className="text-sm font-black text-emerald-600">{Number(pm.total).toFixed(2)}</span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            <div className="flex items-center justify-between px-4 py-3 bg-slate-50">
+                                                <span className="text-sm font-black text-slate-800">Grand Total</span>
+                                                <span className="text-base font-black text-slate-900">{Number(reportData.posSummary.grandTotal).toFixed(2)}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Fiscal header info — only when fiscal day data is present */}
+                                {reportData.fiscalDayNo && (
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="bg-slate-50 rounded-2xl p-4">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Fiscal Day</p>
+                                            <p className="text-2xl font-black text-slate-800">#{reportData.fiscalDayNo}</p>
+                                        </div>
+                                        <div className="bg-slate-50 rounded-2xl p-4">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Opened</p>
+                                            <p className="text-sm font-black text-slate-800">{reportData.openedAt ? new Date(reportData.openedAt).toLocaleString() : "—"}</p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Doc stats by currency — only when non-empty */}
+                                {(reportData.docStats || []).length > 0 && (reportData.docStats || []).map((stat: any) => (
+                                    <div key={stat.currency} className="border border-slate-100 rounded-2xl overflow-hidden">
+                                        <div className="bg-slate-800 px-4 py-2">
+                                            <span className="text-xs font-black text-white uppercase tracking-widest">{stat.currency}</span>
+                                        </div>
+                                        <div className="divide-y divide-slate-50">
+                                            {[
+                                                { label: "Invoices", data: stat.invoices, color: "text-emerald-600" },
+                                                { label: "Credit Notes", data: stat.creditNotes, color: "text-red-500" },
+                                                { label: "Debit Notes", data: stat.debitNotes, color: "text-amber-500" },
+                                            ].map(row => (
+                                                <div key={row.label} className="flex items-center justify-between px-4 py-3">
+                                                    <span className="text-sm font-bold text-slate-600">{row.label}</span>
+                                                    <div className="flex items-center gap-4">
+                                                        <span className="text-xs font-black text-slate-400">{row.data.quantity} docs</span>
+                                                        <span className={cn("text-sm font-black", row.color)}>{stat.currency} {Number(row.data.total).toFixed(2)}</span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            <div className="flex items-center justify-between px-4 py-3 bg-slate-50">
+                                                <span className="text-sm font-black text-slate-800">Total</span>
+                                                <span className="text-base font-black text-slate-900">{stat.currency} {Number(stat.totalDocuments.total).toFixed(2)}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+
+                                {/* Fiscal counters — only when non-empty */}
+                                {reportData.counters && reportData.counters.length > 0 && (
+                                    <div className="border border-slate-100 rounded-2xl overflow-hidden">
+                                        <div className="bg-slate-100 px-4 py-2">
+                                            <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Fiscal Counters</span>
+                                        </div>
+                                        <div className="divide-y divide-slate-50">
+                                            {reportData.counters.map((c: any, i: number) => (
+                                                <div key={i} className="flex items-center justify-between px-4 py-2">
+                                                    <span className="text-xs font-bold text-slate-500">{c.taxCode || c.taxPercent + "%"}</span>
+                                                    <span className="text-xs font-black text-slate-800">{c.currency} {Number(c.taxAmount || 0).toFixed(2)}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+                    <div className="p-4 border-t border-slate-100 bg-slate-50 shrink-0">
+                        <Button variant="ghost" className="w-full h-10 rounded-xl font-black text-xs text-slate-400" onClick={() => setIsReportOpen(false)}>Close</Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
         </PosLayout >
     );
 

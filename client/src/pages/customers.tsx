@@ -5,7 +5,7 @@ import { useState } from "react";
 const ITEMS_PER_PAGE = 10;
 import { useCustomers, useUpdateCustomer } from "@/hooks/use-customers";
 import { Card, CardContent } from "@/components/ui/card";
-import { Users, Building2, Phone, Mail, Search, ChevronLeft, ChevronRight, Eye } from "lucide-react";
+import { Users, Building2, Phone, Mail, Search, ChevronLeft, ChevronRight, Eye, FileDown } from "lucide-react";
 import { CreateCustomerDialog } from "@/components/customers/create-customer-dialog";
 import { EditCustomerDialog } from "@/components/customers/edit-customer-dialog";
 import { DeleteButton } from "@/components/delete-button";
@@ -72,6 +72,17 @@ export default function CustomersPage() {
           <p className="text-slate-500 mt-1">Manage your client base</p>
         </div>
         <div className="flex flex-wrap gap-2 w-full lg:w-auto">
+          <Button
+            variant="outline"
+            onClick={() => {
+              window.location.href = `/api/export/customers?companyId=${companyId}`;
+            }}
+            disabled={!companyId}
+            className="rounded-xl shadow-sm hover:shadow-md transition-all duration-300 border-slate-200"
+          >
+            <FileDown className="w-4 h-4 mr-2 text-violet-600" />
+            Export CSV
+          </Button>
           <CsvImportDialog
             type="customer"
             companyId={companyId}

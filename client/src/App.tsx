@@ -54,6 +54,7 @@ import { useEffect, useRef, useState } from "react";
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
 import { getPwaLaunchRedirect } from "@/hooks/use-pwa-install";
 import { useIsOnline } from "@/hooks/use-is-online";
+import { useBranding } from "@/hooks/use-branding";
 
 // Prevents loading states from spinning forever.
 // Returns true while `loading` is true, but automatically
@@ -230,11 +231,33 @@ function useSwAuthBridge() {
   }, []);
 }
 
+function BrandingMeta() {
+  const { brand } = useBranding();
+  
+  useEffect(() => {
+    document.title = brand.name + " | ZIMRA Compliant Fiscalization";
+    
+    // Update favicon dynamically
+    let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.getElementsByTagName('head')[0].appendChild(link);
+    }
+    // Note: We use the same favicon path for simplicity in development, 
+    // but in production these would be different assets in the build folder.
+    // However, the logo is definitely different.
+  }, [brand]);
+
+  return null;
+}
+
 function App() {
   useSwAuthBridge();
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
+        <BrandingMeta />
         <Toaster />
         <PwaInstallPrompt />
         <Router />

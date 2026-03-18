@@ -35,6 +35,7 @@ import { useState, useEffect } from "react";
 import { apiFetch } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
+import { useBranding } from "@/hooks/use-branding";
 
 // Company Onboarding Schema
 const companySchema = insertCompanySchema.pick({
@@ -62,6 +63,7 @@ export default function OnboardingPage() {
     const { toast } = useToast();
     const { user } = useAuth();
     const createCompany = useCreateCompany();
+    const { brand } = useBranding();
 
     // Steps: 1 = Company Basics, 2 = Tax Details
     const [currentStep, setCurrentStep] = useState(1);

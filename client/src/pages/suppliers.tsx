@@ -3,7 +3,7 @@ import { Layout } from "@/components/layout";
 import { useState } from "react";
 import { useSuppliers, useUpdateSupplier } from "@/hooks/use-suppliers";
 import { Card, CardContent } from "@/components/ui/card";
-import { Truck, Phone, Mail, Search, ChevronLeft, ChevronRight, User } from "lucide-react";
+import { Truck, Phone, Mail, Search, ChevronLeft, ChevronRight, User, FileDown } from "lucide-react";
 import { CreateSupplierDialog } from "@/components/suppliers/create-supplier-dialog";
 import { EditSupplierDialog } from "@/components/suppliers/edit-supplier-dialog";
 import { DeleteButton } from "@/components/delete-button";
@@ -60,6 +60,17 @@ export default function SuppliersPage() {
                     <p className="text-slate-500 mt-1">Manage your vendor relationships</p>
                 </div>
                 <div className="flex gap-2">
+                    <Button
+                        variant="outline"
+                        onClick={() => {
+                            window.location.href = `/api/export/suppliers?companyId=${companyId}`;
+                        }}
+                        disabled={!companyId}
+                        className="rounded-xl shadow-sm hover:shadow-md transition-all duration-300 border-slate-200"
+                    >
+                        <FileDown className="w-4 h-4 mr-2 text-emerald-600" />
+                        Export CSV
+                    </Button>
                     {companyId > 0 ? (
                         <CreateSupplierDialog companyId={companyId} />
                     ) : (

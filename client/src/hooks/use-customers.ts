@@ -3,14 +3,23 @@ import { api, buildUrl } from "@shared/routes";
 import { type InsertCustomer } from "@shared/schema";
 import { apiFetch } from "@/lib/api";
 import { cacheCustomers, getCachedCustomers } from "@/lib/offline-db";
+import { getIsOnline } from "@/lib/online-state";
 
 export function useCustomers(companyId: number) {
   return useQuery({
     queryKey: [api.customers.list.path, companyId],
     queryFn: async () => {
+      if (!getIsOnline()) {
+        const cached = await getCachedCustomers(companyId);
+        return cached ?? [];
+      }
       try {
         const url = buildUrl(api.customers.list.path, { companyId });
         const res = await apiFetch(url);
+        if (res.status === 401) {
+          const cached = await getCachedCustomers(companyId);
+          return cached ?? [];
+        }
         if (!res.ok) throw new Error("Failed to fetch customers");
         const customers = api.customers.list.responses[200].parse(await res.json());
         if (companyId) await cacheCustomers(companyId, customers);
@@ -18,11 +27,12 @@ export function useCustomers(companyId: number) {
       } catch (err) {
         console.warn("Customers fetch failed, trying offline cache...", err);
         const cached = await getCachedCustomers(companyId);
-        if (cached && cached.length > 0) return cached;
-        throw err;
+        return cached ?? [];
       }
     },
     enabled: !!companyId,
+    retry: false,
+    staleTime: 0,
   });
 }
 

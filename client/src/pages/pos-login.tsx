@@ -17,6 +17,20 @@ export default function PosLoginPage() {
   const [loginData, setLoginData] = useState({ email: "", password: "" });
   const [error, setError] = useState<string | null>(null);
   const isOnline = useIsOnline();
+  const [updateInfo, setUpdateInfo] = useState<{ version: string; releaseNotes?: string } | null>(null);
+  // Safety valve: never show spinner for more than 2s on the login page
+  const [loadingTimedOut, setLoadingTimedOut] = useState(false);
+  useEffect(() => {
+    if (!isLoading) return;
+    const t = setTimeout(() => setLoadingTimedOut(true), 2000);
+    return () => clearTimeout(t);
+  }, [isLoading]);
+
+  useEffect(() => {
+    if (window.electronAPI) {
+      window.electronAPI.onUpdateAvailable((info) => setUpdateInfo(info));
+    }
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,12 +46,15 @@ export default function PosLoginPage() {
   };
 
   useEffect(() => {
-    if (user && !isLoading && !isLoadingCompanies) {
+    // In Electron, redirect as soon as user is authenticated — don't wait for companies
+    // since they load from IndexedDB cache on the POS page itself.
+    const isElectronApp = !!(window as any).electronAPI;
+    if (user && !isLoading && (isElectronApp || !isLoadingCompanies)) {
       setLocation("/pos");
     }
   }, [user, companies, isLoading, isLoadingCompanies, setLocation]);
 
-  if (isLoading) {
+  if (isLoading && !loadingTimedOut) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-900">
         <Loader2 className="w-8 h-8 animate-spin text-white" />
@@ -50,7 +67,19 @@ export default function PosLoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-900 relative overflow-hidden p-6 text-white">
+    <div className="min-h-screen flex flex-col bg-slate-900 text-white">
+      {updateInfo && (
+        <div className="bg-blue-500 text-white p-3 flex items-center justify-between z-50">
+          <span>Update available: v{updateInfo.version}</span>
+          <button
+            className="px-3 py-1 bg-white text-blue-600 rounded font-semibold text-sm hover:bg-blue-50 transition-colors"
+            onClick={() => window.electronAPI?.installUpdate()}
+          >
+            Install &amp; Restart
+          </button>
+        </div>
+      )}
+    <div className="flex-1 flex items-center justify-center relative overflow-hidden p-6">
       {/* Background Effects */}
       <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none" />
       <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-primary/20 rounded-full blur-[120px] -translate-y-1/2 translate-x-1/2" />
@@ -58,10 +87,7 @@ export default function PosLoginPage() {
 
       <div className="w-full max-w-md relative z-10">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-white/10 backdrop-blur-xl border border-white/20 shadow-2xl mb-6">
-            <Store className="w-10 h-10 text-white" />
-          </div>
-          <h1 className="text-4xl font-black uppercase tracking-tighter mb-2">POS Desktop</h1>
+
           <p className="text-slate-400 font-medium">Terminal Login</p>
           {!isOnline && (
             <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30 text-sm font-semibold">
@@ -131,9 +157,10 @@ export default function PosLoginPage() {
         </Card>
 
         <p className="text-center text-slate-500 text-xs mt-8 uppercase tracking-widest font-bold">
-          &copy; 2026 Fiscal Stack Desktop v1.0
+          &copy; 2026 FieldPos Desktop v1.0
         </p>
       </div>
+    </div>
     </div>
   );
 }

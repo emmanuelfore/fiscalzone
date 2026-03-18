@@ -62,6 +62,7 @@ export interface IStorage {
   getProducts(companyId: number): Promise<Product[]>;
   createProduct(product: InsertProduct): Promise<Product>;
   updateProduct(id: number, product: Partial<InsertProduct>): Promise<Product>;
+  getProductsForExport(companyId: number): Promise<any[]>;
 
   // Invoices
   getInvoicesPaginated(companyId: number, page?: number, limit?: number, search?: string, status?: string, type?: string, dateFrom?: Date, dateTo?: Date, isPos?: boolean): Promise<{ data: (Invoice & { customer?: Customer })[]; total: number; pages: number }>;
@@ -429,6 +430,33 @@ export class DatabaseStorage implements IStorage {
     }
     const [updated] = await db.update(products).set(data).where(eq(products.id, id)).returning();
     return updated;
+  }
+  
+  async getProductsForExport(companyId: number): Promise<any[]> {
+    return await db
+      .select({
+        id: products.id,
+        name: products.name,
+        description: products.description,
+        sku: products.sku,
+        barcode: products.barcode,
+        price: products.price,
+        costPrice: products.costPrice,
+        taxRate: products.taxRate,
+        taxCode: taxTypes.code,
+        category: products.category,
+        productType: products.productType,
+        stockLevel: products.stockLevel,
+        hsCode: products.hsCode,
+        isTracked: products.isTracked,
+        isActive: products.isActive
+      })
+      .from(products)
+      .leftJoin(taxTypes, eq(products.taxTypeId, taxTypes.id))
+      .where(and(
+        eq(products.companyId, companyId),
+        eq(products.isActive, true)
+      ));
   }
 
   async getInvoices(companyId: number): Promise<(Invoice & { customer?: Customer })[]> {

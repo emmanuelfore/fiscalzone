@@ -3,6 +3,7 @@ import { getPendingSalesCount, getPendingShiftsCount, getLastCacheTime } from '@
 import { syncPendingSales, type SyncStatus, type SyncResult } from '@/lib/offline-sync';
 import { useToast } from '@/hooks/use-toast';
 import { useIsOnline } from '@/hooks/use-is-online';
+import { getIsOnline } from '@/lib/online-state';
 
 interface UseOfflineReturn {
     isOnline: boolean;
@@ -63,7 +64,7 @@ export function useOffline(companyId: number): UseOfflineReturn {
     }, [refreshPendingCount, refreshCacheTime]);
 
     const triggerSync = useCallback(async () => {
-        if (!companyId || isSyncingRef.current || !navigator.onLine) return;
+        if (!companyId || isSyncingRef.current || !getIsOnline()) return;
 
         isSyncingRef.current = true;
         setSyncStatus('syncing');
@@ -82,6 +83,17 @@ export function useOffline(companyId: number): UseOfflineReturn {
                 });
             }
 
+            if (result.failed > 0 && result.synced === 0) {
+                const isAuthError = result.errors.some(e => e.error.includes('auth session') || e.error.includes('log in'));
+                toast({
+                    title: isAuthError ? '🔐 Session Expired' : '⚠️ Sync Failed',
+                    description: isAuthError
+                        ? 'Your session expired. Please log out and log back in to sync offline sales.'
+                        : `${result.failed} sale(s) failed to sync. Will retry automatically.`,
+                    variant: 'destructive',
+                });
+            }
+
             setSyncStatus(result.failed > 0 ? 'error' : 'complete');
             await refreshPendingCount();
             setTimeout(() => setSyncStatus('idle'), 3000);
@@ -96,9 +108,17 @@ export function useOffline(companyId: number): UseOfflineReturn {
 
     useEffect(() => {
         if (isOnline && (pendingSalesCount > 0 || pendingShiftsCount > 0)) {
+            // Initial sync attempt: wait 2s after coming online to let Supabase finish token refresh
             const timer = setTimeout(() => triggerSync(), 2000);
             return () => clearTimeout(timer);
         }
+    }, [isOnline, pendingSalesCount, pendingShiftsCount, triggerSync]);
+
+    // Periodic retry every 60s when online and there are pending sales
+    useEffect(() => {
+        if (!isOnline || (pendingSalesCount === 0 && pendingShiftsCount === 0)) return;
+        const interval = setInterval(() => triggerSync(), 60_000);
+        return () => clearInterval(interval);
     }, [isOnline, pendingSalesCount, pendingShiftsCount, triggerSync]);
 
     return {

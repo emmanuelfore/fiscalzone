@@ -16,12 +16,21 @@
     "directories": {
       "output": "dist"
     },
+    "publish": {
+      "provider": "generic",
+      "url": "https://updates.fiscalstack.com/pos/"
+    },
     "win": {
       "target": "nsis"
     },
     "linux": {
       "target": "AppImage"
     }
+  },
+  "dependencies": {
+    "electron-log": "^5.2.4",
+    "electron-updater": "^6.3.9",
+    "serialport": "^12.0.0"
   },
   "devDependencies": {
     "electron": "^31.0.0",

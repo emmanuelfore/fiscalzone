@@ -4,7 +4,7 @@ import { useProducts, useUpdateProduct } from "@/hooks/use-products";
 import { useActiveCompany } from "@/hooks/use-active-company";
 import { useTaxConfig } from "@/hooks/use-tax-config";
 import { Card, CardContent } from "@/components/ui/card";
-import { Package, AlertCircle, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { Package, AlertCircle, Search, ChevronLeft, ChevronRight, FileDown } from "lucide-react";
 import { CreateProductDialog } from "@/components/products/create-product-dialog";
 import { EditProductDialog } from "@/components/products/edit-product-dialog";
 import { StockInDialog } from "@/components/products/stock-in-dialog";
@@ -99,6 +99,17 @@ export default function ProductsPage() {
           <p className="text-slate-500 mt-1 font-medium">Inventory and goods</p>
         </div>
         <div className="flex flex-wrap gap-2 w-full lg:w-auto">
+          <Button
+            variant="outline"
+            onClick={() => {
+              window.location.href = `/api/export/products?companyId=${companyId}`;
+            }}
+            disabled={!companyId}
+            className="rounded-xl"
+          >
+            <FileDown className="w-4 h-4 mr-2" />
+            Export CSV
+          </Button>
           <ManageCategoriesDialog companyId={companyId} />
           <CsvImportDialog
             type="product"

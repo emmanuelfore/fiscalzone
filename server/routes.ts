@@ -594,18 +594,22 @@ export async function registerRoutes(
         return null;
       };
 
+      const taxTypesList = await storage.getTaxTypes(targetCompanyId);
+
       for (const [index, row] of records.entries()) {
         try {
           const nameHeader = findHeader(row, ['Name', 'Product Name', 'Item Name', 'Title']);
           const descHeader = findHeader(row, ['Description', 'Notes', 'Details']);
           const skuHeader = findHeader(row, ['Code', 'SKU', 'Item Code', 'ID']);
-          const priceHeader = findHeader(row, ['Price', 'Unit Price', 'Rate']);
-          const taxHeader = findHeader(row, ['Tax Rate', 'VAT', 'TaxPercent', 'Tax']);
+          const barcodeHeader = findHeader(row, ['Barcode', 'EAN', 'UPC']);
+          const priceHeader = findHeader(row, ['Price', 'Unit Price', 'Rate', 'Retail Price']);
+          const costHeader = findHeader(row, ['Cost Price', 'Cost', 'Unit Cost', 'Purchase Price']);
+          const taxRateHeader = findHeader(row, ['Tax Rate', 'VAT', 'TaxPercent', 'Tax']);
+          const taxTypeHeader = findHeader(row, ['Tax Type', 'Tax Code', 'VAT Code']);
           const typeHeader = findHeader(row, ['Type', 'Product Type', 'Item Type']);
-          const stockHeader = findHeader(row, ['Stock', 'Quantity', 'Qty', 'Inventory']);
+          const stockHeader = findHeader(row, ['Stock', 'Quantity', 'Qty', 'Inventory', 'Stock Level']);
           const hsHeader = findHeader(row, ['HS Code', 'HSCode', 'Harmonized Code']);
           const categoryHeader = findHeader(row, ['Category', 'Cat', 'Tax Category', 'Group']);
-
           const trackHeader = findHeader(row, ['Track Inventory', 'Track', 'Inventory Tracking']);
 
           const name = nameHeader ? (row as any)[nameHeader] : null;
@@ -618,13 +622,29 @@ export async function registerRoutes(
           const trackValue = trackHeader ? (row as any)[trackHeader].toString().toLowerCase() : "";
           const isTracked = ["yes", "true", "1", "on"].includes(trackValue);
 
+          // Resolve Tax Type ID from Code
+          let taxTypeId: number | undefined;
+          let taxRateValue = taxRateHeader ? cleanNum((row as any)[taxRateHeader]).toString() : "15.00";
+
+          if (taxTypeHeader) {
+            const code = (row as any)[taxTypeHeader]?.toString().trim();
+            const matchedTax = taxTypesList.find(t => t.code.toLowerCase() === code.toLowerCase());
+            if (matchedTax) {
+              taxTypeId = matchedTax.id;
+              taxRateValue = matchedTax.rate.toString();
+            }
+          }
+
           const productData = {
             companyId: targetCompanyId,
             name: name,
             description: descHeader ? (row as any)[descHeader] : "",
             sku: skuHeader ? (row as any)[skuHeader] : `IMP-${Date.now()}-${index}`,
+            barcode: barcodeHeader ? (row as any)[barcodeHeader]?.toString() : undefined,
             price: priceHeader ? cleanNum((row as any)[priceHeader]).toString() : "0.00",
-            taxRate: taxHeader ? cleanNum((row as any)[taxHeader]).toString() : "15.5",
+            costPrice: costHeader ? cleanNum((row as any)[costHeader]).toString() : "0.00",
+            taxRate: taxRateValue,
+            taxTypeId: taxTypeId,
             productType: type,
             hsCode: hsHeader ? (row as any)[hsHeader] : "0000.00.00",
             category: categoryHeader ? (row as any)[categoryHeader] : "General",
@@ -636,10 +656,25 @@ export async function registerRoutes(
           // Validate via Zod
           const validated = api.products.create.input.parse(productData);
 
-          await storage.createProduct({
+          const newProduct = await storage.createProduct({
             ...validated,
             companyId: targetCompanyId
           });
+
+          // If stock is provided and product is tracked, create initial inventory transaction
+          const initialStock = cleanNum(productData.stockLevel);
+          if (initialStock > 0 && newProduct.isTracked) {
+            await storage.createInventoryTransaction({
+              companyId: targetCompanyId,
+              productId: newProduct.id,
+              type: "STOCK_IN",
+              quantity: initialStock.toString(),
+              unitCost: productData.costPrice,
+              totalCost: (initialStock * cleanNum(productData.costPrice)).toString(),
+              referenceType: "MANUAL",
+              notes: "Initial stock from import"
+            });
+          }
           results.success++;
         } catch (err: any) {
           results.failed++;
@@ -659,6 +694,50 @@ export async function registerRoutes(
     }
   });
 
+
+  // Export Products
+  app.get("/api/export/products", requireAuth, async (req, res) => {
+    try {
+      const companyId = parseInt(req.query.companyId as string) || (req.user as any).companyId;
+      if (!companyId) return res.status(400).json({ message: "Company ID required" });
+
+      const products = await storage.getProductsForExport(companyId);
+
+      // Construct CSV
+      const headers = ["Name", "Description", "SKU", "Barcode", "Price", "Cost Price", "Tax Rate", "Tax Type", "Type", "Stock", "HS Code", "Category", "Track Inventory"];
+      const rows = products.map(p => [
+        p.name,
+        p.description || "",
+        p.sku || "",
+        p.barcode || "",
+        p.price,
+        p.costPrice || "0.00",
+        p.taxRate,
+        p.taxCode || "",
+        p.productType,
+        p.stockLevel || "0.00",
+        p.hsCode || "0000.00.00",
+        p.category || "General",
+        p.isTracked ? "Yes" : "No"
+      ]);
+
+      const csvContent = [
+        headers.join(","),
+        ...rows.map(r => r.map(cell => {
+          const val = String(cell).replace(/"/g, '""');
+          return val.includes(",") ? `"${val}"` : val;
+        }).join(","))
+      ].join("\n");
+
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", `attachment; filename=products_export_${format(new Date(), "yyyy-MM-dd")}.csv`);
+      res.send(csvContent);
+
+    } catch (error: any) {
+      console.error("Export Products Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
 
   // Product Categories
   app.get("/api/product-categories", requireAuth, async (req: any, res) => {
@@ -4407,6 +4486,24 @@ export async function registerRoutes(
 
       res.status(401).json({ authorized: false, message: "Invalid Manager PIN" });
 
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Returns scrypt PIN hashes for all managers — used by Electron to enable offline PIN verification
+  // without requiring a prior online verify call. Only accessible to authenticated users of the company.
+  app.get("/api/companies/:companyId/auth/manager-pin-hashes", requireAuth, async (req, res) => {
+    try {
+      const companyId = parseInt(req.params.companyId);
+      const users = await storage.getCompanyUsers(companyId);
+      const managers = users.filter((u: any) => u.role === 'admin' || u.role === 'owner');
+
+      const hashes = managers
+        .filter((m: any) => m.pin) // only managers who have set a PIN
+        .map((m: any) => ({ id: m.id, name: m.name, pinHash: m.pin })); // pin is "scryptHex.salt"
+
+      res.json(hashes);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

@@ -1,14 +1,8 @@
 import { supabase } from "./supabase";
 
 export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-    const sessionResult = (await Promise.race([
-        supabase.auth.getSession(),
-        new Promise((resolve) =>
-            window.setTimeout(() => resolve({ data: { session: null } }), 2000)
-        ),
-    ])) as { data?: { session: { access_token?: string } | null } };
-
-    const session = sessionResult?.data?.session ?? null;
+    const { data: sessionData } = await supabase.auth.getSession();
+    const session = sessionData?.session ?? null;
 
     const headers = new Headers(init?.headers);
 

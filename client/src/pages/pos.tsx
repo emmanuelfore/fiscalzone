@@ -7,6 +7,7 @@ import { useCompany } from "@/hooks/use-companies";
 import { useTaxConfig } from "@/hooks/use-tax-config";
 import { useToast } from "@/hooks/use-toast";
 import { useOffline } from "@/hooks/use-offline";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,7 +21,7 @@ import {
     setLastCacheTime,
     addPendingSale,
 } from "@/lib/offline-db";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, UserPlus, Loader2, Package, Tag, Pause, Play, History, Calculator, Printer, CheckCircle2, XCircle, ChevronRight, Fullscreen, HelpCircle, User, Settings as SettingsIcon, LogOut, FileText, Receipt, Clock, LayoutGrid, ShoppingBag, Filter, WifiOff, Wifi, CloudUpload, AlertTriangle } from "lucide-react";
 import { RefreshCw } from "lucide-react";
 import { POSReceipt } from "@/components/pos-receipt";
@@ -33,7 +34,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { MySalesModal } from "@/components/pos/my-sales-modal";
-import { usePosSettings } from "@/hooks/use-pos-settings";
 
 interface CartItem {
     productId: number;
@@ -50,10 +50,58 @@ import { useAuth } from "@/hooks/use-auth";
 
 export default function POSPage() {
     const { user, logout } = useAuth();
-    const companyId = parseInt(localStorage.getItem("selectedCompanyId") || "0");
+    const queryClient = useQueryClient();
+    // Use state so companyId is reactive — handles the case where selectedCompanyId
+    // is set just before this component mounts (offline login race condition).
+    const [companyId, setCompanyId] = useState<number>(
+        () => parseInt(localStorage.getItem("selectedCompanyId") || "0")
+    );
+    useEffect(() => {
+        if (companyId) return; // already have a valid id
+        // Poll briefly in case offline login set it just after mount
+        const t = setInterval(() => {
+            const id = parseInt(localStorage.getItem("selectedCompanyId") || "0");
+            if (id) { setCompanyId(id); clearInterval(t); }
+        }, 100);
+        setTimeout(() => clearInterval(t), 3000); // stop after 3s
+        return () => clearInterval(t);
+    }, [companyId]);
     const { data: company } = useCompany(companyId);
     const isCashier = (company as any)?.role === 'cashier';
     const { data: products, isLoading: isLoadingProducts } = useProducts(companyId);
+
+    // Emergency fallback: if React Query returns nothing but we have a companyId,
+    // read directly from IndexedDB. This handles edge cases where the query
+    // completes but returns empty due to timing issues.
+    const [cachedProductsFallback, setCachedProductsFallback] = useState<any[]>([]);
+    const [cachedCompanyFallback, setCachedCompanyFallback] = useState<any>(null);
+    const [cachedCustomersFallback, setCachedCustomersFallback] = useState<any[]>([]);
+    useEffect(() => {
+        if (!companyId) return;
+        import('@/lib/offline-db').then(({ getCachedProducts, getCachedCompanySettings, getCachedCompaniesList, getCachedCustomers }) => {
+            // Products
+            getCachedProducts(companyId).then(cached => {
+                if (cached && cached.length > 0) {
+                    console.log(`[POS] Direct cache read: ${cached.length} products for company ${companyId}`);
+                    setCachedProductsFallback(cached);
+                }
+            });
+            // Company
+            getCachedCompanySettings(companyId).then(async cached => {
+                if (cached) { setCachedCompanyFallback(cached); return; }
+                const list = await getCachedCompaniesList();
+                const fromList = list?.find((c: any) => c.id === companyId || c.id === String(companyId));
+                if (fromList) setCachedCompanyFallback(fromList);
+            });
+            // Customers
+            getCachedCustomers(companyId).then(cached => {
+                if (cached && cached.length > 0) {
+                    console.log(`[POS] Direct cache read: ${cached.length} customers for company ${companyId}`);
+                    setCachedCustomersFallback(cached);
+                }
+            });
+        });
+    }, [companyId]);
     const { data: customers } = useCustomers(companyId);
     const { data: currencies } = useCurrencies(companyId);
     const { taxTypes } = useTaxConfig(companyId);
@@ -71,12 +119,27 @@ export default function POSPage() {
         refreshCacheTime
     } = useOffline(companyId);
 
-    // Resolved data — hooks now handle caching and fallback automatically
-    const resolvedProducts = products || [];
-    const resolvedCustomers = customers || [];
+    // When we come back online (or first confirm online), refresh all POS data queries
+    const prevIsOnlineRef = useRef<boolean | null>(null);
+    useEffect(() => {
+        const prev = prevIsOnlineRef.current;
+        prevIsOnlineRef.current = isOnline;
+        if (prev === false && isOnline && companyId) {
+            // Invalidate using partial key prefixes that match the actual query keys
+            queryClient.invalidateQueries({ queryKey: ['/api/companies'] });
+            queryClient.invalidateQueries({ queryKey: ['/api/companies/:companyId/products', companyId] });
+            queryClient.invalidateQueries({ queryKey: ['/api/companies/:companyId/customers', companyId] });
+            queryClient.invalidateQueries({ queryKey: ['/api/companies/:companyId/currencies', companyId] });
+            queryClient.invalidateQueries({ queryKey: ['/api/tax/types', companyId] });
+        }
+    }, [isOnline, companyId, queryClient]);
+
+    // Resolved data — hooks handle caching and fallback; direct IDB reads are emergency fallback
+    const resolvedProducts = (products && products.length > 0) ? products : cachedProductsFallback;
+    const resolvedCustomers = (customers && customers.length > 0) ? customers : cachedCustomersFallback;
     const resolvedCurrencies = currencies || [];
     const resolvedTaxTypes = taxTypes?.data || [];
-    const resolvedCompany = company;
+    const resolvedCompany = company ?? cachedCompanyFallback;
     const { toast } = useToast();
 
     const [searchQuery, setSearchQuery] = useState("");
@@ -92,9 +155,11 @@ export default function POSPage() {
     const [paidAmount, setPaidAmount] = useState<string>("");
     const [selectedCurrencyCode, setSelectedCurrencyCode] = useState<string>("USD");
 
-    // Barcode Listener State
-    const [barcodeBuffer, setBarcodeBuffer] = useState("");
-    const [lastCharTime, setLastCharTime] = useState(0);
+    // Barcode scanner — use refs to avoid stale closure issues
+    const barcodeBufferRef = useRef("");
+    const lastCharTimeRef = useRef(0);
+    const lastScannedProductRef = useRef<{ productId: number; time: number } | null>(null);
+    const searchInputRef = useRef<HTMLInputElement>(null);
 
     const [heldSales, setHeldSales] = useState<any[]>([]);
     const [isHoldsModalOpen, setIsHoldsModalOpen] = useState(false);
@@ -111,10 +176,20 @@ export default function POSPage() {
         terminalId: "POS-T01",
         silentPrinting: false,
         printerName: localStorage.getItem("pos_printer_name") || "",
-        printServerUrl: "http://localhost:12312"
+        printServerUrl: "http://localhost:12312",
+        cashDrawerEnabled: false
     });
 
     // Default to "Walk-in Customer"
+    const resetToDefaultCustomer = () => {
+        if (resolvedCustomers && resolvedCustomers.length > 0) {
+            const walkIn = resolvedCustomers.find((x: any) => x.name.toLowerCase().includes("walk-in") || x.name.toLowerCase().includes("guest"));
+            setSelectedCustomerId(walkIn ? walkIn.id.toString() : "");
+        } else {
+            setSelectedCustomerId("");
+        }
+    };
+
     useEffect(() => {
         if (!selectedCustomerId && resolvedCustomers && resolvedCustomers.length > 0) {
             const walkIn = resolvedCustomers.find((x: any) => x.name.toLowerCase().includes("walk-in") || x.name.toLowerCase().includes("guest"));
@@ -283,38 +358,135 @@ export default function POSPage() {
         ));
     };
 
-    // Barcode Effect
+    // ─── Barcode Scanner (keyboard wedge / HID mode) ──────────────────────
+    // Uses refs to avoid stale closures. Handles scanners up to 100ms/char.
+    // Works even when search input is focused.
     useEffect(() => {
-        const handleKeyPress = (e: KeyboardEvent) => {
-            // Ignore if in any input context EXCEPT the specific search if we want it to work globally
-            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            const now = Date.now();
+            const gap = now - lastCharTimeRef.current;
+            const inInput = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+            const modalOpen = isCheckoutOpen || isShiftModalOpen || isHoldsModalOpen || isSettingsOpen || !!pendingOverride;
+
+            // ── Keyboard shortcuts (only when not typing in an input and no modal) ──
+            if (!inInput && !modalOpen) {
+                switch (e.key) {
+                    case 'F1':
+                        e.preventDefault();
+                        searchInputRef.current?.focus();
+                        searchInputRef.current?.select();
+                        return;
+                    case 'F2':
+                        e.preventDefault();
+                        if (cart.length > 0) handleCheckout();
+                        return;
+                    case 'F3':
+                        e.preventDefault();
+                        if (cart.length > 0) holdOrder();
+                        return;
+                    case 'F4':
+                        e.preventDefault();
+                        handleClearCart();
+                        return;
+                    case 'Escape':
+                        setSearchQuery("");
+                        searchInputRef.current?.blur();
+                        return;
+                    case '+':
+                    case '=':
+                        e.preventDefault();
+                        if (cart.length > 0) updateQuantity(cart[cart.length - 1].productId, 1);
+                        return;
+                    case '-':
+                        e.preventDefault();
+                        if (cart.length > 0) updateQuantity(cart[cart.length - 1].productId, -1);
+                        return;
+                }
+            }
+
+            // Escape closes checkout modal
+            if (e.key === 'Escape' && isCheckoutOpen) {
+                setIsCheckoutOpen(false);
                 return;
             }
 
-            const currentTime = Date.now();
-
-            // If more than 50ms since last key, start new buffer (typical barcode speed)
-            if (currentTime - lastCharTime > 50) {
-                setBarcodeBuffer(e.key);
+            // ── Barcode accumulation — chars arriving < 100ms apart are from a scanner ──
+            if (gap > 100) {
+                barcodeBufferRef.current = e.key === 'Enter' ? '' : e.key;
             } else {
                 if (e.key === 'Enter') {
-                    // Process barcode
-                    const found = resolvedProducts?.find((p: any) => p.barcode === barcodeBuffer || p.sku === barcodeBuffer);
+                    const barcode = barcodeBufferRef.current.trim();
+                    barcodeBufferRef.current = '';
+                    if (barcode.length < 2) return;
+
+                    const found = resolvedProducts?.find(
+                        (p: any) => p.barcode === barcode || p.sku === barcode
+                    );
                     if (found) {
-                        addToCart(found);
-                        toast({ title: "Scanned", description: `Added ${found.name}` });
+                        const prev = lastScannedProductRef.current;
+                        if (prev && prev.productId === found.id && now - prev.time < 2000) {
+                            updateQuantity(found.id, 1);
+                        } else {
+                            addToCart(found);
+                            toast({ title: "✓ Scanned", description: found.name });
+                        }
+                        lastScannedProductRef.current = { productId: found.id, time: now };
+                        if (searchQuery) setSearchQuery("");
+                    } else {
+                        setSearchQuery(barcode);
+                        searchInputRef.current?.focus();
+                        toast({ title: "Not found", description: `No product for: ${barcode}`, variant: "destructive" });
                     }
-                    setBarcodeBuffer("");
-                } else {
-                    setBarcodeBuffer(prev => prev + e.key);
+                } else if (e.key.length === 1) {
+                    barcodeBufferRef.current += e.key;
                 }
             }
-            setLastCharTime(currentTime);
+            lastCharTimeRef.current = now;
         };
 
-        window.addEventListener('keypress', handleKeyPress);
-        return () => window.removeEventListener('keypress', handleKeyPress);
-    }, [barcodeBuffer, lastCharTime, products]);
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [resolvedProducts, cart, isCheckoutOpen, isShiftModalOpen, isHoldsModalOpen, isSettingsOpen, pendingOverride, searchQuery]);
+
+    // ─── Electron serial/USB barcode scanner ──────────────────────────────
+    useEffect(() => {
+        if (!window.electronAPI) return;
+        const handler = (barcode: string) => {
+            const trimmed = barcode.trim();
+            if (!trimmed) return;
+            const found = resolvedProducts?.find((p: any) => p.barcode === trimmed || p.sku === trimmed);
+            if (found) {
+                const now = Date.now();
+                const prev = lastScannedProductRef.current;
+                if (prev && prev.productId === found.id && now - prev.time < 2000) {
+                    updateQuantity(found.id, 1);
+                } else {
+                    addToCart(found);
+                    toast({ title: "✓ Scanned", description: found.name });
+                }
+                lastScannedProductRef.current = { productId: found.id, time: now };
+            } else {
+                setSearchQuery(trimmed);
+                searchInputRef.current?.focus();
+                toast({ title: "Not found", description: `No product for: ${trimmed}`, variant: "destructive" });
+            }
+        };
+        window.electronAPI.onBarcodeScan(handler);
+        return () => window.electronAPI?.offBarcodeScan?.(handler);
+    }, [resolvedProducts]);
+
+    // Pre-cache manager PIN hashes for offline verification (Electron only)
+    useEffect(() => {
+        if (!window.electronAPI || !isOnline || !companyId) return;
+        apiFetch(`/api/companies/${companyId}/auth/manager-pin-hashes`)
+            .then(res => res.ok ? res.json() : null)
+            .then(hashes => {
+                if (hashes && hashes.length > 0) {
+                    window.electronAPI!.cacheManagerPins(companyId, hashes);
+                }
+            })
+            .catch(() => { /* non-critical — silently ignore */ });
+    }, [companyId, isOnline]);
 
     const updateQuantity = (productId: number, delta: number) => {
         const product = resolvedProducts?.find((p: any) => p.id === productId);
@@ -377,11 +549,15 @@ export default function POSPage() {
                     const shiftData = await res.json();
                     setCurrentShift(shiftData);
                     if (companyId) await cacheShift(companyId, shiftData);
+                    return;
                 }
+                // 401 = offline auth session — fall through to cache
             } catch (e) {
                 console.error("Failed to fetch shift from API", e);
             }
-        } else if (companyId) {
+        }
+        // Offline or auth-offline fallback
+        if (companyId) {
             const cached = await getCachedShift(companyId);
             if (cached) setCurrentShift(cached);
         }
@@ -395,6 +571,7 @@ export default function POSPage() {
             try {
                 const res = await apiFetch(`/api/pos/holds?companyId=${companyId}`);
                 if (res.ok) serverHolds = await res.json();
+                // 401 = offline auth session — skip server holds, use local only
             } catch (e) {
                 console.error("Failed to fetch holds from API", e);
             }
@@ -601,7 +778,7 @@ export default function POSPage() {
                 }
                 setCart([]);
                 setOrderDiscount(0);
-                setSelectedCustomerId("");
+                resetToDefaultCustomer();
                 setPaidAmount("");
                 setIsCheckoutOpen(false);
                 clearPersistedSession();
@@ -618,6 +795,11 @@ export default function POSPage() {
             }
 
             const result = await createInvoice.mutateAsync(invoiceData as any);
+            // Cash drawer: open after successful sale when running in Electron and enabled
+            if (window.electronAPI && posSettings.cashDrawerEnabled) {
+                const printerName = localStorage.getItem('pos_printer_name') || undefined;
+                window.electronAPI.openCashDrawer(printerName).catch(console.error);
+            }
             if (posSettings.printingEnabled) {
                 setLastSuccessfulInvoice(result);
             } else {
@@ -626,7 +808,7 @@ export default function POSPage() {
             }
             setCart([]);
             setOrderDiscount(0);
-            setSelectedCustomerId("");
+            resetToDefaultCustomer();
             setPaidAmount("");
             setIsCheckoutOpen(false);
             clearPersistedSession();
@@ -679,7 +861,7 @@ export default function POSPage() {
                     }
                     setCart([]);
                     setOrderDiscount(0);
-                    setSelectedCustomerId("");
+                    resetToDefaultCustomer();
                     setPaidAmount("");
                     setIsCheckoutOpen(false);
                     clearPersistedSession();
@@ -806,7 +988,8 @@ export default function POSPage() {
                 autoPrint: settings.autoPrint ?? true,
                 silentPrinting: settings.silentPrinting ?? false,
                 printServerUrl: settings.printServerUrl || "http://localhost:12312",
-                printerName: prev.printerName || settings.printerName || ""
+                printerName: prev.printerName || settings.printerName || "",
+                cashDrawerEnabled: settings.cashDrawerEnabled ?? false
             }));
         }
     }, [company]);
@@ -968,7 +1151,7 @@ export default function POSPage() {
         } else {
             setCart([]);
             setOrderDiscount(0);
-            setSelectedCustomerId("");
+            resetToDefaultCustomer();
         }
     };
 
@@ -981,7 +1164,7 @@ export default function POSPage() {
         } else if (pendingOverride.type === "VOID_CART") {
             setCart([]);
             setOrderDiscount(0);
-            setSelectedCustomerId("");
+            resetToDefaultCustomer();
             toast({ title: "Cart Cleared", description: `Void approved by ${manager.name}` });
         } else if (pendingOverride.type === "REMOVE_ITEM") {
             const productId = pendingOverride.data;
@@ -1401,7 +1584,7 @@ export default function POSPage() {
                                             <span className="text-sm font-black text-slate-900">{company?.name || "Premium POS"}</span>
                                             <div className="flex items-center justify-between">
                                                 <span className="text-[10px] font-bold text-slate-400">ID: {companyId}</span>
-                                                <Badge variant={currentShift ? "success" : "destructive"} className="h-4 text-[9px] px-1">
+                                                <Badge variant={currentShift ? "default" : "destructive"} className="h-4 text-[9px] px-1">
                                                     {currentShift ? "SHIFT OPEN" : "SHIFT CLOSED"}
                                                 </Badge>
                                             </div>
@@ -1472,7 +1655,8 @@ export default function POSPage() {
                                 </div>
                                 <Input
                                     autoFocus
-                                    placeholder="Search products..."
+                                    ref={searchInputRef}
+                                    placeholder="Search products... (F1)"
                                     className="pl-10 md:pl-12 h-10 md:h-14 w-full bg-slate-50 border-none rounded-xl md:rounded-2xl text-xs md:text-sm font-bold text-slate-800 focus:bg-white focus:ring-4 focus:ring-primary/5 transition-all shadow-inner"
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -1761,11 +1945,26 @@ export default function POSPage() {
                         </div>
 
                         <ScrollArea className="flex-1 -mx-2 px-2">
-                            {isLoadingProducts ? (
+                            {isLoadingProducts && resolvedProducts.length === 0 ? (
                                 <div className="flex items-center justify-center min-h-[400px]">
                                     <div className="flex flex-col items-center gap-4">
                                         <Loader2 className="h-10 w-10 animate-spin text-primary" />
                                         <p className="text-slate-400 font-medium">Loading Inventory...</p>
+                                    </div>
+                                </div>
+                            ) : resolvedProducts.length === 0 ? (
+                                <div className="flex items-center justify-center min-h-[400px]">
+                                    <div className="flex flex-col items-center gap-4 text-center px-6">
+                                        <Package className="h-12 w-12 text-slate-200" />
+                                        <div>
+                                            <p className="text-slate-500 font-bold text-sm">No products available</p>
+                                            {!isOnline && (
+                                                <p className="text-amber-600 text-xs mt-1 font-medium">
+                                                    Offline — no cached products found.<br />
+                                                    Connect to internet and log in online to cache products.
+                                                </p>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             ) : (

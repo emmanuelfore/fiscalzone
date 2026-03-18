@@ -97,10 +97,15 @@ export default function PosSettingsPage() {
     // Fetch printers logic
     const fetchPrintersForGlobal = async () => {
         try {
-            const response = await fetch(`${posConfig.printServerUrl}/printers`);
-            if (response.ok) {
-                const data = await response.json();
-                setAvailablePrinters(Array.isArray(data) ? data : []);
+            if (window.electronAPI) {
+                const printers = await window.electronAPI.getPrinters();
+                setAvailablePrinters(Array.isArray(printers) ? printers : []);
+            } else {
+                const response = await fetch(`${posConfig.printServerUrl}/printers`);
+                if (response.ok) {
+                    const data = await response.json();
+                    setAvailablePrinters(Array.isArray(data) ? data : []);
+                }
             }
         } catch (error) {
             console.error("Failed to fetch printers:", error);
@@ -398,7 +403,7 @@ export default function PosSettingsPage() {
                                     />
                                 </div>
 
-                                {posConfig.silentPrinting && (
+                                {posConfig.silentPrinting && !window.electronAPI && (
                                     <div className="space-y-1 animate-in slide-in-from-top-2 duration-300">
                                         <Label className="text-xs">Print Server URL</Label>
                                         <Input
@@ -424,7 +429,11 @@ export default function PosSettingsPage() {
                                     </div>
                                     <Select
                                         value={posConfig.printerName || "default"}
-                                        onValueChange={(val) => setPosConfig({ ...posConfig, printerName: val === "default" ? "" : val })}
+                                        onValueChange={(val) => {
+                                            const printerName = val === "default" ? "" : val;
+                                            setPosConfig({ ...posConfig, printerName });
+                                            localStorage.setItem('pos_printer_name', printerName);
+                                        }}
                                     >
                                         <SelectTrigger className="h-10 text-xs font-black bg-white border-emerald-200 rounded-lg outline-none">
                                             <SelectValue placeholder="Select Printer (or Default)" />

@@ -48,7 +48,11 @@ export function Receipt48({ id = "receipt-48", invoice, company, customer, items
 
     const isCreditNote = invoice.transactionType === 'CreditNote' || invoice.type === 'credit_note';
     const isDebitNote = invoice.transactionType === 'DebitNote' || invoice.type === 'debit_note';
-    const documentTitle = isCreditNote ? "CREDIT NOTE" : isDebitNote ? "DEBIT NOTE" : "FISCAL TAX INVOICE";
+    const isFiscalized = !!invoice.fiscalCode;
+    const documentTitle = isCreditNote ? "CREDIT NOTE"
+        : isDebitNote ? "DEBIT NOTE"
+        : isFiscalized ? "FISCAL TAX INVOICE"
+        : "TAX INVOICE";
 
     return (
         <div id={id} className="w-[80mm] bg-white p-2 text-black font-mono text-[10px] leading-tight">
@@ -102,19 +106,25 @@ export function Receipt48({ id = "receipt-48", invoice, company, customer, items
             {/* Invoice Details */}
             <div className="mb-2 pb-2 border-b border-dashed border-black">
                 <p>Invoice No: {invoice.invoiceNumber}</p>
-                <p>Receipt No: {invoice.receiptCounter || "N/A"} / {invoice.receiptGlobalNo || "N/A"}</p>
-                <p>Fiscal Day No: {invoice.fiscalDayNo || "N/A"}</p>
-                {invoice.customerReference && <p>Customer Ref: {invoice.customerReference}</p>} {/* [20] */}
-                <p>Device Serial: {company.deviceSerialNo || "N/A"}</p> {/* [21] */}
-                <p>Device ID: {company.deviceId || "N/A"}</p> {/* [22] */}
-                <p>Date: {format(new Date(invoice.issueDate), "dd/MM/yy HH:mm")}</p> {/* [23] */}
+                {invoice.fiscalCode && (
+                    <>
+                        <p>Receipt No: {invoice.receiptCounter} / {invoice.receiptGlobalNo}</p>
+                        <p>Fiscal Day No: {invoice.fiscalDayNo}</p>
+                        <p>Device Serial: {company.fdmsDeviceSerialNo || company.deviceSerialNo}</p>
+                        <p>Device ID: {company.fdmsDeviceId || company.deviceId}</p>
+                    </>
+                )}
+                {invoice.customerReference && <p>Customer Ref: {invoice.customerReference}</p>}
+                <p>Date: {format(new Date(invoice.issueDate), "dd/MM/yy HH:mm")}</p>
                 {user && <p>Cashier: {user.name || user.username || user.email}</p>}
 
                 {/* Credit/Debit Note Specifics */}
                 {(isCreditNote || isDebitNote) && (originalInvoice || invoice.originalInvoiceNumber) && (
                     <div className="mt-1">
                         <p className="font-bold">{isCreditNote ? "Credited Invoice" : "Debited Invoice"}</p>
-                        <p>Device Serial: {originalInvoice?.deviceSerialNo || company.deviceSerialNo}</p>
+                        {originalInvoice?.fiscalCode && (
+                            <p>Device Serial: {originalInvoice?.fdmsDeviceSerialNo || company.fdmsDeviceSerialNo}</p>
+                        )}
                         <p>Invoice No: {originalInvoice?.invoiceNumber || invoice.originalInvoiceNumber}</p>
                         {originalInvoice?.issueDate && (
                             <p>Date: {format(new Date(originalInvoice.issueDate), "dd/MM/yy HH:mm")}</p>

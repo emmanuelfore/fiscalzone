@@ -10,6 +10,8 @@ import {
 } from './offline-db';
 import { apiFetch } from './api';
 import { buildUrl, api } from '@shared/routes';
+import { getIsOnline } from './online-state';
+import { supabase } from './supabase';
 
 export type SyncStatus = 'idle' | 'syncing' | 'error' | 'complete';
 
@@ -21,10 +23,37 @@ export interface SyncResult {
 }
 
 /**
+ * Ensure we have a fresh, valid auth token before syncing.
+ * Forces a token refresh so we don't use a stale/expired JWT.
+ * Returns the access token string, or null if unavailable.
+ */
+async function getFreshToken(): Promise<string | null> {
+    try {
+        // Force a refresh to get a guaranteed-fresh token
+        const { data: refreshed } = await supabase.auth.refreshSession();
+        if (refreshed?.session?.access_token) return refreshed.session.access_token;
+
+        // Refresh failed (e.g. refresh token expired) — try existing session
+        const { data } = await supabase.auth.getSession();
+        return data?.session?.access_token ?? null;
+    } catch (err) {
+        console.warn('[Sync] Token refresh failed:', err);
+        return null;
+    }
+}
+
+/**
  * Sync all pending offline shifts.
  * Shifts must be synced before sales to ensure valid shift context.
  */
 export async function syncPendingShifts(companyId: number): Promise<{ success: boolean; errors: string[] }> {
+    return syncPendingShiftsWithToken(companyId, apiFetch as any);
+}
+
+async function syncPendingShiftsWithToken(
+    companyId: number,
+    fetchFn: (url: string, init?: RequestInit) => Promise<Response>
+): Promise<{ success: boolean; errors: string[] }> {
     const pending = await getPendingShifts(companyId);
     const toSync = pending.filter(s => s.status === 'pending' || s.status === 'failed');
 
@@ -46,7 +75,7 @@ export async function syncPendingShifts(companyId: number): Promise<{ success: b
                 body = { closingBalance: action.data.closingBalance };
             }
 
-            const res = await apiFetch(url, {
+            const res = await fetchFn(url, {
                 method: 'POST',
                 body: JSON.stringify(body),
             });
@@ -61,7 +90,7 @@ export async function syncPendingShifts(companyId: number): Promise<{ success: b
             const errorMsg = error.message || 'Shift sync failed';
             await updatePendingShiftStatus(action.id, 'failed');
             errors.push(errorMsg);
-            if (!navigator.onLine) break;
+            if (!getIsOnline()) break;
         }
     }
 
@@ -78,8 +107,27 @@ export async function syncPendingSales(
     companyId: number,
     onProgress?: (synced: number, total: number) => void
 ): Promise<SyncResult> {
+    // Get a fresh token upfront — avoids mid-refresh race conditions
+    const token = await getFreshToken();
+    if (!token) {
+        return {
+            total: 0,
+            synced: 0,
+            failed: 1,
+            errors: [{ error: 'No valid auth session — please log in again to sync' }],
+        };
+    }
+
+    // Helper: fetch with the pre-fetched token to avoid getSession() race
+    const authFetch = (url: string, init?: RequestInit) => {
+        const headers = new Headers(init?.headers);
+        headers.set('Authorization', `Bearer ${token}`);
+        headers.set('Content-Type', 'application/json');
+        return fetch(url, { ...init, headers });
+    };
+
     // 1. Sync shifts first
-    const shiftResult = await syncPendingShifts(companyId);
+    const shiftResult = await syncPendingShiftsWithToken(companyId, authFetch);
 
     // 2. Sync sales
     const pending = await getPendingSales(companyId);
@@ -108,7 +156,7 @@ export async function syncPendingSales(
 
             // Build correct URL including companyId substitution
             const url = buildUrl(api.invoices.create.path, { companyId });
-            const res = await apiFetch(url, {
+            const res = await authFetch(url, {
                 method: 'POST',
                 body: JSON.stringify({
                     ...sale.invoiceData,
@@ -133,7 +181,7 @@ export async function syncPendingSales(
             onProgress?.(result.synced, result.total);
 
             // If this is a network error, stop trying — we're still offline
-            if (!navigator.onLine) {
+            if (!getIsOnline()) {
                 break;
             }
         }

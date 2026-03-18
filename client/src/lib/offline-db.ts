@@ -1,7 +1,7 @@
 import { openDB, type IDBPDatabase } from 'idb';
 
 const DB_NAME = 'pos-offline';
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 
 interface PendingSale {
     id: string;
@@ -71,6 +71,11 @@ export async function getDb(): Promise<IDBPDatabase> {
                 const store = db.createObjectStore('holds', { keyPath: 'id' });
                 store.createIndex('byCompany', 'companyId');
             }
+
+            // Offline Credentials
+            if (!db.objectStoreNames.contains('offline_credentials')) {
+                db.createObjectStore('offline_credentials', { keyPath: 'email' });
+            }
         },
         blocked() {
             console.warn('[DB] Upgrade blocked by older version open in another tab. Please close all tabs.');
@@ -112,7 +117,50 @@ export async function getCachedUser(): Promise<any | undefined> {
 export async function clearCachedUser(): Promise<void> {
     const db = await getDb();
     await db.delete('user_cache', 'current_user');
-    await db.delete('companies_list', 'current_list');
+    // Note: We intentionally do NOT clear 'offline_credentials' or 'companies_list' here.
+    // This allows cashiers to log back into the POS terminal even if
+    // the internet drops after they've explicitly logged out, and ensures
+    // selectedCompanyId can be restored on next offline login.
+}
+
+// ─── Offline Credentials ────────────────────────────────────────────────────
+
+// Simple hashing for local offline verification. NOT meant for production backend storage,
+// but sufficient for preventing plain-text storage of local caching.
+async function hashPassword(password: string, salt: string): Promise<string> {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password + salt);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+export async function saveOfflineCredentials(email: string, password: string, user: any): Promise<void> {
+    const db = await getDb();
+    const salt = crypto.randomUUID();
+    const hash = await hashPassword(password, salt);
+    
+    await db.put('offline_credentials', {
+        email: email.toLowerCase(),
+        hash,
+        salt,
+        user,
+        lastOnlineLogin: new Date().toISOString()
+    });
+}
+
+export async function verifyOfflineCredentials(email: string, password: string): Promise<any | null> {
+    const db = await getDb();
+    const record = await db.get('offline_credentials', email.toLowerCase());
+    
+    if (!record) return null;
+    
+    const computedHash = await hashPassword(password, record.salt);
+    if (computedHash === record.hash) {
+        return record.user;
+    }
+    
+    return null;
 }
 
 // ─── Companies List ──────────────────────────────────────────────────────────
@@ -136,7 +184,10 @@ export async function cacheProducts(companyId: number, products: any[]): Promise
 
 export async function getCachedProducts(companyId: number): Promise<any[] | undefined> {
     const db = await getDb();
-    return db.get('products', companyId);
+    // Try numeric key first, then string key (handles legacy data stored with string companyId)
+    const result = await db.get('products', companyId);
+    if (result) return result;
+    return db.get('products', String(companyId));
 }
 
 // ─── Customers ──────────────────────────────────────────────────────────────
@@ -148,7 +199,9 @@ export async function cacheCustomers(companyId: number, customers: any[]): Promi
 
 export async function getCachedCustomers(companyId: number): Promise<any[] | undefined> {
     const db = await getDb();
-    return db.get('customers', companyId);
+    const result = await db.get('customers', companyId);
+    if (result) return result;
+    return db.get('customers', String(companyId));
 }
 
 // ─── Currencies ─────────────────────────────────────────────────────────────
@@ -160,7 +213,9 @@ export async function cacheCurrencies(companyId: number, currencies: any[]): Pro
 
 export async function getCachedCurrencies(companyId: number): Promise<any[] | undefined> {
     const db = await getDb();
-    return db.get('currencies', companyId);
+    const result = await db.get('currencies', companyId);
+    if (result) return result;
+    return db.get('currencies', String(companyId));
 }
 
 // ─── Tax Config ─────────────────────────────────────────────────────────────
@@ -172,7 +227,9 @@ export async function cacheTaxConfig(companyId: number, taxConfig: any): Promise
 
 export async function getCachedTaxConfig(companyId: number): Promise<any | undefined> {
     const db = await getDb();
-    return db.get('taxConfig', companyId);
+    const result = await db.get('taxConfig', companyId);
+    if (result) return result;
+    return db.get('taxConfig', String(companyId));
 }
 
 // ─── Company Settings ───────────────────────────────────────────────────────
@@ -184,7 +241,9 @@ export async function cacheCompanySettings(companyId: number, company: any): Pro
 
 export async function getCachedCompanySettings(companyId: number): Promise<any | undefined> {
     const db = await getDb();
-    return db.get('companySettings', companyId);
+    const result = await db.get('companySettings', companyId);
+    if (result) return result;
+    return db.get('companySettings', String(companyId));
 }
 
 // ─── Shifts ─────────────────────────────────────────────────────────────────
@@ -196,7 +255,9 @@ export async function cacheShift(companyId: number, shift: any): Promise<void> {
 
 export async function getCachedShift(companyId: number): Promise<any | undefined> {
     const db = await getDb();
-    return db.get('shifts', companyId);
+    const result = await db.get('shifts', companyId);
+    if (result) return result;
+    return db.get('shifts', String(companyId));
 }
 
 // ─── Pending Shifts ─────────────────────────────────────────────────────────

@@ -19,11 +19,13 @@ export function ManagerOverride({ isOpen, onClose, onAuthorized, title = "Manage
     const [pin, setPin] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const { toast } = useToast();
-    const companyId = parseInt(localStorage.getItem("selectedCompanyId") || "0");
 
     const handleVerify = async () => {
         if (!pin || pin.length < 4) return;
         setIsLoading(true);
+
+        // Read companyId fresh each time so we always have the latest value
+        const companyId = parseInt(localStorage.getItem("selectedCompanyId") || "0");
 
         try {
             const res = await apiFetch(`/api/companies/${companyId}/auth/verify-manager-pin`, {
@@ -44,7 +46,25 @@ export function ManagerOverride({ isOpen, onClose, onAuthorized, title = "Manage
                 setPin("");
             }
         } catch (error) {
-            toast({ title: "Error", description: "Verification failed", variant: "destructive" });
+            // Network error — try Electron offline fallback
+            if (window.electronAPI) {
+                try {
+                    const verified = await window.electronAPI.verifyManagerPin(pin, companyId);
+                    if (verified) {
+                        toast({ title: "Authorized", description: "Approved offline via cached PIN" });
+                        onAuthorized({ name: "Manager (offline)" });
+                        setPin("");
+                        onClose();
+                    } else {
+                        toast({ title: "Access Denied", description: "Invalid PIN", variant: "destructive" });
+                        setPin("");
+                    }
+                } catch {
+                    toast({ title: "Error", description: "Offline verification failed", variant: "destructive" });
+                }
+            } else {
+                toast({ title: "Error", description: "Verification failed", variant: "destructive" });
+            }
         } finally {
             setIsLoading(false);
         }

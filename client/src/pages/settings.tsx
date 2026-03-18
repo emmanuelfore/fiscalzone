@@ -98,6 +98,12 @@ export default function SettingsPage() {
           apiKey: '',
           fromEmail: 'billing@yourdomain.com',
           fromName: currentCompany.name || 'Accounts'
+        },
+        posSettings: currentCompany.posSettings || {
+          requireOverrideForDiscount: false,
+          requireOverrideForPriceChange: false,
+          requireOverrideForDelete: false,
+          requireOverrideForOpenDrawer: false
         }
       });
     }
@@ -130,12 +136,15 @@ export default function SettingsPage() {
       </div>
 
       <Tabs defaultValue="general" className="space-y-6">
-        <TabsList className="bg-slate-100/80 p-1 border border-slate-200 shadow-sm">
-          <TabsTrigger value="general" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">General</TabsTrigger>
-          <TabsTrigger value="finance" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">Finance & Tax</TabsTrigger>
-          <TabsTrigger value="communication" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">Communication</TabsTrigger>
-          <TabsTrigger value="security" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">Security</TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-none">
+          <TabsList className="bg-slate-100/80 p-1 border border-slate-200 shadow-sm w-full sm:w-auto inline-flex min-w-max">
+            <TabsTrigger value="general" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">General</TabsTrigger>
+            <TabsTrigger value="finance" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">Finance & Tax</TabsTrigger>
+            <TabsTrigger value="communication" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">Communication</TabsTrigger>
+            <TabsTrigger value="pos" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">POS Settings</TabsTrigger>
+            <TabsTrigger value="security" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">Security</TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* GENERAL TAB */}
         <TabsContent value="general" className="space-y-6">
@@ -156,7 +165,7 @@ export default function SettingsPage() {
                 <CardDescription>Official business identification and contacts</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <Label className="text-xs">Company Name</Label>
                     <Input
@@ -184,7 +193,7 @@ export default function SettingsPage() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <Label className="text-xs">Email Address</Label>
                     <Input
@@ -212,7 +221,7 @@ export default function SettingsPage() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <Label className="text-xs">City</Label>
                     <Input
@@ -345,7 +354,7 @@ export default function SettingsPage() {
                     className="h-12 text-base"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div className="space-y-3">
                     <Label className="text-base font-bold text-slate-800 block">Account Number</Label>
                     <Input
@@ -376,7 +385,7 @@ export default function SettingsPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <Label className="text-xs">TIN</Label>
                     <Input
@@ -493,7 +502,7 @@ export default function SettingsPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <Label className="text-xs">From Name</Label>
                   <Input
@@ -519,6 +528,83 @@ export default function SettingsPage() {
               </div>
               <div className="bg-amber-50 p-3 rounded border border-amber-100 text-[11px] text-amber-800 italic">
                 <strong>Note:</strong> Verify your domain in Resend. For testing, use <code>onboarding@resend.dev</code>.
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        
+        {/* POS SETTINGS TAB */}
+        <TabsContent value="pos" className="space-y-6">
+          <div className="flex justify-between items-center mb-2">
+            <h2 className="text-lg font-semibold text-slate-800">Point of Sale Settings</h2>
+            <Button onClick={() => handleSave("POS settings")} disabled={updateCompany.isPending} size="sm" className="btn-gradient shadow-md">
+              <Save className="mr-2 h-4 w-4" /> Save POS Settings
+            </Button>
+          </div>
+
+          <Card className="card-depth border-none max-w-2xl">
+            <CardHeader>
+              <CardTitle className="flex items-center text-base">
+                <Landmark className="w-5 h-5 mr-2 text-indigo-600" />
+                Admin Override Requirements
+              </CardTitle>
+              <CardDescription>Select which actions require an Admin PIN to proceed at the point of sale.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="flex items-center justify-between p-4 bg-slate-50/50 rounded-2xl border border-slate-100 group hover:border-indigo-100 transition-all">
+                <div className="space-y-0.5">
+                  <Label className="text-sm font-bold text-slate-700">Manual Discount</Label>
+                  <p className="text-xs text-slate-500">Require admin PIN when applying a manual discount to an order.</p>
+                </div>
+                <Checkbox 
+                  checked={formData.posSettings?.requireOverrideForDiscount}
+                  onCheckedChange={(checked) => setFormData({
+                    ...formData,
+                    posSettings: { ...formData.posSettings, requireOverrideForDiscount: checked === true }
+                  })}
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-4 bg-slate-50/50 rounded-2xl border border-slate-100 group hover:border-indigo-100 transition-all">
+                <div className="space-y-0.5">
+                  <Label className="text-sm font-bold text-slate-700">Price Change</Label>
+                  <p className="text-xs text-slate-500">Require admin PIN when manually changing the price of an item.</p>
+                </div>
+                <Checkbox 
+                  checked={formData.posSettings?.requireOverrideForPriceChange}
+                  onCheckedChange={(checked) => setFormData({
+                    ...formData,
+                    posSettings: { ...formData.posSettings, requireOverrideForPriceChange: checked === true }
+                  })}
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-4 bg-slate-50/50 rounded-2xl border border-slate-100 group hover:border-indigo-100 transition-all">
+                <div className="space-y-0.5">
+                  <Label className="text-sm font-bold text-slate-700">Delete Item / Void</Label>
+                  <p className="text-xs text-slate-500">Require admin PIN to remove items from a cart or void a transaction.</p>
+                </div>
+                <Checkbox 
+                  checked={formData.posSettings?.requireOverrideForDelete}
+                  onCheckedChange={(checked) => setFormData({
+                    ...formData,
+                    posSettings: { ...formData.posSettings, requireOverrideForDelete: checked === true }
+                  })}
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-4 bg-slate-50/50 rounded-2xl border border-slate-100 group hover:border-indigo-100 transition-all">
+                <div className="space-y-0.5">
+                  <Label className="text-sm font-bold text-slate-700">Open Cash Drawer</Label>
+                  <p className="text-xs text-slate-500">Require admin PIN to open the cash drawer without a sale.</p>
+                </div>
+                <Checkbox 
+                  checked={formData.posSettings?.requireOverrideForOpenDrawer}
+                  onCheckedChange={(checked) => setFormData({
+                    ...formData,
+                    posSettings: { ...formData.posSettings, requireOverrideForOpenDrawer: checked === true }
+                  })}
+                />
               </div>
             </CardContent>
           </Card>

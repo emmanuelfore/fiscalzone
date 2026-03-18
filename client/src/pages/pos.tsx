@@ -7,6 +7,7 @@ import { useCompany } from "@/hooks/use-companies";
 import { useTaxConfig } from "@/hooks/use-tax-config";
 import { useToast } from "@/hooks/use-toast";
 import { useOffline } from "@/hooks/use-offline";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,7 +21,7 @@ import {
     setLastCacheTime,
     addPendingSale,
 } from "@/lib/offline-db";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, UserPlus, Loader2, Package, Tag, Pause, Play, History, Calculator, Printer, CheckCircle2, XCircle, ChevronRight, Fullscreen, HelpCircle, User, Settings as SettingsIcon, LogOut, FileText, Receipt, Clock, LayoutGrid, ShoppingBag, Filter, WifiOff, Wifi, CloudUpload, AlertTriangle } from "lucide-react";
 import { RefreshCw } from "lucide-react";
 import { POSReceipt } from "@/components/pos-receipt";
@@ -32,6 +33,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { MySalesModal } from "@/components/pos/my-sales-modal";
 
 interface CartItem {
     productId: number;
@@ -48,10 +50,58 @@ import { useAuth } from "@/hooks/use-auth";
 
 export default function POSPage() {
     const { user, logout } = useAuth();
-    const companyId = parseInt(localStorage.getItem("selectedCompanyId") || "0");
+    const queryClient = useQueryClient();
+    // Use state so companyId is reactive — handles the case where selectedCompanyId
+    // is set just before this component mounts (offline login race condition).
+    const [companyId, setCompanyId] = useState<number>(
+        () => parseInt(localStorage.getItem("selectedCompanyId") || "0")
+    );
+    useEffect(() => {
+        if (companyId) return; // already have a valid id
+        // Poll briefly in case offline login set it just after mount
+        const t = setInterval(() => {
+            const id = parseInt(localStorage.getItem("selectedCompanyId") || "0");
+            if (id) { setCompanyId(id); clearInterval(t); }
+        }, 100);
+        setTimeout(() => clearInterval(t), 3000); // stop after 3s
+        return () => clearInterval(t);
+    }, [companyId]);
     const { data: company } = useCompany(companyId);
     const isCashier = (company as any)?.role === 'cashier';
     const { data: products, isLoading: isLoadingProducts } = useProducts(companyId);
+
+    // Emergency fallback: if React Query returns nothing but we have a companyId,
+    // read directly from IndexedDB. This handles edge cases where the query
+    // completes but returns empty due to timing issues.
+    const [cachedProductsFallback, setCachedProductsFallback] = useState<any[]>([]);
+    const [cachedCompanyFallback, setCachedCompanyFallback] = useState<any>(null);
+    const [cachedCustomersFallback, setCachedCustomersFallback] = useState<any[]>([]);
+    useEffect(() => {
+        if (!companyId) return;
+        import('@/lib/offline-db').then(({ getCachedProducts, getCachedCompanySettings, getCachedCompaniesList, getCachedCustomers }) => {
+            // Products
+            getCachedProducts(companyId).then(cached => {
+                if (cached && cached.length > 0) {
+                    console.log(`[POS] Direct cache read: ${cached.length} products for company ${companyId}`);
+                    setCachedProductsFallback(cached);
+                }
+            });
+            // Company
+            getCachedCompanySettings(companyId).then(async cached => {
+                if (cached) { setCachedCompanyFallback(cached); return; }
+                const list = await getCachedCompaniesList();
+                const fromList = list?.find((c: any) => c.id === companyId || c.id === String(companyId));
+                if (fromList) setCachedCompanyFallback(fromList);
+            });
+            // Customers
+            getCachedCustomers(companyId).then(cached => {
+                if (cached && cached.length > 0) {
+                    console.log(`[POS] Direct cache read: ${cached.length} customers for company ${companyId}`);
+                    setCachedCustomersFallback(cached);
+                }
+            });
+        });
+    }, [companyId]);
     const { data: customers } = useCustomers(companyId);
     const { data: currencies } = useCurrencies(companyId);
     const { taxTypes } = useTaxConfig(companyId);
@@ -69,12 +119,27 @@ export default function POSPage() {
         refreshCacheTime
     } = useOffline(companyId);
 
-    // Resolved data — hooks now handle caching and fallback automatically
-    const resolvedProducts = products || [];
-    const resolvedCustomers = customers || [];
+    // When we come back online (or first confirm online), refresh all POS data queries
+    const prevIsOnlineRef = useRef<boolean | null>(null);
+    useEffect(() => {
+        const prev = prevIsOnlineRef.current;
+        prevIsOnlineRef.current = isOnline;
+        if (prev === false && isOnline && companyId) {
+            // Invalidate using partial key prefixes that match the actual query keys
+            queryClient.invalidateQueries({ queryKey: ['/api/companies'] });
+            queryClient.invalidateQueries({ queryKey: ['/api/companies/:companyId/products', companyId] });
+            queryClient.invalidateQueries({ queryKey: ['/api/companies/:companyId/customers', companyId] });
+            queryClient.invalidateQueries({ queryKey: ['/api/companies/:companyId/currencies', companyId] });
+            queryClient.invalidateQueries({ queryKey: ['/api/tax/types', companyId] });
+        }
+    }, [isOnline, companyId, queryClient]);
+
+    // Resolved data — hooks handle caching and fallback; direct IDB reads are emergency fallback
+    const resolvedProducts = (products && products.length > 0) ? products : cachedProductsFallback;
+    const resolvedCustomers = (customers && customers.length > 0) ? customers : cachedCustomersFallback;
     const resolvedCurrencies = currencies || [];
     const resolvedTaxTypes = taxTypes?.data || [];
-    const resolvedCompany = company;
+    const resolvedCompany = company ?? cachedCompanyFallback;
     const { toast } = useToast();
 
     const [searchQuery, setSearchQuery] = useState("");
@@ -90,9 +155,11 @@ export default function POSPage() {
     const [paidAmount, setPaidAmount] = useState<string>("");
     const [selectedCurrencyCode, setSelectedCurrencyCode] = useState<string>("USD");
 
-    // Barcode Listener State
-    const [barcodeBuffer, setBarcodeBuffer] = useState("");
-    const [lastCharTime, setLastCharTime] = useState(0);
+    // Barcode scanner — use refs to avoid stale closure issues
+    const barcodeBufferRef = useRef("");
+    const lastCharTimeRef = useRef(0);
+    const lastScannedProductRef = useRef<{ productId: number; time: number } | null>(null);
+    const searchInputRef = useRef<HTMLInputElement>(null);
 
     const [heldSales, setHeldSales] = useState<any[]>([]);
     const [isHoldsModalOpen, setIsHoldsModalOpen] = useState(false);
@@ -102,6 +169,26 @@ export default function POSPage() {
     const [shiftModalType, setShiftModalType] = useState<"OPEN" | "CLOSE">("OPEN");
     const [shiftBalance, setShiftBalance] = useState("");
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+    // Credit/Debit Note modal
+    const [isCreditNoteOpen, setIsCreditNoteOpen] = useState(false);
+    const [cnSearchQuery, setCnSearchQuery] = useState("");
+    const [cnSearchResults, setCnSearchResults] = useState<any[]>([]);
+    const [cnSearching, setCnSearching] = useState(false);
+    const [cnProcessing, setCnProcessing] = useState(false);
+    const [cnType, setCnType] = useState<"credit" | "debit">("credit");
+
+    // X/Z Report modal
+    const [isReportOpen, setIsReportOpen] = useState(false);
+    const [reportData, setReportData] = useState<any>(null);
+    const [reportLoading, setReportLoading] = useState(false);
+    const [reportType, setReportType] = useState<"x" | "z">("x");
+
+    // Reprint receipts
+    const [isReprintOpen, setIsReprintOpen] = useState(false);
+    const [reprintList, setReprintList] = useState<any[]>([]);
+    const [reprintListLoading, setReprintListLoading] = useState(false);
+    const [reprintInvoice, setReprintInvoice] = useState<any>(null);
     const [availablePrinters, setAvailablePrinters] = useState<any[]>([]);
     const [posSettings, setPosSettings] = useState({
         printingEnabled: true,
@@ -109,10 +196,20 @@ export default function POSPage() {
         terminalId: "POS-T01",
         silentPrinting: false,
         printerName: localStorage.getItem("pos_printer_name") || "",
-        printServerUrl: "http://localhost:12312"
+        printServerUrl: "http://localhost:12312",
+        cashDrawerEnabled: false
     });
 
     // Default to "Walk-in Customer"
+    const resetToDefaultCustomer = () => {
+        if (resolvedCustomers && resolvedCustomers.length > 0) {
+            const walkIn = resolvedCustomers.find((x: any) => x.name.toLowerCase().includes("walk-in") || x.name.toLowerCase().includes("guest"));
+            setSelectedCustomerId(walkIn ? walkIn.id.toString() : "");
+        } else {
+            setSelectedCustomerId("");
+        }
+    };
+
     useEffect(() => {
         if (!selectedCustomerId && resolvedCustomers && resolvedCustomers.length > 0) {
             const walkIn = resolvedCustomers.find((x: any) => x.name.toLowerCase().includes("walk-in") || x.name.toLowerCase().includes("guest"));
@@ -123,7 +220,10 @@ export default function POSPage() {
     }, [resolvedCustomers, selectedCustomerId]);
 
     // Manager Override State
-    const [pendingOverride, setPendingOverride] = useState<{ type: "DISCOUNT" | "VOID_CART", data: any } | null>(null);
+    const [pendingOverride, setPendingOverride] = useState<{ 
+        type: "DISCOUNT" | "VOID_CART" | "REMOVE_ITEM" | "PRICE_CHANGE" | "OPEN_DRAWER", 
+        data: any 
+    } | null>(null);
 
     // ─── POS Session Persistence ──────────────────────────────────────────
     // Load persisted state on mount
@@ -184,8 +284,32 @@ export default function POSPage() {
                 (p.sku && p.sku.toLowerCase().includes(searchQuery.toLowerCase()));
             const matchesCategory = selectedCategory === "All" || p.category === selectedCategory;
             return matchesSearch && matchesCategory;
-        });
+        }).sort(() => Math.random() - 0.5);
     }, [resolvedProducts, searchQuery, selectedCategory]);
+
+    // ── Display limit: show first 40 items; show all when searching/filtering ──
+    const INITIAL_LIMIT = 40;
+    const pagedProducts = useMemo(
+        () => searchQuery || selectedCategory !== "All"
+            ? filteredProducts
+            : filteredProducts.slice(0, INITIAL_LIMIT),
+        [filteredProducts, searchQuery, selectedCategory]
+    );
+    // ─────────────────────────────────────────────────────────────────────────
+
+    const currencyInfo = useMemo(() => {
+        if (selectedCurrencyCode === "USD") return { symbol: "$", rate: 1 };
+        const cur = (resolvedCurrencies || []).find((c: any) => c.code === selectedCurrencyCode);
+        return {
+            symbol: cur?.symbol || selectedCurrencyCode,
+            rate: Number(cur?.exchangeRate || 1)
+        };
+    }, [selectedCurrencyCode, resolvedCurrencies]);
+
+    const fmt = (val: number) => {
+        const converted = val * currencyInfo.rate;
+        return `${currencyInfo.symbol}${converted.toFixed(2)}`;
+    };
 
     const taxInclusive = company?.vatEnabled ?? false;
 
@@ -264,38 +388,135 @@ export default function POSPage() {
         ));
     };
 
-    // Barcode Effect
+    // ─── Barcode Scanner (keyboard wedge / HID mode) ──────────────────────
+    // Uses refs to avoid stale closures. Handles scanners up to 100ms/char.
+    // Works even when search input is focused.
     useEffect(() => {
-        const handleKeyPress = (e: KeyboardEvent) => {
-            // Ignore if in any input context EXCEPT the specific search if we want it to work globally
-            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            const now = Date.now();
+            const gap = now - lastCharTimeRef.current;
+            const inInput = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+            const modalOpen = isCheckoutOpen || isShiftModalOpen || isHoldsModalOpen || isSettingsOpen || !!pendingOverride;
+
+            // ── Keyboard shortcuts (only when not typing in an input and no modal) ──
+            if (!inInput && !modalOpen) {
+                switch (e.key) {
+                    case 'F1':
+                        e.preventDefault();
+                        searchInputRef.current?.focus();
+                        searchInputRef.current?.select();
+                        return;
+                    case 'F2':
+                        e.preventDefault();
+                        if (cart.length > 0) handleCheckout();
+                        return;
+                    case 'F3':
+                        e.preventDefault();
+                        if (cart.length > 0) holdOrder();
+                        return;
+                    case 'F4':
+                        e.preventDefault();
+                        handleClearCart();
+                        return;
+                    case 'Escape':
+                        setSearchQuery("");
+                        searchInputRef.current?.blur();
+                        return;
+                    case '+':
+                    case '=':
+                        e.preventDefault();
+                        if (cart.length > 0) updateQuantity(cart[cart.length - 1].productId, 1);
+                        return;
+                    case '-':
+                        e.preventDefault();
+                        if (cart.length > 0) updateQuantity(cart[cart.length - 1].productId, -1);
+                        return;
+                }
+            }
+
+            // Escape closes checkout modal
+            if (e.key === 'Escape' && isCheckoutOpen) {
+                setIsCheckoutOpen(false);
                 return;
             }
 
-            const currentTime = Date.now();
-
-            // If more than 50ms since last key, start new buffer (typical barcode speed)
-            if (currentTime - lastCharTime > 50) {
-                setBarcodeBuffer(e.key);
+            // ── Barcode accumulation — chars arriving < 100ms apart are from a scanner ──
+            if (gap > 100) {
+                barcodeBufferRef.current = e.key === 'Enter' ? '' : e.key;
             } else {
                 if (e.key === 'Enter') {
-                    // Process barcode
-                    const found = resolvedProducts?.find((p: any) => p.barcode === barcodeBuffer || p.sku === barcodeBuffer);
+                    const barcode = barcodeBufferRef.current.trim();
+                    barcodeBufferRef.current = '';
+                    if (barcode.length < 2) return;
+
+                    const found = resolvedProducts?.find(
+                        (p: any) => p.barcode === barcode || p.sku === barcode
+                    );
                     if (found) {
-                        addToCart(found);
-                        toast({ title: "Scanned", description: `Added ${found.name}` });
+                        const prev = lastScannedProductRef.current;
+                        if (prev && prev.productId === found.id && now - prev.time < 2000) {
+                            updateQuantity(found.id, 1);
+                        } else {
+                            addToCart(found);
+                            toast({ title: "✓ Scanned", description: found.name });
+                        }
+                        lastScannedProductRef.current = { productId: found.id, time: now };
+                        if (searchQuery) setSearchQuery("");
+                    } else {
+                        setSearchQuery(barcode);
+                        searchInputRef.current?.focus();
+                        toast({ title: "Not found", description: `No product for: ${barcode}`, variant: "destructive" });
                     }
-                    setBarcodeBuffer("");
-                } else {
-                    setBarcodeBuffer(prev => prev + e.key);
+                } else if (e.key.length === 1) {
+                    barcodeBufferRef.current += e.key;
                 }
             }
-            setLastCharTime(currentTime);
+            lastCharTimeRef.current = now;
         };
 
-        window.addEventListener('keypress', handleKeyPress);
-        return () => window.removeEventListener('keypress', handleKeyPress);
-    }, [barcodeBuffer, lastCharTime, products]);
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [resolvedProducts, cart, isCheckoutOpen, isShiftModalOpen, isHoldsModalOpen, isSettingsOpen, pendingOverride, searchQuery]);
+
+    // ─── Electron serial/USB barcode scanner ──────────────────────────────
+    useEffect(() => {
+        if (!window.electronAPI) return;
+        const handler = (barcode: string) => {
+            const trimmed = barcode.trim();
+            if (!trimmed) return;
+            const found = resolvedProducts?.find((p: any) => p.barcode === trimmed || p.sku === trimmed);
+            if (found) {
+                const now = Date.now();
+                const prev = lastScannedProductRef.current;
+                if (prev && prev.productId === found.id && now - prev.time < 2000) {
+                    updateQuantity(found.id, 1);
+                } else {
+                    addToCart(found);
+                    toast({ title: "✓ Scanned", description: found.name });
+                }
+                lastScannedProductRef.current = { productId: found.id, time: now };
+            } else {
+                setSearchQuery(trimmed);
+                searchInputRef.current?.focus();
+                toast({ title: "Not found", description: `No product for: ${trimmed}`, variant: "destructive" });
+            }
+        };
+        window.electronAPI.onBarcodeScan(handler);
+        return () => window.electronAPI?.offBarcodeScan?.(handler);
+    }, [resolvedProducts]);
+
+    // Pre-cache manager PIN hashes for offline verification (Electron only)
+    useEffect(() => {
+        if (!window.electronAPI || !isOnline || !companyId) return;
+        apiFetch(`/api/companies/${companyId}/auth/manager-pin-hashes`)
+            .then(res => res.ok ? res.json() : null)
+            .then(hashes => {
+                if (hashes && hashes.length > 0) {
+                    window.electronAPI!.cacheManagerPins(companyId, hashes);
+                }
+            })
+            .catch(() => { /* non-critical — silently ignore */ });
+    }, [companyId, isOnline]);
 
     const updateQuantity = (productId: number, delta: number) => {
         const product = resolvedProducts?.find((p: any) => p.id === productId);
@@ -321,7 +542,33 @@ export default function POSPage() {
     };
 
     const removeFromCart = (productId: number) => {
-        setCart(prev => prev.filter(item => item.productId !== productId));
+        const settings = company?.posSettings as any;
+        if (settings?.requireOverrideForDelete) {
+            setPendingOverride({ type: "REMOVE_ITEM", data: productId });
+        } else {
+            setCart(prev => prev.filter(item => item.productId !== productId));
+        }
+    };
+
+    const updatePrice = (productId: number, newPrice: number) => {
+        const settings = company?.posSettings as any;
+        if (settings?.requireOverrideForPriceChange) {
+            setPendingOverride({ type: "PRICE_CHANGE", data: { productId, price: newPrice } });
+        } else {
+            setCart(prev => prev.map(item =>
+                item.productId === productId ? { ...item, price: newPrice } : item
+            ));
+        }
+    };
+
+    const handleOpenDrawer = () => {
+        const settings = company?.posSettings as any;
+        if (settings?.requireOverrideForOpenDrawer) {
+            setPendingOverride({ type: "OPEN_DRAWER", data: null });
+        } else {
+            toast({ title: "Drawer Opened", description: "Cash drawer opened successfully" });
+            // triggerOpenDrawer();
+        }
     };
 
     const fetchShift = async () => {
@@ -332,11 +579,15 @@ export default function POSPage() {
                     const shiftData = await res.json();
                     setCurrentShift(shiftData);
                     if (companyId) await cacheShift(companyId, shiftData);
+                    return;
                 }
+                // 401 = offline auth session — fall through to cache
             } catch (e) {
                 console.error("Failed to fetch shift from API", e);
             }
-        } else if (companyId) {
+        }
+        // Offline or auth-offline fallback
+        if (companyId) {
             const cached = await getCachedShift(companyId);
             if (cached) setCurrentShift(cached);
         }
@@ -350,6 +601,7 @@ export default function POSPage() {
             try {
                 const res = await apiFetch(`/api/pos/holds?companyId=${companyId}`);
                 if (res.ok) serverHolds = await res.json();
+                // 401 = offline auth session — skip server holds, use local only
             } catch (e) {
                 console.error("Failed to fetch holds from API", e);
             }
@@ -500,7 +752,7 @@ export default function POSPage() {
         if (parseFloat(paidAmount || "0") < total) {
             toast({
                 title: "Insufficient Payment",
-                description: `Received amount ($${paidAmount}) is less than total payable ($${total.toFixed(2)})`,
+                description: `Received amount (${currencyInfo.symbol}${paidAmount}) is less than total payable (${fmt(total)})`,
                 variant: "destructive"
             });
             setIsProcessing(false);
@@ -556,7 +808,7 @@ export default function POSPage() {
                 }
                 setCart([]);
                 setOrderDiscount(0);
-                setSelectedCustomerId("");
+                resetToDefaultCustomer();
                 setPaidAmount("");
                 setIsCheckoutOpen(false);
                 clearPersistedSession();
@@ -573,6 +825,11 @@ export default function POSPage() {
             }
 
             const result = await createInvoice.mutateAsync(invoiceData as any);
+            // Cash drawer: open after successful sale when running in Electron and enabled
+            if (window.electronAPI && posSettings.cashDrawerEnabled) {
+                const printerName = localStorage.getItem('pos_printer_name') || undefined;
+                window.electronAPI.openCashDrawer(printerName).catch(console.error);
+            }
             if (posSettings.printingEnabled) {
                 setLastSuccessfulInvoice(result);
             } else {
@@ -581,7 +838,7 @@ export default function POSPage() {
             }
             setCart([]);
             setOrderDiscount(0);
-            setSelectedCustomerId("");
+            resetToDefaultCustomer();
             setPaidAmount("");
             setIsCheckoutOpen(false);
             clearPersistedSession();
@@ -634,7 +891,7 @@ export default function POSPage() {
                     }
                     setCart([]);
                     setOrderDiscount(0);
-                    setSelectedCustomerId("");
+                    resetToDefaultCustomer();
                     setPaidAmount("");
                     setIsCheckoutOpen(false);
                     clearPersistedSession();
@@ -761,7 +1018,8 @@ export default function POSPage() {
                 autoPrint: settings.autoPrint ?? true,
                 silentPrinting: settings.silentPrinting ?? false,
                 printServerUrl: settings.printServerUrl || "http://localhost:12312",
-                printerName: prev.printerName || settings.printerName || ""
+                printerName: prev.printerName || settings.printerName || "",
+                cashDrawerEnabled: settings.cashDrawerEnabled ?? false
             }));
         }
     }, [company]);
@@ -840,19 +1098,24 @@ export default function POSPage() {
 
         try {
             const html = receiptElement.outerHTML;
-            // Wrap in a basic document with styling if needed, but receipt-48 already has <style>
-            const response = await fetch(`${posSettings.printServerUrl}/print`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    html,
-                    printerName: posSettings.printerName || undefined
-                })
-            });
+            
+            if (window.electronAPI) {
+                await window.electronAPI.printReceipt(html, posSettings.printerName || undefined);
+            } else {
+                // Wrap in a basic document with styling if needed, but receipt-48 already has <style>
+                const response = await fetch(`${posSettings.printServerUrl}/print`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        html,
+                        printerName: posSettings.printerName || undefined
+                    })
+                });
 
-            if (!response.ok) {
-                const err = await response.json();
-                throw new Error(err.error || "Failed to send print job");
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.error || "Failed to send print job");
+                }
             }
 
             toast({ title: "Sent to Printer", description: "Silent print job sent successfully." });
@@ -899,9 +1162,10 @@ export default function POSPage() {
 
     const handleOrderDiscountChange = (val: string) => {
         const amount = parseFloat(val) || 0;
-        // Logic: If discount is being increased and is > 10% of subtotal, require override
-        // Simple heuristic: if amount > 0 and amount > subtotal * 0.1
-        if (amount > 0 && subtotal > 0 && amount > (subtotal * 0.1)) {
+        const settings = company?.posSettings as any;
+
+        // Logic: Require override if enabled in settings OR if discount is high
+        if (settings?.requireOverrideForDiscount || (amount > 0 && subtotal > 0 && amount > (subtotal * 0.1))) {
             setPendingOverride({ type: "DISCOUNT", data: amount });
         } else {
             setOrderDiscount(amount);
@@ -910,8 +1174,91 @@ export default function POSPage() {
 
     const handleClearCart = () => {
         if (cart.length === 0) return;
-        setPendingOverride({ type: "VOID_CART", data: null });
+        const settings = company?.posSettings as any;
+        
+        if (settings?.requireOverrideForDelete) {
+            setPendingOverride({ type: "VOID_CART", data: null });
+        } else {
+            setCart([]);
+            setOrderDiscount(0);
+            resetToDefaultCustomer();
+        }
     };
+
+    // ── Reprint receipts ─────────────────────────────────────────────────────
+    const handleReprintLast = async () => {
+        setIsReprintOpen(true);
+        setReprintListLoading(true);
+        setReprintList([]);
+        try {
+            const res = await apiFetch(`/api/pos/last-receipt?companyId=${companyId}`);
+            if (res.ok) setReprintList(await res.json());
+            else toast({ title: "No receipts found for today", variant: "destructive" });
+        } catch {
+            toast({ title: "Failed to load receipts", variant: "destructive" });
+        }
+        setReprintListLoading(false);
+    };
+
+    // ── Credit / Debit Note search ────────────────────────────────────────────
+    const handleCnSearch = async () => {
+        if (!cnSearchQuery.trim()) return;
+        setCnSearching(true);
+        try {
+            const res = await apiFetch(`/api/pos/invoice-search?companyId=${companyId}&q=${encodeURIComponent(cnSearchQuery)}`);
+            if (res.ok) setCnSearchResults(await res.json());
+        } catch { /* ignore */ }
+        setCnSearching(false);
+    };
+
+    const handleIssueCreditDebitNote = async (originalInvoice: any) => {
+        setCnProcessing(true);
+        try {
+            const endpoint = cnType === "credit"
+                ? `/api/invoices/${originalInvoice.id}/credit-note`
+                : `/api/invoices/${originalInvoice.id}/debit-note`;
+            const res = await apiFetch(endpoint, { method: "POST" });
+            if (!res.ok) {
+                const err = await res.json();
+                toast({ title: "Failed", description: err.message, variant: "destructive" });
+                return;
+            }
+            const note = await res.json();
+            toast({ title: cnType === "credit" ? "Credit Note Created" : "Debit Note Created", description: `${note.invoiceNumber} — issued successfully` });
+            setIsCreditNoteOpen(false);
+            setCnSearchQuery("");
+            setCnSearchResults([]);
+            // Show receipt for the note
+            setReprintInvoice({ ...note, originalInvoice });
+        } catch {
+            toast({ title: "Error", description: "Could not create note", variant: "destructive" });
+        }
+        setCnProcessing(false);
+    };
+
+    // ── X / Z Report ─────────────────────────────────────────────────────────
+    const handleLoadReport = async (type: "x" | "z") => {
+        setReportType(type);
+        setReportLoading(true);
+        setReportData(null);
+        setIsReportOpen(true);
+        try {
+            const endpoint = type === "x"
+                ? `/api/companies/${companyId}/zimra/day/x-report`
+                : `/api/companies/${companyId}/zimra/day/z-report`;
+            const res = await apiFetch(endpoint);
+            if (!res.ok) {
+                const err = await res.json();
+                setReportData({ error: err.message });
+            } else {
+                setReportData(await res.json());
+            }
+        } catch (e: any) {
+            setReportData({ error: e.message });
+        }
+        setReportLoading(false);
+    };
+    // ─────────────────────────────────────────────────────────────────────────
 
     const handleOverrideSuccess = (manager: any) => {
         if (!pendingOverride) return;
@@ -922,8 +1269,21 @@ export default function POSPage() {
         } else if (pendingOverride.type === "VOID_CART") {
             setCart([]);
             setOrderDiscount(0);
-            setSelectedCustomerId("");
+            resetToDefaultCustomer();
             toast({ title: "Cart Cleared", description: `Void approved by ${manager.name}` });
+        } else if (pendingOverride.type === "REMOVE_ITEM") {
+            const productId = pendingOverride.data;
+            setCart(prev => prev.filter(item => item.productId !== productId));
+            toast({ title: "Item Removed", description: `Approved by ${manager.name}` });
+        } else if (pendingOverride.type === "PRICE_CHANGE") {
+            const { productId, price } = pendingOverride.data;
+            setCart(prev => prev.map(item =>
+                item.productId === productId ? { ...item, price } : item
+            ));
+            toast({ title: "Price Updated", description: `Approved by ${manager.name}` });
+        } else if (pendingOverride.type === "OPEN_DRAWER") {
+            toast({ title: "Drawer Opened", description: `Approved by ${manager.name}` });
+            // triggerOpenDrawer();
         }
         setPendingOverride(null);
     };
@@ -990,7 +1350,18 @@ export default function POSPage() {
                                             </p>
                                         </div>
                                         <div className="flex items-center gap-2 mt-1">
-                                            <span className="text-[11px] font-bold text-slate-400">${item.price.toFixed(2)}</span>
+                                            <button 
+                                                className="text-[11px] font-bold text-slate-400 hover:text-primary transition-colors hover:underline"
+                                                onClick={() => {
+                                                    const newPriceStr = prompt("Enter new price:", item.price.toString());
+                                                    if (newPriceStr) {
+                                                        const p = parseFloat(newPriceStr);
+                                                        if (!isNaN(p)) updatePrice(item.productId, p);
+                                                    }
+                                                }}
+                                            >
+                                                ${item.price.toFixed(2)}
+                                            </button>
                                             {item.discountAmount > 0 && (
                                                 <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-1 rounded">-{item.discountAmount.toFixed(2)}</span>
                                             )}
@@ -1042,17 +1413,17 @@ export default function POSPage() {
                     <div className="space-y-1.5">
                         <div className="flex justify-between text-[10px] font-black text-slate-400 uppercase tracking-widest">
                             <span>Subtotal</span>
-                            <span className="text-slate-600">${subtotal.toFixed(2)}</span>
+                            <span className="text-slate-600">{fmt(subtotal)}</span>
                         </div>
                         <div className="flex justify-between text-[10px] font-black text-slate-400 uppercase tracking-widest">
                             <span>Tax (VAT)</span>
-                            <span className="text-slate-600">${taxAmount.toFixed(2)}</span>
+                            <span className="text-slate-600">{fmt(taxAmount)}</span>
                         </div>
 
                         {orderDiscount > 0 && (
                             <div className="flex justify-between text-[10px] font-black text-emerald-600 bg-emerald-50 p-2 rounded-xl border border-emerald-100 items-center">
                                 <span className="flex items-center gap-1.5"><Tag className="h-3.5 w-3.5" /> Discount</span>
-                                <span>-${orderDiscount.toFixed(2)}</span>
+                                <span>-{fmt(orderDiscount)}</span>
                             </div>
                         )}
 
@@ -1082,8 +1453,8 @@ export default function POSPage() {
                         <div className="flex justify-between items-center py-1.5 border-t border-slate-100 border-dashed mt-1.5">
                             <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Total</span>
                             <div className="text-right">
-                                <p className="text-xl font-black text-slate-900 tracking-tight leading-none">${total.toFixed(2)}</p>
-                                <p className="text-[9px] font-bold text-emerald-600 mt-0.5 uppercase tracking-widest">{selectedCurrencyCode}</p>
+                                <p className="text-xl font-black text-slate-900 tracking-tight leading-none">{fmt(total)}</p>
+                                <p className="text-[9px] font-bold text-emerald-600 mt-0.5 uppercase tracking-widest">{currencyInfo.symbol} {selectedCurrencyCode}</p>
                             </div>
                         </div>
                     </div>
@@ -1120,8 +1491,20 @@ export default function POSPage() {
                     isOpen={!!pendingOverride}
                     onClose={() => setPendingOverride(null)}
                     onAuthorized={handleOverrideSuccess}
-                    title={pendingOverride?.type === "DISCOUNT" ? "Authorize Discount" : "Authorize Void"}
-                    description={pendingOverride?.type === "DISCOUNT" ? "Manager PIN required for high discount" : "Manager PIN required to void cart"}
+                    title={
+                        pendingOverride?.type === "DISCOUNT" ? "Authorize Discount" : 
+                        pendingOverride?.type === "VOID_CART" ? "Authorize Void" :
+                        pendingOverride?.type === "REMOVE_ITEM" ? "Authorize Delete" :
+                        pendingOverride?.type === "PRICE_CHANGE" ? "Authorize Price Change" :
+                        "Manager Authorization"
+                    }
+                    description={
+                        pendingOverride?.type === "DISCOUNT" ? "Manager PIN required for discount" : 
+                        pendingOverride?.type === "VOID_CART" ? "Manager PIN required to void cart" :
+                        pendingOverride?.type === "REMOVE_ITEM" ? "Manager PIN required to remove item" :
+                        pendingOverride?.type === "PRICE_CHANGE" ? "Manager PIN required to change price" :
+                        "Manager PIN required to proceed"
+                    }
                 />
 
 
@@ -1263,11 +1646,21 @@ export default function POSPage() {
                                 {/* Mobile Total Indicator */}
                                 {activeView === "products" && (
                                     <div className="md:hidden flex items-center gap-2 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100 shrink-0">
-                                        <span className="text-[10px] font-black text-emerald-700">${total.toFixed(2)}</span>
+                                        <span className="text-[10px] font-black text-emerald-700">{fmt(total)}</span>
                                     </div>
                                 )}
                             </div>
 
+                            {/* Open Drawer Button (Visible next to logo) */}
+                            <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="h-8 md:h-10 px-2 md:px-4 rounded-lg md:rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50 transition-all font-bold text-[10px] md:text-xs gap-1.5"
+                                onClick={handleOpenDrawer}
+                            >
+                                <Banknote className="h-3.5 w-3.5 md:h-4 md:w-4" />
+                                <span className="hidden md:inline">Open Drawer</span>
+                            </Button>
                             {/* Mobile Holds Button (Visible next to logo) */}
                             <Button
                                 variant="outline"
@@ -1296,7 +1689,7 @@ export default function POSPage() {
                                             <span className="text-sm font-black text-slate-900">{company?.name || "Premium POS"}</span>
                                             <div className="flex items-center justify-between">
                                                 <span className="text-[10px] font-bold text-slate-400">ID: {companyId}</span>
-                                                <Badge variant={currentShift ? "success" : "destructive"} className="h-4 text-[9px] px-1">
+                                                <Badge variant={currentShift ? "default" : "destructive"} className="h-4 text-[9px] px-1">
                                                     {currentShift ? "SHIFT OPEN" : "SHIFT CLOSED"}
                                                 </Badge>
                                             </div>
@@ -1311,13 +1704,21 @@ export default function POSPage() {
                                             </div>
                                         </DropdownMenuItem>
 
-                                        <DropdownMenuItem className="p-3 rounded-xl focus:bg-slate-50 cursor-pointer" onClick={() => window.open('/pos/my-sales', '_blank')}>
-                                            <Receipt className="h-4 w-4 mr-3 text-slate-500" />
-                                            <div className="flex flex-col">
-                                                <span className="text-sm font-bold text-slate-700">My Sales</span>
-                                                <span className="text-[10px] text-slate-400">View & Reprint Receipts</span>
-                                            </div>
-                                        </DropdownMenuItem>
+                                        <MySalesModal
+                                            companyId={companyId}
+                                            company={company}
+                                            posSettings={posSettings}
+                                            user={user}
+                                            trigger={
+                                                <DropdownMenuItem className="p-3 rounded-xl focus:bg-slate-50 cursor-pointer" onSelect={(e) => e.preventDefault()}>
+                                                    <Receipt className="h-4 w-4 mr-3 text-slate-500" />
+                                                    <div className="flex flex-col">
+                                                        <span className="text-sm font-bold text-slate-700">My Sales</span>
+                                                        <span className="text-[10px] text-slate-400">View & Reprint Receipts</span>
+                                                    </div>
+                                                </DropdownMenuItem>
+                                            }
+                                        />
 
                                         {currentShift ? (
                                             <DropdownMenuItem className="p-3 rounded-xl focus:bg-red-50 cursor-pointer text-red-600" onClick={() => { setShiftModalType("CLOSE"); setShiftBalance(""); setIsShiftModalOpen(true); }}>
@@ -1337,6 +1738,28 @@ export default function POSPage() {
                                             </DropdownMenuItem>
                                         )}
 
+                                        <DropdownMenuSeparator className="bg-slate-50" />
+                                        <DropdownMenuItem className="p-3 rounded-xl focus:bg-blue-50 cursor-pointer" onClick={handleReprintLast}>
+                                            <Printer className="h-4 w-4 mr-3 text-blue-500" />
+                                            <div className="flex flex-col">
+                                                <span className="text-sm font-bold">Reprint Last Receipt</span>
+                                                <span className="text-[10px] text-slate-400">Reprint most recent sale</span>
+                                            </div>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem className="p-3 rounded-xl focus:bg-amber-50 cursor-pointer" onClick={() => { setCnType("credit"); setIsCreditNoteOpen(true); }}>
+                                            <FileText className="h-4 w-4 mr-3 text-amber-500" />
+                                            <div className="flex flex-col">
+                                                <span className="text-sm font-bold">Credit / Debit Note</span>
+                                                <span className="text-[10px] text-slate-400">Issue return or adjustment</span>
+                                            </div>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem className="p-3 rounded-xl focus:bg-purple-50 cursor-pointer" onClick={() => handleLoadReport("x")}>
+                                            <LayoutGrid className="h-4 w-4 mr-3 text-purple-500" />
+                                            <div className="flex flex-col">
+                                                <span className="text-sm font-bold">X-Report</span>
+                                                <span className="text-[10px] text-slate-400">Current day summary</span>
+                                            </div>
+                                        </DropdownMenuItem>
                                         <DropdownMenuSeparator className="bg-slate-50" />
                                         <DropdownMenuItem className="p-3 rounded-xl focus:bg-slate-50 cursor-pointer text-slate-400" onClick={() => setIsSettingsOpen(true)}>
                                             <SettingsIcon className="h-4 w-4 mr-3" />
@@ -1359,11 +1782,30 @@ export default function POSPage() {
                                 </div>
                                 <Input
                                     autoFocus
-                                    placeholder="Search products..."
+                                    ref={searchInputRef}
+                                    placeholder="Search products... (F1)"
                                     className="pl-10 md:pl-12 h-10 md:h-14 w-full bg-slate-50 border-none rounded-xl md:rounded-2xl text-xs md:text-sm font-bold text-slate-800 focus:bg-white focus:ring-4 focus:ring-primary/5 transition-all shadow-inner"
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                 />
+                            </div>
+
+                            {/* Global Currency Switcher */}
+                            <div className="flex bg-slate-100 p-1 rounded-xl shrink-0">
+                                {['USD', 'ZWG'].map(cc => (
+                                    <button
+                                        key={cc}
+                                        onClick={() => setSelectedCurrencyCode(cc)}
+                                        className={cn(
+                                            "px-3 py-1.5 rounded-lg text-[10px] font-black transition-all",
+                                            selectedCurrencyCode === cc 
+                                                ? "bg-white text-primary shadow-sm" 
+                                                : "text-slate-400 hover:text-slate-600"
+                                        )}
+                                    >
+                                        {cc}
+                                    </button>
+                                ))}
                             </div>
 
                             {/* Mobile Category Filter Trigger */}
@@ -1539,43 +1981,23 @@ export default function POSPage() {
                                             </div>
                                         </DropdownMenuItem>
 
-                                        <DropdownMenuItem className="p-3 rounded-xl focus:bg-slate-50 cursor-pointer" onClick={() => window.open('/pos/my-sales', '_blank')}>
-                                            <Receipt className="h-4 w-4 mr-3 text-slate-500" />
-                                            <div className="flex flex-col">
-                                                <span className="text-sm font-bold text-slate-700">My Sales</span>
-                                                <span className="text-[10px] text-slate-400">View & Reprint Receipts</span>
-                                            </div>
-                                        </DropdownMenuItem>
-
-                                        {!isCashier && (
-                                            <>
-                                                <DropdownMenuItem className="p-3 rounded-xl focus:bg-slate-50 cursor-pointer" onClick={() => window.open('/pos/reports', '_blank')}>
-                                                    <FileText className="h-4 w-4 mr-3 text-slate-500" />
+                                        <MySalesModal
+                                            companyId={companyId}
+                                            company={company}
+                                            posSettings={posSettings}
+                                            user={user}
+                                            trigger={
+                                                <DropdownMenuItem className="p-3 rounded-xl focus:bg-slate-50 cursor-pointer" onSelect={(e) => e.preventDefault()}>
+                                                    <Receipt className="h-4 w-4 mr-3 text-slate-500" />
                                                     <div className="flex flex-col">
-                                                        <span className="text-sm font-bold text-slate-700">Analytics Reports</span>
-                                                        <span className="text-[10px] text-slate-400">Daily Trends & Insights</span>
+                                                        <span className="text-sm font-bold text-slate-700">My Sales</span>
+                                                        <span className="text-[10px] text-slate-400">View & Reprint Receipts</span>
                                                     </div>
                                                 </DropdownMenuItem>
+                                            }
+                                        />
 
-                                                <DropdownMenuItem className="p-3 rounded-xl focus:bg-slate-50 cursor-pointer" onClick={() => window.open('/pos/all-sales', '_blank')}>
-                                                    <History className="h-4 w-4 mr-3 text-slate-500" />
-                                                    <div className="flex flex-col">
-                                                        <span className="text-sm font-bold text-slate-700">Sales Ledger</span>
-                                                        <span className="text-[10px] text-slate-400">Detailed Transaction Log</span>
-                                                    </div>
-                                                </DropdownMenuItem>
-                                            </>
-                                        )}
 
-                                        {currentShift && (
-                                            <DropdownMenuItem className="p-3 rounded-xl focus:bg-slate-50 cursor-pointer" onClick={() => { /* Open Cash Drop Modal */ }}>
-                                                <Banknote className="h-4 w-4 mr-3 text-slate-500" />
-                                                <div className="flex flex-col">
-                                                    <span className="text-sm font-bold text-slate-700">Cash Management</span>
-                                                    <span className="text-[10px] text-slate-400">Drops & Payouts</span>
-                                                </div>
-                                            </DropdownMenuItem>
-                                        )}
                                         {currentShift ? (
                                             <DropdownMenuItem className="p-3 rounded-xl focus:bg-red-50 cursor-pointer text-red-600" onClick={() => { setShiftModalType("CLOSE"); setShiftBalance(""); setIsShiftModalOpen(true); }}>
                                                 <XCircle className="h-4 w-4 mr-3" />
@@ -1594,6 +2016,28 @@ export default function POSPage() {
                                             </DropdownMenuItem>
                                         )}
                                         <DropdownMenuSeparator className="bg-slate-50" />
+                                        <DropdownMenuItem className="p-3 rounded-xl focus:bg-blue-50 cursor-pointer" onClick={handleReprintLast}>
+                                            <Printer className="h-4 w-4 mr-3 text-blue-500" />
+                                            <div className="flex flex-col">
+                                                <span className="text-sm font-bold">Reprint Last Receipt</span>
+                                                <span className="text-[10px] text-slate-400">Reprint most recent sale</span>
+                                            </div>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem className="p-3 rounded-xl focus:bg-amber-50 cursor-pointer" onClick={() => { setCnType("credit"); setIsCreditNoteOpen(true); }}>
+                                            <FileText className="h-4 w-4 mr-3 text-amber-500" />
+                                            <div className="flex flex-col">
+                                                <span className="text-sm font-bold">Credit / Debit Note</span>
+                                                <span className="text-[10px] text-slate-400">Issue return or adjustment</span>
+                                            </div>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem className="p-3 rounded-xl focus:bg-purple-50 cursor-pointer" onClick={() => handleLoadReport("x")}>
+                                            <LayoutGrid className="h-4 w-4 mr-3 text-purple-500" />
+                                            <div className="flex flex-col">
+                                                <span className="text-sm font-bold">X-Report</span>
+                                                <span className="text-[10px] text-slate-400">Current day summary</span>
+                                            </div>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator className="bg-slate-50" />
                                         <DropdownMenuItem className="p-3 rounded-xl focus:bg-slate-50 cursor-pointer text-slate-400" onClick={() => setIsSettingsOpen(true)}>
                                             <SettingsIcon className="h-4 w-4 mr-3" />
                                             <span className="text-sm font-bold">Device Settings</span>
@@ -1611,7 +2055,7 @@ export default function POSPage() {
                                     <Calculator className="h-4 w-4 text-emerald-600" />
                                     <div className="flex flex-col">
                                         <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600/60 leading-none">Total Payable</span>
-                                        <span className="text-base font-black text-emerald-700 leading-none mt-1">${total.toFixed(2)}</span>
+                                        <span className="text-base font-black text-emerald-700 leading-none mt-1">{fmt(total)}</span>
                                     </div>
                                 </div>
                             </div>
@@ -1650,23 +2094,37 @@ export default function POSPage() {
                         </div>
 
                         <ScrollArea className="flex-1 -mx-2 px-2">
-                            {isLoadingProducts ? (
+                            {isLoadingProducts && resolvedProducts.length === 0 ? (
                                 <div className="flex items-center justify-center min-h-[400px]">
                                     <div className="flex flex-col items-center gap-4">
                                         <Loader2 className="h-10 w-10 animate-spin text-primary" />
                                         <p className="text-slate-400 font-medium">Loading Inventory...</p>
                                     </div>
                                 </div>
+                            ) : resolvedProducts.length === 0 ? (
+                                <div className="flex items-center justify-center min-h-[400px]">
+                                    <div className="flex flex-col items-center gap-4 text-center px-6">
+                                        <Package className="h-12 w-12 text-slate-200" />
+                                        <div>
+                                            <p className="text-slate-500 font-bold text-sm">No products available</p>
+                                            {!isOnline && (
+                                                <p className="text-amber-600 text-xs mt-1 font-medium">
+                                                    Offline — no cached products found.<br />
+                                                    Connect to internet and log in online to cache products.
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
                             ) : (
                                 <>
-                                    {/* Mobile View: High-Density Ultra-Compact Grid */}
+                                    {/* Mobile View */}
                                     <div className="md:hidden grid grid-cols-3 gap-1 pb-24 px-1 select-none touch-manipulation">
-                                        {(filteredProducts as any[]).map(product => {
+                                        {(pagedProducts as any[]).map(product => {
                                             const hash = product.name.split("").reduce((acc: number, char: string) => char.charCodeAt(0) + ((acc << 5) - acc), 0);
                                             const hue = Math.abs(hash % 360);
                                             const bgColor = `hsl(${hue}, 70%, 95%)`;
                                             const iconColor = `hsl(${hue}, 60%, 60%)`;
-
                                             return (
                                                 <div
                                                     key={product.id}
@@ -1689,7 +2147,7 @@ export default function POSPage() {
                                                     <div className="flex flex-col gap-0.5 pb-0.5">
                                                         <h4 className="text-[8px] font-black text-slate-800 line-clamp-1 leading-tight px-0.5">{product.name}</h4>
                                                         <div className="flex items-center justify-between px-0.5">
-                                                            <span className="text-[9px] font-black text-slate-900">${Number(product.price).toFixed(2)}</span>
+                                                            <span className="text-[9px] font-black text-slate-900">{fmt(product.price)}</span>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1697,15 +2155,13 @@ export default function POSPage() {
                                         })}
                                     </div>
 
-                                    {/* Desktop View: Grid with Images */}
-                                    <div className="hidden md:grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2 pb-8">
-                                        {(filteredProducts as any[]).map(product => {
-                                            // Generate pastel color based on product name
+                                    {/* Desktop View */}
+                                    <div className="hidden md:grid gap-2 pb-8" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(160px, 160px))" }}>
+                                        {(pagedProducts as any[]).map(product => {
                                             const hash = product.name.split("").reduce((acc: number, char: string) => char.charCodeAt(0) + ((acc << 5) - acc), 0);
                                             const hue = Math.abs(hash % 360);
                                             const bgColor = `hsl(${hue}, 70%, 95%)`;
                                             const iconColor = `hsl(${hue}, 60%, 60%)`;
-
                                             return (
                                                 <Card
                                                     key={product.id}
@@ -1713,8 +2169,7 @@ export default function POSPage() {
                                                     onClick={() => addToCart(product)}
                                                 >
                                                     <CardContent className="p-0 flex flex-col h-full">
-                                                        {/* Image Container with Glass Overlay */}
-                                                        <div className="aspect-square flex items-center justify-center shrink-0 relative overflow-hidden" style={{ backgroundColor: product.imageUrl ? '#f8fafc' : bgColor }}>
+                                                        <div className="aspect-square max-h-24 flex items-center justify-center shrink-0 relative overflow-hidden" style={{ backgroundColor: product.imageUrl ? '#f8fafc' : bgColor }}>
                                                             {product.imageUrl ? (
                                                                 <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
                                                             ) : (
@@ -1722,26 +2177,20 @@ export default function POSPage() {
                                                                     <Package className="h-6 w-6 md:h-8 md:w-8" style={{ color: iconColor }} />
                                                                 </div>
                                                             )}
-
-                                                            {/* Compact Hover Overlay */}
                                                             <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                                                 <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-lg">
                                                                     <Plus className="h-5 w-5 text-primary" />
                                                                 </div>
                                                             </div>
-
                                                             {product.isTracked && Number(product.stockLevel) <= Number(product.lowStockThreshold) && (
                                                                 <Badge className="absolute top-2 right-2 bg-red-500 text-[8px] font-black h-4 px-1 border-none">OUT</Badge>
                                                             )}
                                                         </div>
-
-                                                        {/* Product Info */}
                                                         <div className="p-2 flex flex-col flex-1 bg-white">
                                                             <h4 className="text-[10px] md:text-[11px] font-black text-slate-800 line-clamp-2 mb-1 group-hover:text-primary transition-colors leading-tight min-h-[1.5rem] md:min-h-[1.75rem]">{product.name}</h4>
                                                             <div className="flex justify-between items-center mt-auto">
                                                                 <p className="text-xs md:text-sm font-black text-slate-900">
-                                                                    <span className="text-[9px] md:text-[10px] text-slate-400 mr-0.5">$</span>
-                                                                    {Number(product.price).toFixed(2)}
+                                                                    {fmt(product.price)}
                                                                 </p>
                                                                 {product.isTracked && (
                                                                     <span className={cn(
@@ -1827,16 +2276,16 @@ export default function POSPage() {
                                     <div className="hidden md:block space-y-2">
                                         <div className="flex justify-between items-center text-slate-300">
                                             <span className="text-xs font-bold uppercase tracking-widest">Subtotal</span>
-                                            <span className="font-mono text-sm">${subtotal.toFixed(2)}</span>
+                                            <span className="font-mono text-sm">{fmt(subtotal)}</span>
                                         </div>
                                         <div className="flex justify-between items-center text-slate-300">
                                             <span className="text-xs font-bold uppercase tracking-widest">Tax (VAT)</span>
-                                            <span className="font-mono text-sm">${taxAmount.toFixed(2)}</span>
+                                            <span className="font-mono text-sm">{fmt(taxAmount)}</span>
                                         </div>
                                         {orderDiscount > 0 && (
                                             <div className="flex justify-between items-center text-emerald-400">
                                                 <span className="text-xs font-bold uppercase tracking-widest">Order Discount</span>
-                                                <span className="font-mono text-sm">-${orderDiscount.toFixed(2)}</span>
+                                                <span className="font-mono text-sm">-{fmt(orderDiscount)}</span>
                                             </div>
                                         )}
                                     </div>
@@ -1846,11 +2295,11 @@ export default function POSPage() {
                                     <div className="hidden md:block h-px bg-slate-800 w-full mb-6 border-dashed" />
                                     <div
                                         className="flex flex-col gap-0 md:gap-1 cursor-pointer group/total"
-                                        onClick={() => setPaidAmount(total.toFixed(2))}
+                                        onClick={() => setPaidAmount((total * currencyInfo.rate).toFixed(2))}
                                         title="Click to pay exact amount"
                                     >
                                         <span className="hidden md:block text-[10px] font-black uppercase tracking-[0.4em] text-white group-hover/total:text-slate-200 transition-colors">Total Payable</span>
-                                        <h2 className="text-base md:text-3xl font-black tracking-tighter leading-none text-white group-hover/total:scale-105 transition-transform origin-left text-right md:text-left">${total.toFixed(2)}</h2>
+                                        <h2 className="text-base md:text-3xl font-black tracking-tighter leading-none text-white group-hover/total:scale-105 transition-transform origin-left text-right md:text-left">{fmt(total)}</h2>
                                         <p className="hidden md:block text-[10px] font-bold text-slate-500 mt-1 uppercase tracking-widest">ID: {companyId}</p>
                                     </div>
                                 </div>
@@ -1859,22 +2308,7 @@ export default function POSPage() {
                             {/* Payment Input Side */}
                             <div className="flex-1 bg-white p-2 md:p-6 flex flex-col overflow-y-auto">
                                 <div className="flex items-center justify-between mb-1.5 md:mb-4 shrink-0">
-                                    <h3 className="text-[10px] md:text-base font-black text-slate-900 uppercase tracking-widest">Pay</h3>
-                                    <div className="flex gap-1">
-                                        {['USD', 'ZWG'].map(cc => (
-                                            <Button
-                                                key={cc}
-                                                variant={selectedCurrencyCode === cc ? 'default' : 'outline'}
-                                                className={cn(
-                                                    "h-6 md:h-8 px-2 rounded-md font-black text-[9px] transition-all",
-                                                    selectedCurrencyCode === cc ? "bg-primary text-white shadow-lg shadow-primary/20" : "text-slate-400 border-slate-100"
-                                                )}
-                                                onClick={() => setSelectedCurrencyCode(cc)}
-                                            >
-                                                {cc}
-                                            </Button>
-                                        ))}
-                                    </div>
+                                    <h3 className="text-[10px] md:text-base font-black text-slate-900 uppercase tracking-widest">Pay in {selectedCurrencyCode}</h3>
                                 </div>
 
                                 <div className="space-y-1.5 flex-1 flex flex-col">
@@ -2213,6 +2647,295 @@ export default function POSPage() {
                     />
                 )}
             </div>
+
+            {/* Hidden Reprint Receipt */}
+            <div className="fixed -left-[9999px] top-0 pointer-events-none overflow-hidden" style={{ width: '80mm' }}>
+                {reprintInvoice && (
+                    <Receipt48
+                        id="reprint-receipt-48"
+                        invoice={reprintInvoice}
+                        company={resolvedCompany}
+                        customer={resolvedCustomers?.find((c: any) => c.id === reprintInvoice?.customerId)}
+                        items={reprintInvoice?.items}
+                        originalInvoice={reprintInvoice?.originalInvoice}
+                        user={user}
+                    />
+                )}
+            </div>
+
+            {/* Reprint — single receipt confirm */}
+            <Dialog open={!!reprintInvoice} onOpenChange={() => setReprintInvoice(null)}>
+                <DialogContent className="sm:max-w-[400px] rounded-3xl p-0 overflow-hidden border-none">
+                    <div className="bg-slate-900 p-6 text-white relative">
+                        <button onClick={() => setReprintInvoice(null)} className="absolute top-4 right-4 h-8 w-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all">
+                            <XCircle className="h-4 w-4 text-white" />
+                        </button>
+                        <Printer className="h-8 w-8 mb-2 text-white/70" />
+                        <h3 className="text-lg font-black">Reprint Receipt</h3>
+                        <p className="text-slate-400 text-xs mt-0.5 font-bold">{reprintInvoice?.invoiceNumber}</p>
+                    </div>
+                    <div className="p-6 bg-white space-y-3">
+                        <div className="text-sm text-slate-600 space-y-1.5">
+                            <div className="flex justify-between"><span className="font-bold text-slate-400">Customer</span><span className="font-black">{resolvedCustomers?.find((c: any) => c.id === reprintInvoice?.customerId)?.name || "Walk-in"}</span></div>
+                            <div className="flex justify-between"><span className="font-bold text-slate-400">Total</span><span className="font-black text-emerald-600">{fmt(Number(reprintInvoice?.total || 0))}</span></div>
+                            <div className="flex justify-between"><span className="font-bold text-slate-400">Payment</span><span className="font-black">{reprintInvoice?.paymentMethod}</span></div>
+                            <div className="flex justify-between"><span className="font-bold text-slate-400">Type</span><span className="font-black">{reprintInvoice?.transactionType || "Invoice"}</span></div>
+                        </div>
+                        <Button className="w-full h-12 rounded-xl bg-slate-900 hover:bg-black text-white font-black uppercase tracking-widest"
+                            onClick={() => {
+                                if (posSettings.silentPrinting) {
+                                    const el = document.getElementById('reprint-receipt-48');
+                                    if (el && window.electronAPI) window.electronAPI.printReceipt(el.outerHTML, posSettings.printerName || undefined);
+                                    else window.print();
+                                } else { window.print(); }
+                            }}>
+                            <Printer className="h-4 w-4 mr-2" /> Print
+                        </Button>
+                        <Button variant="ghost" className="w-full h-10 rounded-xl font-black text-xs text-slate-400" onClick={() => setReprintInvoice(null)}>Back to List</Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Today's Receipts List */}
+            <Dialog open={isReprintOpen} onOpenChange={v => { setIsReprintOpen(v); if (!v) setReprintList([]); }}>
+                <DialogContent className="sm:max-w-[480px] rounded-3xl p-0 overflow-hidden border-none max-h-[85vh] flex flex-col">
+                    <div className="bg-slate-900 p-6 text-white relative shrink-0">
+                        <button onClick={() => setIsReprintOpen(false)} className="absolute top-4 right-4 h-8 w-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all">
+                            <XCircle className="h-4 w-4 text-white" />
+                        </button>
+                        <Printer className="h-8 w-8 mb-2 text-white/70" />
+                        <h3 className="text-lg font-black">Today's Receipts</h3>
+                        <p className="text-slate-400 text-xs mt-0.5 font-bold">Select a receipt to reprint</p>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-4 bg-white space-y-2">
+                        {reprintListLoading && (
+                            <div className="flex items-center justify-center py-12">
+                                <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+                            </div>
+                        )}
+                        {!reprintListLoading && reprintList.length === 0 && (
+                            <div className="text-center py-12">
+                                <Receipt className="h-10 w-10 text-slate-200 mx-auto mb-3" />
+                                <p className="text-slate-400 font-bold text-sm">No receipts today</p>
+                            </div>
+                        )}
+                        {reprintList.map((inv: any) => (
+                            <button key={inv.id}
+                                className="w-full flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:border-slate-300 hover:bg-slate-50 transition-all text-left"
+                                onClick={() => { setReprintInvoice(inv); setIsReprintOpen(false); }}>
+                                <div>
+                                    <p className="text-sm font-black text-slate-800">{inv.invoiceNumber}</p>
+                                    <p className="text-xs text-slate-400 font-bold">
+                                        {resolvedCustomers?.find((c: any) => c.id === inv.customerId)?.name || "Walk-in"} · {inv.paymentMethod}
+                                    </p>
+                                    <p className="text-[10px] text-slate-300 font-bold">{new Date(inv.createdAt).toLocaleTimeString()}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-sm font-black text-emerald-600">{fmt(Number(inv.total))}</p>
+                                    <p className="text-[10px] text-slate-400 font-bold">{inv.transactionType || "Invoice"}</p>
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                    <div className="p-4 border-t border-slate-100 bg-slate-50 shrink-0">
+                        <Button variant="ghost" className="w-full h-10 rounded-xl font-black text-xs text-slate-400" onClick={() => setIsReprintOpen(false)}>Close</Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Credit / Debit Note Modal */}
+            <Dialog open={isCreditNoteOpen} onOpenChange={setIsCreditNoteOpen}>
+                <DialogContent className="sm:max-w-[520px] rounded-3xl p-0 overflow-hidden border-none max-h-[85vh] flex flex-col">
+                    <div className="bg-amber-500 p-6 text-white relative shrink-0">
+                        <button onClick={() => { setIsCreditNoteOpen(false); setCnSearchResults([]); setCnSearchQuery(""); }} className="absolute top-4 right-4 h-8 w-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-all">
+                            <XCircle className="h-4 w-4 text-white" />
+                        </button>
+                        <FileText className="h-8 w-8 mb-2 text-white/80" />
+                        <h3 className="text-xl font-black">Issue Credit / Debit Note</h3>
+                        <p className="text-amber-100 text-xs mt-1">Search for the original invoice to reverse or adjust</p>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-6 bg-white space-y-4">
+                        {/* Note type toggle */}
+                        <div className="flex bg-slate-100 p-1 rounded-xl">
+                            {(["credit", "debit"] as const).map(t => (
+                                <button key={t} onClick={() => setCnType(t)}
+                                    className={cn("flex-1 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all",
+                                        cnType === t ? "bg-white text-amber-600 shadow-sm" : "text-slate-400")}>
+                                    {t === "credit" ? "Credit Note (Return)" : "Debit Note (Adjustment)"}
+                                </button>
+                            ))}
+                        </div>
+                        {/* Search */}
+                        <div className="flex gap-2">
+                            <Input
+                                placeholder="Invoice number or customer name..."
+                                value={cnSearchQuery}
+                                onChange={e => setCnSearchQuery(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && handleCnSearch()}
+                                className="flex-1 h-10 rounded-xl border-slate-200 text-sm font-bold"
+                            />
+                            <Button onClick={handleCnSearch} disabled={cnSearching} className="h-10 px-4 rounded-xl font-black text-xs">
+                                {cnSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : "Search"}
+                            </Button>
+                        </div>
+                        {/* Results */}
+                        {cnSearchResults.length > 0 && (
+                            <div className="space-y-2 max-h-[280px] overflow-y-auto">
+                                {cnSearchResults.map((inv: any) => (
+                                    <div key={inv.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:border-amber-200 hover:bg-amber-50 transition-all">
+                                        <div>
+                                            <p className="text-sm font-black text-slate-800">{inv.invoiceNumber}</p>
+                                            <p className="text-xs text-slate-400 font-bold">{inv.customerName || resolvedCustomers?.find((c: any) => c.id === inv.customerId)?.name || "Customer"} · {fmt(Number(inv.total))}</p>
+                                            <p className="text-[10px] text-slate-300 font-bold">{inv.paymentMethod} · {new Date(inv.issueDate || inv.createdAt).toLocaleDateString()}</p>
+                                        </div>
+                                        <Button size="sm" disabled={cnProcessing}
+                                            className="h-8 px-3 rounded-lg font-black text-xs bg-amber-500 hover:bg-amber-600 text-white"
+                                            onClick={() => handleIssueCreditDebitNote(inv)}>
+                                            {cnProcessing ? <Loader2 className="h-3 w-3 animate-spin" /> : `Issue ${cnType === "credit" ? "CN" : "DN"}`}
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        {cnSearchResults.length === 0 && cnSearchQuery && !cnSearching && (
+                            <p className="text-center text-slate-400 text-sm font-bold py-4">No invoices found</p>
+                        )}
+                    </div>
+                    <div className="p-4 border-t border-slate-100 bg-slate-50 shrink-0">
+                        <Button variant="ghost" className="w-full h-10 rounded-xl font-black text-xs text-slate-400" onClick={() => { setIsCreditNoteOpen(false); setCnSearchResults([]); setCnSearchQuery(""); }}>Cancel</Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* X / Z Report Modal */}
+            <Dialog open={isReportOpen} onOpenChange={setIsReportOpen}>
+                <DialogContent className="sm:max-w-[560px] rounded-3xl p-0 overflow-hidden border-none max-h-[90vh] flex flex-col">
+                    <div className="bg-purple-600 p-6 text-white relative shrink-0">
+                        <button onClick={() => setIsReportOpen(false)} className="absolute top-4 right-4 h-8 w-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-all">
+                            <XCircle className="h-4 w-4 text-white" />
+                        </button>
+                        <div className="flex items-end justify-between pr-10">
+                            <div>
+                                <h3 className="text-xl font-black">{reportType === "x" ? "X-Report" : "Z-Report"}</h3>
+                                <p className="text-purple-200 text-xs mt-1">{reportType === "x" ? "Current day summary" : "Closed day summary"}</p>
+                            </div>
+                            <div className="flex bg-purple-700/50 p-1 rounded-xl">
+                                {(["x", "z"] as const).map(t => (
+                                    <button key={t} onClick={() => handleLoadReport(t)}
+                                        className={cn("px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all",
+                                            reportType === t ? "bg-white text-purple-600" : "text-purple-200")}>
+                                        {t.toUpperCase()}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-6 bg-white space-y-4">
+                        {reportLoading && (
+                            <div className="flex items-center justify-center py-12">
+                                <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
+                            </div>
+                        )}
+                        {reportData?.error && (
+                            <div className="bg-red-50 border border-red-100 rounded-2xl p-4 text-center">
+                                <XCircle className="h-8 w-8 text-red-400 mx-auto mb-2" />
+                                <p className="text-sm font-black text-red-600">{reportData.error}</p>
+                            </div>
+                        )}
+                        {reportData && !reportData.error && (
+                            <>
+                                {/* POS Sales Summary — always shown */}
+                                {reportData.posSummary && (
+                                    <div className="border border-purple-100 rounded-2xl overflow-hidden">
+                                        <div className="bg-purple-600 px-4 py-2 flex items-center justify-between">
+                                            <span className="text-xs font-black text-white uppercase tracking-widest">Today's Sales Summary</span>
+                                            <span className="text-xs font-black text-purple-200">{reportData.posSummary.totalTransactions} transactions</span>
+                                        </div>
+                                        <div className="divide-y divide-slate-50">
+                                            {reportData.posSummary.byPaymentMethod.map((pm: any) => (
+                                                <div key={pm.method} className="flex items-center justify-between px-4 py-3">
+                                                    <span className="text-sm font-bold text-slate-600">{pm.method}</span>
+                                                    <div className="flex items-center gap-4">
+                                                        <span className="text-xs font-black text-slate-400">{pm.count} sales</span>
+                                                        <span className="text-sm font-black text-emerald-600">{Number(pm.total).toFixed(2)}</span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            <div className="flex items-center justify-between px-4 py-3 bg-slate-50">
+                                                <span className="text-sm font-black text-slate-800">Grand Total</span>
+                                                <span className="text-base font-black text-slate-900">{Number(reportData.posSummary.grandTotal).toFixed(2)}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Fiscal header info — only when fiscal day data is present */}
+                                {reportData.fiscalDayNo && (
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="bg-slate-50 rounded-2xl p-4">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Fiscal Day</p>
+                                            <p className="text-2xl font-black text-slate-800">#{reportData.fiscalDayNo}</p>
+                                        </div>
+                                        <div className="bg-slate-50 rounded-2xl p-4">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Opened</p>
+                                            <p className="text-sm font-black text-slate-800">{reportData.openedAt ? new Date(reportData.openedAt).toLocaleString() : "—"}</p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Doc stats by currency — only when non-empty */}
+                                {(reportData.docStats || []).length > 0 && (reportData.docStats || []).map((stat: any) => (
+                                    <div key={stat.currency} className="border border-slate-100 rounded-2xl overflow-hidden">
+                                        <div className="bg-slate-800 px-4 py-2">
+                                            <span className="text-xs font-black text-white uppercase tracking-widest">{stat.currency}</span>
+                                        </div>
+                                        <div className="divide-y divide-slate-50">
+                                            {[
+                                                { label: "Invoices", data: stat.invoices, color: "text-emerald-600" },
+                                                { label: "Credit Notes", data: stat.creditNotes, color: "text-red-500" },
+                                                { label: "Debit Notes", data: stat.debitNotes, color: "text-amber-500" },
+                                            ].map(row => (
+                                                <div key={row.label} className="flex items-center justify-between px-4 py-3">
+                                                    <span className="text-sm font-bold text-slate-600">{row.label}</span>
+                                                    <div className="flex items-center gap-4">
+                                                        <span className="text-xs font-black text-slate-400">{row.data.quantity} docs</span>
+                                                        <span className={cn("text-sm font-black", row.color)}>{stat.currency} {Number(row.data.total).toFixed(2)}</span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            <div className="flex items-center justify-between px-4 py-3 bg-slate-50">
+                                                <span className="text-sm font-black text-slate-800">Total</span>
+                                                <span className="text-base font-black text-slate-900">{stat.currency} {Number(stat.totalDocuments.total).toFixed(2)}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+
+                                {/* Fiscal counters — only when non-empty */}
+                                {reportData.counters && reportData.counters.length > 0 && (
+                                    <div className="border border-slate-100 rounded-2xl overflow-hidden">
+                                        <div className="bg-slate-100 px-4 py-2">
+                                            <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Fiscal Counters</span>
+                                        </div>
+                                        <div className="divide-y divide-slate-50">
+                                            {reportData.counters.map((c: any, i: number) => (
+                                                <div key={i} className="flex items-center justify-between px-4 py-2">
+                                                    <span className="text-xs font-bold text-slate-500">{c.taxCode || c.taxPercent + "%"}</span>
+                                                    <span className="text-xs font-black text-slate-800">{c.currency} {Number(c.taxAmount || 0).toFixed(2)}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+                    <div className="p-4 border-t border-slate-100 bg-slate-50 shrink-0">
+                        <Button variant="ghost" className="w-full h-10 rounded-xl font-black text-xs text-slate-400" onClick={() => setIsReportOpen(false)}>Close</Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
         </PosLayout >
     );
 

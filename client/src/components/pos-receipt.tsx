@@ -108,26 +108,36 @@ export function POSReceipt({ invoice, company, customer, items }: POSReceiptProp
                 )}
             </div>
 
-            {/* Fiscal Data */}
-            <div className="text-[8px] space-y-1 border-y border-dashed py-2 mb-4 font-bold bg-slate-50 p-2 break-inside-avoid">
-                <p className="text-center font-black mb-1">FISCAL DATA</p>
-                <div className="flex justify-between">
-                    <span>FISCAL CODE:</span>
-                    <span className="font-mono">{invoice.fiscalCode || 'NOT FISCALIZED'}</span>
+            {/* Fiscal Data — only shown when fiscalized */}
+            {invoice.fiscalCode && (
+                <div className="text-[8px] space-y-1 border-y border-dashed py-2 mb-4 font-bold bg-slate-50 p-2 break-inside-avoid">
+                    <p className="text-center font-black mb-1">FISCAL DATA</p>
+                    <div className="flex justify-between">
+                        <span>FISCAL CODE:</span>
+                        <span className="font-mono">{invoice.fiscalCode}</span>
+                    </div>
+                    <div className="flex justify-between">
+                        <span>SIG:</span>
+                        <span className="font-mono truncate max-w-[150px]">{invoice.fiscalSignature || 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                        <span>RCPT NO:</span>
+                        <span className="font-mono">{invoice.receiptCounter || 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                        <span>GLOBAL NO:</span>
+                        <span className="font-mono">{invoice.receiptGlobalNo || 'N/A'}</span>
+                    </div>
                 </div>
-                <div className="flex justify-between">
-                    <span>SIG:</span>
-                    <span className="font-mono truncate max-w-[150px]">{invoice.fiscalSignature || 'N/A'}</span>
+            )}
+
+            {/* Pending fiscalization notice for offline sales */}
+            {!invoice.fiscalCode && invoice._offline && (
+                <div className="text-[8px] border-y border-dashed py-2 mb-4 text-center">
+                    <p className="font-black text-red-600">PENDING FISCALIZATION</p>
+                    <p className="text-[7px]">Offline sale — will sync when reconnected</p>
                 </div>
-                <div className="flex justify-between">
-                    <span>RCPT NO:</span>
-                    <span className="font-mono">{invoice.receiptCounter || 'N/A'}</span>
-                </div>
-                <div className="flex justify-between">
-                    <span>GLOBAL NO:</span>
-                    <span className="font-mono">{invoice.receiptGlobalNo || 'N/A'}</span>
-                </div>
-            </div>
+            )}
 
             {/* QR Code */}
             {invoice.qrCodeData && (
@@ -141,13 +151,10 @@ export function POSReceipt({ invoice, company, customer, items }: POSReceiptProp
             <div className="text-center space-y-1 text-[8px] italic break-inside-avoid">
                 <p>{company.posSettings?.receiptFooter || "Thank you for your business!"}</p>
                 {invoice._offline ? (
-                    <div className="my-2 border-2 border-red-500 p-1 text-red-600 font-black text-[10px] animate-pulse">
-                        *** PENDING FISCALIZATION ***
-                        <p className="text-[7px]">Offline Sale - Will sync once reconnected</p>
-                    </div>
-                ) : (
+                    <p className="font-black not-italic">*** OFFLINE SALE ***</p>
+                ) : invoice.fiscalCode ? (
                     <p>*** FISCAL RECEIPT ***</p>
-                )}
+                ) : null}
                 <p>Powered by Fisczim SaaS</p>
             </div>
 

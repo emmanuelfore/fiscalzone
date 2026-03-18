@@ -196,20 +196,20 @@ export default function InvoicesPage() {
           // For simplicity, we just close. The user can click the button again.
         }}
       />
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-6 pt-2">
+      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between mb-8 gap-6 pt-2">
         <div>
-          <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight uppercase">Invoices</h1>
-          <p className="text-slate-500 mt-1 font-medium">Manage and track your customer billing cycle</p>
+          <h1 className="text-3xl sm:text-4xl font-display font-black text-slate-900 tracking-tight uppercase">Invoices</h1>
+          <p className="text-slate-500 mt-1 font-medium italic">Manage and track your customer billing cycle</p>
         </div>
-        <div className="flex gap-3 w-full sm:w-auto">
-          <Link href="/quotations">
-            <Button variant="outline" className="border-slate-200 rounded-xl hover:bg-slate-50 flex-1 sm:flex-none h-11">
+        <div className="flex flex-wrap gap-3 w-full lg:w-auto">
+          <Link href="/quotations" className="flex-1 sm:flex-none">
+            <Button variant="outline" className="border-slate-200 rounded-xl hover:bg-slate-50 w-full h-11">
               <ClipboardList className="w-4 h-4 mr-2" />
               Quotations
             </Button>
           </Link>
-          <Link href="/invoices/new">
-            <Button className="btn-gradient rounded-xl px-6 flex-1 sm:flex-none h-11">
+          <Link href="/invoices/new" className="flex-1 sm:flex-none">
+            <Button className="btn-gradient rounded-xl px-6 w-full h-11">
               <Plus className="w-4 h-4 mr-2" />
               Create Invoice
             </Button>
@@ -334,7 +334,7 @@ export default function InvoicesPage() {
                     id="date"
                     variant={"outline"}
                     className={cn(
-                      "w-auto sm:w-[260px] h-11 justify-start text-left font-medium border-slate-200 bg-white/80 rounded-xl",
+                      "w-full sm:w-[260px] h-11 justify-start text-left font-medium border-slate-200 bg-white/80 rounded-xl",
                       !dateRange && "text-muted-foreground"
                     )}
                   >
@@ -392,12 +392,12 @@ export default function InvoicesPage() {
               <TableHeader className="bg-slate-50/50 border-b border-slate-100">
                 <TableRow className="hover:bg-transparent border-none">
                   <TableHead className="w-[140px] h-12 px-6 font-black text-slate-400 uppercase tracking-widest text-[10px]">Invoice #</TableHead>
-                  <TableHead className="w-[120px] h-12 px-4 font-black text-slate-400 uppercase tracking-widest text-[10px]">Type</TableHead>
-                  <TableHead className="w-[180px] h-12 px-4 font-black text-slate-400 uppercase tracking-widest text-[10px]">Reference</TableHead>
-                  <TableHead className="w-[120px] h-12 px-4 font-black text-slate-400 uppercase tracking-widest text-[10px]">Date</TableHead>
+                  <TableHead className="hidden md:table-cell w-[120px] h-12 px-4 font-black text-slate-400 uppercase tracking-widest text-[10px]">Type</TableHead>
+                  <TableHead className="hidden lg:table-cell w-[180px] h-12 px-4 font-black text-slate-400 uppercase tracking-widest text-[10px]">Reference</TableHead>
+                  <TableHead className="hidden sm:table-cell w-[120px] h-12 px-4 font-black text-slate-400 uppercase tracking-widest text-[10px]">Date</TableHead>
                   <TableHead className="h-12 px-4 font-black text-slate-400 uppercase tracking-widest text-[10px]">Customer</TableHead>
-                  <TableHead className="w-[140px] text-right h-12 px-4 font-black text-slate-400 uppercase tracking-widest text-[10px]">Amount</TableHead>
-                  <TableHead className="w-[100px] text-right h-12 px-4 font-black text-slate-400 uppercase tracking-widest text-[10px]">Tax</TableHead>
+                  <TableHead className="w-[120px] text-right h-12 px-4 font-black text-slate-400 uppercase tracking-widest text-[10px]">Amount</TableHead>
+                  <TableHead className="hidden xl:table-cell w-[100px] text-right h-12 px-4 font-black text-slate-400 uppercase tracking-widest text-[10px]">Tax</TableHead>
                   <TableHead className="w-[140px] h-12 px-4 font-black text-slate-400 uppercase tracking-widest text-[10px]">Status</TableHead>
                   <TableHead className="w-[60px] text-right h-12 px-6"></TableHead>
                 </TableRow>
@@ -430,7 +430,7 @@ export default function InvoicesPage() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ) : invoices?.map((invoice) => (
+                ) : invoices?.map((invoice: any) => ( // Fix: Added type annotation for 'invoice'
                   <TableRow
                     key={invoice.id}
                     className="group cursor-pointer hover:bg-slate-50 transition-all duration-200 border-none"
@@ -442,7 +442,7 @@ export default function InvoicesPage() {
                     <TableCell className="px-6 py-4 font-black font-mono text-xs text-primary group-hover:translate-x-1 transition-transform">
                       {invoice.invoiceNumber}
                     </TableCell>
-                    <TableCell className="px-4 py-4">
+                    <TableCell className="hidden md:table-cell px-4 py-4">
                       {invoice.transactionType === 'CreditNote' ? (
                         <Badge className="bg-orange-500/10 text-orange-600 hover:bg-orange-500/20 border-none font-black whitespace-nowrap text-[9px] uppercase tracking-wider px-2 py-0.5">
                           Credit Note
@@ -457,7 +457,7 @@ export default function InvoicesPage() {
                         </Badge>
                       )}
                     </TableCell>
-                    <TableCell className="px-4 py-4">
+                    <TableCell className="hidden lg:table-cell px-4 py-4">
                       {invoice.relatedInvoiceId && (
                         <Link href={`/invoices/${invoice.relatedInvoiceId}`} className="text-[10px] text-slate-400 hover:text-primary transition-colors flex items-center font-bold whitespace-nowrap">
                           <FileText className="w-3 h-3 mr-1 opacity-50" />
@@ -468,7 +468,7 @@ export default function InvoicesPage() {
                         <span className="text-slate-200 text-xs font-bold">-</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-slate-500 px-4 py-4 font-bold text-[10px] whitespace-nowrap uppercase">
+                    <TableCell className="hidden sm:table-cell text-slate-500 px-4 py-4 font-bold text-[10px] whitespace-nowrap uppercase">
                       {invoice.issueDate ? format(new Date(invoice.issueDate), "dd MMM yyyy") : "-"}
                     </TableCell>
                     <TableCell className="font-black text-slate-900 px-4 py-4 text-xs max-w-[180px] truncate uppercase tracking-tight">
@@ -478,7 +478,7 @@ export default function InvoicesPage() {
                       <span className="text-[10px] text-slate-400 mr-1">{invoice.currency}</span>
                       {Number(invoice.total).toFixed(2)}
                     </TableCell>
-                    <TableCell className="text-slate-400 text-right px-4 py-4 font-bold text-[10px] whitespace-nowrap">
+                    <TableCell className="hidden xl:table-cell text-slate-400 text-right px-4 py-4 font-bold text-[10px] whitespace-nowrap">
                       {Number(invoice.taxAmount).toFixed(2)}
                     </TableCell>
                     <TableCell className="px-4 py-4">

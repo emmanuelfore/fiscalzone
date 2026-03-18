@@ -393,6 +393,15 @@ export const api = {
       responses: {
         201: z.custom<Expense>(),
       }
+    },
+    update: {
+      method: 'PATCH' as const,
+      path: '/api/expenses/:id',
+      input: insertExpenseSchema.partial(),
+      responses: {
+        200: z.custom<Expense>(),
+        404: errorSchemas.notFound,
+      }
     }
   },
   reports: {
@@ -423,7 +432,12 @@ export const api = {
           expenseBreakdown: z.array(z.object({
             category: z.string(),
             amount: z.number()
-          }))
+          })),
+          drillDown: z.object({
+            revenueItems: z.array(z.any()),
+            cogsItems: z.array(z.any()),
+            expenseItems: z.array(z.any())
+          }).optional()
         })
       }
     }

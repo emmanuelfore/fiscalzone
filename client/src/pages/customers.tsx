@@ -5,7 +5,7 @@ import { useState } from "react";
 const ITEMS_PER_PAGE = 10;
 import { useCustomers, useUpdateCustomer } from "@/hooks/use-customers";
 import { Card, CardContent } from "@/components/ui/card";
-import { Users, Building2, Phone, Mail, Search, ChevronLeft, ChevronRight, Eye } from "lucide-react";
+import { Users, Building2, Phone, Mail, Search, ChevronLeft, ChevronRight, Eye, FileDown } from "lucide-react";
 import { CreateCustomerDialog } from "@/components/customers/create-customer-dialog";
 import { EditCustomerDialog } from "@/components/customers/edit-customer-dialog";
 import { DeleteButton } from "@/components/delete-button";
@@ -66,12 +66,23 @@ export default function CustomersPage() {
 
   return (
     <Layout>
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-display font-bold text-slate-900">Customers</h1>
           <p className="text-slate-500 mt-1">Manage your client base</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 w-full lg:w-auto">
+          <Button
+            variant="outline"
+            onClick={() => {
+              window.location.href = `/api/export/customers?companyId=${companyId}`;
+            }}
+            disabled={!companyId}
+            className="rounded-xl shadow-sm hover:shadow-md transition-all duration-300 border-slate-200"
+          >
+            <FileDown className="w-4 h-4 mr-2 text-violet-600" />
+            Export CSV
+          </Button>
           <CsvImportDialog
             type="customer"
             companyId={companyId}
@@ -82,13 +93,13 @@ export default function CustomersPage() {
           {companyId > 0 ? (
             <CreateCustomerDialog companyId={companyId} />
           ) : (
-            <Button disabled variant="outline">Select a Company First</Button>
+            <Button disabled variant="outline" className="flex-1 sm:flex-none">Select a Company First</Button>
           )}
         </div>
       </div>
 
       <div className="flex flex-col md:flex-row gap-4 mb-8">
-        <div className="relative flex-1 max-w-sm group">
+        <div className="relative flex-1 w-full sm:max-w-sm group">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-hover:text-primary transition-colors duration-200" />
           <Input
             placeholder="Search customers..."
@@ -139,14 +150,14 @@ export default function CustomersPage() {
       </div>
 
       <Card className="border-none shadow-xl bg-white/50 backdrop-blur-sm rounded-[2rem] overflow-hidden hover:shadow-2xl transition-all duration-500">
-        <CardContent className="p-0">
-          <table className="w-full text-left border-collapse">
+        <CardContent className="p-0 overflow-x-auto">
+          <table className="w-full text-left border-collapse min-w-[600px] md:min-w-full">
             <thead>
               <tr className="bg-slate-50/50 border-b border-slate-100 text-[10px] uppercase tracking-widest font-bold text-slate-500">
                 <th className="p-6 font-bold text-slate-400">Name</th>
-                <th className="p-6 font-bold text-slate-400">Contact</th>
-                <th className="p-6 font-bold text-slate-400">Tax Details</th>
-                <th className="p-6 font-bold text-slate-400">Type</th>
+                <th className="hidden md:table-cell p-6 font-bold text-slate-400">Contact</th>
+                <th className="hidden lg:table-cell p-6 font-bold text-slate-400">Tax Details</th>
+                <th className="hidden sm:table-cell p-6 font-bold text-slate-400">Type</th>
                 <th className="p-6 font-bold text-slate-400 text-right">Actions</th>
               </tr>
             </thead>
@@ -193,7 +204,7 @@ export default function CustomersPage() {
                       </div>
                     </div>
                   </td>
-                  <td className="p-6 align-middle">
+                  <td className="hidden md:table-cell p-6 align-middle">
                     <div className="flex flex-col gap-1.5 text-sm">
                       {c.email && (
                         <div className="flex items-center gap-2 text-slate-600 group-hover:text-slate-900 transition-colors">
@@ -210,7 +221,7 @@ export default function CustomersPage() {
                       {!c.email && !c.phone && <span className="text-slate-400 text-xs italic">No contact info</span>}
                     </div>
                   </td>
-                  <td className="p-6 align-middle">
+                  <td className="hidden lg:table-cell p-6 align-middle">
                     <div className="text-sm text-slate-600 space-y-1">
                       {c.tin && (
                         <div className="flex items-center gap-2">
@@ -227,7 +238,7 @@ export default function CustomersPage() {
                       {!c.tin && !c.vatNumber && <span className="text-slate-400 italic text-xs">—</span>}
                     </div>
                   </td>
-                  <td className="p-6 align-middle">
+                  <td className="hidden sm:table-cell p-6 align-middle">
                     <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide border shadow-sm ${c.customerType === 'business'
                       ? 'bg-blue-50 text-blue-700 border-blue-100'
                       : 'bg-emerald-50 text-emerald-700 border-emerald-100'

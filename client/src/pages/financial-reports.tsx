@@ -1,191 +1,129 @@
-
+import { useState } from "react";
+import { format, startOfMonth, endOfMonth } from "date-fns";
 import { Layout } from "@/components/layout";
-import { useFinancialSummary } from "@/hooks/use-reports";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { TrendingUp, TrendingDown, DollarSign, PieChart as PieChartIcon, ArrowUpRight, ArrowDownRight, Printer } from "lucide-react";
+import { useCurrencies } from "@/hooks/use-currencies";
+import { useActiveCompany } from "@/hooks/use-active-company";
 import { Button } from "@/components/ui/button";
+import { Calendar as CalendarIcon, Printer, Calculator, FileDown } from "lucide-react";
 import {
-    PieChart,
-    Pie,
-    Cell,
-    ResponsiveContainer,
-    Tooltip as RechartsTooltip,
-    Legend,
-    BarChart,
-    Bar,
-    XAxis,
-    YAxis,
-    CartesianGrid,
-    Tooltip
-} from "recharts";
-
-const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
+import { ProfitAndLossView } from "@/components/reports/profit-and-loss-view";
+import { downloadExcel } from "@/lib/export-utils";
 
 export default function FinancialReportsPage() {
-    const companyId = parseInt(localStorage.getItem("selectedCompanyId") || "0");
-    const { data: summary, isLoading } = useFinancialSummary(companyId);
+    const { activeCompany, isLoading: isLoadingActive } = useActiveCompany();
+    const companyId = activeCompany?.id || 0;
+    
+    const { data: currencies } = useCurrencies(companyId);
 
-    if (isLoading) {
+    // State
+    const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
+        from: startOfMonth(new Date()),
+        to: endOfMonth(new Date())
+    });
+    const [consolidatedCode, setConsolidatedCode] = useState<string>("USD");
+
+    const consolidatedCurrency = currencies?.find(c => c.code === consolidatedCode);
+    const consolidatedRate = Number(consolidatedCurrency?.exchangeRate || 1);
+    const consolidatedSymbol = consolidatedCurrency?.symbol || "$";
+
+    const handleExportExcel = () => {
+        const params = new URLSearchParams({
+            startDate: format(dateRange.from, 'yyyy-MM-dd'),
+            endDate: format(dateRange.to, 'yyyy-MM-dd')
+        });
+        downloadExcel(`/api/reports/export/financial/${companyId}?${params.toString()}`, `Financial_Report_${format(new Date(), "yyyyMMdd")}.xlsx`);
+    };
+
+    if (isLoadingActive) {
         return (
             <Layout>
                 <div className="flex items-center justify-center min-h-[60vh]">
-                    <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+                    <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
                 </div>
             </Layout>
         );
     }
 
-    const expenseBreakdown = summary?.expenseBreakdown || [];
-
     return (
         <Layout>
-            <div className="flex items-center justify-between mb-8">
+            <div className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                    <h1 className="text-3xl font-display font-bold text-slate-900 uppercase">Financial Analysis</h1>
-                    <p className="text-slate-500 mt-1 font-medium">Profitability and expense performance overview</p>
+                    <h1 className="text-3xl font-display font-bold text-slate-900 uppercase tracking-tight">Financial Performance</h1>
+                    <p className="text-slate-500 mt-1 font-medium italic">Comprehensive Profit & Loss Analysis for {activeCompany?.name}</p>
                 </div>
-                <Button variant="outline" className="gap-2 rounded-2xl border-slate-200 shadow-sm" onClick={() => window.print()}>
-                    <Printer className="h-4 w-4" />
-                    Print Analysis
-                </Button>
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
-                {/* Revenue */}
-                <Card className="border-none shadow-xl bg-indigo-600 text-white rounded-[2rem] overflow-hidden">
-                    <CardContent className="p-8">
-                        <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-2">Total Revenue</p>
-                        <h3 className="text-3xl font-black font-display tracking-tight">${summary?.revenue.toLocaleString()}</h3>
-                        <div className="mt-4 flex items-center gap-1.5 text-xs font-bold bg-white/20 w-fit px-2 py-1 rounded-full backdrop-blur-sm">
-                            <ArrowUpRight className="w-3.5 h-3.5" />
-                            Gross Sales
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* COGS */}
-                <Card className="border-none shadow-xl bg-rose-500 text-white rounded-[2rem] overflow-hidden">
-                    <CardContent className="p-8">
-                        <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-2">Cost of Sales (COGS)</p>
-                        <h3 className="text-3xl font-black font-display tracking-tight">${summary?.cogs.toLocaleString()}</h3>
-                        <div className="mt-4 flex items-center gap-1.5 text-xs font-bold bg-white/20 w-fit px-2 py-1 rounded-full backdrop-blur-sm">
-                            <ArrowDownRight className="w-3.5 h-3.5" />
-                            Inventory Cost
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Gross Profit */}
-                <Card className="border-none shadow-xl bg-white rounded-[2rem] overflow-hidden group hover:shadow-2xl transition-all duration-500 border border-slate-50">
-                    <CardContent className="p-8">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Gross Profit</p>
-                        <h3 className="text-3xl font-black text-slate-900 font-display tracking-tight">${summary?.grossProfit.toLocaleString()}</h3>
-                        <div className={`mt-4 flex items-center gap-1.5 text-xs font-bold ${summary!.grossProfit > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                            {summary!.grossProfit > 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                            {((summary!.grossProfit / summary!.revenue) * 100 || 0).toFixed(1)}% Margin
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Expenses */}
-                <Card className="border-none shadow-xl bg-white rounded-[2rem] overflow-hidden border border-slate-50">
-                    <CardContent className="p-8">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Op. Expenses</p>
-                        <h3 className="text-3xl font-black text-slate-900 font-display tracking-tight">${summary?.expenses.toLocaleString()}</h3>
-                        <p className="text-[10px] text-slate-400 mt-4 font-bold uppercase tracking-widest">Indirect Costs</p>
-                    </CardContent>
-                </Card>
-
-                {/* Net Profit */}
-                <Card className={`border-none shadow-xl rounded-[2rem] overflow-hidden border ${summary!.netProfit >= 0 ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'}`}>
-                    <CardContent className="p-8">
-                        <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-2">Net Profit</p>
-                        <h3 className="text-3xl font-black font-display tracking-tight">${summary?.netProfit.toLocaleString()}</h3>
-                        <p className="text-[10px] font-black uppercase tracking-widest mt-4 opacity-80">Bottom Line</p>
-                    </CardContent>
-                </Card>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Expense Breakdown */}
-                <Card className="border-none shadow-xl bg-white rounded-[2rem] overflow-hidden">
-                    <CardHeader className="p-8 pb-0">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <CardTitle className="text-xl font-black text-slate-900 font-display uppercase tracking-tight">Expense Distribution</CardTitle>
-                                <CardDescription className="text-slate-400 font-medium">Spending by category</CardDescription>
-                            </div>
-                            <div className="p-3 bg-violet-50 rounded-2xl">
-                                <PieChartIcon className="w-6 h-6 text-violet-600" />
-                            </div>
-                        </div>
-                    </CardHeader>
-                    <CardContent className="h-[400px] p-8">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                                <Pie
-                                    data={expenseBreakdown}
-                                    cx="50%"
-                                    cy="50%"
-                                    innerRadius={80}
-                                    outerRadius={120}
-                                    paddingAngle={5}
-                                    dataKey="amount"
-                                    nameKey="category"
-                                >
-                                    {expenseBreakdown.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                    ))}
-                                </Pie>
-                                <Tooltip
-                                    contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)' }}
-                                    formatter={(value: number) => [`$${value.toFixed(2)}`, 'Amount']}
-                                />
-                                <Legend />
-                            </PieChart>
-                        </ResponsiveContainer>
-                    </CardContent>
-                </Card>
-
-                {/* Expense List Table */}
-                <Card className="border-none shadow-xl bg-white rounded-[2rem] overflow-hidden">
-                    <CardHeader className="p-8 border-b border-slate-50 flex flex-row items-center justify-between bg-slate-50/50">
-                        <div>
-                            <CardTitle className="text-xl font-black text-slate-900 font-display uppercase tracking-tight">Financial Summary</CardTitle>
-                            <CardDescription className="text-slate-400 font-medium">Detailed spending records</CardDescription>
-                        </div>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                        <table className="w-full">
-                            <thead>
-                                <tr className="bg-slate-50/50 border-b border-slate-100 text-[10px] uppercase tracking-widest font-bold text-slate-500">
-                                    <th className="p-6 text-left">Category</th>
-                                    <th className="p-6 text-right">Amount</th>
-                                    <th className="p-6 text-right">% of Total</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-50">
-                                {expenseBreakdown.map((item, idx) => (
-                                    <tr key={idx} className="hover:bg-slate-50/50 transition-colors duration-200">
-                                        <td className="p-6 font-bold text-slate-700">{item.category}</td>
-                                        <td className="p-6 text-right font-black text-slate-900">${item.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                        <td className="p-6 text-right">
-                                            <span className="inline-block px-2 py-0.5 bg-slate-100 text-slate-500 text-[10px] font-black rounded-full uppercase">
-                                                {((item.amount / summary!.expenses) * 100).toFixed(1)}%
-                                            </span>
-                                        </td>
-                                    </tr>
+                <div className="flex flex-wrap items-center gap-3 bg-white/50 backdrop-blur-md p-2 rounded-[1.5rem] border border-slate-100 shadow-sm">
+                    <div className="flex items-center gap-2 pl-2">
+                        <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Base:</span>
+                        <Select value={consolidatedCode} onValueChange={setConsolidatedCode}>
+                            <SelectTrigger className="w-[90px] h-8 text-xs font-bold border-none bg-slate-100/50 rounded-xl focus:ring-0">
+                                <SelectValue placeholder="USD" />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-xl border-slate-100 shadow-xl">
+                                <SelectItem value="USD" className="text-xs font-bold">USD</SelectItem>
+                                {currencies?.filter(c => c.code !== 'USD').map(c => (
+                                    <SelectItem key={c.id} value={c.code} className="text-xs font-bold">{c.code}</SelectItem>
                                 ))}
-                                {expenseBreakdown.length === 0 && (
-                                    <tr>
-                                        <td colSpan={3} className="p-12 text-center text-slate-400 font-medium italic">No expense data recorded</td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </CardContent>
-                </Card>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    <div className="h-6 w-px bg-slate-200" />
+
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button variant="ghost" className={cn("h-8 px-3 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl")}>
+                                <CalendarIcon className="mr-2 h-3.5 w-3.5 text-indigo-500" />
+                                {format(dateRange.from, "MMM dd")} - {format(dateRange.to, "MMM dd, yyyy")}
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0 rounded-3xl border-none shadow-2xl" align="end">
+                            <Calendar
+                                initialFocus
+                                mode="range"
+                                defaultMonth={dateRange.from}
+                                selected={{ from: dateRange.from, to: dateRange.to }}
+                                onSelect={(range: any) => {
+                                    if (range?.from) {
+                                        setDateRange({ from: range.from, to: range.to || range.from });
+                                    }
+                                }}
+                                numberOfMonths={2}
+                                className="rounded-3xl"
+                            />
+                        </PopoverContent>
+                    </Popover>
+
+                    <div className="h-6 w-px bg-slate-200" />
+                    
+                    <div className="flex gap-1">
+                        <Button variant="ghost" className="h-8 px-3 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl gap-2" onClick={handleExportExcel}>
+                            <FileDown className="h-3.5 w-3.5 text-indigo-500" />
+                            Excel
+                        </Button>
+                        <Button variant="ghost" className="h-8 px-3 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl gap-2" onClick={() => window.print()}>
+                            <Printer className="h-3.5 w-3.5 text-indigo-500" />
+                            Print
+                        </Button>
+                    </div>
+                </div>
             </div>
+
+            <ProfitAndLossView 
+                companyId={companyId}
+                dateRange={dateRange}
+                consolidatedSymbol={consolidatedSymbol}
+                consolidatedRate={consolidatedRate}
+            />
         </Layout>
     );
 }

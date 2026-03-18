@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "FieldPOS",
+    "slug": "fieldpos",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "scheme": "fisczim-pause",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0a0600"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0a0600"
+      },
+      "package": "com.emmmanuelfore.fieldpos"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "ad5206fe-d89f-4736-b568-660263b35892"
+      }
+    },
+    "plugins": [
+      "expo-asset"
+    ]
+  }
+}

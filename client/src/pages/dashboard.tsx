@@ -221,7 +221,7 @@ export default function Dashboard() {
         </Link>
 
         {/* Stats Cards */}
-        <div className="col-span-1 lg:col-span-2 grid grid-cols-2 gap-6">
+        <div className="col-span-1 lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
           <Card className="border-none bg-gradient-to-br from-white to-slate-50 rounded-[2rem] flex flex-col justify-between shadow-sm hover:shadow-xl transition-all duration-300 ring-1 ring-slate-100">
             <CardHeader className="p-8 pb-2 flex flex-row items-center justify-between space-y-0">
               <CardTitle className="text-xs font-black text-slate-400 uppercase tracking-widest">Total Revenue</CardTitle>
@@ -230,7 +230,7 @@ export default function Dashboard() {
               </div>
             </CardHeader>
             <CardContent className="p-8 pt-0">
-              <div className="text-4xl lg:text-5xl font-black font-display text-slate-900 tracking-tight">
+              <div className="text-3xl sm:text-4xl lg:text-5xl font-black font-display text-slate-900 tracking-tight">
                 {consolidatedSymbol}{stats.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </div>
               <div className="text-xs font-bold text-slate-400 mt-4 flex items-center gap-2">
@@ -247,7 +247,7 @@ export default function Dashboard() {
               </div>
             </CardHeader>
             <CardContent className="p-8 pt-0">
-              <div className="text-4xl lg:text-5xl font-black font-display text-slate-900 tracking-tight">
+              <div className="text-3xl sm:text-4xl lg:text-5xl font-black font-display text-slate-900 tracking-tight">
                 {consolidatedSymbol}{stats.pending.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </div>
               <div className="text-xs font-bold text-slate-400 mt-4">

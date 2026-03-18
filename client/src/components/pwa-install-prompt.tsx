@@ -3,9 +3,11 @@ import { usePwaInstall } from "@/hooks/use-pwa-install";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { MonitorSmartphone, X } from "lucide-react";
+import { useBranding } from "@/hooks/use-branding";
 
 export function PwaInstallPrompt() {
     const { isInstallable, promptInstall } = usePwaInstall();
+    const { brand } = useBranding();
     const [isOpen, setIsOpen] = useState(false);
 
     useEffect(() => {
@@ -48,7 +50,7 @@ export function PwaInstallPrompt() {
                         <MonitorSmartphone className="h-8 w-8 text-primary" />
                     </div>
                     <div className="space-y-2">
-                        <DialogTitle className="text-2xl font-semibold tracking-tight">Install FiscalStack</DialogTitle>
+                        <DialogTitle className="text-2xl font-semibold tracking-tight">Install {brand.name}</DialogTitle>
                         <DialogDescription className="text-base text-muted-foreground">
                             Add our app to your home screen for a faster, full-screen experience and true offline support.
                         </DialogDescription>

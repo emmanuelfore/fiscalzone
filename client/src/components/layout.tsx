@@ -27,8 +27,11 @@ import {
   ShieldCheck,
   History,
   Receipt,
-  Truck
+  Truck,
+  Menu,
+  X
 } from "lucide-react";
+import { useBranding } from "@/hooks/use-branding";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -70,6 +73,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const { data: companies } = useCompanies(!!user);
   const { activeCompany, activeCompanyId, setCompany } = useActiveCompany(!!user);
+  const { brand } = useBranding();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Close mobile menu on location change
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [location]);
 
   const handleCompanyChange = (id: number) => {
     setCompany(id);
@@ -114,16 +124,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
     },
     {
       icon: Building2,
-      label: "Finance & Reports",
+      label: "Intelligence Hub",
       children: [
-        { icon: MonitorCheck, label: "POS Reports", href: "/reports/pos" },
-        { icon: TrendingUp, label: "Financial Analysis", href: "/reports/financial" },
-        { icon: History, label: "Recent Sales Ledger", href: "/pos/all-sales" },
+        { icon: BarChart3, label: "Analytics Dashboard", href: "/reports?tab=analytics" },
+        { icon: Receipt, label: "Daily Sales Ledger", href: "/reports/daily" },
+        { icon: TrendingUp, label: "Profit & Loss", href: "/reports/financial" },
         { icon: Calculator, label: "Expenses", href: "/expenses" },
         { icon: Package, label: "Stock Reports", href: "/reports/inventory" },
         { icon: FileText, label: "Tax & ZIMRA", href: "/reports/tax" },
         { icon: Coins, label: "Currencies", href: "/currencies" },
-        { icon: Calculator, label: "Tax Config", href: "/tax-config" },
       ]
     },
     {
@@ -168,11 +177,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-slate-50/50 flex font-sans selection:bg-violet-500/20">
+      {/* Mobile Menu Backdrop */}
+      {isMobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 lg:hidden transition-opacity duration-300"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
       {/* Floating Sidebar */}
-      <aside className="w-72 bg-white/80 backdrop-blur-xl border border-white/50 shadow-2xl shadow-slate-200/50 flex flex-col fixed inset-y-4 left-4 z-50 rounded-[2rem] overflow-hidden transition-all duration-300">
+      <aside className={cn(
+        "w-72 bg-white/80 backdrop-blur-xl border border-white/50 shadow-2xl shadow-slate-200/50 flex flex-col fixed inset-y-4 left-4 z-50 rounded-[2rem] overflow-hidden transition-all duration-300",
+        isMobileMenuOpen ? "translate-x-0" : "-translate-x-[calc(100%+2rem)] lg:translate-x-0"
+      )}>
         <div className="p-6 border-b border-slate-100/50 bg-white/50">
           <div className="flex items-center gap-3 mb-6 px-1">
-            <img src="/fiscalstack-logo.png" alt="FiscalStack" className="h-9" />
+            <img src={brand.logo} alt={brand.name} className="h-9" />
           </div>
 
           <DropdownMenu>
@@ -326,18 +346,28 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="p-4 bg-slate-50/50 border-t border-slate-100/50">
           <div className="flex items-center justify-center gap-1 text-[10px] font-bold text-slate-300 uppercase tracking-widest">
             <ShieldCheck className="w-3 h-3" />
-            <span>FiscalStack v1.2</span>
+            <span>{brand.name} v1.2</span>
           </div>
         </div>
       </aside>
 
       {/* Main Content Wrapper */}
-      <div className="flex-1 ml-80 flex flex-col min-h-screen transition-all duration-300">
+      <div className="flex-1 lg:ml-80 flex flex-col min-h-screen transition-all duration-300">
 
         {/* Top Header */}
-        <header className="h-20 bg-transparent flex items-center justify-end gap-4 px-8 pt-4 pb-2 z-40 sticky top-0 backdrop-blur-sm">
+        <header className="h-20 bg-transparent flex items-center justify-end gap-4 px-4 sm:px-8 pt-4 pb-2 z-40 sticky top-0 backdrop-blur-sm">
+          {/* Mobile Menu Toggle */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="mr-auto lg:hidden bg-white/80 backdrop-blur-md border border-slate-200/50 rounded-xl shadow-sm"
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          >
+            {isMobileMenuOpen ? <X className="w-5 h-5 text-slate-600" /> : <Menu className="w-5 h-5 text-slate-600" />}
+          </Button>
+
           {user.isSuperAdmin && (
-            <div className="mr-auto flex items-center gap-2 bg-amber-100/80 backdrop-blur-md border border-amber-200/50 px-4 py-1.5 rounded-full shadow-sm">
+            <div className="hidden sm:flex items-center gap-2 bg-amber-100/80 backdrop-blur-md border border-amber-200/50 px-4 py-1.5 rounded-full shadow-sm">
               <LogOut className="w-4 h-4 text-amber-600" />
               <span className="text-xs font-black text-amber-700 uppercase tracking-widest">Global Super Admin</span>
             </div>
@@ -423,7 +453,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         )}
 
         {/* Page Content */}
-        <main className="flex-1 p-8 pt-6 max-w-[1600px] w-full mx-auto">
+        <main className="flex-1 p-4 sm:p-8 pt-6 max-w-[1600px] w-full mx-auto">
           {children}
         </main>
       </div>

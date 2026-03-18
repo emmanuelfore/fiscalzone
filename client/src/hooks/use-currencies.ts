@@ -4,11 +4,17 @@ import { api, buildUrl } from "@shared/routes";
 import { type InsertCurrency, type Currency } from "@shared/schema";
 import { apiFetch } from "@/lib/api";
 import { cacheCurrencies, getCachedCurrencies } from "@/lib/offline-db";
+import { getIsOnline } from "@/lib/online-state";
 
 export function useCurrencies(companyId: number) {
     return useQuery({
         queryKey: [api.currencies.list.path, companyId],
         queryFn: async () => {
+            if (!getIsOnline()) {
+                const cached = await getCachedCurrencies(companyId);
+                if (cached && cached.length > 0) return cached;
+                throw new Error("Offline and no cached currencies");
+            }
             try {
                 const url = buildUrl(api.currencies.list.path, { companyId });
                 const res = await apiFetch(url);
@@ -24,6 +30,7 @@ export function useCurrencies(companyId: number) {
             }
         },
         enabled: !!companyId,
+        retry: false,
     });
 }
 

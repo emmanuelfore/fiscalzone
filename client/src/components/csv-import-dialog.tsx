@@ -29,7 +29,7 @@ export function CsvImportDialog({ type, companyId, onSuccess, trigger }: CsvImpo
             return "Name,Email,Phone,Address,TIN,VAT Number,Type\nJohn Doe,john@example.com,0771234567,123 Street,100100100,12345678,Individual\nACME Corp,info@acme.com,0242123456,Industrial Site,200200200,87654321,Business";
         }
         if (type === "product") {
-            return "Name,Description,SKU,Price,Tax Rate,Type,Stock,HS Code,Category,Track Inventory\nWidget A,High quality widget,WID-001,10.00,15.5,Good,100,0000.00.00,General,Yes\nConsulting,Hourly rate,SVC-001,50.00,15.5,Service,0,,Services,No";
+            return "Name,Description,SKU,Barcode,Price,Cost Price,Tax Type,Type,Stock,HS Code,Category,Track Inventory\nWidget A,High quality widget,WID-001,600123456789,10.00,7.50,VAT,Good,100,0000.00.00,General,Yes\nConsulting,Hourly rate,SVC-001,,50.00,0.00,EXEMPT,Service,0,,Services,No";
         }
         return "";
     };
@@ -126,8 +126,18 @@ export function CsvImportDialog({ type, companyId, onSuccess, trigger }: CsvImpo
                 <DialogHeader>
                     <DialogTitle>Import {type === 'customer' ? 'Customers' : 'Products & Services'}</DialogTitle>
                     <DialogDescription>
-                        Upload a CSV file to bulk import data.
+                        Upload a CSV file to bulk import data. 
                     </DialogDescription>
+                    {type === 'product' && (
+                        <Alert className="bg-primary/5 border-primary/20">
+                            <AlertCircle className="h-4 w-4 text-primary" />
+                            <AlertTitle className="text-sm font-bold">Tax Type Requirements</AlertTitle>
+                            <AlertDescription className="text-xs">
+                                Use <b>VAT</b>, <b>NON</b>, or <b>EXEMPT</b> in the Tax Type column. 
+                                The "Tax Rate" column is now optional and ignored.
+                            </AlertDescription>
+                        </Alert>
+                    )}
                 </DialogHeader>
 
                 <div className="space-y-6 py-4">

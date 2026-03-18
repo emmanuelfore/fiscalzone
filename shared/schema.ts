@@ -1,5 +1,5 @@
 
-import { pgTable, text, serial, integer, boolean, timestamp, decimal, jsonb, primaryKey, uuid, date, unique, index } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, decimal, numeric, jsonb, primaryKey, uuid, date, unique, index } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -690,6 +690,8 @@ export const posHolds = pgTable("pos_holds", {
   userId: uuid("user_id").references(() => users.id).notNull(),
   customerId: integer("customer_id").references(() => customers.id),
   holdName: text("hold_name"),
+  total: numeric("total", { precision: 12, scale: 2 }),
+  orderDiscount: numeric("order_discount", { precision: 12, scale: 2 }).default("0"),
   cartData: jsonb("cart_data").notNull(), // Array of cart items
   createdAt: timestamp("created_at").defaultNow(),
 });

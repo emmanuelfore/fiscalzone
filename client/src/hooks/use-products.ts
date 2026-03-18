@@ -3,30 +3,45 @@ import { api, buildUrl } from "@shared/routes";
 import { type InsertProduct } from "@shared/schema";
 import { apiFetch } from "@/lib/api";
 import { cacheProducts, getCachedProducts, setLastCacheTime } from "@/lib/offline-db";
+import { getIsOnline } from "@/lib/online-state";
 
 export function useProducts(companyId: number) {
   return useQuery({
     queryKey: [api.products.list.path, companyId],
     queryFn: async () => {
+      // Always try cache first when offline
+      if (!getIsOnline()) {
+        const cached = await getCachedProducts(companyId);
+        console.log(`[useProducts] offline, cached count: ${cached?.length ?? 0}`);
+        return cached && cached.length > 0 ? cached : [];
+      }
+      // Online path — try API, fall back to cache on any failure or 401
       try {
         const url = buildUrl(api.products.list.path, { companyId });
         const res = await apiFetch(url);
-        if (!res.ok) throw new Error("Failed to fetch products");
+        if (res.status === 401) {
+          console.warn('[useProducts] 401 — using cached products');
+          const cached = await getCachedProducts(companyId);
+          console.log(`[useProducts] cache fallback count: ${cached?.length ?? 0}`);
+          return cached ?? [];
+        }
+        if (!res.ok) throw new Error(`Failed to fetch products: ${res.status}`);
         const products = api.products.list.responses[200].parse(await res.json());
         if (companyId) {
           await cacheProducts(companyId, products);
-          // Update the cache timestamp so the 24h stale warning resets
           await setLastCacheTime(companyId, Date.now());
         }
         return products;
       } catch (err) {
-        console.warn("Products fetch failed, trying offline cache...", err);
+        console.warn('[useProducts] fetch error, falling back to cache:', err);
         const cached = await getCachedProducts(companyId);
-        if (cached && cached.length > 0) return cached;
-        throw err;
+        console.log(`[useProducts] error cache fallback count: ${cached?.length ?? 0}`);
+        return cached ?? [];
       }
     },
     enabled: !!companyId,
+    retry: false,
+    staleTime: 0, // always re-run on mount so cache is loaded fresh
   });
 }
 

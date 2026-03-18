@@ -1,4 +1,4 @@
-import { Switch, Route, useLocation, Redirect } from "wouter";
+import { Switch, Route, Redirect, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -32,6 +32,7 @@ import AuditLogsPage from "@/pages/audit-logs";
 import QuotationsPage from "@/pages/quotations";
 import CreateQuotationPage from "@/pages/create-quotation";
 import FinancialReportsPage from "@/pages/financial-reports";
+import DailySalesLedgerPage from "@/pages/daily-sales-ledger";
 import InventoryReportsPage from "@/pages/inventory-reports";
 import RecurringInvoicesPage from "@/pages/recurring-invoices";
 import ZimraLogsPage from "@/pages/zimra-logs";
@@ -42,6 +43,8 @@ import RecentSalesPage from "@/pages/recent-sales";
 import TaxReportsPage from "@/pages/tax-reports";
 import PosSettingsPage from "@/pages/pos-settings";
 import SubscriptionPage from "@/pages/subscription";
+import PosLoginPage from "@/pages/pos-login";
+import ReportsPage from "@/pages/reports";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/lib/supabase";
 import { useCompanies } from "@/hooks/use-companies";
@@ -51,6 +54,7 @@ import { useEffect, useRef, useState } from "react";
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
 import { getPwaLaunchRedirect } from "@/hooks/use-pwa-install";
 import { useIsOnline } from "@/hooks/use-is-online";
+import { useBranding } from "@/hooks/use-branding";
 
 // Prevents loading states from spinning forever.
 // Returns true while `loading` is true, but automatically
@@ -159,6 +163,7 @@ function Router() {
       </Route>
       <Route path="/forgot-password" component={ForgotPasswordPage} />
       <Route path="/reset-password" component={ResetPasswordPage} />
+      <Route path="/pos-login" component={PosLoginPage} />
 
       <Route path="/onboarding" component={OnboardingRoute} />
 
@@ -174,6 +179,7 @@ function Router() {
       <Route path="/inventory/account">{() => <ProtectedRoute component={InventoryAccountPage} />}</Route>
       <Route path="/reports/inventory">{() => <ProtectedRoute component={InventoryReportsPage} />}</Route>
       <Route path="/reports/financial">{() => <ProtectedRoute component={FinancialReportsPage} />}</Route>
+      <Route path="/reports/daily">{() => <ProtectedRoute component={DailySalesLedgerPage} />}</Route>
       <Route path="/products">{() => <ProtectedRoute component={ProductsPage} />}</Route>
       <Route path="/services">{() => <ProtectedRoute component={ServicesPage} />}</Route>
       <Route path="/tax-config">{() => <ProtectedRoute component={TaxConfigPage} />}</Route>
@@ -182,7 +188,7 @@ function Router() {
       <Route path="/team-settings">{() => <ProtectedRoute component={TeamSettingsPage} />}</Route>
       <Route path="/reports/pos">{() => <ProtectedRoute component={PosReportsPage} />}</Route>
       <Route path="/reports/tax">{() => <ProtectedRoute component={TaxReportsPage} />}</Route>
-      <Route path="/reports">{() => <Redirect to="/reports/pos" />}</Route>
+      <Route path="/reports">{() => <ProtectedRoute component={ReportsPage} />}</Route>
       <Route path="/profile">{() => <ProtectedRoute component={UserProfilePage} />}</Route>
       <Route path="/zimra-settings">{() => <ProtectedRoute component={ZimraSettingsPage} />}</Route>
       <Route path="/zimra-logs">{() => <ProtectedRoute component={ZimraLogsPage} />}</Route>
@@ -225,11 +231,33 @@ function useSwAuthBridge() {
   }, []);
 }
 
+function BrandingMeta() {
+  const { brand } = useBranding();
+  
+  useEffect(() => {
+    document.title = brand.name + " | ZIMRA Compliant Fiscalization";
+    
+    // Update favicon dynamically
+    let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.getElementsByTagName('head')[0].appendChild(link);
+    }
+    // Note: We use the same favicon path for simplicity in development, 
+    // but in production these would be different assets in the build folder.
+    // However, the logo is definitely different.
+  }, [brand]);
+
+  return null;
+}
+
 function App() {
   useSwAuthBridge();
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
+        <BrandingMeta />
         <Toaster />
         <PwaInstallPrompt />
         <Router />

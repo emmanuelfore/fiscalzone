@@ -1,0 +1,2104 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FieldPOS — Point of Sale for Zimbabwean Businesses</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,500;1,700&family=Lora:ital,wght@1,400;1,500&display=swap"
+        rel="stylesheet" />
+    <style>
+        /* ─── PremiumColors tokens ─── */
+        :root {
+            --amber: #FF9500;
+            --amber-light: #FFB74D;
+            --bg-base: #0a0600;
+            --bg-card: #1a140a;
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.7);
+            --border: rgba(255, 149, 0, 0.2);
+
+            /* derived */
+            --amber-glow: rgba(255, 149, 0, 0.15);
+            --amber-glow-md: rgba(255, 149, 0, 0.25);
+            --card-hover: #221a0d;
+            --sans: 'Figtree', 'Helvetica Neue', Arial, sans-serif;
+            --serif: 'Lora', Georgia, serif;
+            --ease: cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            background: var(--bg-base);
+            color: var(--text-primary);
+            font-family: var(--sans);
+            font-size: 16px;
+            line-height: 1.5;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        a {
+            text-decoration: none;
+            color: inherit;
+        }
+
+        img {
+            display: block;
+            max-width: 100%;
+        }
+
+        /* ─── HERO PAGE — dark amber gradient replacing outseta yellow ─── */
+        .hero-page {
+            min-height: 100vh;
+            /* Deep dark base with amber radial glow — mirrors outseta gradient structure */
+            background:
+                radial-gradient(ellipse 55% 65% at 15% 55%, rgba(255, 149, 0, 0.18) 0%, transparent 60%),
+                radial-gradient(ellipse 55% 60% at 85% 60%, rgba(255, 183, 77, 0.12) 0%, transparent 60%),
+                radial-gradient(ellipse 80% 70% at 50% 20%, rgba(255, 149, 0, 0.22) 0%, rgba(255, 120, 0, 0.1) 40%, transparent 75%),
+                var(--bg-base);
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* subtle noise grain over hero */
+        .hero-page::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            z-index: 0;
+            opacity: 0.025;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+            pointer-events: none;
+        }
+
+        /* ─── NAV ─── */
+        .navbar {
+            position: relative;
+            z-index: 10;
+            padding: 0 32px;
+            border-bottom: 1px solid var(--border);
+            background: rgba(10, 6, 0, 0.7);
+            backdrop-filter: blur(16px);
+        }
+
+        .migration-banner {
+            position: absolute;
+            top: 50%;
+            right: 32px;
+            transform: translateY(-50%);
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 7px 16px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+        }
+
+        .migration-banner strong {
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .migration-banner .arr {
+            color: var(--amber);
+        }
+
+        .nav-inner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 64px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .nav-logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .nav-logo-mark {
+            width: 32px;
+            height: 32px;
+            background: var(--amber);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .nav-logo-mark svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        .nav-logo-text {
+            font-size: 1.15rem;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            color: var(--text-primary);
+        }
+
+        .nav-logo-text span {
+            color: var(--amber);
+        }
+
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+        }
+
+        .nav-link {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            padding: 7px 14px;
+            border-radius: 8px;
+            transition: color 0.15s, background 0.15s;
+        }
+
+        .nav-link:hover {
+            color: var(--text-primary);
+            background: var(--amber-glow);
+        }
+
+        .nav-link svg {
+            width: 13px;
+            height: 13px;
+            opacity: 0.5;
+        }
+
+        .btn-signup-nav {
+            background: var(--amber);
+            color: var(--bg-base);
+            font-size: 0.85rem;
+            font-weight: 800;
+            padding: 10px 22px;
+            border-radius: 8px;
+            transition: all 0.15s;
+            box-shadow: 0 2px 12px rgba(255, 149, 0, 0.35);
+        }
+
+        .btn-signup-nav:hover {
+            background: var(--amber-light);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 24px rgba(255, 149, 0, 0.45);
+        }
+
+        .btn-login {
+            display: none !important;
+        }
+
+        /* ─── WHATSAPP BUBBLE ─── */
+        .wa-bubble {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 60px;
+            height: 60px;
+            background: #25D366;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            animation: wa-bounce 2s infinite;
+        }
+
+        .wa-bubble:hover {
+            transform: scale(1.1) rotate(5deg);
+            background: #20ba59;
+            box-shadow: 0 8px 32px rgba(37, 211, 102, 0.4);
+        }
+
+        .wa-bubble svg {
+            width: 30px;
+            height: 30px;
+        }
+
+        @keyframes wa-bounce {
+
+            0%,
+            100% {
+                transform: translateY(0);
+            }
+
+            50% {
+                transform: translateY(-10px);
+            }
+        }
+
+        /* ─── HERO BODY ─── */
+        .hero-body {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 56px 32px 0;
+            text-align: center;
+            position: relative;
+            z-index: 2;
+        }
+
+        /* verified badge */
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 100px;
+            padding: 7px 16px 7px 10px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            margin-bottom: 36px;
+        }
+
+        .hero-badge svg {
+            width: 20px;
+            height: 20px;
+            flex-shrink: 0;
+        }
+
+        .hero-badge-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--amber);
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1)
+            }
+
+            50% {
+                opacity: 0.6;
+                transform: scale(0.85)
+            }
+        }
+
+        /* GIANT headline — outseta weight + tracking */
+        .hero-h1 {
+            font-family: var(--sans);
+            font-size: clamp(4rem, 10vw, 8.5rem);
+            font-weight: 900;
+            line-height: 1.0;
+            letter-spacing: -0.04em;
+            color: var(--text-primary);
+            margin-bottom: 28px;
+        }
+
+        /* amber glow on key word */
+        .hero-h1 .glow-word {
+            color: var(--amber);
+            text-shadow: 0 0 60px rgba(255, 149, 0, 0.4);
+        }
+
+        /* italic serif sub — outseta technique */
+        .hero-sub {
+            font-family: var(--serif);
+            font-size: clamp(1.05rem, 2vw, 1.4rem);
+            font-style: italic;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin-bottom: 40px;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .hero-sub a {
+            color: var(--text-primary);
+            font-weight: 700;
+            text-decoration: underline;
+            text-decoration-color: var(--amber);
+            text-underline-offset: 3px;
+            text-decoration-thickness: 1.5px;
+        }
+
+        .hero-sub a:hover {
+            color: var(--amber);
+        }
+
+        /* CTAs — outseta shape, amber palette */
+        .hero-ctas {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 48px;
+            flex-wrap: wrap;
+        }
+
+        .btn-cta-amber {
+            background: var(--amber);
+            color: var(--bg-base);
+            font-family: var(--sans);
+            font-size: 1rem;
+            font-weight: 800;
+            padding: 16px 32px;
+            border-radius: 10px;
+            box-shadow: 0 4px 24px rgba(255, 149, 0, 0.4);
+            transition: all 0.2s var(--ease);
+            display: inline-block;
+        }
+
+        .btn-cta-amber:hover {
+            background: var(--amber-light);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(255, 149, 0, 0.5);
+        }
+
+        .btn-cta-outline {
+            background: var(--bg-card);
+            color: var(--text-primary);
+            font-family: var(--sans);
+            font-size: 1rem;
+            font-weight: 700;
+            padding: 15px 32px;
+            border-radius: 10px;
+            border: 1.5px solid var(--border);
+            transition: all 0.2s;
+        }
+
+        .btn-cta-outline:hover {
+            border-color: var(--amber);
+            background: var(--amber-glow);
+        }
+
+        /* use-case marquee — outseta caps style */
+        .use-cases {
+            display: flex;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+            margin-bottom: 56px;
+        }
+
+        .uc-fade-l,
+        .uc-fade-r {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100px;
+            z-index: 2;
+            pointer-events: none;
+        }
+
+        .uc-fade-l {
+            left: 0;
+            background: linear-gradient(to right, var(--bg-base), transparent);
+        }
+
+        .uc-fade-r {
+            right: 0;
+            background: linear-gradient(to left, var(--bg-base), transparent);
+        }
+
+        .uc-track {
+            display: flex;
+            align-items: center;
+            animation: marquee 28s linear infinite;
+            width: max-content;
+        }
+
+        @keyframes marquee {
+            from {
+                transform: translateX(0)
+            }
+
+            to {
+                transform: translateX(-50%)
+            }
+        }
+
+        .uc-item {
+            font-size: 0.78rem;
+            font-weight: 800;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.3);
+            padding: 0 24px;
+            white-space: nowrap;
+        }
+
+        .uc-sep {
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: var(--amber);
+            opacity: 0.5;
+            flex-shrink: 0;
+        }
+
+        /* handwritten annotations */
+        .annotation {
+            position: absolute;
+            font-family: 'Segoe Script', 'Comic Sans MS', 'Brush Script MT', cursive;
+            font-size: 0.78rem;
+            font-weight: 700;
+            line-height: 1.35;
+            pointer-events: none;
+        }
+
+        .ann-left {
+            left: 48px;
+            bottom: 220px;
+            color: var(--amber);
+            transform: rotate(-4deg);
+        }
+
+        .ann-right {
+            right: 60px;
+            bottom: 230px;
+            color: var(--amber-light);
+            transform: rotate(3deg);
+        }
+
+        /* customer cards at bottom */
+        .customer-cards {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            position: relative;
+            z-index: 2;
+        }
+
+        .ccard {
+            border: 1px solid var(--border);
+            border-radius: 16px 16px 0 0;
+            overflow: hidden;
+            height: 240px;
+            box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .ccard-inner {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Card 1 — very dark */
+        .cc1 {
+            background: #0f0a05;
+        }
+
+        .cc1-header {
+            background: var(--bg-card);
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .cc-dots {
+            display: flex;
+            gap: 5px;
+        }
+
+        .ccdot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .cc1-body {
+            flex: 1;
+            padding: 20px 16px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .cc1-title {
+            font-size: 1.3rem;
+            font-weight: 900;
+            color: var(--text-primary);
+            letter-spacing: -0.03em;
+            line-height: 1.15;
+            margin-bottom: 10px;
+        }
+
+        .cc1-title em {
+            font-style: italic;
+            color: var(--amber);
+        }
+
+        .cc-author {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: auto;
+        }
+
+        .cc-avatar {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--amber), var(--amber-light));
+            flex-shrink: 0;
+        }
+
+        .cc-name {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        .cc-tag {
+            display: inline-flex;
+            gap: 4px;
+            margin-top: 6px;
+        }
+
+        .cc-pill {
+            font-size: 0.6rem;
+            font-weight: 800;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .cc-pill-amber {
+            background: var(--amber);
+            color: var(--bg-base);
+        }
+
+        .cc-pill-ghost {
+            background: var(--amber-glow);
+            color: var(--amber);
+            border: 1px solid var(--border);
+        }
+
+        /* Card 2 — amber themed */
+        .cc2 {
+            background: var(--amber);
+        }
+
+        .cc2-header {
+            background: rgba(0, 0, 0, 0.15);
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .cc2-body {
+            flex: 1;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .cc2-label {
+            font-size: 0.62rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: rgba(0, 0, 0, 0.45);
+            margin-bottom: 8px;
+        }
+
+        .cc2-title {
+            font-size: 1.4rem;
+            font-weight: 900;
+            color: var(--bg-base);
+            line-height: 1.1;
+            letter-spacing: -0.03em;
+        }
+
+        .cc2-footer {
+            padding: 0 16px 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .cc2-avatar {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .cc2-handle {
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: rgba(0, 0, 0, 0.5);
+        }
+
+        /* Card 3 — card bg */
+        .cc3 {
+            background: var(--bg-card);
+        }
+
+        .cc3-header {
+            background: var(--bg-base);
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .cc3-header-label {
+            font-size: 0.62rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+        }
+
+        .cc3-live {
+            background: var(--amber);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.6rem;
+            font-weight: 900;
+            color: var(--bg-base);
+        }
+
+        .cc3-body {
+            padding: 16px;
+        }
+
+        .cc3-title {
+            font-size: 1.05rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            letter-spacing: -0.02em;
+            margin-bottom: 6px;
+        }
+
+        .cc3-sub {
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            line-height: 1.5;
+            margin-bottom: 10px;
+        }
+
+        .cc3-pills {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .cc3-pill {
+            font-size: 0.64rem;
+            font-weight: 700;
+            padding: 3px 9px;
+            border-radius: 100px;
+            border: 1px solid var(--border);
+            color: var(--amber);
+            background: var(--amber-glow);
+        }
+
+        /* ─── TICKER ─── */
+        .ticker {
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+            overflow: hidden;
+            padding: 11px 0;
+            background: var(--bg-card);
+        }
+
+        .ticker-track {
+            display: flex;
+            animation: ticker 20s linear infinite;
+            width: max-content;
+        }
+
+        @keyframes ticker {
+            from {
+                transform: translateX(0)
+            }
+
+            to {
+                transform: translateX(-50%)
+            }
+        }
+
+        .ticker-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 0 28px;
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            border-right: 1px solid var(--border);
+        }
+
+        .ticker-dot {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: var(--amber);
+            flex-shrink: 0;
+        }
+
+        /* ─── SECTION BASE ─── */
+        .section {
+            padding: 96px 0;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding-left: 32px;
+            padding-right: 32px;
+        }
+
+        .sec-eyebrow {
+            font-size: 0.72rem;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--amber);
+            margin-bottom: 12px;
+        }
+
+        .sec-h2 {
+            font-family: var(--sans);
+            font-size: clamp(2rem, 4vw, 3.5rem);
+            font-weight: 900;
+            letter-spacing: -0.04em;
+            line-height: 1.06;
+            color: var(--text-primary);
+        }
+
+        .sec-h2 em {
+            font-style: italic;
+            font-family: var(--serif);
+            font-weight: 400;
+            color: var(--amber);
+        }
+
+        .sec-sub {
+            font-size: 1.05rem;
+            color: var(--text-secondary);
+            line-height: 1.65;
+            margin-top: 14px;
+            max-width: 520px;
+        }
+
+        /* ─── WHY CARDS ─── */
+        .why-cards {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0;
+            margin-top: 52px;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        .why-card {
+            padding: 32px 24px;
+            border-right: 1px solid var(--border);
+            background: var(--bg-card);
+            transition: background 0.2s;
+        }
+
+        .why-card:last-child {
+            border-right: none;
+        }
+
+        .why-card:hover {
+            background: var(--card-hover);
+        }
+
+        .wc-num {
+            font-size: 0.72rem;
+            font-weight: 800;
+            color: var(--amber);
+            letter-spacing: 0.06em;
+            margin-bottom: 14px;
+        }
+
+        .wc-title {
+            font-size: 1rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .wc-body {
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+            line-height: 1.65;
+        }
+
+        /* ─── BENTO FEATURES ─── */
+        .bento {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 12px;
+            margin-top: 52px;
+        }
+
+        .bc {
+            border-radius: 16px;
+            padding: 28px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+            position: relative;
+            transition: transform 0.2s var(--ease), box-shadow 0.2s, border-color 0.2s;
+        }
+
+        .bc:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(255, 149, 0, 0.1);
+            border-color: rgba(255, 149, 0, 0.35);
+        }
+
+        .bc-dark {
+            background: var(--bg-card);
+        }
+
+        .bc-amber {
+            background: linear-gradient(135deg, #1a0e00, #2a1800);
+            border-color: rgba(255, 149, 0, 0.3);
+        }
+
+        .bc-deeper {
+            background: var(--bg-base);
+        }
+
+        .bc-1 {
+            grid-column: span 7;
+            min-height: 280px;
+        }
+
+        .bc-2 {
+            grid-column: span 5;
+        }
+
+        .bc-3 {
+            grid-column: span 5;
+        }
+
+        .bc-4 {
+            grid-column: span 7;
+        }
+
+        .bc-5 {
+            grid-column: span 4;
+        }
+
+        .bc-6 {
+            grid-column: span 4;
+        }
+
+        .bc-7 {
+            grid-column: span 4;
+        }
+
+        .bc-tag {
+            font-size: 0.68rem;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--amber);
+            margin-bottom: 10px;
+        }
+
+        .bc h3 {
+            font-size: 1.05rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .bc p {
+            font-size: 0.83rem;
+            color: var(--text-secondary);
+            line-height: 1.65;
+        }
+
+        .mini-bars {
+            display: flex;
+            align-items: flex-end;
+            gap: 4px;
+            height: 72px;
+            margin-top: 24px;
+        }
+
+        .mbar {
+            flex: 1;
+            border-radius: 3px 3px 0 0;
+            background: rgba(255, 149, 0, 0.15);
+        }
+
+        .mbar.hi {
+            background: var(--amber);
+        }
+
+        .mbar.md {
+            background: rgba(255, 183, 77, 0.45);
+        }
+
+        .cpills {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-top: 18px;
+        }
+
+        .cpill {
+            padding: 5px 14px;
+            border-radius: 100px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            border: 1px solid var(--border);
+            color: var(--amber);
+            background: var(--amber-glow);
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            margin-top: 18px;
+            background: var(--bg-base);
+            border: 1px solid var(--border);
+            border-radius: 100px;
+            padding: 6px 14px;
+            font-size: 0.77rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .status-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #22c55e;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .big-price {
+            margin-top: 16px;
+            font-size: 3.8rem;
+            font-weight: 900;
+            letter-spacing: -0.05em;
+            color: var(--amber);
+            line-height: 1;
+        }
+
+        .big-price sup {
+            font-size: 1.4rem;
+            vertical-align: top;
+            margin-top: 8px;
+        }
+
+        .big-price sub {
+            font-size: 1rem;
+            font-weight: 500;
+            letter-spacing: 0;
+            color: var(--text-secondary);
+        }
+
+        /* ─── HOW IT WORKS ─── */
+        .how-section {
+            background: var(--bg-card);
+            padding: 96px 0;
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .how-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 32px;
+        }
+
+        .how-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 80px;
+            align-items: center;
+            margin-top: 60px;
+        }
+
+        .steps {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .step {
+            display: flex;
+            gap: 20px;
+            padding: 24px 0;
+            border-bottom: 1px solid var(--border);
+            transition: padding-left 0.2s;
+        }
+
+        .step:last-child {
+            border-bottom: none;
+        }
+
+        .step:hover {
+            padding-left: 6px;
+        }
+
+        .step-n {
+            font-size: 0.7rem;
+            font-weight: 800;
+            color: var(--amber);
+            letter-spacing: 0.06em;
+            min-width: 28px;
+            padding-top: 3px;
+        }
+
+        .step h4 {
+            font-size: 0.95rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .step p {
+            font-size: 0.83rem;
+            color: var(--text-secondary);
+            line-height: 1.65;
+        }
+
+        .receipt-card {
+            background: var(--bg-base);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 32px;
+        }
+
+        .receipt {
+            font-family: 'Courier New', monospace;
+            font-size: 0.77rem;
+            color: var(--text-primary);
+        }
+
+        .rhead {
+            text-align: center;
+            margin-bottom: 14px;
+        }
+
+        .rhead-name {
+            font-family: var(--sans);
+            font-size: 0.9rem;
+            font-weight: 900;
+            letter-spacing: -0.03em;
+            color: var(--amber);
+        }
+
+        .rhead-sub {
+            font-size: 0.68rem;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        .receipt hr {
+            border: none;
+            border-top: 1px dashed var(--border);
+            margin: 10px 0;
+        }
+
+        .rrow {
+            display: flex;
+            justify-content: space-between;
+            margin: 4px 0;
+            color: var(--text-secondary);
+        }
+
+        .rrow.rtotal {
+            font-family: var(--sans);
+            font-weight: 900;
+            border-top: 2px solid var(--amber);
+            padding-top: 8px;
+            margin-top: 6px;
+            font-size: 0.85rem;
+            color: var(--text-primary);
+        }
+
+        .rfiscal {
+            margin-top: 12px;
+            text-align: center;
+            padding: 8px;
+            background: var(--bg-card);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            font-size: 0.65rem;
+            color: var(--text-secondary);
+        }
+
+        .rfiscal-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            margin-top: 6px;
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.25);
+            border-radius: 100px;
+            padding: 3px 10px;
+            font-family: var(--sans);
+            font-size: 0.68rem;
+            font-weight: 700;
+            color: #22c55e;
+        }
+
+        /* ─── PRICING ─── */
+        .pricing-section {
+            background: var(--bg-base);
+            padding: 96px 0;
+        }
+
+        .pricing-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 32px;
+            text-align: center;
+        }
+
+        .pricing-wrap {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            max-width: 780px;
+            margin: 52px auto 0;
+        }
+
+        .pc {
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 36px;
+            background: var(--bg-card);
+            transition: box-shadow 0.2s, border-color 0.2s;
+        }
+
+        .pc:hover {
+            border-color: rgba(255, 149, 0, 0.4);
+            box-shadow: 0 8px 32px rgba(255, 149, 0, 0.1);
+        }
+
+        .pc-amber {
+            background: linear-gradient(145deg, #2a1800, #1a0e00);
+            border-color: rgba(255, 149, 0, 0.35);
+        }
+
+        .pc-plan {
+            font-size: 0.7rem;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+        }
+
+        .pc-amber .pc-plan {
+            color: rgba(255, 183, 77, 0.6);
+        }
+
+        .pc-price {
+            display: flex;
+            align-items: baseline;
+            gap: 2px;
+            margin-bottom: 4px;
+        }
+
+        .pc-sym {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+        }
+
+        .pc-amber .pc-sym {
+            color: rgba(255, 183, 77, 0.7);
+        }
+
+        .pc-amt {
+            font-size: 4rem;
+            font-weight: 900;
+            letter-spacing: -0.05em;
+            line-height: 1;
+            color: var(--text-primary);
+        }
+
+        .pc-amber .pc-amt {
+            color: var(--amber);
+        }
+
+        .pc-mo {
+            font-size: 0.88rem;
+            color: var(--text-secondary);
+        }
+
+        .pc-setup {
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            margin-bottom: 24px;
+            opacity: 0.6;
+        }
+
+        .pc-div {
+            border: none;
+            border-top: 1px solid var(--border);
+            margin: 20px 0;
+        }
+
+        .pc-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 28px;
+        }
+
+        .pc-list li {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            font-size: 0.84rem;
+            color: var(--text-secondary);
+        }
+
+        .pc-list li::before {
+            content: '✓';
+            font-size: 0.68rem;
+            font-weight: 900;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--amber-glow);
+            color: var(--amber);
+            flex-shrink: 0;
+            border: 1px solid var(--border);
+        }
+
+        .btn-pc {
+            display: block;
+            text-align: center;
+            width: 100%;
+            font-family: var(--sans);
+            font-size: 0.88rem;
+            font-weight: 800;
+            padding: 14px;
+            border-radius: 10px;
+            transition: all 0.18s;
+        }
+
+        .btn-pc-ghost {
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            background: transparent;
+        }
+
+        .btn-pc-ghost:hover {
+            border-color: var(--amber);
+            background: var(--amber-glow);
+        }
+
+        .btn-pc-amber {
+            background: var(--amber);
+            color: var(--bg-base);
+            box-shadow: 0 2px 16px rgba(255, 149, 0, 0.35);
+        }
+
+        .btn-pc-amber:hover {
+            background: var(--amber-light);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 24px rgba(255, 149, 0, 0.45);
+        }
+
+        /* ─── COMPLIANCE ─── */
+        .compliance {
+            padding: 56px 0;
+            border-top: 1px solid var(--border);
+            background: var(--bg-card);
+        }
+
+        .comp-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+            max-width: 660px;
+            margin: 0 auto;
+            background: var(--bg-base);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 28px 32px;
+        }
+
+        .comp-icon {
+            flex-shrink: 0;
+            width: 32px;
+            height: 32px;
+            color: #22c55e;
+        }
+
+        .comp-icon svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .comp-text h4 {
+            font-size: 0.9rem;
+            font-weight: 800;
+            letter-spacing: -0.01em;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .comp-text p {
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+            line-height: 1.65;
+        }
+
+        .comp-text a {
+            color: var(--amber);
+            font-weight: 700;
+        }
+
+        /* ─── CTA SECTION ─── */
+        .cta-section {
+            background: var(--bg-card);
+            padding: 100px 0;
+            text-align: center;
+            overflow: hidden;
+            border-top: 1px solid var(--border);
+            position: relative;
+        }
+
+        /* amber glow behind CTA */
+        .cta-section::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(ellipse, rgba(255, 149, 0, 0.12) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .cta-section h2 {
+            font-family: var(--sans);
+            font-size: clamp(2.8rem, 6vw, 5.5rem);
+            font-weight: 900;
+            letter-spacing: -0.04em;
+            line-height: 1.05;
+            color: var(--text-primary);
+            margin-bottom: 18px;
+            max-width: 720px;
+            margin-left: auto;
+            margin-right: auto;
+            position: relative;
+        }
+
+        .cta-section h2 em {
+            font-style: italic;
+            font-family: var(--serif);
+            font-weight: 400;
+            color: var(--amber);
+        }
+
+        .cta-section p {
+            font-size: 1rem;
+            color: var(--text-secondary);
+            margin-bottom: 40px;
+            position: relative;
+        }
+
+        .cta-btns {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: center;
+            position: relative;
+        }
+
+        .btn-cta-primary {
+            background: var(--amber);
+            color: var(--bg-base);
+            font-family: var(--sans);
+            font-size: 0.95rem;
+            font-weight: 900;
+            padding: 16px 32px;
+            border-radius: 10px;
+            box-shadow: 0 4px 24px rgba(255, 149, 0, 0.4);
+            transition: all 0.2s;
+        }
+
+        .btn-cta-primary:hover {
+            background: var(--amber-light);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(255, 149, 0, 0.5);
+        }
+
+        .store-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 11px 20px;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .store-btn:hover {
+            border-color: rgba(255, 149, 0, 0.4);
+            background: var(--amber-glow);
+            transform: translateY(-2px);
+        }
+
+        .store-btn svg {
+            width: 22px;
+            height: 22px;
+            color: var(--text-primary);
+            flex-shrink: 0;
+        }
+
+        .store-btn-label {
+            display: block;
+            font-size: 0.6rem;
+            color: var(--text-secondary);
+            font-weight: 700;
+            letter-spacing: 0.07em;
+            text-transform: uppercase;
+        }
+
+        .store-btn-name {
+            display: block;
+            font-size: 0.88rem;
+            font-weight: 800;
+            color: var(--text-primary);
+        }
+
+        .store-soon {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: var(--amber);
+            color: var(--bg-base);
+            font-size: 0.55rem;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            padding: 2px 7px;
+            border-radius: 4px;
+        }
+
+        /* ─── FOOTER ─── */
+        .footer {
+            border-top: 1px solid var(--border);
+            padding: 28px 0;
+            background: var(--bg-base);
+        }
+
+        .foot-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 32px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .foot-logo {
+            font-family: var(--sans);
+            font-size: 1.1rem;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            color: var(--text-primary);
+        }
+
+        .foot-logo span {
+            color: var(--amber);
+        }
+
+        .foot-copy {
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+        }
+
+        /* ─── REVEALS ─── */
+        .reveal {
+            opacity: 0;
+            transform: translateY(18px);
+            transition: opacity 0.6s var(--ease), transform 0.6s var(--ease);
+        }
+
+        .reveal.in {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .d1 {
+            transition-delay: .08s;
+        }
+
+        .d2 {
+            transition-delay: .16s;
+        }
+
+        .d3 {
+            transition-delay: .24s;
+        }
+
+        .d4 {
+            transition-delay: .32s;
+        }
+
+        /* ─── RESPONSIVE ─── */
+        @media(max-width:900px) {
+
+            .nav-links,
+            .migration-banner {
+                display: none;
+            }
+
+            .annotation {
+                display: none;
+            }
+
+            .why-cards,
+            .customer-cards {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .bc-1,
+            .bc-2,
+            .bc-3,
+            .bc-4,
+            .bc-5,
+            .bc-6,
+            .bc-7 {
+                grid-column: span 12;
+            }
+
+            .how-grid {
+                grid-template-columns: 1fr;
+                gap: 48px;
+            }
+
+            .pricing-wrap {
+                grid-template-columns: 1fr;
+                max-width: 420px;
+            }
+
+            .foot-inner {
+                flex-direction: column;
+                gap: 12px;
+                text-align: center;
+            }
+        }
+
+        @media(max-width:600px) {
+            .hero-h1 {
+                font-size: 3.2rem;
+            }
+
+            .why-cards,
+            .customer-cards {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- ═══ HERO ═══ -->
+    <div class="hero-page">
+
+        <!-- NAV -->
+        <nav class="navbar">
+            <div class="migration-banner">
+                Looking for a <strong>Vend</strong> alternative? <span class="arr">→</span>
+            </div>
+            <div class="nav-inner">
+                <div class="nav-logo">
+                    <div class="nav-logo-mark">
+                        <svg viewBox="0 0 18 18" fill="none">
+                            <rect x="2" y="2" width="6" height="6" rx="1.5" fill="#0a0600" />
+                            <rect x="10" y="2" width="6" height="6" rx="1.5" fill="#0a0600" opacity="0.7" />
+                            <rect x="2" y="10" width="6" height="6" rx="1.5" fill="#0a0600" opacity="0.7" />
+                            <rect x="10" y="10" width="6" height="6" rx="1.5" fill="#0a0600" opacity="0.4" />
+                        </svg>
+                    </div>
+                    <span class="nav-logo-text">Field<span>POS</span></span>
+                </div>
+                <div class="nav-links">
+                    <a class="nav-link" href="#features">Features <svg viewBox="0 0 14 14" fill="none">
+                            <path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                                stroke-linejoin="round" />
+                        </svg></a>
+                    <a class="nav-link" href="#pricing">Pricing</a>
+                    <a class="nav-link" href="#how">How it works</a>
+                </div>
+                <div class="nav-right">
+                    <a class="btn-signup-nav"
+                        href="https://wa.me/263712270914?text=I'm%20interested%20in%20FieldPOS">Get Started</a>
+                </div>
+            </div>
+        </nav>
+
+        <!-- HERO BODY -->
+        <div class="hero-body">
+
+
+
+            <h1 class="hero-h1 reveal d1">
+                Sell More.<br>Work <span class="glow-word">Less.</span>
+            </h1>
+
+            <p class="hero-sub reveal d2">
+                Everything you need to grow, from <a href="#features">fast checkout</a> and <a href="#features">offline
+                    selling</a> to <a href="#features">analytics</a> and <a href="#features">inventory</a>.
+            </p>
+
+            <div class="hero-ctas reveal d2">
+                <a href="fieldpos.apk" class="btn-cta-amber" download>Download the App (.apk)</a>
+                <a href="https://wa.me/263712270914?text=I'm%20interested%20in%20FieldPOS" class="btn-cta-outline">WhatsApp Support →</a>
+            </div>
+
+            <!-- use-case marquee -->
+            <div class="use-cases reveal d3">
+                <div class="uc-fade-l"></div>
+                <div class="uc-fade-r"></div>
+                <div class="uc-track">
+                    <span class="uc-item">Retail Stores</span><span class="uc-sep"></span>
+                    <span class="uc-item">Restaurants</span><span class="uc-sep"></span>
+                    <span class="uc-item">Salons</span><span class="uc-sep"></span>
+                    <span class="uc-item">Supermarkets</span><span class="uc-sep"></span>
+                    <span class="uc-item">Hardware Stores</span><span class="uc-sep"></span>
+                    <span class="uc-item">Tuck Shops</span><span class="uc-sep"></span>
+                    <span class="uc-item">Pharmacies</span><span class="uc-sep"></span>
+                    <span class="uc-item">Wholesale</span><span class="uc-sep"></span>
+                    <span class="uc-item">Market Traders</span><span class="uc-sep"></span>
+                    <span class="uc-item">Retail Stores</span><span class="uc-sep"></span>
+                    <span class="uc-item">Restaurants</span><span class="uc-sep"></span>
+                    <span class="uc-item">Salons</span><span class="uc-sep"></span>
+                    <span class="uc-item">Supermarkets</span><span class="uc-sep"></span>
+                    <span class="uc-item">Hardware Stores</span><span class="uc-sep"></span>
+                    <span class="uc-item">Tuck Shops</span><span class="uc-sep"></span>
+                    <span class="uc-item">Pharmacies</span><span class="uc-sep"></span>
+                    <span class="uc-item">Wholesale</span><span class="uc-sep"></span>
+                    <span class="uc-item">Market Traders</span><span class="uc-sep"></span>
+                </div>
+            </div>
+
+
+            <!-- customer cards -->
+            <div class="customer-cards reveal d3">
+                <div class="ccard cc1">
+                    <div class="ccard-inner">
+                        <div class="cc1-header">
+                            <div class="cc-dots">
+                                <div class="ccdot" style="background:#ff5f57"></div>
+                                <div class="ccdot" style="background:#febc2e"></div>
+                                <div class="ccdot" style="background:#28c840"></div>
+                            </div>
+                            <div
+                                style="font-size:0.62rem;color:var(--text-secondary);margin-left:8px;font-weight:600;opacity:0.5">
+                                fieldpos.co.zw/demo</div>
+                        </div>
+                        <div class="cc1-body">
+                            <div class="cc1-title">Harare<br>CBD <em>Store</em></div>
+                            <div class="cc-tag"><span class="cc-pill cc-pill-amber">POS</span><span
+                                    class="cc-pill cc-pill-ghost">Retail</span></div>
+                            <div class="cc-author" style="margin-top:12px">
+                                <div class="cc-avatar"></div>
+                                <div class="cc-name">@tendaim · Harare</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ccard cc2">
+                    <div class="ccard-inner">
+                        <div class="cc2-header">
+                            <div class="cc-dots">
+                                <div class="ccdot" style="background:rgba(0,0,0,0.3)"></div>
+                                <div class="ccdot" style="background:rgba(0,0,0,0.3)"></div>
+                                <div class="ccdot" style="background:rgba(0,0,0,0.3)"></div>
+                            </div>
+                            <div
+                                style="font-size:0.62rem;color:rgba(0,0,0,0.45);margin-left:8px;font-weight:800;letter-spacing:0.06em">
+                                BULAWAYO FRESH</div>
+                        </div>
+                        <div class="cc2-body">
+                            <div class="cc2-label">Built with FieldPOS</div>
+                            <div class="cc2-title">THE FASTEST<br>CHECKOUT<br>IN BULAWAYO</div>
+                        </div>
+                        <div class="cc2-footer">
+                            <div class="cc2-avatar"></div>
+                            <div class="cc2-handle">@chipo_byo</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ccard cc3">
+                    <div class="ccard-inner">
+                        <div class="cc3-header">
+                            <div class="cc3-header-label">Mutare Pharmacy</div>
+                            <div class="cc3-live">LIVE</div>
+                        </div>
+                        <div class="cc3-body">
+                            <div class="cc3-title">MedPlus Pharmacy Chain</div>
+                            <div class="cc3-sub">3 branches · 400+ daily transactions · offline ready</div>
+                            <div class="cc3-pills"><span class="cc3-pill">USD</span><span
+                                    class="cc3-pill">ZWG</span><span class="cc3-pill">Multi-branch</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ REST ═══ -->
+
+    <!-- TICKER -->
+    <div class="ticker">
+        <div class="ticker-track">
+            <div class="ticker-item"><span class="ticker-dot"></span>Works on any phone</div>
+            <div class="ticker-item"><span class="ticker-dot"></span>No hardware required</div>
+            <div class="ticker-item"><span class="ticker-dot"></span>Offline capable</div>
+            <div class="ticker-item"><span class="ticker-dot"></span>USD · ZWL · ZWG</div>
+            <div class="ticker-item"><span class="ticker-dot"></span>ZIMRA compliant</div>
+            <div class="ticker-item"><span class="ticker-dot"></span>From $2/month</div>
+            <div class="ticker-item"><span class="ticker-dot"></span>Multi-branch ready</div>
+            <div class="ticker-item"><span class="ticker-dot"></span>10-second checkout</div>
+            <div class="ticker-item"><span class="ticker-dot"></span>Works on any phone</div>
+            <div class="ticker-item"><span class="ticker-dot"></span>No hardware required</div>
+            <div class="ticker-item"><span class="ticker-dot"></span>Offline capable</div>
+            <div class="ticker-item"><span class="ticker-dot"></span>USD · ZWG</div>
+            <div class="ticker-item"><span class="ticker-dot"></span>ZIMRA compliant</div>
+            <div class="ticker-item"><span class="ticker-dot"></span>From $2/month</div>
+            <div class="ticker-item"><span class="ticker-dot"></span>Multi-branch ready</div>
+            <div class="ticker-item"><span class="ticker-dot"></span>10-second checkout</div>
+        </div>
+    </div>
+
+    <!-- WHY -->
+    <div class="section">
+        <p class="sec-eyebrow reveal">Why FieldPOS</p>
+        <h2 class="sec-h2 reveal d1">Built different. <em>On purpose.</em></h2>
+        <div class="why-cards">
+            <div class="why-card reveal">
+                <div class="wc-num">01</div>
+                <div class="wc-title">No hardware needed</div>
+                <div class="wc-body">Your phone is your terminal. No card machines, printers, or equipment to buy or
+                    lease.</div>
+            </div>
+            <div class="why-card reveal d1">
+                <div class="wc-num">02</div>
+                <div class="wc-title">10-second checkout</div>
+                <div class="wc-body">Tap a product, take payment, done. Faster than any traditional POS — your queue
+                    will notice.</div>
+            </div>
+            <div class="why-card reveal d2">
+                <div class="wc-num">03</div>
+                <div class="wc-title">Offline always</div>
+                <div class="wc-body">Load shedding, bad signal — doesn't matter. Runs locally, syncs when you're back
+                    online.</div>
+            </div>
+            <div class="why-card reveal d3">
+                <div class="wc-num">04</div>
+                <div class="wc-title">$2 a month</div>
+                <div class="wc-body">No per-transaction fees, no hardware costs, no surprises. Full system for every
+                    business.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- FEATURES -->
+    <div id="features" class="section" style="padding-top:0">
+        <p class="sec-eyebrow reveal">Features</p>
+        <h2 class="sec-h2 reveal d1">Everything your business <em>actually needs.</em></h2>
+        <p class="sec-sub reveal d2">Built for Harare at 8am on a Monday, during load shedding, with a queue at the
+            door.</p>
+        <div class="bento">
+            <div class="bc bc-1 bc-dark reveal">
+                <p class="bc-tag">Analytics</p>
+                <h3>Real-time sales insights</h3>
+                <p>Best-selling products, busiest hours, profit margins — all live.</p>
+                <div class="mini-bars">
+                    <div class="mbar" style="height:30%"></div>
+                    <div class="mbar" style="height:52%"></div>
+                    <div class="mbar" style="height:42%"></div>
+                    <div class="mbar hi" style="height:88%"></div>
+                    <div class="mbar md" style="height:70%"></div>
+                    <div class="mbar hi" style="height:100%"></div>
+                    <div class="mbar" style="height:62%"></div>
+                    <div class="mbar md" style="height:78%"></div>
+                </div>
+            </div>
+            <div class="bc bc-2 bc-amber reveal d1">
+                <p class="bc-tag">Payments</p>
+                <h3>Multi-currency</h3>
+                <p>USD, ZWL, ZWG. Live rates and instant conversions.</p>
+                <div class="cpills"><span class="cpill">USD</span><span class="cpill">ZWG</span></div>
+            </div>
+            <div class="bc bc-3 bc-darker reveal" style="background:#0f0a05">
+                <p class="bc-tag">Reliability</p>
+                <h3>Works without internet</h3>
+                <p>Every sale stored locally. No signal, no problem.</p>
+                <div class="status-pill"><span class="status-dot"></span>Syncing 14 offline sales</div>
+            </div>
+            <div class="bc bc-4 bc-amber reveal d1">
+                <p class="bc-tag">Inventory</p>
+                <h3>Smart stock management</h3>
+                <p>Live stock counts, low-stock alerts, automatic deduction on every sale.</p>
+                <div class="mini-bars" style="margin-top:20px">
+                    <div class="mbar" style="height:60%"></div>
+                    <div class="mbar hi" style="height:100%"></div>
+                    <div class="mbar" style="height:45%"></div>
+                    <div class="mbar md" style="height:80%"></div>
+                    <div class="mbar" style="height:55%"></div>
+                    <div class="mbar hi" style="height:90%"></div>
+                </div>
+            </div>
+            <div class="bc bc-5 bc-dark reveal">
+                <p class="bc-tag">Pricing</p>
+                <h3>Radically affordable</h3>
+                <p>Full features for every business.</p>
+                <div class="big-price"><sup>$</sup>2<sub>/mo</sub></div>
+            </div>
+            <div class="bc bc-6 bc-dark reveal d1">
+                <p class="bc-tag">Scale</p>
+                <h3>Multi-branch</h3>
+                <p>Harare, Bulawayo, Mutare — your whole business in one view.</p>
+            </div>
+            <div class="bc bc-7 bc-dark reveal d2">
+                <p class="bc-tag">Reports</p>
+                <h3>Daily summaries</h3>
+                <p>Automatic end-of-day reports to your inbox every night.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- HOW IT WORKS -->
+    <section id="how" class="how-section">
+        <div class="how-inner">
+            <p class="sec-eyebrow reveal">How it works</p>
+            <h2 class="sec-h2 reveal d1">Up and selling <em>in minutes.</em></h2>
+            <div class="how-grid">
+                <div class="steps">
+                    <div class="step reveal">
+                        <div class="step-n">01</div>
+                        <div>
+                            <h4>Create your account</h4>
+                            <p>Sign up in two minutes. We configure your store automatically.</p>
+                        </div>
+                    </div>
+                    <div class="step reveal d1">
+                        <div class="step-n">02</div>
+                        <div>
+                            <h4>Load your products</h4>
+                            <p>Import via CSV or add manually. Set prices in any currency.</p>
+                        </div>
+                    </div>
+                    <div class="step reveal d2">
+                        <div class="step-n">03</div>
+                        <div>
+                            <h4>Start selling</h4>
+                            <p>Open the app, tap a product, take payment. Every sale receipted automatically.</p>
+                        </div>
+                    </div>
+                    <div class="step reveal d3">
+                        <div class="step-n">04</div>
+                        <div>
+                            <h4>Watch it grow</h4>
+                            <p>Daily reports and stock alerts keep you one step ahead.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="receipt-card reveal d1">
+                    <div class="receipt">
+                        <div class="rhead">
+                            <div class="rhead-name">FieldPOS</div>
+                            <div class="rhead-sub">Harare CBD · VAT Reg: 2024-XXXX-Z</div>
+                        </div>
+                        <hr />
+                        <div class="rrow"><span>Bread 800g × 2</span><span>$2.40</span></div>
+                        <div class="rrow"><span>Cooking Oil 2L</span><span>$4.50</span></div>
+                        <div class="rrow"><span>Sugar 2kg</span><span>$3.20</span></div>
+                        <div class="rrow"><span>Mealie Meal 5kg</span><span>$6.80</span></div>
+                        <hr />
+                        <div class="rrow"><span>Subtotal</span><span>$16.90</span></div>
+                        <div class="rrow"><span>VAT (15%)</span><span>$2.54</span></div>
+                        <div class="rrow rtotal"><span>TOTAL</span><span>$19.44</span></div>
+                        <div class="rfiscal">FISCAL RECEIPT · ZIMRA APPROVED<br />FD No: 2026-03-0048291 · 15 Mar
+                            2026<br /><span class="rfiscal-badge"><svg viewBox="0 0 24 24" fill="none"
+                                    stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                                    stroke-linejoin="round" style="width:10px;height:10px">
+                                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                                    <polyline points="9 12 11 14 15 10" />
+                                </svg>ZIMRA Verified</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- PRICING -->
+    <section id="pricing" class="pricing-section">
+        <div class="pricing-inner">
+            <p class="sec-eyebrow reveal">Pricing</p>
+            <h2 class="sec-h2 reveal d1">Priced for Zimbabwe. <em>Not Silicon Valley.</em></h2>
+            <p class="sec-sub reveal d2" style="max-width:460px;margin:14px auto 0">No hardware costs. No
+                per-transaction fees. One small monthly subscription and you're live.</p>
+            <div class="pricing-wrap">
+                <div class="pc reveal">
+                    <p class="pc-plan">Monthly</p>
+                    <div class="pc-price"><span class="pc-sym">$</span><span class="pc-amt">3</span><span
+                            class="pc-mo">/month</span></div>
+                    <p class="pc-setup">+ $6 one-time setup fee</p>
+                    <hr class="pc-div" />
+                    <ul class="pc-list">
+                        <li>Full POS on any phone</li>
+                        <li>Multi-currency checkout</li>
+                        <li>Offline mode</li>
+                        <li>Inventory management</li>
+                        <li>Sales analytics</li>
+                        <li>Standard support</li>
+                    </ul>
+                    <a href="https://wa.me/263712270914?text=I'm%20interested%20in%20FieldPOS"
+                        class="btn-pc btn-pc-ghost">Get started</a>
+                </div>
+                <div class="pc pc-amber reveal d1">
+                    <p class="pc-plan">Annual — save 33%</p>
+                    <div class="pc-price"><span class="pc-sym">$</span><span class="pc-amt">2</span><span
+                            class="pc-mo">/month</span></div>
+                    <p class="pc-setup">+ $6 one-time setup fee</p>
+                    <hr class="pc-div" />
+                    <ul class="pc-list">
+                        <li>Everything in Monthly</li>
+                        <li>Priority support</li>
+                        <li>Multi-branch dashboard</li>
+                        <li>Early access to features</li>
+                        <li>Dedicated onboarding</li>
+                    </ul>
+                    <a href="https://wa.me/263712270914?text=I'm%20interested%20in%20FieldPOS"
+                        class="btn-pc btn-pc-amber">Choose annual</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- COMPLIANCE -->
+    <div class="compliance">
+        <div style="max-width:1200px;margin:0 auto;padding:0 32px">
+            <div class="comp-row reveal">
+                <div class="comp-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                        <polyline points="9 12 11 14 15 10" />
+                    </svg></div>
+                <div class="comp-text">
+                    <h4>Automatically ZIMRA compliant — zero effort on your part.</h4>
+                    <p>FieldPOS connects to <a href="https://fiscalstack.co.zw" target="_blank">Fiscalstack</a> for full
+                        FDMS fiscalization. Every receipt is legally compliant and every daily report is filed
+                        automatically. You don't have to think about it.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CTA -->
+    <section class="cta-section">
+        <div style="max-width:1200px;margin:0 auto;padding:0 32px">
+            <h2 class="reveal">Start selling smarter <em>today.</em></h2>
+            <p class="reveal d1">Join hundreds of businesses across Zimbabwe already using FieldPOS.</p>
+            <div class="cta-btns reveal d2">
+                <a href="https://wa.me/263712270914?text=I'm%20interested%20in%20FieldPOS" class="btn-cta-primary">Get
+                    Started via WhatsApp →</a>
+                <a href="#" class="store-btn"><span class="store-soon">Soon</span><svg viewBox="0 0 24 24"
+                        fill="currentColor">
+                        <path
+                            d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" />
+                    </svg>
+                    <div><span class="store-btn-label">Download on the</span><span class="store-btn-name">App
+                            Store</span></div>
+                </a>
+                <a href="fieldpos.apk" class="store-btn" download><svg viewBox="0 0 24 24"
+                        fill="currentColor">
+                        <path
+                            d="M3.18 23.76c.3.17.64.22.99.14l12.5-7.19-2.55-2.55-10.94 9.6zm-1.76-20.1C1.16 4 1 4.34 1 4.75v14.5c0 .41.16.75.42 1.01l.08.07 8.12-8.12v-.19L1.5 3.59l-.08.07zM20.33 10.63l-2.77-1.6-2.85 2.85 2.85 2.85 2.79-1.61c.8-.46.8-1.22-.02-1.49zM4.17.24L16.68 7.43l-2.55 2.55L4.17.24C4.52.06 4.93.07 5.21.24z" />
+                    </svg>
+                    <div><span class="store-btn-label">Download for</span><span class="store-btn-name">Android (.apk)</span>
+                    </div>
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+        <div class="foot-inner">
+            <div class="foot-logo">Field<span>POS</span></div>
+            <p class="foot-copy">© 2026 FieldPOS. Built in Zimbabwe.</p>
+        </div>
+    </footer>
+
+    <script>
+        const obs = new IntersectionObserver(entries => {
+            entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('in'); });
+        }, { threshold: 0.07 });
+        document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+    </script>
+    <!-- WhatsApp Bubble -->
+    <a href="https://wa.me/263712270914?text=I'm%20interested%20in%20FieldPOS" class="wa-bubble" target="_blank"
+        rel="noopener noreferrer">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+            <path
+                d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+        </svg>
+    </a>
+</body>
+
+</html>

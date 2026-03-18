@@ -1,43 +1,57 @@
 #!/bin/bash
 
-# FiscalStack Production Deployment Script
-# Run this on your production server after pulling latest code
+# Multi-Brand Production Deployment Script (FiscalStack & FiscalZone)
+# Standardized version for automated CI/CD
 
 set -e  # Exit on error
 
-echo "🚀 FiscalStack Production Deployment"
-echo "===================================="
+echo "🚀 Starting Unified Multi-Brand Production Deployment..."
+echo "=================================================="
 
-# 1. Stop current server
-echo "📦 Stopping current server..."
-pm2 stop fiscalstack || echo "No existing process to stop"
-
-# 2. Pull latest code
-echo "📥 Pulling latest code..."
+# 1. Pull latest code
+echo "📥 Pulling latest code from main..."
 git pull origin main
 
-# 3. Install dependencies
+# 2. Install dependencies
 echo "📦 Installing dependencies..."
-npm install --production=false
+npm install
 
-# 4. Build frontend and backend
-echo "🔨 Building production bundle..."
-npm run build
+# 3. Detect Brand
+BRAND=$1
 
-# 5. Start with PM2
-echo "🚀 Starting production server..."
-pm2 start dist/index.cjs --name "fiscalstack" --time
+if [ -z "$BRAND" ]; then
+    echo "❌ Error: Please specify a brand (fiscalstack or fiscalzone)"
+    echo "Usage: ./deploy.sh [brand]"
+    exit 1
+fi
 
-# 6. Save PM2 configuration
-echo "💾 Saving PM2 configuration..."
+echo "🎯 Deploying brand: $BRAND"
+
+# 4. Build the specific brand
+echo "🔨 Building $BRAND..."
+rm -rf dist
+npm run "build:$BRAND"
+
+# 5. Reload PM2 process
+echo "🚀 Reloading PM2 process..."
+
+if pm2 show "$BRAND" > /dev/null 2>&1; then
+    echo "🔄 Reloading '$BRAND'..."
+    pm2 reload "$BRAND" --update-env
+else
+    echo "✨ Starting '$BRAND'..."
+    # If not running, we start it manually with the correct params
+    if [ "$BRAND" == "fiscalstack" ]; then PORT=5000; else PORT=5001; fi
+    cross-env NODE_ENV=production VITE_APP_BRAND=$BRAND PORT=$PORT pm2 start dist/index.cjs --name "$BRAND"
+fi
+
+# 6. Save PM2 state
+echo "💾 Saving PM2 state..."
 pm2 save
 
-# 7. Show status
 echo ""
-echo "✅ Deployment complete!"
-echo ""
+echo "✅ Multi-brand deployment successful!"
+echo "------------------------------------------"
 pm2 status
 echo ""
-echo "📊 View logs: pm2 logs fiscalstack"
-echo "🔄 Restart: pm2 restart fiscalstack"
-echo "⏹️  Stop: pm2 stop fiscalstack"
+echo "📊 View logs: pm2 logs [name]"

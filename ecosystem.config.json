@@ -1,23 +1,44 @@
 {
-    "apps": [
-        {
-            "name": "fiscalstack",
-            "script": "./dist/index.cjs",
-            "instances": 1,
-            "exec_mode": "fork",
-            "env": {
-                "NODE_ENV": "production",
-                "PORT": 5000
-            },
-            "error_file": "./logs/pm2-error.log",
-            "out_file": "./logs/pm2-out.log",
-            "log_date_format": "YYYY-MM-DD HH:mm:ss Z",
-            "merge_logs": true,
-            "autorestart": true,
-            "max_restarts": 10,
-            "min_uptime": "10s",
-            "max_memory_restart": "500M",
-            "watch": false
-        }
-    ]
+  "apps" : [
+    {
+      "name": "fiscalstack",
+      "script": "./dist/index.cjs",
+      "instances": 1,
+      "exec_mode": "fork",
+      "node_args": "--unhandled-rejections=throw",
+      "env": {
+        "NODE_ENV": "production",
+        "PORT": 5000,
+        "VITE_APP_BRAND": "fiscalstack"
+      },
+      "error_file": "./logs/pm2-error.log",
+      "out_file": "./logs/pm2-out.log",
+      "log_date_format": "YYYY-MM-DD HH:mm:ss Z",
+      "merge_logs": true,
+      "autorestart": false,
+      "max_restarts": 1,
+      "min_uptime": "40s",
+      "watch": false
+    },
+    {
+      "name": "fiscalzone",
+      "script": "./dist/index.cjs",
+      "instances": 1,
+      "exec_mode": "fork",
+      "node_args": "--unhandled-rejections=throw",
+      "env": {
+        "NODE_ENV": "production",
+        "PORT": 5001,
+        "VITE_APP_BRAND": "fiscalzone"
+      },
+      "error_file": "./logs/pm2-fiscalzone-error.log",
+      "out_file": "./logs/pm2-fiscalzone-out.log",
+      "log_date_format": "YYYY-MM-DD HH:mm:ss Z",
+      "merge_logs": true,
+      "autorestart": false,
+      "max_restarts": 1,
+      "min_uptime": "40s",
+      "watch": false
+    }
+  ]
 }

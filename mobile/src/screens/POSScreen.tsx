@@ -111,6 +111,7 @@ type Props = {
 
 export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
   const [isOnline, setIsOnline] = useState(true);
+  const isOnlineRef = React.useRef(true);
   const [queueCount, setQueueCount] = useState(0);
 
   const {
@@ -202,8 +203,9 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener((state) => {
       const online = !!state.isConnected && !!state.isInternetReachable;
+      isOnlineRef.current = online;
       setIsOnline(online);
-      if (online) syncQueued(false);
+      if (online) syncQueuedRef.current(false);
     });
     return () => unsubscribe();
   }, [companyId]);
@@ -349,7 +351,12 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
   const addToCart = (product: any) => {
     if (product.isTracked) {
       const inCart = cart.find((item: CartItem) => item.productId === product.id)?.quantity || 0;
-      if (inCart >= Number(product.stockLevel || 0)) return;
+      if (inCart >= Number(product.stockLevel || 0)) {
+        if (Number(product.stockLevel || 0) === 0) {
+          Alert.alert("Out of Stock", `${product.name} is currently out of stock.`);
+        }
+        return;
+      }
     }
     setCart((prev: CartItem[]) => {
       const existing = prev.find((item: CartItem) => item.productId === product.id);
@@ -480,7 +487,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
   };
 
   const syncQueued = async (isManual = false) => {
-    if (!isOnline || isSyncing) return;
+    if (!isOnlineRef.current || isSyncing) return;
     const shiftActions = await getPendingShiftActions(companyId);
     const sales = await getPendingSales(companyId);
 
@@ -526,6 +533,10 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
       }
     }
   };
+
+  // Stable ref so the NetInfo listener always calls the latest version
+  const syncQueuedRef = React.useRef(syncQueued);
+  useEffect(() => { syncQueuedRef.current = syncQueued; });
 
   const handleParkSale = async () => {
     Keyboard.dismiss();

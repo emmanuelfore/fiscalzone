@@ -1,17 +1,19 @@
 import React, { useState, useMemo, useEffect } from "react";
 import {
   View, Text, FlatList, TouchableOpacity, TextInput,
-  StyleSheet, SafeAreaView, ActivityIndicator,
+  StyleSheet, SafeAreaView, ActivityIndicator, Alert,
 } from "react-native";
 import {
   Menu, PieChart, TrendingUp, DollarSign, Calendar,
   ChevronDown, ChevronUp, Receipt, Package, Clock,
-  User as UserIcon, Filter, Search, X
+  User as UserIcon, Filter, Search, X, Printer
 } from "lucide-react-native";
 import { StatusBar } from "expo-status-bar";
 import { Modal, ScrollView } from "react-native";
-import { usePosSales, useInvoiceItems, useCurrencies } from "../hooks/usePosData";
+import { usePosSales, useInvoiceItems, useCurrencies, useCompany } from "../hooks/usePosData";
 import { apiJson } from "../lib/api";
+import { printReceipt, printToBluetooth } from "../lib/printing";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { PremiumColors as C } from "../ui/PremiumColors";
 
@@ -39,6 +41,43 @@ interface ReportsScreenProps {
   userRole?: string;
   userId?: string;
   userName?: string;
+}
+
+function ExpandedSaleContent({ sale, currencySymbols, onReprint, isPrinting }: {
+  sale: any;
+  currencySymbols: Record<string, string>;
+  onReprint: (sale: any, items: any[]) => void;
+  isPrinting: boolean;
+}) {
+  const { data: items, isLoading } = useInvoiceItems(sale.id);
+  return (
+    <View style={styles.saleDetails}>
+      <View style={styles.detailsDivider} />
+      <InvoiceItemRow
+        invoiceId={sale.id}
+        currencyCode={sale.currency}
+        exchangeRate={sale.exchangeRate}
+        symbols={currencySymbols}
+      />
+      <View style={[styles.saleFooter, { justifyContent: "space-between" }]}>
+        <View>
+          <Text style={styles.paymentMethod}>Paid via {sale.paymentMethod || "CASH"}</Text>
+          {sale.customerName && <Text style={styles.customerName}>Customer: {sale.customerName}</Text>}
+        </View>
+        <TouchableOpacity
+          onPress={() => onReprint(sale, items || [])}
+          disabled={isPrinting || isLoading}
+          style={{
+            flexDirection: "row", alignItems: "center", gap: 5,
+            paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8,
+            backgroundColor: "rgba(240,165,0,0.1)", borderWidth: 1, borderColor: "rgba(240,165,0,0.3)"
+          }}>
+          <Printer size={13} color="#f0a500" />
+          <Text style={{ color: "#f0a500", fontSize: 11, fontWeight: "700" }}>Reprint</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 }
 
 function InvoiceItemRow({ invoiceId, currencyCode, exchangeRate, symbols }: {
@@ -89,9 +128,45 @@ function InvoiceItemRow({ invoiceId, currencyCode, exchangeRate, symbols }: {
 
 export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", userId, userName }: ReportsScreenProps) {
   const isCashier = userRole.toLowerCase() === "cashier" || userRole.toLowerCase() === "member";
-  
-  const [period, setPeriod] = useState<Period>("Today");
-  const [customStart, setCustomStart] = useState("");
+  const { data: company } = useCompany(companyId);
+  const [isPrinting, setIsPrinting] = useState(false);
+  const [printerConfig, setPrinterConfig] = useState({ macAddress: "", terminalId: "POS-01", targetPrinter: "", paperWidth: 58 });
+
+  useEffect(() => {
+    AsyncStorage.getItem(`printer_config_${userId}`).then(val => {
+      if (val) { try { setPrinterConfig(JSON.parse(val)); } catch (_) {} }
+    });
+  }, [userId]);
+
+  const handleReprint = async (sale: any, items: any[]) => {
+    if (!company) return;
+    setIsPrinting(true);
+    const ticketData = {
+      invoice: sale,
+      company,
+      items,
+      currencySymbol: currencySymbols[sale.currency || "USD"] || "$",
+      cashierName: sale.cashierName,
+      paidAmount: Number(sale.total || 0),
+      paperWidth: printerConfig.paperWidth,
+      terminalId: printerConfig.terminalId,
+    };
+    try {
+      if (printerConfig.macAddress) {
+        await printToBluetooth(ticketData, printerConfig.macAddress);
+      } else {
+        await printReceipt(ticketData, printerConfig.targetPrinter || undefined);
+      }
+    } catch (e: any) {
+      if (e.message !== "Print preview was cancelled.") {
+        Alert.alert("Print Error", e.message || "Could not print receipt");
+      }
+    } finally {
+      setIsPrinting(false);
+    }
+  };
+
+  const [period, setPeriod] = useState<Period>("Today");  const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
   const [showPeriodPicker, setShowPeriodPicker] = useState(false);
   const [expandedSaleId, setExpandedSaleId] = useState<number | null>(null);
@@ -395,19 +470,12 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
                 </View>
               </TouchableOpacity>
               {isExpanded && (
-                <View style={styles.saleDetails}>
-                  <View style={styles.detailsDivider} />
-                  <InvoiceItemRow
-                    invoiceId={sale.id}
-                    currencyCode={sale.currency}
-                    exchangeRate={sale.exchangeRate}
-                    symbols={currencySymbols}
-                  />
-                  <View style={styles.saleFooter}>
-                    <Text style={styles.paymentMethod}>Paid via {sale.paymentMethod || "CASH"}</Text>
-                    {sale.customerName && <Text style={styles.customerName}>Customer: {sale.customerName}</Text>}
-                  </View>
-                </View>
+                <ExpandedSaleContent
+                  sale={sale}
+                  currencySymbols={currencySymbols}
+                  onReprint={handleReprint}
+                  isPrinting={isPrinting}
+                />
               )}
             </View>
           );

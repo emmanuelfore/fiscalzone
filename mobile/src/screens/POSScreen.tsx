@@ -610,7 +610,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
       currency: currencyObj.code, exchangeRate: currencyObj.exchangeRate,
       paymentMethod, status: "issued", notes: "POS Transaction (Mobile)",
       discountAmount: orderDiscount.toFixed(2), taxInclusive,
-      transactionType: "FiscalInvoice",
+      transactionType: company?.vatRegistered ? "FiscalInvoice" : "Invoice",
       isPos: true, // Mark as POS transaction
       invoiceNumber: `POS-${Date.now()}`,
       issueDate: new Date().toISOString(),

@@ -73,7 +73,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const { data: companies } = useCompanies(!!user);
   const { activeCompany, activeCompanyId, setCompany } = useActiveCompany(!!user);
-  const { brand } = useBranding();
+  const { brand, currentBrand } = useBranding();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Close mobile menu on location change
@@ -176,23 +176,40 @@ export function Layout({ children }: { children: React.ReactNode }) {
   if (!user) return null;
 
   return (
-    <div className="min-h-screen bg-slate-50/50 flex font-sans selection:bg-violet-500/20">
-      {/* Mobile Menu Backdrop */}
-      {isMobileMenuOpen && (
-        <div 
-          className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 lg:hidden transition-opacity duration-300"
-          onClick={() => setIsMobileMenuOpen(false)}
-        />
+    <>
+      {/* Brand Specific Fonts & Styles */}
+      {currentBrand === "fiscalzone" && (
+        <style>{`
+          @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&display=swap');
+          .fz-admin { font-family: 'Syne', sans-serif !important; }
+          .fz-admin .font-display { font-family: 'Bricolage Grotesque', sans-serif !important; }
+          .fz-sidebar { background: rgba(15, 23, 42, 0.9) !important; color: white !important; border-color: rgba(255,255,255,0.1) !important; }
+          .fz-sidebar .text-slate-800 { color: white !important; }
+          .fz-sidebar .text-slate-500 { color: rgba(255,255,255,0.6) !important; }
+          .fz-sidebar .bg-white { background: rgba(255,255,255,0.05) !important; border-color: rgba(255,255,255,0.1) !important; }
+        `}</style>
       )}
+
+      <div className={cn(
+        "min-h-screen bg-slate-50/50 flex transition-all duration-300",
+        currentBrand === "fiscalzone" ? "fz-admin" : "font-sans selection:bg-violet-500/20"
+      )}>
 
       {/* Floating Sidebar */}
       <aside className={cn(
         "w-72 bg-white/80 backdrop-blur-xl border border-white/50 shadow-2xl shadow-slate-200/50 flex flex-col fixed inset-y-4 left-4 z-50 rounded-[2rem] overflow-hidden transition-all duration-300",
-        isMobileMenuOpen ? "translate-x-0" : "-translate-x-[calc(100%+2rem)] lg:translate-x-0"
+        isMobileMenuOpen ? "translate-x-0" : "-translate-x-[calc(100%+2rem)] lg:translate-x-0",
+        currentBrand === "fiscalzone" && "fz-sidebar"
       )}>
         <div className="p-6 border-b border-slate-100/50 bg-white/50">
           <div className="flex items-center gap-3 mb-6 px-1">
-            <img src={brand.logo} alt={brand.name} className="h-9" />
+            {currentBrand === "fiscalzone" ? (
+              <span className="text-xl font-black text-slate-800 tracking-tight font-display">
+                Fiscal<span className="text-blue-600">Zone</span>
+              </span>
+            ) : (
+              <img src={brand.logo} alt={brand.name} className="h-9" />
+            )}
           </div>
 
           <DropdownMenu>
@@ -346,7 +363,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="p-4 bg-slate-50/50 border-t border-slate-100/50">
           <div className="flex items-center justify-center gap-1 text-[10px] font-bold text-slate-300 uppercase tracking-widest">
             <ShieldCheck className="w-3 h-3" />
-            <span>{brand.name} v1.2</span>
+            <span>{brand.name} Managed Server</span>
           </div>
         </div>
       </aside>
@@ -458,5 +475,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </main>
       </div>
     </div>
+    </>
   );
 }

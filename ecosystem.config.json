@@ -2,10 +2,10 @@
   "apps" : [
     {
       "name": "fiscalstack",
-      "script": "./dist/index.cjs",
+      "script": "./start.sh",
+      "interpreter": "bash",
       "instances": 1,
       "exec_mode": "fork",
-      "node_args": "--unhandled-rejections=throw",
       "env": {
         "NODE_ENV": "production",
         "PORT": 5000,
@@ -15,17 +15,17 @@
       "out_file": "./logs/pm2-out.log",
       "log_date_format": "YYYY-MM-DD HH:mm:ss Z",
       "merge_logs": true,
-      "autorestart": false,
-      "max_restarts": 1,
-      "min_uptime": "40s",
+      "autorestart": true,
+      "max_restarts": 10,
+      "min_uptime": "10s",
       "watch": false
     },
     {
       "name": "fiscalzone",
-      "script": "./dist/index.cjs",
+      "script": "./start.sh",
+      "interpreter": "bash",
       "instances": 1,
       "exec_mode": "fork",
-      "node_args": "--unhandled-rejections=throw",
       "env": {
         "NODE_ENV": "production",
         "PORT": 5001,
@@ -35,9 +35,9 @@
       "out_file": "./logs/pm2-fiscalzone-out.log",
       "log_date_format": "YYYY-MM-DD HH:mm:ss Z",
       "merge_logs": true,
-      "autorestart": false,
-      "max_restarts": 1,
-      "min_uptime": "40s",
+      "autorestart": true,
+      "max_restarts": 10,
+      "min_uptime": "10s",
       "watch": false
     }
   ]

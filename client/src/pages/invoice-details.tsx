@@ -6,7 +6,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Link, useLocation, useRoute } from "wouter";
 import { PaymentReceipt } from "@/components/invoices/payment-receipt";
 import { ArrowLeft, Printer, Send, ShieldCheck, Loader2, Download, Undo2, ClipboardList, MessageCircle, MoreVertical, Mail, Share2, CreditCard, Search, FileText, Filter, MoreHorizontal, Eye, Edit, Trash2, User, Copy, AlertCircle } from "lucide-react";
-import { PDFDownloadLink, PDFViewer } from "@react-pdf/renderer";
+import { PDFDownloadLink } from "@react-pdf/renderer";
 import { InvoicePDF } from "@/components/invoices/pdf-document";
 import { useCompany } from "@/hooks/use-companies";
 import QRCode from "qrcode";
@@ -78,6 +78,8 @@ export default function InvoiceDetailsPage() {
   const [isCreatingCN, setIsCreatingCN] = useState(false);
   const [isCreatingDN, setIsCreatingDN] = useState(false);
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>("");
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [pdfGenerating, setPdfGenerating] = useState(false);
 
   const totalPaid = payments?.reduce((sum: number, p: any) => sum + Number(p.amount), 0) || 0;
   const balanceDue = Math.max(0, Number(invoice?.total || 0) - totalPaid);
@@ -91,6 +93,24 @@ export default function InvoiceDetailsPage() {
       setQrCodeDataUrl("");
     }
   }, [invoice?.fiscalCode, invoice?.qrCodeData, company?.qrUrl]);
+
+  // Generate PDF blob URL for the viewer (no internal scroll)
+  useEffect(() => {
+    if (!invoice || !canPreview) { setPdfBlobUrl(null); return; }
+    let revoked = false;
+    setPdfGenerating(true);
+    pdf(<InvoicePDF invoice={invoice} company={company} customer={invoice.customer} qrCodeUrl={qrCodeDataUrl} taxTypes={taxTypes.data} />)
+      .toBlob()
+      .then((blob) => {
+        if (revoked) return;
+        const url = URL.createObjectURL(blob);
+        setPdfBlobUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return url; });
+      })
+      .catch(console.error)
+      .finally(() => { if (!revoked) setPdfGenerating(false); });
+    return () => { revoked = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoice?.id, invoice?.status, invoice?.fiscalCode, qrCodeDataUrl, company?.id]);
 
   const handleIssue = async () => {
     if (isIssuing || !invoice) return;
@@ -149,11 +169,11 @@ export default function InvoiceDetailsPage() {
 
   return (
     <Layout>
-      {/* Full-height split panel */}
-      <div className="flex h-[calc(100vh-5rem)] -mx-4 sm:-mx-8 -mt-6 overflow-hidden">
+      {/* Split panel */}
+      <div className="flex -mx-4 sm:-mx-8 -mt-6">
 
         {/* ── LEFT: invoice list ── */}
-        <div className="w-[380px] shrink-0 flex flex-col border-r border-slate-200 bg-white">
+        <div className="w-[380px] shrink-0 flex flex-col border-r border-slate-200 bg-white sticky top-0 h-screen overflow-hidden">
           {/* List header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 shrink-0">
             <span className="text-sm font-black text-slate-800 uppercase tracking-tight">Invoices</span>
@@ -279,7 +299,7 @@ export default function InvoiceDetailsPage() {
         </div>
 
         {/* ── RIGHT: invoice preview ── */}
-        <div className="flex-1 min-w-0 flex flex-col bg-white overflow-hidden">
+        <div className="flex-1 min-w-0 flex flex-col bg-white">
           {isLoading ? (
             <div className="flex items-center justify-center h-full"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
           ) : !invoice ? (
@@ -287,7 +307,7 @@ export default function InvoiceDetailsPage() {
           ) : (
             <>
               {/* Toolbar */}
-              <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-slate-200 shrink-0">
+              <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-slate-200 sticky top-0 bg-white z-10">
                 <div className="flex items-center gap-2 min-w-0">
                   <Button variant="ghost" size="sm" className="h-8 px-2 shrink-0" onClick={() => setLocation("/invoices")}>
                     <ArrowLeft className="w-4 h-4" />
@@ -382,14 +402,23 @@ export default function InvoiceDetailsPage() {
                 </div>
               )}
 
-              {/* PDF viewer — takes all remaining height; PDFViewer handles its own scroll */}
-              <div className="flex-1 min-h-0 bg-slate-100">
+              {/* PDF viewer — blob URL in plain iframe, page scroll handles everything */}
+              <div className="bg-slate-100">
                 {canPreview ? (
-                  <PDFViewer width="100%" height="100%" style={{ border: "none" }}>
-                    <InvoicePDF invoice={invoice} company={company} customer={invoice.customer} qrCodeUrl={qrCodeDataUrl} taxTypes={taxTypes.data} />
-                  </PDFViewer>
+                  pdfGenerating || !pdfBlobUrl ? (
+                    <div className="flex items-center justify-center h-64 gap-2 text-slate-400">
+                      <Loader2 className="w-5 h-5 animate-spin" /> Generating preview...
+                    </div>
+                  ) : (
+                    <iframe
+                      src={pdfBlobUrl}
+                      title="Invoice Preview"
+                      width="100%"
+                      style={{ height: "1400px", border: "none", display: "block" }}
+                    />
+                  )
                 ) : (
-                  <div className="flex items-center justify-center h-full gap-2 text-slate-400">
+                  <div className="flex items-center justify-center h-64 gap-2 text-slate-400">
                     <Loader2 className="w-5 h-5 animate-spin" /> Generating preview...
                   </div>
                 )}

@@ -21,8 +21,21 @@ import {
 } from "@/components/ui/select";
 import { CsvImportDialog } from "@/components/csv-import-dialog";
 import { ManageCategoriesDialog } from "@/components/products/manage-categories-dialog";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { useState } from "react";
+import { 
+  AlertDialog, 
+  AlertDialogAction, 
+  AlertDialogCancel, 
+  AlertDialogContent, 
+  AlertDialogDescription, 
+  AlertDialogFooter, 
+  AlertDialogHeader, 
+  AlertDialogTitle, 
+  AlertDialogTrigger 
+} from "@/components/ui/alert-dialog";
+import { Trash2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 const ITEMS_PER_PAGE = 10;
 
@@ -38,6 +51,31 @@ export default function ProductsPage() {
   const [stockFilter, setStockFilter] = useState("all");
   const [taxFilter, setTaxFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
+  const { toast } = useToast();
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch(`/api/companies/${companyId}/products/bulk-delete`, {
+        method: "DELETE",
+      });
+      if (!response.ok) throw new Error("Failed to delete products");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["products", companyId] });
+      toast({
+        title: "Products Deleted",
+        description: "All products have been successfully deleted.",
+        variant: "default",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Delete Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  });
 
   // Filter for products (goods)
   const products = allItems?.filter(item => item.productType !== 'service'); // Treat undefined/'good' as product
@@ -110,6 +148,33 @@ export default function ProductsPage() {
             <FileDown className="w-4 h-4 mr-2" />
             Export CSV
           </Button>
+
+          {companyId > 0 && products && products.length > 0 && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" className="rounded-xl" disabled={bulkDeleteMutation.isPending}>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  {bulkDeleteMutation.isPending ? "Deleting..." : "Delete All"}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will permanently delete ALL products and services from your inventory for this company. 
+                    This action cannot be undone. Historical transactions (invoices, receipts) will keep standard text references.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => bulkDeleteMutation.mutate()} className="bg-red-600 hover:bg-red-700">
+                    Yes, Delete All
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+
           <ManageCategoriesDialog companyId={companyId} />
           <CsvImportDialog
             type="product"

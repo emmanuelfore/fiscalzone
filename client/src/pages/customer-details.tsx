@@ -17,7 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { PDFDownloadLink } from "@react-pdf/renderer";
-import { StatementPDF } from "@/components/customers/statement-pdf";
+import { CustomerStatementPDF } from "@/components/reports/customer-statement-pdf";
 import {
     Table,
     TableBody,
@@ -275,25 +275,34 @@ export default function CustomerDetailsPage() {
 
                                     {statementData && company && (
                                         <>
+                                            <Button 
+                                                variant="outline" 
+                                                className="bg-primary/5 text-primary border-primary/20 hover:bg-primary/10"
+                                                onClick={() => setLocation(`/reports/customer-statements?customerId=${customerId}`)}
+                                            >
+                                                <FileText className="w-4 h-4 mr-2" />
+                                                View Full Report
+                                            </Button>
                                             <Button variant="outline" onClick={printStatement}>
                                                 <Printer className="w-4 h-4 mr-2" />
                                                 Print
                                             </Button>
                                             <PDFDownloadLink
                                                 document={
-                                                    <StatementPDF
+                                                    <CustomerStatementPDF
                                                         data={statementData}
                                                         company={company}
                                                         startDate={dateRange.from}
                                                         endDate={dateRange.to}
+                                                        currency={selectedCurrency}
                                                     />
                                                 }
                                                 fileName={`Statement-${customer.name}-${format(new Date(), 'yyyyMMdd')}.pdf`}
                                             >
-                                                {({ loading }) => (
-                                                    <Button variant="outline" disabled={loading}>
+                                                {({ loading, error }) => (
+                                                    <Button variant="outline" disabled={loading} title={error ? String(error) : undefined}>
                                                         {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Download className="w-4 h-4 mr-2" />}
-                                                        Download PDF
+                                                        {error ? "PDF Error" : "Download PDF"}
                                                     </Button>
                                                 )}
                                             </PDFDownloadLink>

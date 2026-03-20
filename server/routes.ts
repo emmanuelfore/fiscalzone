@@ -22,6 +22,7 @@ import { logAction } from "./audit.js";
 import { startPosShift, endPosShift, addPosTransaction, getOpenShift, getShiftTransactions } from "./lib/pos.js";
 import { seedCompanyDefaults } from "./lib/seeding.js";
 import { processInvoiceFiscalization, getZimraLogger } from "./lib/fiscalization.js";
+import sageWebhookRouter from "./lib/sage-webhook.js";
 import { db } from "./db";
 import { eq, and, gte, lte, ne, desc, asc, sql, or, ilike } from "drizzle-orm";
 import { format } from "date-fns";
@@ -3694,6 +3695,27 @@ export async function registerRoutes(
     }
   });
 
+  app.delete("/api/companies/:companyId/products/bulk-delete", requireAuth, async (req, res) => {
+    try {
+      const companyId = Number(req.params.companyId);
+      if (isNaN(companyId)) return res.status(400).json({ message: "Invalid company ID" });
+      
+      // Ownership check
+      if (!(req.user as any).isSuperAdmin) {
+        const userCompanies = await storage.getCompanies((req.user as any).id);
+        if (!userCompanies.find((c: any) => c.id === companyId)) {
+          return res.status(403).json({ message: "Forbidden" });
+        }
+      }
+
+      await storage.deleteCompanyProducts(companyId);
+      res.status(204).end();
+    } catch (err) {
+      console.error("Bulk delete products error:", err);
+      res.status(500).json({ message: "Failed to delete products" });
+    }
+  });
+
   // Tax Routes
   app.get(api.tax.types.path, requireAuth, async (req, res) => {
     const companyId = req.query.companyId ? Number(req.query.companyId) : (req as any).user?.companyId;
@@ -3892,6 +3914,28 @@ export async function registerRoutes(
         items: input.items as any,
         companyId: Number(req.params.companyId)
       });
+
+      // POS Payment Recording: Automatically record payment for POS sales
+      if (input.isPos) {
+        try {
+          await storage.createPayment({
+            companyId: invoice.companyId,
+            invoiceId: invoice.id,
+            amount: invoice.total.toString(),
+            currency: invoice.currency,
+            paymentMethod: invoice.paymentMethod || "CASH",
+            paymentDate: new Date(),
+            createdBy: (req.user as any)?.id,
+            exchangeRate: invoice.exchangeRate?.toString() || "1.000000",
+          });
+          
+          // Force status to paid for POS sales since they are upfront
+          await storage.updateInvoice(invoice.id, { status: "paid" });
+          invoice.status = "paid";
+        } catch (payErr) {
+          console.error("[POS] Auto-payment recording failed:", payErr);
+        }
+      }
 
       // ZIMRA Fiscalization Trigger: 
       // 1. All POS sales for VAT registered companies
@@ -4314,6 +4358,17 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error(err);
       res.status(500).json({ message: "Failed to fetch payments" });
+    }
+  });
+
+  app.get("/api/payments/:id", requireAuth, async (req, res) => {
+    try {
+      const payment = await storage.getPayment(Number(req.params.id));
+      if (!payment) return res.status(404).json({ message: "Payment not found" });
+      res.json(payment);
+    } catch (err: any) {
+      console.error(err);
+      res.status(500).json({ message: "Failed to fetch payment" });
     }
   });
 
@@ -5510,6 +5565,154 @@ export async function registerRoutes(
       res.status(500).json({ message: err.message });
     }
   });
+
+  // ── Report Module Routes ──────────────────────────────────────────────────
+  // All routes follow: GET /api/companies/:companyId/reports/:reportName
+  // Auth: requireAuth + company ownership check (403 if not authorized)
+  // Date range: startDate/endDate query params, defaults to current month
+
+  const reportRouteHandler = (
+    storageMethod: (companyId: number, start: Date, end: Date) => Promise<any>
+  ) => {
+    return async (req: any, res: any) => {
+      try {
+        const companyId = parseInt(req.params.companyId);
+        if (isNaN(companyId)) {
+          return res.status(400).json({ message: "Invalid companyId" });
+        }
+
+        // Company ownership check
+        if (!req.user.isSuperAdmin) {
+          const userCompanies = await storage.getCompanies(req.user.id);
+          if (!userCompanies.find((c: any) => c.id === companyId)) {
+            return res.status(403).json({ message: "Forbidden" });
+          }
+        }
+
+        // Parse date range with current-month defaults
+        const now = new Date();
+        let startDate: Date;
+        let endDate: Date;
+
+        if (req.query.startDate) {
+          startDate = new Date(req.query.startDate as string);
+          if (isNaN(startDate.getTime())) {
+            return res.status(400).json({ message: "Invalid startDate format" });
+          }
+        } else {
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        }
+
+        if (req.query.endDate) {
+          endDate = new Date(req.query.endDate as string);
+          if (isNaN(endDate.getTime())) {
+            return res.status(400).json({ message: "Invalid endDate format" });
+          }
+        } else {
+          endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        }
+
+        const data = await storageMethod(companyId, startDate, endDate);
+        res.json(data);
+      } catch (err: any) {
+        res.status(500).json({ message: err.message });
+      }
+    };
+  };
+
+  app.get("/api/companies/:companyId/reports/sales-summary", requireAuth,
+    reportRouteHandler((id, s, e) => storage.getReportSalesSummary(id, s, e)));
+
+  app.get("/api/companies/:companyId/reports/sales-by-customer", requireAuth,
+    reportRouteHandler((id, s, e) => storage.getReportSalesByCustomer(id, s, e)));
+
+  app.get("/api/companies/:companyId/reports/sales-by-item", requireAuth,
+    reportRouteHandler((id, s, e) => storage.getReportSalesByItem(id, s, e)));
+
+  app.get("/api/companies/:companyId/reports/sales-by-salesperson", requireAuth,
+    reportRouteHandler((id, s, e) => storage.getReportSalesBySalesperson(id, s, e)));
+
+  app.get("/api/companies/:companyId/reports/ar-aging-summary", requireAuth,
+    reportRouteHandler((id, s, e) => storage.getReportArAgingSummary(id, s, e)));
+
+  app.get("/api/companies/:companyId/reports/ar-aging-details", requireAuth,
+    reportRouteHandler((id, s, e) => storage.getReportArAgingDetails(id, s, e)));
+
+  app.get("/api/companies/:companyId/reports/invoice-details", requireAuth,
+    reportRouteHandler((id, s, e) => storage.getReportInvoiceDetails(id, s, e)));
+
+  app.get("/api/companies/:companyId/reports/quote-details", requireAuth,
+    reportRouteHandler((id, s, e) => storage.getReportQuoteDetails(id, s, e)));
+
+  app.get("/api/companies/:companyId/reports/customer-balance-summary", requireAuth,
+    reportRouteHandler((id, s, e) => storage.getReportCustomerBalanceSummary(id, s, e)));
+
+  app.get("/api/companies/:companyId/reports/receivable-summary", requireAuth,
+    reportRouteHandler((id, s, e) => storage.getReportReceivableSummary(id, s, e)));
+
+  app.get("/api/companies/:companyId/reports/receivable-details", requireAuth,
+    reportRouteHandler((id, s, e) => storage.getReportReceivableDetails(id, s, e)));
+
+  app.get("/api/companies/:companyId/reports/bad-debts", requireAuth,
+    reportRouteHandler((id, s, e) => storage.getReportBadDebts(id, s, e)));
+
+  app.get("/api/companies/:companyId/reports/bank-charges", requireAuth,
+    reportRouteHandler((id, s, e) => storage.getReportBankCharges(id, s, e)));
+
+  app.get("/api/companies/:companyId/reports/time-to-get-paid", requireAuth,
+    reportRouteHandler((id, s, e) => storage.getReportTimeToGetPaid(id, s, e)));
+
+  app.get("/api/companies/:companyId/reports/refund-history", requireAuth,
+    reportRouteHandler((id, s, e) => storage.getReportRefundHistory(id, s, e)));
+
+  app.get("/api/companies/:companyId/reports/withholding-tax", requireAuth,
+    reportRouteHandler((id, s, e) => storage.getReportWithholdingTax(id, s, e)));
+
+  app.get("/api/companies/:companyId/reports/expense-details", requireAuth,
+    reportRouteHandler((id, s, e) => storage.getReportExpenseDetails(id, s, e)));
+
+  app.get("/api/companies/:companyId/reports/expenses-by-category", requireAuth,
+    reportRouteHandler((id, s, e) => storage.getReportExpensesByCategory(id, s, e)));
+
+  app.get("/api/companies/:companyId/reports/expenses-by-customer", requireAuth,
+    reportRouteHandler((id, s, e) => storage.getReportExpensesByCustomer(id, s, e)));
+
+  app.get("/api/companies/:companyId/reports/expenses-by-project", requireAuth,
+    reportRouteHandler((id, s, e) => storage.getReportExpensesByProject(id, s, e)));
+
+  app.get("/api/companies/:companyId/reports/billable-expense-details", requireAuth,
+    reportRouteHandler((id, s, e) => storage.getReportBillableExpenseDetails(id, s, e)));
+
+  app.get("/api/companies/:companyId/reports/tax-summary", requireAuth,
+    reportRouteHandler((id, s, e) => storage.getReportTaxSummary(id, s, e)));
+
+  // Currency-aware reports for Dashboard
+  app.get("/api/companies/:companyId/reports/receivables-aging", requireAuth, async (req: any, res: any) => {
+    try {
+      const companyId = parseInt(req.params.companyId);
+      if (isNaN(companyId)) return res.status(400).json({ message: "Invalid companyId" });
+      const currency = req.query.currency as string | undefined;
+      const data = await storage.getReceivablesAging(companyId, currency);
+      res.json(data);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/companies/:companyId/reports/fiscal-year-stats", requireAuth, async (req: any, res: any) => {
+    try {
+      const companyId = parseInt(req.params.companyId);
+      if (isNaN(companyId)) return res.status(400).json({ message: "Invalid companyId" });
+      const currency = req.query.currency as string | undefined;
+      const data = await storage.getFiscalYearStats(companyId, currency);
+      res.json(data);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Sage Business Cloud webhook
+  app.use("/api/webhooks/sage", sageWebhookRouter);
 
   return httpServer;
 

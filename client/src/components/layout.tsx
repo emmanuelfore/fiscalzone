@@ -108,7 +108,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       label: "Customers",
       children: [
         { icon: Users, label: "Customer List", href: "/customers" },
-        { icon: FileText, label: "Statements", href: "/reports?tab=statements" },
+        { icon: FileText, label: "Statements", href: "/reports/customer-statements" },
       ]
     },
     {
@@ -127,9 +127,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
       icon: BarChart3,
       label: "Reports",
       children: [
+        { icon: BarChart3, label: "Reports Module", href: "/reports-module" },
         { icon: BarChart3, label: "Analytics", href: "/reports?tab=analytics" },
         { icon: Receipt, label: "Daily Sales", href: "/reports/daily" },
         { icon: TrendingUp, label: "Profit & Loss", href: "/reports/financial" },
+        { icon: FileText, label: "Customer Statements", href: "/reports/customer-statements" },
         { icon: Package, label: "Stock Reports", href: "/reports/inventory" },
         { icon: FileText, label: "Tax & ZIMRA", href: "/reports/tax" },
       ]
@@ -235,7 +237,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     </p>
                     {selectedCompany && (
                       <span className={`text-[9px] px-1.5 rounded-md font-bold uppercase tracking-wider ${selectedCompany.zimraEnvironment === 'production' ? 'text-emerald-600 bg-emerald-50' : 'text-amber-600 bg-amber-50'}`}>
-                        {selectedCompany.zimraEnvironment === 'production' ? 'Producdtion' : 'Test Mode'}
+                        {selectedCompany.zimraEnvironment === 'production' ? 'Production' : 'Test Mode'}
                       </span>
                     )}
                   </div>

@@ -2,16 +2,20 @@
 import { Document, Page, Text, View, StyleSheet, Image, Font } from "@react-pdf/renderer";
 import { format } from "date-fns";
 
-// Register fonts (reuse existing if possible or re-declare)
-Font.register({
+// Register fonts — use Google Fonts direct TTF (more reliable than CDN)
+try {
+  Font.register({
     family: 'Roboto',
     fonts: [
-        { src: 'https://cdnjs.cloudflare.com/ajax/libs/ink/3.1.10/fonts/Roboto/roboto-light-webfont.ttf', fontWeight: 300 },
-        { src: 'https://cdnjs.cloudflare.com/ajax/libs/ink/3.1.10/fonts/Roboto/roboto-regular-webfont.ttf', fontWeight: 400 },
-        { src: 'https://cdnjs.cloudflare.com/ajax/libs/ink/3.1.10/fonts/Roboto/roboto-medium-webfont.ttf', fontWeight: 500 },
-        { src: 'https://cdnjs.cloudflare.com/ajax/libs/ink/3.1.10/fonts/Roboto/roboto-bold-webfont.ttf', fontWeight: 700 },
+        { src: 'https://fonts.gstatic.com/s/roboto/v30/KFOlCnqEu92Fr1MmSU5fBBc4.ttf', fontWeight: 300 },
+        { src: 'https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Mu4mxK.ttf', fontWeight: 400 },
+        { src: 'https://fonts.gstatic.com/s/roboto/v30/KFOlCnqEu92Fr1MmEU9fBBc4.ttf', fontWeight: 500 },
+        { src: 'https://fonts.gstatic.com/s/roboto/v30/KFOlCnqEu92Fr1MmWUlfBBc4.ttf', fontWeight: 700 },
     ],
-});
+  });
+} catch (e) {
+  console.warn("Failed to register Roboto font for PDF", e);
+}
 
 const styles = StyleSheet.create({
     page: {
@@ -146,9 +150,11 @@ interface StatementPDFProps {
     company: any;
     startDate: Date;
     endDate: Date;
+    currency?: string;
 }
 
-export const StatementPDF = ({ data, company, startDate, endDate }: StatementPDFProps) => {
+export const StatementPDF = ({ data, company, startDate, endDate, currency = 'USD' }: StatementPDFProps) => {
+    const cur = currency;
     return (
         <Document>
             <Page size="A4" style={styles.page}>
@@ -178,7 +184,7 @@ export const StatementPDF = ({ data, company, startDate, endDate }: StatementPDF
                 {/* Opening Balance */}
                 <View style={styles.periodBlock}>
                     <Text style={styles.periodLabel}>Opening Balance</Text>
-                    <Text style={styles.periodValue}>${Number(data.openingBalance).toFixed(2)}</Text>
+                    <Text style={styles.periodValue}>{cur} {Number(data.openingBalance).toFixed(2)}</Text>
                 </View>
 
                 {/* Transactions Table */}
@@ -209,7 +215,7 @@ export const StatementPDF = ({ data, company, startDate, endDate }: StatementPDF
                 {/* Closing Balance */}
                 <View style={styles.balanceRow}>
                     <Text style={styles.totalLabel}>Closing Balance</Text>
-                    <Text style={styles.totalValue}>${Number(data.closingBalance).toFixed(2)}</Text>
+                    <Text style={styles.totalValue}>{cur} {Number(data.closingBalance).toFixed(2)}</Text>
                 </View>
 
             </Page>

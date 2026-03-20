@@ -23,6 +23,7 @@ import { startPosShift, endPosShift, addPosTransaction, getOpenShift, getShiftTr
 import { seedCompanyDefaults } from "./lib/seeding.js";
 import { processInvoiceFiscalization, getZimraLogger } from "./lib/fiscalization.js";
 import sageWebhookRouter from "./lib/sage-webhook.js";
+import v1Router from "./api/v1/index.js";
 import { db } from "./db";
 import { eq, and, gte, lte, ne, desc, asc, sql, or, ilike } from "drizzle-orm";
 import { format } from "date-fns";
@@ -5713,6 +5714,8 @@ export async function registerRoutes(
 
   // Sage Business Cloud webhook
   app.use("/api/webhooks/sage", sageWebhookRouter);
+
+  app.use('/api/v1', v1Router);
 
   return httpServer;
 

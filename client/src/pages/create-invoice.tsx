@@ -630,15 +630,6 @@ export default function CreateInvoicePage() {
       }
     }
 
-    if (company?.lastReceiptAt) {
-      const lastReceipt = new Date(company.lastReceiptAt);
-      if (finalIssueDate < lastReceipt) {
-        toast({ title: "Validation Error", description: `Invoice Date cannot be earlier than the last receipt (${lastReceipt.toLocaleString()}). Sequence must be maintained.`, variant: "destructive" });
-        setLoadingAction(null);
-        return;
-      }
-    }
-
     // No Future Dates (RCPT031)
     if (finalIssueDate > new Date()) {
       toast({ title: "Validation Error", description: "Invoice Date cannot be in the future (RCPT031).", variant: "destructive" });

@@ -3,7 +3,6 @@ import { ZimraDevice, ReceiptData, ZimraConfigResponse, ZimraApiError, ZimraLogg
 import { Invoice } from "../../shared/schema.js";
 import fs from "fs";
 import path from "path";
-import { storage } from "../storage.js";
 import { logAction } from "../audit.js";
 
 // Exported to be shared across the server
@@ -173,28 +172,57 @@ export const processInvoiceFiscalization = async (invoiceId: number, companyId: 
 
         console.log(`[Fiscalize] ZIMRA Status Sync - GlobalNo: ${zimraGlobalNo}, DailyCount: ${zimraDailyCount}`);
 
+        // Only advance local counters to ZIMRA's value — never go backwards.
+        // Going backwards is what causes RCPT012: local DB had N+2 claimed, ZIMRA
+        // returned N, sync reset to N, next claim gave N+1 which ZIMRA already saw.
         if (status.lastReceiptGlobalNo !== undefined || status.lastReceiptCounter !== undefined) {
             const updateData: any = {};
-            // Force sync with ZIMRA's actual values to avoid RCPT011/RCPT012
-            if (status.lastReceiptGlobalNo !== undefined) {
+            const localGlobal = company.lastReceiptGlobalNo ?? 0;
+            const localDaily = company.dailyReceiptCount ?? 0;
+
+            if (status.lastReceiptGlobalNo !== undefined && status.lastReceiptGlobalNo > localGlobal) {
                 updateData.lastReceiptGlobalNo = status.lastReceiptGlobalNo;
+                console.log(`[ZIMRA] Advancing globalNo from ${localGlobal} → ${status.lastReceiptGlobalNo} (ZIMRA is ahead)`);
+            } else if (status.lastReceiptGlobalNo !== undefined) {
+                console.log(`[ZIMRA] Skipping globalNo sync: local ${localGlobal} >= ZIMRA ${status.lastReceiptGlobalNo} (keeping local)`);
             }
-            if (status.lastReceiptCounter !== undefined) {
+
+            if (status.lastReceiptCounter !== undefined && status.lastReceiptCounter > localDaily) {
                 updateData.dailyReceiptCount = status.lastReceiptCounter;
+                console.log(`[ZIMRA] Advancing dailyCount from ${localDaily} → ${status.lastReceiptCounter} (ZIMRA is ahead)`);
+            } else if (status.lastReceiptCounter !== undefined) {
+                console.log(`[ZIMRA] Skipping dailyCount sync: local ${localDaily} >= ZIMRA ${status.lastReceiptCounter} (keeping local)`);
             }
 
             if (Object.keys(updateData).length > 0) {
-                console.log(`[ZIMRA] Syncing counters from ZIMRA status: Global=${status.lastReceiptGlobalNo}, Daily=${status.lastReceiptCounter}`);
                 company = await storage.updateCompany(company.id, updateData);
             }
         }
 
         // Re-fetch to get the resulting peaked counters
         currentCompany = await storage.getCompany(company.id) || company;
-        let nextGlobalNo = (currentCompany.lastReceiptGlobalNo || 0) + 1;
-        let nextReceiptCounter = (currentCompany.dailyReceiptCount || 0) + 1;
 
-        console.log(`[Fiscalize] Calculated Next Sequence - GlobalNo: ${nextGlobalNo}, DailyCount: ${nextReceiptCounter}`);
+        // Reuse existing numbers if present (retry scenario), otherwise atomically claim new ones.
+        // The atomic claim does a single UPDATE...RETURNING so no two concurrent fiscalizations
+        // can ever receive the same pair of numbers.
+        let nextGlobalNo: number;
+        let nextReceiptCounter: number;
+
+        if (zimraSync) {
+            nextGlobalNo = zimraSync.nextGlobalNo;
+            nextReceiptCounter = zimraSync.nextReceiptCounter;
+        } else if (invoice.receiptGlobalNo && invoice.receiptCounter) {
+            // Retry: reuse the numbers already locked to this invoice
+            nextGlobalNo = invoice.receiptGlobalNo;
+            nextReceiptCounter = invoice.receiptCounter;
+            console.log(`[Fiscalize] Retry — reusing locked numbers: GlobalNo=${nextGlobalNo}, Counter=${nextReceiptCounter}`);
+        } else {
+            // First attempt: atomically claim the next pair
+            const claimed = await storage.claimNextReceiptNumbers(company.id);
+            nextGlobalNo = claimed.receiptGlobalNo;
+            nextReceiptCounter = claimed.receiptCounter;
+            console.log(`[Fiscalize] Atomically claimed: GlobalNo=${nextGlobalNo}, Counter=${nextReceiptCounter}`);
+        }
 
         // 1. Get ZIMRA Config for correct Tax IDs
         let zimraConfig: ZimraConfigResponse | undefined;
@@ -430,17 +458,6 @@ export const processInvoiceFiscalization = async (invoiceId: number, companyId: 
             }
         }
 
-        // Reuse existing numbers if present (retry scenario), otherwise generate new ones
-        // Use latest counters from synced 'company' object
-        if (zimraSync) {
-            nextGlobalNo = zimraSync.nextGlobalNo;
-            nextReceiptCounter = zimraSync.nextReceiptCounter;
-        } else {
-            // Priority: Existing Locked Number > Last Global/Daily + 1
-            nextGlobalNo = invoice.receiptGlobalNo || ((company.lastReceiptGlobalNo || 0) + 1);
-            nextReceiptCounter = invoice.receiptCounter || ((company.dailyReceiptCount || 0) + 1);
-        }
-
         // DEBUG: Write to file
         try {
             const logData = `[${new Date().toISOString()}] Invoice ${invoiceId}
@@ -453,16 +470,13 @@ export const processInvoiceFiscalization = async (invoiceId: number, companyId: 
             fs.appendFileSync(path.join(process.cwd(), 'debug_fiscalize.log'), logData);
         } catch (err) { console.error("Failed to write debug log", err); }
 
-        // ZIMRA Date Formatting & Sequentiality Guards [40, RCPT014, RCPT030]
-        const formatZimraDate = (date: Date) => {
-            const parts = new Intl.DateTimeFormat('en-GB', {
-                timeZone: 'Africa/Harare',
-                year: 'numeric', month: '2-digit', day: '2-digit',
-                hour: '2-digit', minute: '2-digit', second: '2-digit',
-                hour12: false
-            }).formatToParts(date);
-            const p = (t: string) => parts.find(x => x.type === t)?.value;
-            return `${p('year')}-${p('month')}-${p('day')}T${p('hour')}:${p('minute')}:${p('second')}`;
+        // ZIMRA Date Formatting — ISO 8601 local Harare time, no timezone suffix.
+        // Format: YYYY-MM-DDTHH:mm:ss (24h, local time per ZIMRA spec example: 2019-09-23T14:43:23)
+        // Harare is UTC+2, no DST. We manually offset to avoid Intl/locale quirks on the server.
+        const formatZimraDate = (date: Date): string => {
+            const harareMsOffset = 2 * 60 * 60 * 1000; // UTC+2, no DST
+            const local = new Date(date.getTime() + harareMsOffset);
+            return local.toISOString().slice(0, 19); // "YYYY-MM-DDTHH:mm:ss"
         };
 
         // Ensure receiptDate is after fiscalDayOpenedAt (RCPT014) and after lastReceiptAt (RCPT030)
@@ -470,15 +484,22 @@ export const processInvoiceFiscalization = async (invoiceId: number, companyId: 
         const dayOpenedAt = company.fiscalDayOpenedAt ? new Date(company.fiscalDayOpenedAt) : null;
         const lastRcptAt = company.lastReceiptAt ? new Date(company.lastReceiptAt) : null;
 
-        // Check against day opening
+        // Check against day opening — receipt must be after day was opened (RCPT014)
         if (dayOpenedAt && nowAtHarare.getTime() <= dayOpenedAt.getTime()) {
-            console.log(`[ZIMRA] Guard: Current time (${nowAtHarare.toISOString()}) is before or equal to day opening (${dayOpenedAt.toISOString()}). Bumping timestamp.`);
+            console.log(`[ZIMRA] Guard: now (${nowAtHarare.toISOString()}) <= dayOpened (${dayOpenedAt.toISOString()}). Bumping by 1s.`);
             nowAtHarare = new Date(dayOpenedAt.getTime() + 1000);
         }
 
-        // Check against last receipt
-        if (lastRcptAt && nowAtHarare.getTime() <= lastRcptAt.getTime()) {
-            console.log(`[ZIMRA] Guard: Current time (${nowAtHarare.toISOString()}) is before or equal to last receipt (${lastRcptAt.toISOString()}). Bumping timestamp.`);
+        // Check against last receipt — receipt must be after previous receipt (RCPT030).
+        // Only bump if lastRcptAt is in the past or very recent (within 5 minutes).
+        // If lastRcptAt is far in the future (stale bug), ignore it — don't send a future date.
+        const fiveMinutes = 5 * 60 * 1000;
+        const realNow = new Date();
+        if (lastRcptAt && lastRcptAt.getTime() > realNow.getTime() + fiveMinutes) {
+            console.log(`[ZIMRA] Guard: lastRcptAt (${lastRcptAt.toISOString()}) is far in the future — ignoring stale value, using real now.`);
+            // Don't bump — lastRcptAt is stale/wrong, just use current time
+        } else if (lastRcptAt && nowAtHarare.getTime() <= lastRcptAt.getTime()) {
+            console.log(`[ZIMRA] Guard: now (${nowAtHarare.toISOString()}) <= lastRcpt (${lastRcptAt.toISOString()}). Bumping by 1s.`);
             nowAtHarare = new Date(lastRcptAt.getTime() + 1000);
         }
 
@@ -512,30 +533,38 @@ export const processInvoiceFiscalization = async (invoiceId: number, companyId: 
             try {
                 result = await device.submitReceipt(receiptData, prevHash, true);
             } catch (submitErr: any) {
-                // Auto-Open Retry Logic: Catch "Day Closed" errors (typically code 310 or message containing "closed")
-                if (submitErr.message?.toLowerCase().includes('closed') || submitErr.toString().includes('310')) {
-                    console.log("[ZIMRA] Auto-Open Retry: Fiscal Day reported closed during submission. Opening new day...");
+                // Auto-Open Retry Logic: Only trigger on ZIMRA error code 310 (FiscalDayClosed).
+                // Do NOT match on generic "closed" strings — that can fire on unrelated errors
+                // and cause a mid-day counter reset which produces RCPT011/RCPT012.
+                const is310 = submitErr.statusCode === 310 || submitErr.toString().includes('"statusCode":310') || submitErr.toString().includes('310');
+                const isDayClosed = is310 || (submitErr instanceof ZimraApiError && (submitErr as any).details?.statusCode === 310);
+                if (isDayClosed) {
+                    console.log("[ZIMRA] Auto-Open Retry: ZIMRA returned 310 (FiscalDayClosed). Opening new day...");
 
                     try {
                         // 1. Open New Fiscal Day
                         const nextDay = (company.currentFiscalDayNo || 0) + 1;
                         await device.openDay(nextDay);
 
-                        // 2. Update Local Company State
+                        // 2. Update Local Company State — reset daily counter to 0 for the new day
                         await storage.updateCompany(company.id, {
                             fiscalDayOpen: true,
                             currentFiscalDayNo: nextDay,
-                            fiscalDayOpenedAt: new Date(), // Critical for RCPT014 validation
+                            fiscalDayOpenedAt: new Date(),
                             dailyReceiptCount: 0,
-                            lastFiscalHash: null // Reset hash for new day
+                            lastFiscalHash: null
                         });
 
-                        // 3. Reset Receipt Data for New Day (Counter = 1, PrevHash = null)
-                        receiptData.receiptCounter = 1;
-                        nextReceiptCounter = 1; // Update local variable for DB update later
-                        prevHash = null;
+                        // 3. Atomically claim fresh numbers for the new day — do NOT hardcode 1.
+                        // claimNextReceiptNumbers increments dailyReceiptCount from 0 → 1 atomically,
+                        // so concurrent submissions on the new day can't collide.
+                        const newDayClaimed = await storage.claimNextReceiptNumbers(company.id);
+                        receiptData.receiptCounter = newDayClaimed.receiptCounter;
+                        nextReceiptCounter = newDayClaimed.receiptCounter;
+                        receiptData.receiptGlobalNo = newDayClaimed.receiptGlobalNo;
+                        prevHash = null; // First receipt of new day has no previous hash
 
-                        console.log("[ZIMRA] Retry: Resubmitting receipt as first of new day...");
+                        console.log(`[ZIMRA] Retry: New day ${nextDay}, claimed Counter=${nextReceiptCounter}, GlobalNo=${newDayClaimed.receiptGlobalNo}`);
                         result = await device.submitReceipt(receiptData, prevHash, true);
 
                     } catch (retryErr: any) {
@@ -666,7 +695,7 @@ export const processInvoiceFiscalization = async (invoiceId: number, companyId: 
             lastReceiptGlobalNo: receiptData.receiptGlobalNo,
             dailyReceiptCount: receiptData.receiptCounter,
             lastFiscalHash: result.hash, // Chaining
-            lastReceiptAt: new Date(receiptData.receiptDate)
+            lastReceiptAt: nowAtHarare  // Use the actual UTC Date object, not re-parsed from the Harare-formatted string
         });
 
         return updatedInvoice;

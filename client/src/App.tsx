@@ -45,6 +45,7 @@ import PosSettingsPage from "@/pages/pos-settings";
 import SubscriptionPage from "@/pages/subscription";
 import PosLoginPage from "@/pages/pos-login";
 import ReportsPage from "@/pages/reports";
+import PaymentsReceivedPage from "@/pages/payments-received";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/lib/supabase";
 import { useCompanies } from "@/hooks/use-companies";
@@ -189,6 +190,7 @@ function Router() {
       <Route path="/reports/pos">{() => <ProtectedRoute component={PosReportsPage} />}</Route>
       <Route path="/reports/tax">{() => <ProtectedRoute component={TaxReportsPage} />}</Route>
       <Route path="/reports">{() => <ProtectedRoute component={ReportsPage} />}</Route>
+      <Route path="/payments-received">{() => <ProtectedRoute component={PaymentsReceivedPage} />}</Route>
       <Route path="/profile">{() => <ProtectedRoute component={UserProfilePage} />}</Route>
       <Route path="/zimra-settings">{() => <ProtectedRoute component={ZimraSettingsPage} />}</Route>
       <Route path="/zimra-logs">{() => <ProtectedRoute component={ZimraLogsPage} />}</Route>

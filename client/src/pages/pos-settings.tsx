@@ -49,10 +49,11 @@ export default function PosSettingsPage() {
         showLogo: boolean;
         allowSellOutOfStock: boolean;
         allowedPaymentMethods: string[];
-        defaultCustomerId?: string; // Stored as string to match Select value, but implies ID
+        defaultCustomerId?: string;
         silentPrinting: boolean;
         printServerUrl: string;
         printerName?: string;
+        paperSize: '80mm' | '58mm' | 'A4';
     }
 
     // POS Settings Form State
@@ -69,7 +70,8 @@ export default function PosSettingsPage() {
         defaultCustomerId: "",
         silentPrinting: false,
         printServerUrl: "http://localhost:12312",
-        printerName: ""
+        printerName: "",
+        paperSize: '80mm'
     });
 
     const { data: customers } = useCustomers(companyId);
@@ -89,7 +91,8 @@ export default function PosSettingsPage() {
                 defaultCustomerId: settings.defaultCustomerId || "",
                 silentPrinting: settings.silentPrinting ?? false,
                 printServerUrl: settings.printServerUrl || "http://localhost:12312",
-                printerName: settings.printerName || ""
+                printerName: settings.printerName || "",
+                paperSize: settings.paperSize || '80mm'
             });
         }
     }, [currentCompany]);
@@ -369,6 +372,24 @@ export default function PosSettingsPage() {
                                     <p className="text-[10px] text-slate-500">Auto-selects this customer for new sales</p>
                                 </div>
 
+                                <div className="space-y-1">
+                                    <Label className="text-xs">Paper Size</Label>
+                                    <Select
+                                        value={posConfig.paperSize || '80mm'}
+                                        onValueChange={(val) => setPosConfig({ ...posConfig, paperSize: val as any })}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select paper size" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="80mm">80mm — Standard thermal receipt</SelectItem>
+                                            <SelectItem value="58mm">58mm — Compact/portable thermal</SelectItem>
+                                            <SelectItem value="A4">A4 — Office printer</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <p className="text-[10px] text-slate-500">Match this to your receipt printer paper width</p>
+                                </div>
+
                                 <div className="flex items-center justify-between">
                                     <div className="space-y-0.5">
                                         <Label className="text-sm">Printing Enabled</Label>
@@ -382,7 +403,7 @@ export default function PosSettingsPage() {
 
                                 <div className="flex items-center justify-between">
                                     <div className="space-y-0.5">
-                                        <Label className={`text-sm ${!posConfig.printingEnabled ? 'text-slate-300' : ''}`}>Auto-Print Receipt</Label>
+                                        <Label className="text-sm">Auto Print</Label>
                                         <p className="text-[10px] text-slate-500">Print immediately after sale completion</p>
                                     </div>
                                     <Switch

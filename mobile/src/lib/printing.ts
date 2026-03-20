@@ -1,5 +1,4 @@
 import * as Print from 'expo-print';
-import { Platform } from 'react-native';
 
 // Lazy-load native thermal printer to avoid crash on Expo Go / unsupported builds
 let ThermalPrinterModule: any = null;
@@ -19,18 +18,40 @@ export interface TicketData {
   cashierName?: string;
   paidAmount?: number;
   paperWidth?: number;
+  noteType?: "credit" | "debit";
+  originalInvoiceNumber?: string;
 }
 
 /** True when the company is VAT-registered and can issue fiscal receipts */
 const isFiscal = (company: any) => !!(company?.vatRegistered && company?.vatNumber);
 
+/** Derive receipt title and fiscal footer marker based on note type */
+function getNoteLabels(noteType: "credit" | "debit" | undefined, fiscal: boolean) {
+  if (!noteType) {
+    return {
+      title: fiscal ? 'FISCAL TAX INVOICE' : 'TAX INVOICE',
+      footerMarker: fiscal ? '*** FISCAL RECEIPT ***' : null,
+    };
+  }
+  const isCredit = noteType === "credit";
+  return {
+    title: fiscal
+      ? (isCredit ? 'FISCAL CREDIT NOTE' : 'FISCAL DEBIT NOTE')
+      : (isCredit ? 'CREDIT NOTE' : 'DEBIT NOTE'),
+    footerMarker: fiscal
+      ? (isCredit ? '*** FISCAL CREDIT NOTE ***' : '*** FISCAL DEBIT NOTE ***')
+      : null,
+  };
+}
+
 export const generateReceiptHtml = (data: TicketData) => {
-  const { invoice, company, customer, items, currencySymbol, cashierName, paidAmount, paperWidth } = data;
+  const { invoice, company, items, currencySymbol, cashierName, paidAmount, paperWidth, noteType, originalInvoiceNumber } = data;
   const symbol = currencySymbol || '$';
   const receiptItems = items || invoice.items || [];
   const width = paperWidth || 58;
   const isWide = width >= 80;
   const fiscal = isFiscal(company);
+  const { title, footerMarker } = getNoteLabels(noteType, fiscal);
 
   // Group taxes
   const taxGroups = receiptItems.reduce((acc: any, item: any) => {
@@ -112,12 +133,13 @@ export const generateReceiptHtml = (data: TicketData) => {
         </div>
 
         <div class="text-center font-bold mb-2 pb-2 border-b">
-          <p>${fiscal ? 'FISCAL TAX INVOICE' : 'TAX INVOICE'}</p>
+          <p>${title}</p>
         </div>
 
         <div class="mb-2 pb-2 border-b">
           ${cashierName ? `<p>Cashier: ${cashierName}</p>` : ''}
           ${invoice.invoiceNumber ? `<p>Invoice No: ${invoice.invoiceNumber}</p>` : ''}
+          ${originalInvoiceNumber ? `<p>Ref: ${originalInvoiceNumber}</p>` : ''}
           <p>Date: ${new Date(invoice.issueDate || invoice.createdAt).toLocaleString(undefined, {
             day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit'
           })}</p>
@@ -187,16 +209,16 @@ export const generateReceiptHtml = (data: TicketData) => {
 
         <div class="text-center italic text-9xs mt-1">
           <p>${company.posSettings?.receiptFooter || "Thank you for your business!"}</p>
-          ${invoice._offline ? `
-            <div class="offline-badge"><p>*** PENDING FISCALIZATION ***</p><p style="font-weight:normal;">Will sync when online</p></div>
-          ` : fiscal ? `<p>*** FISCAL RECEIPT ***</p>` : ''}
+          ${invoice._offline
+            ? `<div class="offline-badge"><p>*** PENDING SYNC ***</p><p style="font-weight:normal;">Will sync when online</p></div>`
+            : footerMarker ? `<p>${footerMarker}</p>` : ''}
         </div>
       </body>
     </html>
   `;
 };
 
-export const printReceipt = async (data: TicketData, printerUrl?: string) => {
+export const printReceipt = async (data: TicketData, printerUrl?: string, silent?: boolean) => {
   try {
     const html = generateReceiptHtml(data);
     await Print.printAsync({ html, printerUrl: printerUrl || undefined });
@@ -211,10 +233,11 @@ export const printToBluetooth = async (data: TicketData, address?: string) => {
     throw new Error("Bluetooth printing is not available in this build. Please use a custom dev client.");
   }
 
-  const { invoice, company, items, currencySymbol, cashierName, paidAmount, paperWidth } = data;
+  const { invoice, company, items, cashierName, paidAmount, paperWidth, noteType, originalInvoiceNumber } = data;
   const receiptItems = items || invoice.items || [];
   const width = paperWidth || 58;
   const fiscal = isFiscal(company);
+  const { title, footerMarker } = getNoteLabels(noteType, fiscal);
 
   const getMaxChars = (w: number) => {
     if (w >= 80) return 48;
@@ -257,11 +280,12 @@ export const printToBluetooth = async (data: TicketData, address?: string) => {
   if (company.email) text += `[C]${company.email}\n`;
   if (company.phone) text += `[C]${company.phone}\n`;
   text += `[C]${sep}\n`;
-  text += `[C]<b>${fiscal ? 'FISCAL TAX INVOICE' : 'TAX INVOICE'}</b>\n`;
+  text += `[C]<b>${title}</b>\n`;
   text += `[C]${sep}\n`;
 
   if (cashierName) text += `[L]Cashier: [R]${cashierName}\n`;
   if (invoice.invoiceNumber) text += `[L]Invoice No: [R]${invoice.invoiceNumber}\n`;
+  if (originalInvoiceNumber) text += `[L]Ref: [R]${originalInvoiceNumber}\n`;
   text += `[L]Date: [R]${new Date(invoice.issueDate || invoice.createdAt).toLocaleString(undefined, { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}\n`;
   text += `[C]${sep}\n`;
 
@@ -308,8 +332,8 @@ export const printToBluetooth = async (data: TicketData, address?: string) => {
   }
 
   text += `[C]${company.posSettings?.receiptFooter || "Thank you for your business!"}\n`;
-  if (invoice._offline) text += `[C]*** PENDING FISCALIZATION ***\n`;
-  else if (fiscal) text += `[C]*** FISCAL RECEIPT ***\n`;
+  if (invoice._offline) text += `[C]*** PENDING SYNC ***\n`;
+  else if (footerMarker) text += `[C]${footerMarker}\n`;
   text += `\n\n\n`;
 
   await ThermalPrinterModule.printBluetooth({ payload: text, macAddress: address });

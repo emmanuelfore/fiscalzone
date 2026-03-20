@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, ArrowLeft, Save, Download, FileText, Calendar as CalendarIcon } from "lucide-react";
+import { Loader2, ArrowLeft, Save, Download, Printer, Calendar as CalendarIcon } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
@@ -90,6 +90,65 @@ export default function CustomerDetailsPage() {
         } catch (error) {
             toast({ title: "Error", description: "Failed to update customer", variant: "destructive" });
         }
+    };
+
+    const printStatement = () => {
+        if (!statementData || !company) return;
+        const win = window.open("", "_blank", "width=900,height=700");
+        if (!win) return;
+        const rows = statementData.transactions.map((tx: any) => `
+            <tr>
+                <td>${format(new Date(tx.date), "dd MMM yyyy")}</td>
+                <td>${tx.reference}</td>
+                <td>${tx.description}</td>
+                <td style="text-align:right">${tx.debit > 0 ? Number(tx.debit).toFixed(2) : "-"}</td>
+                <td style="text-align:right">${tx.credit > 0 ? Number(tx.credit).toFixed(2) : "-"}</td>
+                <td style="text-align:right;font-weight:bold">${Number(tx.balance).toFixed(2)}</td>
+            </tr>`).join("");
+        win.document.write(`
+            <html><head><title>Statement - ${customer.name}</title>
+            <style>
+                body { font-family: Arial, sans-serif; font-size: 11px; color: #000; padding: 20px; }
+                h1 { font-size: 18px; margin: 0; } h2 { font-size: 13px; margin: 0; }
+                .header { display: flex; justify-content: space-between; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 16px; }
+                .company-info { text-align: right; font-size: 10px; }
+                .customer-box { background: #f5f5f5; padding: 10px; margin-bottom: 16px; border-radius: 4px; }
+                .balances { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 12px; }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+                th { background: #f0f0f0; padding: 6px 8px; text-align: left; font-size: 10px; text-transform: uppercase; border-bottom: 1px solid #ccc; }
+                td { padding: 5px 8px; border-bottom: 1px solid #eee; }
+                .closing { text-align: right; font-size: 13px; font-weight: bold; border-top: 2px solid #000; padding-top: 8px; }
+                @media print { body { padding: 0; } }
+            </style></head>
+            <body>
+                <div class="header">
+                    <div><h1>Statement of Account</h1><p>${format(dateRange.from, "dd MMM yyyy")} – ${format(dateRange.to, "dd MMM yyyy")}</p></div>
+                    <div class="company-info">
+                        <h2>${company.tradingName || company.name}</h2>
+                        ${company.address ? `<p>${company.address}</p>` : ""}
+                        ${company.city ? `<p>${company.city}</p>` : ""}
+                        ${company.phone ? `<p>Tel: ${company.phone}</p>` : ""}
+                        ${company.tin ? `<p>TIN: ${company.tin}</p>` : ""}
+                    </div>
+                </div>
+                <div class="customer-box">
+                    <strong>${customer.name}</strong>
+                    ${customer.address ? `<br/>${customer.address}` : ""}
+                    ${customer.city ? `<br/>${customer.city}` : ""}
+                </div>
+                <div class="balances">
+                    <span>Opening Balance: <strong>${selectedCurrency} ${Number(statementData.openingBalance).toFixed(2)}</strong></span>
+                </div>
+                <table>
+                    <thead><tr><th>Date</th><th>Reference</th><th>Description</th><th style="text-align:right">Debit</th><th style="text-align:right">Credit</th><th style="text-align:right">Balance</th></tr></thead>
+                    <tbody>${rows || '<tr><td colspan="6" style="text-align:center">No transactions</td></tr>'}</tbody>
+                </table>
+                <div class="closing">Closing Balance: ${selectedCurrency} ${Number(statementData.closingBalance).toFixed(2)}</div>
+            </body></html>`);
+        win.document.close();
+        win.focus();
+        win.print();
+        win.close();
     };
 
     if (isLoadingCustomer) return <Layout><div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div></Layout>;
@@ -215,24 +274,30 @@ export default function CustomerDetailsPage() {
                                     </Popover>
 
                                     {statementData && company && (
-                                        <PDFDownloadLink
-                                            document={
-                                                <StatementPDF
-                                                    data={statementData}
-                                                    company={company}
-                                                    startDate={dateRange.from}
-                                                    endDate={dateRange.to}
-                                                />
-                                            }
-                                            fileName={`Statement-${customer.name}-${format(new Date(), 'yyyyMMdd')}.pdf`}
-                                        >
-                                            {({ loading }) => (
-                                                <Button variant="outline" disabled={loading}>
-                                                    {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Download className="w-4 h-4 mr-2" />}
-                                                    Download PDF
-                                                </Button>
-                                            )}
-                                        </PDFDownloadLink>
+                                        <>
+                                            <Button variant="outline" onClick={printStatement}>
+                                                <Printer className="w-4 h-4 mr-2" />
+                                                Print
+                                            </Button>
+                                            <PDFDownloadLink
+                                                document={
+                                                    <StatementPDF
+                                                        data={statementData}
+                                                        company={company}
+                                                        startDate={dateRange.from}
+                                                        endDate={dateRange.to}
+                                                    />
+                                                }
+                                                fileName={`Statement-${customer.name}-${format(new Date(), 'yyyyMMdd')}.pdf`}
+                                            >
+                                                {({ loading }) => (
+                                                    <Button variant="outline" disabled={loading}>
+                                                        {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Download className="w-4 h-4 mr-2" />}
+                                                        Download PDF
+                                                    </Button>
+                                                )}
+                                            </PDFDownloadLink>
+                                        </>
                                     )}
                                 </div>
                             </div>

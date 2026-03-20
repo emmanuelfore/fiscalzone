@@ -10,12 +10,16 @@ interface Receipt48Props {
     items?: any[];
     originalInvoice?: any; // For Credit/Debit notes
     user?: any;
+    paperSize?: '80mm' | '58mm' | 'A4';
 }
 
-export function Receipt48({ id = "receipt-48", invoice, company, customer, items, originalInvoice, user }: Receipt48Props) {
+export function Receipt48({ id = "receipt-48", invoice, company, customer, items, originalInvoice, user, paperSize: paperSizeProp }: Receipt48Props) {
     if (!invoice || !company) return null;
 
     const receiptItems = items || invoice.items || [];
+    const paperSize = paperSizeProp || (company.posSettings?.paperSize as string) || '80mm';
+    const isA4 = paperSize === 'A4';
+    const receiptWidth = isA4 ? '210mm' : paperSize;
 
     // Group taxes
     const taxGroups = receiptItems.reduce((acc: any, item: any) => {
@@ -55,7 +59,7 @@ export function Receipt48({ id = "receipt-48", invoice, company, customer, items
         : "TAX INVOICE";
 
     return (
-        <div id={id} className="w-[80mm] bg-white p-2 text-black font-mono text-[10px] leading-tight">
+        <div id={id} style={{ width: receiptWidth }} className={`bg-white p-2 text-black font-mono text-[10px] leading-tight ${isA4 ? 'mx-auto' : ''}`}>
             {/* [1] Logo (Placeholder if URL exists) */}
             {company.logoUrl && (
                 <div className="flex justify-center mb-2">
@@ -223,19 +227,27 @@ export function Receipt48({ id = "receipt-48", invoice, company, customer, items
             <style>{`
                 @media print {
                     @page { 
-                        size: 80mm auto; 
-                        margin: 0; 
+                        size: ${isA4 ? 'A4' : `${receiptWidth} auto`}; 
+                        margin: 0mm; 
                     }
-                    body { 
-                        margin: 0; 
-                        padding: 0; 
+                    html, body { 
+                        margin: 0 !important; 
+                        padding: 0 !important; 
+                        width: ${isA4 ? '210mm' : receiptWidth} !important;
                         background: white;
                     }
-                    #receipt-48 {
-                        width: 76mm;
-                        margin: 0 auto;
-                        padding: 2mm;
+                    #${id} {
+                        width: ${receiptWidth} !important;
+                        max-width: ${receiptWidth} !important;
+                        margin: ${isA4 ? '0 auto' : '0'} !important;
+                        padding: 2mm !important;
+                        box-sizing: border-box;
                         background: white;
+                        overflow: hidden;
+                        ${isA4 ? 'position: relative;' : 'position: fixed; left: 0; top: 0;'}
+                    }
+                    * {
+                        box-sizing: border-box;
                     }
                 }
             `}</style>

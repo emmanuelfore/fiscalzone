@@ -65,7 +65,9 @@ import {
   getPendingShiftActions,
   removePendingShiftAction,
   getProvisionalShift,
-  setProvisionalShift
+  setProvisionalShift,
+  getPendingNotes,
+  removePendingNote,
 } from "../lib/offlineQueue";
 
 // ─── v3 colour tokens ─────────────────────────────────────────────────────────
@@ -242,7 +244,8 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
     const refreshQueue = async () => {
       const sales = await getPendingSales(companyId);
       const shifts = await getPendingShiftActions(companyId);
-      if (!cancelled) setQueueCount(sales.length + shifts.length);
+      const notes = await getPendingNotes(companyId);
+      if (!cancelled) setQueueCount(sales.length + shifts.length + notes.length);
     };
     refreshQueue();
     const id = setInterval(refreshQueue, 5000);
@@ -490,15 +493,16 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
     if (!isOnlineRef.current || isSyncing) return;
     const shiftActions = await getPendingShiftActions(companyId);
     const sales = await getPendingSales(companyId);
+    const notes = await getPendingNotes(companyId);
 
-    if (shiftActions.length === 0 && sales.length === 0) {
+    if (shiftActions.length === 0 && sales.length === 0 && notes.length === 0) {
       if (isManual) Alert.alert("Sync", "Everything is already synced.");
       return;
     }
 
     setIsSyncing(true);
     if (isManual) {
-      Alert.alert("Syncing", `Starting sync of ${shiftActions.length + sales.length} queued actions...`);
+      Alert.alert("Syncing", `Starting sync of ${shiftActions.length + sales.length + notes.length} queued actions...`);
     }
 
     let successCount = 0;
@@ -523,6 +527,31 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
           if (res.ok) { await removePendingSale(sale.id); successCount++; }
         } catch (err) {
           console.error("Sale sync error:", err);
+          break;
+        }
+      }
+      // Flush pending notes
+      const isFiscalCompany = !!(company?.vatRegistered && company?.vatNumber);
+      for (const note of notes) {
+        try {
+          const endpoint =
+            note.noteType === "credit"
+              ? `/api/invoices/${note.originalInvoiceId}/credit-note`
+              : `/api/invoices/${note.originalInvoiceId}/debit-note`;
+          const res = await apiFetch(endpoint, { method: "POST", body: JSON.stringify(note.payload) });
+          if (res.ok) {
+            const created = await res.json().catch(() => null);
+            await removePendingNote(note.id);
+            successCount++;
+            // Fiscalise for VAT companies
+            if (isFiscalCompany && created?.id) {
+              apiFetch(`/api/invoices/${created.id}/fiscalize`, { method: "POST" }).catch((e) => {
+                console.warn("Note fiscalisation failed after sync:", e);
+              });
+            }
+          }
+        } catch (err) {
+          console.error("Note sync error:", err);
           break;
         }
       }

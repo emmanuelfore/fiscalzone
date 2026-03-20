@@ -14,7 +14,8 @@ type PendingShiftAction =
 const KEYS = {
   pendingSales: "pendingSales",
   pendingShiftActions: "pendingShiftActions",
-  provisionalShift: "provisionalShift"
+  provisionalShift: "provisionalShift",
+  pendingNotes: "pendingNotes",
 } as const;
 
 function uid() {
@@ -91,3 +92,37 @@ export async function getProvisionalShift(companyId: number): Promise<any | null
   return readJson<any | null>(key, null);
 }
 
+
+// ─── Note Queue ───────────────────────────────────────────────────────────────
+
+type PendingNote = {
+  id: string;
+  companyId: number;
+  originalInvoiceId: number;
+  noteType: "credit" | "debit";
+  payload: any;
+  createdAt: string;
+};
+
+export async function addPendingNote(
+  companyId: number,
+  originalInvoiceId: number,
+  noteType: "credit" | "debit",
+  payload: any
+): Promise<string> {
+  const list = await readJson<PendingNote[]>(KEYS.pendingNotes, []);
+  const id = uid();
+  list.push({ id, companyId, originalInvoiceId, noteType, payload, createdAt: new Date().toISOString() });
+  await writeJson(KEYS.pendingNotes, list);
+  return id;
+}
+
+export async function getPendingNotes(companyId: number): Promise<PendingNote[]> {
+  const list = await readJson<PendingNote[]>(KEYS.pendingNotes, []);
+  return list.filter((x) => x.companyId === companyId);
+}
+
+export async function removePendingNote(id: string): Promise<void> {
+  const list = await readJson<PendingNote[]>(KEYS.pendingNotes, []);
+  await writeJson(KEYS.pendingNotes, list.filter((x) => x.id !== id));
+}

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, SafeAreaView, Text, View } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { assertEnv } from "./lib/env";
 import { supabase } from "./lib/supabase";
 import { apiJson } from "./lib/api";
@@ -50,10 +51,17 @@ export function AppRoot() {
     try {
       const companies = await apiJson<any[]>('/api/companies');
       if (Array.isArray(companies)) {
+        // Cache for offline use
+        await AsyncStorage.setItem('cached_companies', JSON.stringify(companies));
         return companies;
       }
       return [];
-    } catch (e) { 
+    } catch (e) {
+      // Offline — try cached companies
+      try {
+        const cached = await AsyncStorage.getItem('cached_companies');
+        if (cached) return JSON.parse(cached) as any[];
+      } catch { /* ignore */ }
       return []; 
     }
   };

@@ -2635,7 +2635,7 @@ export default function POSPage() {
             </div>
 
             {/* Hidden Receipt for Silent Printing */}
-            <div className="fixed -left-[9999px] top-0 pointer-events-none overflow-hidden" style={{ width: '80mm' }}>
+            <div className="fixed -left-[9999px] top-0 pointer-events-none overflow-hidden" style={{ width: resolvedCompany?.posSettings?.paperSize === 'A4' ? '210mm' : (resolvedCompany?.posSettings?.paperSize || '80mm') }}>
                 {lastSuccessfulInvoice && (
                     <Receipt48
                         id="silent-receipt-48"
@@ -2649,7 +2649,7 @@ export default function POSPage() {
             </div>
 
             {/* Hidden Reprint Receipt */}
-            <div className="fixed -left-[9999px] top-0 pointer-events-none overflow-hidden" style={{ width: '80mm' }}>
+            <div className="fixed -left-[9999px] top-0 pointer-events-none overflow-hidden" style={{ width: resolvedCompany?.posSettings?.paperSize === 'A4' ? '210mm' : (resolvedCompany?.posSettings?.paperSize || '80mm') }}>
                 {reprintInvoice && (
                     <Receipt48
                         id="reprint-receipt-48"

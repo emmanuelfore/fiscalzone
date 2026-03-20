@@ -7,15 +7,19 @@ interface POSReceiptProps {
     company: any;
     customer?: any;
     items?: any[];
+    paperSize?: '80mm' | '58mm' | 'A4';
 }
 
-export function POSReceipt({ invoice, company, customer, items }: POSReceiptProps) {
+export function POSReceipt({ invoice, company, customer, items, paperSize: paperSizeProp }: POSReceiptProps) {
     if (!invoice || !company) return null;
 
     const receiptItems = items || invoice.items || [];
+    const paperSize = paperSizeProp || (company.posSettings?.paperSize as string) || '80mm';
+    const isA4 = paperSize === 'A4';
+    const receiptWidth = isA4 ? '210mm' : paperSize;
 
     return (
-        <div id="pos-receipt" className="w-[80mm] bg-white p-2 text-black font-mono text-[10px] leading-tight">
+        <div id="pos-receipt" style={{ width: receiptWidth }} className={`bg-white p-2 text-black font-mono text-[10px] leading-tight ${isA4 ? 'mx-auto' : ''}`}>
             {/* Header */}
             <div className="text-center space-y-1 mb-4">
                 <h1 className="text-lg font-black uppercase text-center w-full">{company.name}</h1>
@@ -161,12 +165,13 @@ export function POSReceipt({ invoice, company, customer, items }: POSReceiptProp
             <style>{`
                 @media print {
                     @page {
-                        size: 80mm auto;
-                        margin: 0;
+                        size: ${isA4 ? 'A4' : `${receiptWidth} auto`};
+                        margin: 0mm;
                     }
-                    body {
-                        margin: 0;
-                        padding: 0;
+                    html, body {
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        width: ${isA4 ? '210mm' : receiptWidth} !important;
                     }
                     body * {
                         visibility: hidden;
@@ -179,14 +184,17 @@ export function POSReceipt({ invoice, company, customer, items }: POSReceiptProp
                         overflow: visible;
                     }
                     #pos-receipt {
-                        position: absolute;
-                        left: 0;
+                        position: fixed;
+                        left: ${isA4 ? '50%' : '0'};
                         top: 0;
-                        width: 79mm; /* Slightly less than 80mm to prevent spillover */
-                        padding: 4mm;
-                        margin: 0 auto;
+                        ${isA4 ? 'transform: translateX(-50%);' : ''}
+                        width: ${receiptWidth};
+                        padding: 2mm;
+                        margin: 0;
+                        box-sizing: border-box;
                         background: white;
                     }
+                    * { box-sizing: border-box; }
                 }
             `}</style>
         </div>

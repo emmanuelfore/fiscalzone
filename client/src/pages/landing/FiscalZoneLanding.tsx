@@ -725,7 +725,7 @@ export default function FiscalZoneLanding() {
                 <div className="footer-logo-txt">Fiscal<span>Zone</span></div>
               </div>
               <p className="footer-tag">Zimbabwe's intelligent fiscalization platform. Built for compliance, designed for growth.</p>
-              <div className="footer-contact">info@fiscalzone.co.zw · www.fiscalzone.co.zw</div>
+              <div className="footer-contact">info@fiscalstack.co.zw · www.fiscalstack.co.zw</div>
             </div>
             <div className="footer-col">
               <h5>Platform</h5>
@@ -751,7 +751,7 @@ export default function FiscalZoneLanding() {
               <ul>
                 <li><a href="https://wa.me/263779532012">WhatsApp: 0779532012</a></li>
                 <li><a href="tel:0779555522">Phone: 0779555522</a></li>
-                <li><a href="mailto:info@fiscalzone.co.zw">info@fiscalzone.co.zw</a></li>
+                <li><a href="mailto:info@fiscalstack.co.zw">info@fiscalstack.co.zw</a></li>
               </ul>
             </div>
           </div>

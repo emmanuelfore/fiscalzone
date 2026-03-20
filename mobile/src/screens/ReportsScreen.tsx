@@ -1,17 +1,21 @@
 import React, { useState, useMemo, useEffect } from "react";
 import {
   View, Text, FlatList, TouchableOpacity, TextInput,
-  StyleSheet, SafeAreaView, ActivityIndicator,
+  StyleSheet, SafeAreaView, ActivityIndicator, Alert,
 } from "react-native";
 import {
   Menu, PieChart, TrendingUp, DollarSign, Calendar,
   ChevronDown, ChevronUp, Receipt, Package, Clock,
-  User as UserIcon, Filter, Search, X
+  User as UserIcon, Filter, Search, X, Printer
 } from "lucide-react-native";
 import { StatusBar } from "expo-status-bar";
 import { Modal, ScrollView } from "react-native";
-import { usePosSales, useInvoiceItems, useCurrencies } from "../hooks/usePosData";
+import { usePosSales, useInvoiceItems, useCurrencies, useCompany } from "../hooks/usePosData";
 import { apiJson } from "../lib/api";
+import { printReceipt, printToBluetooth } from "../lib/printing";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import NetInfo from "@react-native-community/netinfo";
+import { NoteModal } from "../components/NoteModal";
 
 import { PremiumColors as C } from "../ui/PremiumColors";
 
@@ -39,6 +43,70 @@ interface ReportsScreenProps {
   userRole?: string;
   userId?: string;
   userName?: string;
+}
+
+function ExpandedSaleContent({ sale, currencySymbols, onReprint, isPrinting, onCreditNote, onDebitNote }: {
+  sale: any;
+  currencySymbols: Record<string, string>;
+  onReprint: (sale: any, items: any[]) => void;
+  isPrinting: boolean;
+  onCreditNote?: (sale: any, items: any[]) => void;
+  onDebitNote?: (sale: any, items: any[]) => void;
+}) {
+  const { data: items, isLoading } = useInvoiceItems(sale.id);
+  const canIssueNote = sale.status === "issued" || sale.status === "paid";
+  return (
+    <View style={styles.saleDetails}>
+      <View style={styles.detailsDivider} />
+      <InvoiceItemRow
+        invoiceId={sale.id}
+        currencyCode={sale.currency}
+        exchangeRate={sale.exchangeRate}
+        symbols={currencySymbols}
+      />
+      <View style={[styles.saleFooter, { justifyContent: "space-between", flexWrap: "wrap", gap: 6 }]}>
+        <View>
+          <Text style={styles.paymentMethod}>Paid via {sale.paymentMethod || "CASH"}</Text>
+          {sale.customerName && <Text style={styles.customerName}>Customer: {sale.customerName}</Text>}
+        </View>
+        <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
+          {canIssueNote && onCreditNote && (
+            <TouchableOpacity
+              onPress={() => onCreditNote(sale, items || [])}
+              style={{
+                flexDirection: "row", alignItems: "center", gap: 4,
+                paddingHorizontal: 8, paddingVertical: 5, borderRadius: 8,
+                backgroundColor: "rgba(240,165,0,0.1)", borderWidth: 1, borderColor: "rgba(240,165,0,0.3)"
+              }}>
+              <Text style={{ color: "#f0a500", fontSize: 10, fontWeight: "700" }}>CN</Text>
+            </TouchableOpacity>
+          )}
+          {canIssueNote && onDebitNote && (
+            <TouchableOpacity
+              onPress={() => onDebitNote(sale, items || [])}
+              style={{
+                flexDirection: "row", alignItems: "center", gap: 4,
+                paddingHorizontal: 8, paddingVertical: 5, borderRadius: 8,
+                backgroundColor: "rgba(167,139,250,0.1)", borderWidth: 1, borderColor: "rgba(167,139,250,0.3)"
+              }}>
+              <Text style={{ color: "#a78bfa", fontSize: 10, fontWeight: "700" }}>DN</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            onPress={() => onReprint(sale, items || [])}
+            disabled={isPrinting || isLoading}
+            style={{
+              flexDirection: "row", alignItems: "center", gap: 5,
+              paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8,
+              backgroundColor: "rgba(240,165,0,0.1)", borderWidth: 1, borderColor: "rgba(240,165,0,0.3)"
+            }}>
+            <Printer size={13} color="#f0a500" />
+            <Text style={{ color: "#f0a500", fontSize: 11, fontWeight: "700" }}>Reprint</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
 }
 
 function InvoiceItemRow({ invoiceId, currencyCode, exchangeRate, symbols }: {
@@ -89,9 +157,66 @@ function InvoiceItemRow({ invoiceId, currencyCode, exchangeRate, symbols }: {
 
 export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", userId, userName }: ReportsScreenProps) {
   const isCashier = userRole.toLowerCase() === "cashier" || userRole.toLowerCase() === "member";
-  
-  const [period, setPeriod] = useState<Period>("Today");
-  const [customStart, setCustomStart] = useState("");
+  const { data: company } = useCompany(companyId);
+  const [isPrinting, setIsPrinting] = useState(false);
+  const [printerConfig, setPrinterConfig] = useState({ macAddress: "", terminalId: "POS-01", targetPrinter: "", paperWidth: 58 });
+  const [isOnline, setIsOnline] = useState(true);
+  const [creditThreshold, setCreditThreshold] = useState(50);
+  const [noteModal, setNoteModal] = useState<{
+    visible: boolean;
+    noteType: "credit" | "debit";
+    sale: any;
+    items: any[];
+  } | null>(null);
+
+  useEffect(() => {
+    const unsub = NetInfo.addEventListener((state) => {
+      setIsOnline(!!state.isConnected && !!state.isInternetReachable);
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    AsyncStorage.getItem(`credit_threshold_${companyId}`).then((val) => {
+      if (val) setCreditThreshold(parseFloat(val) || 50);
+    });
+  }, [companyId]);
+
+  useEffect(() => {
+    AsyncStorage.getItem(`printer_config_${userId}`).then(val => {
+      if (val) { try { setPrinterConfig(JSON.parse(val)); } catch (_) {} }
+    });
+  }, [userId]);
+
+  const handleReprint = async (sale: any, items: any[]) => {
+    if (!company) return;
+    setIsPrinting(true);
+    const ticketData = {
+      invoice: sale,
+      company,
+      items,
+      currencySymbol: currencySymbols[sale.currency || "USD"] || "$",
+      cashierName: sale.cashierName,
+      paidAmount: Number(sale.total || 0),
+      paperWidth: printerConfig.paperWidth,
+      terminalId: printerConfig.terminalId,
+    };
+    try {
+      if (printerConfig.macAddress) {
+        await printToBluetooth(ticketData, printerConfig.macAddress);
+      } else {
+        await printReceipt(ticketData, printerConfig.targetPrinter || undefined);
+      }
+    } catch (e: any) {
+      if (e.message !== "Print preview was cancelled.") {
+        Alert.alert("Print Error", e.message || "Could not print receipt");
+      }
+    } finally {
+      setIsPrinting(false);
+    }
+  };
+
+  const [period, setPeriod] = useState<Period>("Today");  const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
   const [showPeriodPicker, setShowPeriodPicker] = useState(false);
   const [expandedSaleId, setExpandedSaleId] = useState<number | null>(null);
@@ -371,13 +496,30 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
                 <View style={styles.saleMainInfo}>
                   <View style={styles.saleIcon}><Receipt size={16} color={C.amber.primary} /></View>
                   <View>
-                    <Text style={styles.saleNumber}>{sale.invoiceNumber || `#${sale.id}`}</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                      <Text style={styles.saleNumber}>{sale.invoiceNumber || `#${sale.id}`}</Text>
+                      {sale.transactionType === "CreditNote" && (
+                        <View style={{ backgroundColor: "rgba(240,165,0,0.15)", paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 }}>
+                          <Text style={{ color: "#f0a500", fontSize: 9, fontWeight: "900" }}>CN</Text>
+                        </View>
+                      )}
+                      {sale.transactionType === "DebitNote" && (
+                        <View style={{ backgroundColor: "rgba(167,139,250,0.15)", paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 }}>
+                          <Text style={{ color: "#a78bfa", fontSize: 9, fontWeight: "900" }}>DN</Text>
+                        </View>
+                      )}
+                    </View>
                     <View style={styles.saleMeta}>
                       <Clock size={10} color={C.text.secondary} />
                       <Text style={styles.saleMetaText}>{timeStr}</Text>
                       <UserIcon size={10} color={C.text.secondary} style={{ marginLeft: 6 }} />
                       <Text style={styles.saleMetaText}>{sale.cashierName || "System"}</Text>
                     </View>
+                    {(sale.transactionType === "CreditNote" || sale.transactionType === "DebitNote") && sale.relatedInvoiceId && (
+                      <Text style={{ color: C.text.secondary, fontSize: 9, marginTop: 1 }}>
+                        Ref: #{sale.relatedInvoiceId}
+                      </Text>
+                    )}
                   </View>
                 </View>
                 <View style={styles.saleRight}>
@@ -395,19 +537,14 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
                 </View>
               </TouchableOpacity>
               {isExpanded && (
-                <View style={styles.saleDetails}>
-                  <View style={styles.detailsDivider} />
-                  <InvoiceItemRow
-                    invoiceId={sale.id}
-                    currencyCode={sale.currency}
-                    exchangeRate={sale.exchangeRate}
-                    symbols={currencySymbols}
-                  />
-                  <View style={styles.saleFooter}>
-                    <Text style={styles.paymentMethod}>Paid via {sale.paymentMethod || "CASH"}</Text>
-                    {sale.customerName && <Text style={styles.customerName}>Customer: {sale.customerName}</Text>}
-                  </View>
-                </View>
+                <ExpandedSaleContent
+                  sale={sale}
+                  currencySymbols={currencySymbols}
+                  onReprint={handleReprint}
+                  isPrinting={isPrinting}
+                  onCreditNote={(s, items) => setNoteModal({ visible: true, noteType: "credit", sale: s, items })}
+                  onDebitNote={(s, items) => setNoteModal({ visible: true, noteType: "debit", sale: s, items })}
+                />
               )}
             </View>
           );
@@ -506,6 +643,23 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
           </View>
         </Modal>
       </SafeAreaView>
+      {noteModal && (
+        <NoteModal
+          visible={noteModal.visible}
+          noteType={noteModal.noteType}
+          originalInvoice={noteModal.sale}
+          originalItems={noteModal.items}
+          companyId={companyId}
+          company={company}
+          creditThreshold={creditThreshold}
+          currencySymbol={currencySymbols[noteModal.sale?.currency || "USD"] || "$"}
+          cashierName={userName}
+          printerConfig={printerConfig}
+          isOnline={isOnline}
+          onClose={() => setNoteModal(null)}
+          onSuccess={() => setNoteModal(null)}
+        />
+      )}
     </View>
   );
 }

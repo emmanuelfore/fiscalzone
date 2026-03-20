@@ -23,7 +23,7 @@ import {
   type Expense, type InsertExpense
 } from "../shared/schema.js";
 import { db } from "./db.js";
-import { eq, and, desc, lte, gte, lt, ne, or, isNull, sql, ilike, count } from "drizzle-orm";
+import { eq, and, desc, lte, gte, lt, ne, or, isNull, sql, ilike, count, inArray } from "drizzle-orm";
 import { type FiscalDayCounter } from "./zimra.js";
 import { scrypt, randomBytes } from "crypto";
 import { promisify } from "util";
@@ -55,6 +55,7 @@ export interface IStorage {
 
   // Customers
   getCustomers(companyId: number): Promise<Customer[]>;
+  getCustomer(id: number): Promise<Customer | undefined>;
   createCustomer(customer: InsertCustomer): Promise<Customer>;
   updateCustomer(id: number, customer: Partial<InsertCustomer>): Promise<Customer>;
 
@@ -65,7 +66,7 @@ export interface IStorage {
   getProductsForExport(companyId: number): Promise<any[]>;
 
   // Invoices
-  getInvoicesPaginated(companyId: number, page?: number, limit?: number, search?: string, status?: string, type?: string, dateFrom?: Date, dateTo?: Date, isPos?: boolean): Promise<{ data: (Invoice & { customer?: Customer })[]; total: number; pages: number }>;
+  getInvoicesPaginated(companyId: number, page?: number, limit?: number, search?: string, status?: string, type?: string, dateFrom?: Date, dateTo?: Date, isPos?: boolean): Promise<{ data: (Invoice & { customer?: Customer; latestError?: { message: string, color: string } })[]; total: number; pages: number }>;
   getInvoices(companyId: number): Promise<Invoice[]>;
   getInvoice(id: number): Promise<(Invoice & { items: (InvoiceItem & { product?: Product })[]; customer?: Customer; validationErrors?: any[]; relatedInvoiceNumber?: string; relatedInvoiceDate?: Date | null; relatedFiscalCode?: string; relatedReceiptGlobalNo?: number; relatedReceiptCounter?: number }) | undefined>;
   createInvoice(invoice: CreateInvoiceRequest): Promise<Invoice>;
@@ -105,6 +106,9 @@ export interface IStorage {
   lockInvoice(id: number, userId: string): Promise<boolean>;
   unlockInvoice(id: number, userId: string): Promise<void>;
 
+  // Atomic counter claim — prevents race conditions on concurrent fiscalizations
+  claimNextReceiptNumbers(companyId: number): Promise<{ receiptGlobalNo: number; receiptCounter: number }>;
+
   // Utils
   getNextInvoiceNumber(companyId: number, prefix: string): Promise<string>;
   generateNextDeviceSerial(companyId: number): Promise<string>;
@@ -122,7 +126,7 @@ export interface IStorage {
     transactions: any[];
   }>;
   getSalesReport(companyId: number, startDate: Date, endDate: Date, cashierId?: string): Promise<any[]>;
-  getPaymentsReport(companyId: number, startDate: Date, endDate: Date): Promise<Payment[]>;
+  getPaymentsReport(companyId: number, startDate: Date, endDate: Date): Promise<any[]>;
 
   // Audit Logs
   createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
@@ -400,6 +404,11 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(customers).where(eq(customers.companyId, companyId));
   }
 
+  async getCustomer(id: number): Promise<Customer | undefined> {
+    const [customer] = await db.select().from(customers).where(eq(customers.id, id));
+    return customer;
+  }
+
   async createCustomer(customer: InsertCustomer): Promise<Customer> {
     const [newCustomer] = await db.insert(customers).values(customer).returning();
     return newCustomer;
@@ -486,7 +495,7 @@ export class DatabaseStorage implements IStorage {
     dateFrom?: Date,
     dateTo?: Date,
     isPos?: boolean
-  ): Promise<{ data: (Invoice & { customer?: Customer })[]; total: number; pages: number }> {
+  ): Promise<{ data: (Invoice & { customer?: Customer; latestError?: { message: string, color: string } })[]; total: number; pages: number }> {
     const offset = (page - 1) * limit;
 
     const filters = [eq(invoices.companyId, companyId)];
@@ -546,13 +555,30 @@ export class DatabaseStorage implements IStorage {
     const total = totalResult?.count || 0;
     const pages = Math.ceil(total / limit);
 
+    // Subquery to get the latest error for each invoice
+    const latestErrorSubquery = db
+      .select({
+        invoiceId: validationErrors.invoiceId,
+        errorMessage: validationErrors.errorMessage,
+        errorColor: validationErrors.errorColor,
+        rn: sql`row_number() over (partition by ${validationErrors.invoiceId} order by ${validationErrors.createdAt} desc)`.as("rn"),
+      })
+      .from(validationErrors)
+      .as("latest_errors");
+
     const rows = await db
       .select({
         invoice: invoices,
-        customer: customers
+        customer: customers,
+        latestErrorMsg: latestErrorSubquery.errorMessage,
+        latestErrorColor: latestErrorSubquery.errorColor
       })
       .from(invoices)
       .leftJoin(customers, eq(invoices.customerId, customers.id))
+      .leftJoin(latestErrorSubquery, and(
+        eq(invoices.id, latestErrorSubquery.invoiceId),
+        eq(latestErrorSubquery.rn, 1)
+      ))
       .where(whereClause)
       .limit(limit)
       .offset(offset)
@@ -560,7 +586,11 @@ export class DatabaseStorage implements IStorage {
 
     const data = rows.map(r => ({
       ...r.invoice,
-      customer: r.customer || undefined
+      customer: r.customer || undefined,
+      latestError: r.latestErrorMsg ? {
+        message: r.latestErrorMsg,
+        color: r.latestErrorColor || 'Red'
+      } : undefined
     }));
 
     return { data, total, pages };
@@ -902,6 +932,28 @@ export class DatabaseStorage implements IStorage {
           eq(invoices.lockedBy, userId)
         )
       );
+  }
+
+  /**
+   * Atomically increments both receipt counters in a single UPDATE...RETURNING.
+   * This is the only safe way to claim numbers — no two concurrent calls can
+   * get the same pair because Postgres serialises the row-level update.
+   */
+  async claimNextReceiptNumbers(companyId: number): Promise<{ receiptGlobalNo: number; receiptCounter: number }> {
+    const [updated] = await db
+      .update(companies)
+      .set({
+        lastReceiptGlobalNo: sql`${companies.lastReceiptGlobalNo} + 1`,
+        dailyReceiptCount: sql`${companies.dailyReceiptCount} + 1`,
+      })
+      .where(eq(companies.id, companyId))
+      .returning({
+        receiptGlobalNo: companies.lastReceiptGlobalNo,
+        receiptCounter: companies.dailyReceiptCount,
+      });
+
+    if (!updated) throw new Error(`Company ${companyId} not found when claiming receipt numbers`);
+    return { receiptGlobalNo: updated.receiptGlobalNo!, receiptCounter: updated.receiptCounter! };
   }
 
   async updateCompany(id: number, data: Partial<InsertCompany>): Promise<Company> {
@@ -1501,16 +1553,15 @@ export class DatabaseStorage implements IStorage {
     let userInvoicesQuery = db.select().from(invoices).where(eq(invoices.customerId, customerId));
     const userInvoices = await userInvoicesQuery;
 
-    // Fetch all payments for these invoices
+    // Fetch all payments for these invoices in a single query
     const invoiceIds = userInvoices.map(inv => inv.id);
     let userPayments: Payment[] = [];
     if (invoiceIds.length > 0) {
-      for (const inv of userInvoices) {
-        // Only include payments for the specified currency
-        if (currency && inv.currency !== currency) continue;
-
-        const invPayments = await db.select().from(payments).where(eq(payments.invoiceId, inv.id));
-        userPayments.push(...invPayments);
+      userPayments = await db.select().from(payments).where(inArray(payments.invoiceId, invoiceIds));
+      // Filter by currency if provided
+      if (currency) {
+        const currencyInvoiceIds = new Set(userInvoices.filter(inv => inv.currency === currency).map(inv => inv.id));
+        userPayments = userPayments.filter(p => p.invoiceId && currencyInvoiceIds.has(p.invoiceId));
       }
     }
 
@@ -1520,9 +1571,10 @@ export class DatabaseStorage implements IStorage {
       : userInvoices;
 
     // Sort all transactions by date
-    // Normalize dates
+    // Normalize dates — end includes the full day
     const start = new Date(startDate);
     const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
 
     // Calculate Opening Balance (Transactions < start)
     let openingBalance = 0;
@@ -1610,17 +1662,37 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getPaymentsReport(companyId: number, startDate: Date, endDate: Date): Promise<Payment[]> {
+  async getPaymentsReport(companyId: number, startDate: Date, endDate: Date): Promise<any[]> {
     const results = await db
-      .select()
+      .select({
+        id: payments.id,
+        amount: payments.amount,
+        currency: payments.currency,
+        paymentDate: payments.paymentDate,
+        paymentMethod: payments.paymentMethod,
+        reference: payments.reference,
+        notes: payments.notes,
+        invoiceId: payments.invoiceId,
+        invoiceNumber: invoices.invoiceNumber,
+        customerId: customers.id,
+        customerName: customers.name,
+        customerEmail: customers.email,
+      })
       .from(payments)
+      .leftJoin(invoices, eq(payments.invoiceId, invoices.id))
+      .leftJoin(customers, eq(invoices.customerId, customers.id))
       .where(eq(payments.companyId, companyId))
       .orderBy(desc(payments.paymentDate));
 
-    return results.filter(p => {
-      const date = new Date(p.paymentDate);
-      return date >= startDate && date <= endDate;
+    // Filter by date range in JS to avoid timezone/type casting issues
+    const filtered = results.filter(r => {
+      if (!r.paymentDate) return true;
+      const d = new Date(r.paymentDate);
+      return d >= startDate && d <= endDate;
     });
+
+    console.log(`[getPaymentsReport] companyId=${companyId} → ${results.length} total, ${filtered.length} in range (${startDate.toISOString()} – ${endDate.toISOString()})`);
+    return filtered;
   }
 
   async createAuditLog(log: InsertAuditLog): Promise<AuditLog> {

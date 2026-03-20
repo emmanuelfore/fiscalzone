@@ -11,6 +11,8 @@ echo "=================================================="
 # 1. Pull latest code
 echo "📥 Pulling latest code from main..."
 git pull origin main
+chmod +x start.sh
+chmod +x deploy.sh
 
 # 2. Install dependencies
 echo "📦 Installing dependencies..."

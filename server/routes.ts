@@ -1110,6 +1110,162 @@ export async function registerRoutes(
     }
   });
 
+  // ZIMRA Sequence Report — shows receipt global/counter chain with gap detection
+  app.get("/api/companies/:id/zimra/sequence-report", async (req, res) => {
+    try {
+      const companyId = Number(req.params.id);
+      const { db } = await import("./db.js");
+      const { zimraLogs, invoices } = await import("../shared/schema.js");
+      const { eq, and, isNotNull, desc, asc, inArray } = await import("drizzle-orm");
+
+      // Pull all SubmitReceipt logs for this company, oldest first
+      // Endpoint is stored as the human-readable description from getEndpointDescription()
+      const submitEndpoints = ['Invoice Submission', 'Credit Note Submission', 'Debit Note Submission'];
+      const rows = await db
+        .select({
+          logId: zimraLogs.id,
+          invoiceId: zimraLogs.invoiceId,
+          endpoint: zimraLogs.endpoint,
+          requestPayload: zimraLogs.requestPayload,
+          responsePayload: zimraLogs.responsePayload,
+          statusCode: zimraLogs.statusCode,
+          errorMessage: zimraLogs.errorMessage,
+          createdAt: zimraLogs.createdAt,
+          // Invoice fields
+          invoiceNumber: invoices.invoiceNumber,
+          fiscalDayNo: invoices.fiscalDayNo,
+          receiptGlobalNo: invoices.receiptGlobalNo,
+          receiptCounter: invoices.receiptCounter,
+          fdmsStatus: invoices.fdmsStatus,
+          syncedWithFdms: invoices.syncedWithFdms,
+          transactionType: invoices.transactionType,
+        })
+        .from(zimraLogs)
+        .leftJoin(invoices, eq(zimraLogs.invoiceId, invoices.id))
+        .where(
+          and(
+            eq(zimraLogs.companyId, companyId),
+            inArray(zimraLogs.endpoint, submitEndpoints)
+          )
+        )
+        .orderBy(asc(zimraLogs.createdAt));
+
+      // Build sequence entries, extracting numbers from request payload
+      // Only include successful submissions — failed ones never reached ZIMRA so don't affect the chain
+      const entries = rows
+        .map((row: any) => {
+          const req: any = row.requestPayload || {};
+          const resp: any = row.responsePayload || {};
+
+          const globalNo: number | null = req.receiptGlobalNo ?? req.receipt?.receiptGlobalNo ?? null;
+          const counter: number | null = req.receiptCounter ?? req.receipt?.receiptCounter ?? null;
+          const dayNo: number | null = req.fiscalDayNo ?? req.receipt?.fiscalDayNo ?? row.fiscalDayNo ?? null;
+          const success = row.statusCode >= 200 && row.statusCode < 300;
+
+          // Extract ZIMRA validation errors from response
+          // Raw ZIMRA response uses: resp.validationErrors[].validationErrorCode / validationErrorColor / validationErrorMessage
+          const KNOWN_ERRORS: Record<string, string> = {
+            'RCPT010': 'Wrong currency code',
+            'RCPT011': 'Receipt counter not sequential',
+            'RCPT012': 'Receipt global number not sequential',
+            'RCPT013': 'Invoice number not unique',
+            'RCPT014': 'Receipt date before fiscal day opening',
+            'RCPT015': 'Credited/debited invoice data missing',
+            'RCPT016': 'No receipt lines provided',
+            'RCPT017': 'Taxes information missing',
+            'RCPT018': 'Payment information missing',
+            'RCPT020': 'Previous receipt hash mismatch',
+            'RCPT031': 'Buyer data incomplete',
+            'RCPT041': 'HS code issue',
+          };
+          const validationErrors: string[] = [];
+          const rawErrors = resp.validationErrors || resp.validationResult?.errors || [];
+          for (const e of rawErrors) {
+            const code = e.validationErrorCode || e.errorCode || 'UNKNOWN';
+            const color = e.validationErrorColor || e.errorColor || 'Red';
+            // If ZIMRA sends the code as the message (e.g. "RCPT012"), fall back to our lookup
+            const rawMsg = e.validationErrorMessage || e.errorMessage || e.message || '';
+            const msg = (rawMsg && rawMsg !== code) ? rawMsg : (KNOWN_ERRORS[code] || code);
+            validationErrors.push(`[${color}] ${code}: ${msg}`);
+          }
+          if (row.errorMessage) validationErrors.push(`[Error] ${row.errorMessage}`);
+
+          return {
+            logId: row.logId,
+            invoiceId: row.invoiceId,
+            invoiceNumber: row.invoiceNumber,
+            transactionType: row.transactionType,
+            fiscalDayNo: dayNo,
+            globalNo,
+            counter,
+            success,
+            synced: row.syncedWithFdms,
+            fdmsStatus: row.fdmsStatus,
+            validationErrors,
+            timestamp: row.createdAt,
+          };
+        })
+        .filter((e: any) => e.success); // exclude failed HTTP calls — they never touched ZIMRA's counter
+
+      // Gap detection — walk the list sorted by globalNo ascending (oldest first) to detect breaks,
+      // then reverse for display (newest first)
+      const sorted = [...entries].sort((a, b) => (a.globalNo ?? 0) - (b.globalNo ?? 0));
+      let prevGlobal: number | null = null;
+      let prevCounter: number | null = null;
+      let prevDay: number | null = null;
+
+      const annotated = sorted.map((e) => {
+        const issues: string[] = [];
+
+        if (prevGlobal !== null && e.globalNo !== null) {
+          const expectedGlobal = prevGlobal + 1;
+          if (e.globalNo > expectedGlobal) {
+            issues.push(`GAP: expected globalNo ${expectedGlobal}, got ${e.globalNo} (skipped ${e.globalNo - expectedGlobal})`);
+          } else if (e.globalNo < expectedGlobal) {
+            issues.push(`DUPLICATE/REUSE: globalNo ${e.globalNo} already seen (prev was ${prevGlobal})`);
+          }
+        }
+
+        if (prevDay !== null && e.fiscalDayNo !== null && e.fiscalDayNo === prevDay) {
+          // Same day — counter should be prevCounter + 1
+          if (prevCounter !== null && e.counter !== null) {
+            const expectedCounter = prevCounter + 1;
+            if (e.counter > expectedCounter) {
+              issues.push(`COUNTER GAP: expected counter ${expectedCounter}, got ${e.counter}`);
+            } else if (e.counter < expectedCounter) {
+              if (e.counter === prevCounter) {
+                issues.push(`DUPLICATE COUNTER: counter ${e.counter} repeated on same fiscal day (possible retry)`);
+              } else if (e.counter === 1) {
+                issues.push(`COUNTER RESET TO 1 (mid-day): counter reset from ${prevCounter} to 1 on same fiscal day — this causes RCPT012`);
+              } else {
+                issues.push(`COUNTER WENT BACKWARDS: expected ${expectedCounter}, got ${e.counter} (prev was ${prevCounter})`);
+              }
+            }
+          }
+        } else if (e.fiscalDayNo !== prevDay && e.fiscalDayNo !== null && e.counter !== null && e.counter !== 1) {
+          // New day — counter should reset to 1
+          issues.push(`NEW DAY COUNTER: day changed to ${e.fiscalDayNo} but counter is ${e.counter} (expected 1)`);
+        }
+
+        if (e.globalNo !== null) prevGlobal = e.globalNo;
+        if (e.counter !== null) prevCounter = e.counter;
+        if (e.fiscalDayNo !== null) prevDay = e.fiscalDayNo;
+
+        return { ...e, issues };
+      });
+
+      res.json({
+        total: annotated.length,
+        gaps: annotated.filter((e: any) => e.issues.length > 0).length,
+        entries: annotated.reverse(), // newest first for display
+      });
+    } catch (err: any) {
+      console.error("Sequence Report Error:", err);
+      res.status(500).json({ message: "Failed to generate sequence report" });
+    }
+  });
+
+
   // Get current ZIMRA environment status
   app.get("/api/companies/:id/zimra/environment", requireAuth, async (req, res) => {
     try {
@@ -3935,6 +4091,23 @@ export async function registerRoutes(
     }
   });
 
+  // Helper: compute subtotal/taxAmount/total from supplied items array
+  function computeNoteTotals(items: any[]) {
+    let subtotal = 0, taxAmount = 0;
+    for (const item of items) {
+      const lineTotal = parseFloat(item.lineTotal || "0");
+      const taxRate = parseFloat(item.taxRate || "0") / 100;
+      const taxPortion = lineTotal * taxRate / (1 + taxRate);
+      taxAmount += taxPortion;
+      subtotal += lineTotal - taxPortion;
+    }
+    return {
+      subtotal: subtotal.toFixed(2),
+      taxAmount: taxAmount.toFixed(2),
+      total: (subtotal + taxAmount).toFixed(2),
+    };
+  }
+
   // Create Credit Note
   app.post("/api/invoices/:id/credit-note", requireAuth, async (req, res) => {
     try {
@@ -3943,35 +4116,42 @@ export async function registerRoutes(
 
       if (!originalInvoice) return res.status(404).json({ message: "Invoice not found" });
       if (originalInvoice.status !== "issued" && originalInvoice.status !== "paid") {
-        // Should we allow CN on non-fiscalized? Probably not necessary, just edit/delete.
-        // But for consistency let's require it to be issued/fiscalized to warrant a credit note.
         return res.status(400).json({ message: "Credit notes can only be created for issued invoices." });
       }
 
-      // Create new invoice as Credit Note
-      // Invoice number will be auto-generated by storage.createInvoice using getNextInvoiceNumber
+      const { items: bodyItems, reason, cashierName } = req.body || {};
+      const useCustomItems = Array.isArray(bodyItems) && bodyItems.length > 0;
+      const noteItems = useCustomItems
+        ? bodyItems
+        : originalInvoice.items.map(item => ({
+            productId: item.productId,
+            description: item.description,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            taxRate: item.taxRate,
+            taxTypeId: item.taxTypeId,
+            lineTotal: item.lineTotal
+          }));
+
+      const totals = useCustomItems
+        ? computeNoteTotals(noteItems)
+        : { subtotal: originalInvoice.subtotal, taxAmount: originalInvoice.taxAmount, total: originalInvoice.total };
+
       const cn = await storage.createInvoice({
         companyId: originalInvoice.companyId,
         customerId: originalInvoice.customerId,
         issueDate: new Date(),
-        dueDate: new Date(), // Due immediately?
-        subtotal: originalInvoice.subtotal, // Default to full reversal
-        taxAmount: originalInvoice.taxAmount,
-        total: originalInvoice.total,
+        dueDate: new Date(),
+        subtotal: totals.subtotal,
+        taxAmount: totals.taxAmount,
+        total: totals.total,
         status: "draft",
         taxInclusive: originalInvoice.taxInclusive,
-        currency: originalInvoice.currency, // Maintain same currency from original
+        currency: originalInvoice.currency,
         transactionType: "CreditNote",
         relatedInvoiceId: originalInvoice.id,
-        items: originalInvoice.items.map(item => ({
-          productId: item.productId,
-          description: item.description,
-          quantity: item.quantity, // Positive quantity, logic handles it as credit
-          unitPrice: item.unitPrice,
-          taxRate: item.taxRate,
-          taxTypeId: item.taxTypeId, // Maintain tax type for proper zero-rated/exempt classification
-          lineTotal: item.lineTotal
-        }))
+        notes: reason || undefined,
+        items: noteItems
       });
 
       res.status(201).json(cn);
@@ -3992,29 +4172,39 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Debit notes can only be created for issued invoices." });
       }
 
-      // Create new invoice as Debit Note
+      const { items: bodyItems, reason, cashierName } = req.body || {};
+      const useCustomItems = Array.isArray(bodyItems) && bodyItems.length > 0;
+      const noteItems = useCustomItems
+        ? bodyItems
+        : originalInvoice.items.map(item => ({
+            productId: item.productId,
+            description: item.description,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            taxRate: item.taxRate,
+            taxTypeId: item.taxTypeId,
+            lineTotal: item.lineTotal
+          }));
+
+      const totals = useCustomItems
+        ? computeNoteTotals(noteItems)
+        : { subtotal: originalInvoice.subtotal, taxAmount: originalInvoice.taxAmount, total: originalInvoice.total };
+
       const dn = await storage.createInvoice({
         companyId: originalInvoice.companyId,
         customerId: originalInvoice.customerId,
         issueDate: new Date(),
         dueDate: new Date(),
-        subtotal: originalInvoice.subtotal,
-        taxAmount: originalInvoice.taxAmount,
-        total: originalInvoice.total,
+        subtotal: totals.subtotal,
+        taxAmount: totals.taxAmount,
+        total: totals.total,
         status: "draft",
         taxInclusive: originalInvoice.taxInclusive,
-        currency: originalInvoice.currency, // Maintain same currency from original
+        currency: originalInvoice.currency,
         transactionType: "DebitNote",
         relatedInvoiceId: originalInvoice.id,
-        items: originalInvoice.items.map(item => ({
-          productId: item.productId,
-          description: item.description,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          taxRate: item.taxRate,
-          taxTypeId: item.taxTypeId, // Maintain tax type for proper zero-rated/exempt classification
-          lineTotal: item.lineTotal
-        }))
+        notes: reason || undefined,
+        items: noteItems
       });
 
       res.status(201).json(dn);
@@ -4181,6 +4371,58 @@ export async function registerRoutes(
     }
   });
 
+  // Company-wide payments list with invoice + customer info
+  app.get("/api/companies/:id/payments", requireAuth, async (req, res) => {
+    try {
+      const companyId = Number(req.params.id);
+      const { startDate, endDate, page = "1", limit = "50" } = req.query;
+
+      const { payments: paymentsTable, invoices: invoicesTable, customers: customersTable } = await import("@shared/schema");
+
+      // Match by companyId on payment OR via the invoice's companyId (handles legacy payments without companyId)
+      let conditions = [
+        or(
+          eq(paymentsTable.companyId, companyId),
+          eq(invoicesTable.companyId, companyId)
+        )
+      ];
+      if (startDate) conditions.push(gte(paymentsTable.paymentDate, new Date(startDate as string)));
+      if (endDate) {
+        const end = new Date(endDate as string);
+        end.setHours(23, 59, 59, 999);
+        conditions.push(lte(paymentsTable.paymentDate, end));
+      }
+
+      const rows = await db
+        .select({
+          id: paymentsTable.id,
+          amount: paymentsTable.amount,
+          currency: paymentsTable.currency,
+          paymentDate: paymentsTable.paymentDate,
+          paymentMethod: paymentsTable.paymentMethod,
+          reference: paymentsTable.reference,
+          notes: paymentsTable.notes,
+          invoiceId: paymentsTable.invoiceId,
+          invoiceNumber: invoicesTable.invoiceNumber,
+          customerId: customersTable.id,
+          customerName: customersTable.name,
+          customerEmail: customersTable.email,
+        })
+        .from(paymentsTable)
+        .leftJoin(invoicesTable, eq(paymentsTable.invoiceId, invoicesTable.id))
+        .leftJoin(customersTable, eq(invoicesTable.customerId, customersTable.id))
+        .where(and(...conditions))
+        .orderBy(desc(paymentsTable.paymentDate))
+        .limit(Number(limit))
+        .offset((Number(page) - 1) * Number(limit));
+
+      res.json(rows);
+    } catch (err: any) {
+      console.error("Payments list error:", err);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
 
 
   // Create Uploads Dir
@@ -4241,10 +4483,15 @@ export async function registerRoutes(
 
       const start = new Date(startDate as string);
       const end = new Date(endDate as string);
+      end.setHours(23, 59, 59, 999);
+
+      console.log(`[/reports/payments] companyId=${companyId} start=${start.toISOString()} end=${end.toISOString()}`);
 
       const data = await storage.getPaymentsReport(companyId, start, end);
+      console.log(`[/reports/payments] returning ${data.length} records`);
       res.json(data);
     } catch (err: any) {
+      console.error("[/reports/payments] error:", err);
       res.status(500).json({ message: err.message });
     }
   });

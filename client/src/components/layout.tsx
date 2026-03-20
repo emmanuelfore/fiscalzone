@@ -73,7 +73,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const { data: companies } = useCompanies(!!user);
   const { activeCompany, activeCompanyId, setCompany } = useActiveCompany(!!user);
-  const { brand } = useBranding();
+  const { brand, currentBrand } = useBranding();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Close mobile menu on location change
@@ -92,57 +92,55 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const allNavItems: NavItem[] = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
+    { icon: MonitorCheck, label: "POS Terminal", href: "/pos" },
     {
-      icon: MonitorCheck,
-      label: "POS Terminal",
-      children: [
-        { icon: MonitorCheck, label: "View POS", href: "/pos" },
-        { icon: History, label: "My Sales History", href: "/pos/my-sales" }
-      ]
-    },
-    {
-      icon: Briefcase,
-      label: "Sales & Billing",
+      icon: FileText,
+      label: "Invoices & Billing",
       children: [
         { icon: FileText, label: "Invoices", href: "/invoices" },
         { icon: ClipboardList, label: "Quotations", href: "/quotations" },
         { icon: RefreshCw, label: "Recurring Invoices", href: "/recurring" },
-        { icon: Users, label: "Customers", href: "/customers" },
-        { icon: FileText, label: "Customer Statements", href: "/reports?tab=statements" },
+        { icon: CreditCard, label: "Payments Received", href: "/payments-received" },
+      ]
+    },
+    {
+      icon: Users,
+      label: "Customers",
+      children: [
+        { icon: Users, label: "Customer List", href: "/customers" },
+        { icon: FileText, label: "Statements", href: "/reports?tab=statements" },
       ]
     },
     {
       icon: Package,
       label: "Inventory",
       children: [
-        { icon: LayoutDashboard, label: "Goods Received", href: "/inventory/account" },
         { icon: Package, label: "Products", href: "/products" },
-        { icon: History, label: "Stock Ledger", href: "/inventory" },
         { icon: Briefcase, label: "Services", href: "/services" },
+        { icon: LayoutDashboard, label: "Goods Received", href: "/inventory/account" },
+        { icon: History, label: "Stock Ledger", href: "/inventory" },
         { icon: Truck, label: "Suppliers", href: "/suppliers" },
       ]
     },
+    { icon: Calculator, label: "Expenses", href: "/expenses" },
     {
-      icon: Building2,
-      label: "Intelligence Hub",
+      icon: BarChart3,
+      label: "Reports",
       children: [
-        { icon: BarChart3, label: "Analytics Dashboard", href: "/reports?tab=analytics" },
-        { icon: Receipt, label: "Daily Sales Ledger", href: "/reports/daily" },
+        { icon: BarChart3, label: "Analytics", href: "/reports?tab=analytics" },
+        { icon: Receipt, label: "Daily Sales", href: "/reports/daily" },
         { icon: TrendingUp, label: "Profit & Loss", href: "/reports/financial" },
-        { icon: Calculator, label: "Expenses", href: "/expenses" },
         { icon: Package, label: "Stock Reports", href: "/reports/inventory" },
         { icon: FileText, label: "Tax & ZIMRA", href: "/reports/tax" },
-        { icon: Coins, label: "Currencies", href: "/currencies" },
       ]
     },
     {
-      icon: Server,
+      icon: ShieldCheck,
       label: "Compliance",
       children: [
         { icon: Server, label: "ZIMRA Device", href: "/zimra-settings" },
         { icon: ClipboardList, label: "Transaction Logs", href: "/zimra-logs" },
         { icon: Activity, label: "FDMS Test", href: "/fdms-test" },
-        { icon: CreditCard, label: "Subscription", href: "/subscription" },
       ]
     },
     {
@@ -152,8 +150,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
         { icon: UserCog, label: "Team", href: "/team-settings" },
         { icon: Settings, label: "Settings", href: "/settings" },
         { icon: MonitorCheck, label: "POS Settings", href: "/pos-settings" },
+        { icon: Coins, label: "Currencies", href: "/currencies" },
+        { icon: CreditCard, label: "Subscription", href: "/subscription" },
       ]
-    }
+    },
   ];
 
   const isCashier = !user?.isSuperAdmin && activeRole === 'cashier';
@@ -176,23 +176,40 @@ export function Layout({ children }: { children: React.ReactNode }) {
   if (!user) return null;
 
   return (
-    <div className="min-h-screen bg-slate-50/50 flex font-sans selection:bg-violet-500/20">
-      {/* Mobile Menu Backdrop */}
-      {isMobileMenuOpen && (
-        <div 
-          className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 lg:hidden transition-opacity duration-300"
-          onClick={() => setIsMobileMenuOpen(false)}
-        />
+    <>
+      {/* Brand Specific Fonts & Styles */}
+      {currentBrand === "fiscalzone" && (
+        <style>{`
+          @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&display=swap');
+          .fz-admin { font-family: 'Syne', sans-serif !important; }
+          .fz-admin .font-display { font-family: 'Bricolage Grotesque', sans-serif !important; }
+          .fz-sidebar { background: rgba(15, 23, 42, 0.9) !important; color: white !important; border-color: rgba(255,255,255,0.1) !important; }
+          .fz-sidebar .text-slate-800 { color: white !important; }
+          .fz-sidebar .text-slate-500 { color: rgba(255,255,255,0.6) !important; }
+          .fz-sidebar .bg-white { background: rgba(255,255,255,0.05) !important; border-color: rgba(255,255,255,0.1) !important; }
+        `}</style>
       )}
+
+      <div className={cn(
+        "min-h-screen bg-slate-50/50 flex transition-all duration-300",
+        currentBrand === "fiscalzone" ? "fz-admin" : "font-sans selection:bg-violet-500/20"
+      )}>
 
       {/* Floating Sidebar */}
       <aside className={cn(
         "w-72 bg-white/80 backdrop-blur-xl border border-white/50 shadow-2xl shadow-slate-200/50 flex flex-col fixed inset-y-4 left-4 z-50 rounded-[2rem] overflow-hidden transition-all duration-300",
-        isMobileMenuOpen ? "translate-x-0" : "-translate-x-[calc(100%+2rem)] lg:translate-x-0"
+        isMobileMenuOpen ? "translate-x-0" : "-translate-x-[calc(100%+2rem)] lg:translate-x-0",
+        currentBrand === "fiscalzone" && "fz-sidebar"
       )}>
         <div className="p-6 border-b border-slate-100/50 bg-white/50">
           <div className="flex items-center gap-3 mb-6 px-1">
-            <img src={brand.logo} alt={brand.name} className="h-9" />
+            {currentBrand === "fiscalzone" ? (
+              <span className="text-xl font-black text-slate-800 tracking-tight font-display">
+                Fiscal<span className="text-blue-600">Zone</span>
+              </span>
+            ) : (
+              <img src={brand.logo} alt={brand.name} className="h-9" />
+            )}
           </div>
 
           <DropdownMenu>
@@ -255,8 +272,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </DropdownMenu>
         </div>
 
-        <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto custom-scrollbar">
-          {navItems.map((item) => {
+        <nav className="flex-1 px-3 py-4 overflow-y-auto custom-scrollbar space-y-0.5">
+          {navItems.map((item, idx) => {
+            // Section dividers before logical groups
+            const showDivider = idx > 0 && [
+              "Invoices & Billing", "Expenses", "Compliance", "Administration"
+            ].includes(item.label);
+
             if (item.children) {
               const isActiveGroup = item.children.some(child =>
                 location + window.location.search === child.href || (location === child.href && !child.href.includes("?"))
@@ -264,81 +286,82 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
               const [isOpen, setIsOpen] = useState(isActiveGroup);
 
-              // Keep open if a child is active
               useEffect(() => {
                 if (isActiveGroup) setIsOpen(true);
               }, [isActiveGroup]);
 
               return (
-                <Collapsible
-                  key={item.label}
-                  open={isOpen}
-                  onOpenChange={setIsOpen}
-                  className="space-y-1"
-                >
-                  <CollapsibleTrigger asChild>
-                    <div
-                      className={cn(
-                        "flex items-center justify-between w-full px-4 py-3 rounded-2xl text-sm font-bold transition-all duration-200 cursor-pointer select-none group",
+                <div key={item.label}>
+                  {showDivider && <div className="h-px bg-slate-100 my-3 mx-2" />}
+                  <Collapsible open={isOpen} onOpenChange={setIsOpen} className="space-y-0.5">
+                    <CollapsibleTrigger asChild>
+                      <div className={cn(
+                        "flex items-center justify-between w-full px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 cursor-pointer select-none group",
                         isActiveGroup
-                          ? "bg-slate-50 text-slate-900 shadow-sm"
-                          : "text-slate-500 hover:bg-slate-50 hover:text-slate-900 hover:ml-1"
-                      )}
-                    >
-                      <div className="flex items-center gap-3.5">
-                        <div className={cn("p-1.5 rounded-lg transition-colors", isActiveGroup ? "bg-white text-violet-600 shadow-sm" : "bg-transparent group-hover:bg-slate-200/50")}>
-                          <item.icon className="w-4.5 h-4.5" />
+                          ? "bg-violet-50 text-violet-700"
+                          : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+                      )}>
+                        <div className="flex items-center gap-3">
+                          <div className={cn(
+                            "w-7 h-7 rounded-lg flex items-center justify-center transition-colors shrink-0",
+                            isActiveGroup ? "bg-violet-100 text-violet-600" : "bg-slate-100 text-slate-400 group-hover:bg-slate-200 group-hover:text-slate-600"
+                          )}>
+                            <item.icon className="w-3.5 h-3.5" />
+                          </div>
+                          <span className="font-display tracking-tight text-[13px]">{item.label}</span>
                         </div>
-                        <span className="font-display tracking-tight">{item.label}</span>
+                        <ChevronDown className={cn(
+                          "w-3.5 h-3.5 transition-transform duration-200 shrink-0",
+                          isOpen ? "rotate-180 text-violet-400" : "text-slate-300"
+                        )} />
                       </div>
-                      <ChevronDown
-                        className={cn("w-4 h-4 text-slate-300 transition-transform duration-300", isOpen && "transform rotate-180 text-slate-500")}
-                      />
-                    </div>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="space-y-1 pt-1 pb-2 pl-4">
-                    <div className="pl-4 border-l-2 border-slate-100 space-y-1">
-                      {item.children.map((child) => {
-                        const isChildActive = location + window.location.search === child.href || (location === child.href && !child.href.includes("?"));
-                        return (
-                          <Link key={child.label} href={child.href}>
-                            <div
-                              className={cn(
-                                "flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer w-full relative overflow-hidden active:scale-95",
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="pb-1">
+                      <div className="ml-3 pl-3 border-l-2 border-slate-100 space-y-0.5 mt-0.5">
+                        {item.children.map((child) => {
+                          const isChildActive = location + window.location.search === child.href || (location === child.href && !child.href.includes("?"));
+                          return (
+                            <Link key={child.label} href={child.href}>
+                              <div className={cn(
+                                "flex items-center gap-2.5 px-3 py-2 rounded-lg text-[12px] font-semibold transition-all duration-150 cursor-pointer",
                                 isChildActive
-                                  ? "bg-violet-600 text-white shadow-lg shadow-violet-500/25"
-                                  : "text-slate-500 hover:text-slate-900 hover:bg-slate-50"
-                              )}
-                            >
-                              {isChildActive && (
-                                <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent pointer-events-none" />
-                              )}
-                              <span className="truncate tracking-wide">{child.label}</span>
-                            </div>
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  </CollapsibleContent>
-                </Collapsible>
+                                  ? "bg-violet-600 text-white shadow-sm shadow-violet-500/20"
+                                  : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
+                              )}>
+                                <child.icon className={cn("w-3.5 h-3.5 shrink-0", isChildActive ? "text-violet-200" : "text-slate-400")} />
+                                <span className="truncate">{child.label}</span>
+                              </div>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                </div>
               );
             }
 
-            const isActive = location + window.location.search === item.href || (location === item.href && !item.href?.includes("?"));
+            const isActive = location === item.href;
             return (
-              <Link key={item.label} href={item.href!}>
-                <div
-                  className={cn(
-                    "flex items-center gap-3.5 px-4 py-3.5 rounded-2xl text-sm font-bold transition-all duration-200 cursor-pointer select-none active:scale-95",
+              <div key={item.label}>
+                {showDivider && <div className="h-px bg-slate-100 my-3 mx-2" />}
+                <Link href={item.href!}>
+                  <div className={cn(
+                    "flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all duration-200 cursor-pointer select-none group",
                     isActive
-                      ? "bg-slate-900 text-white shadow-xl shadow-slate-900/10"
-                      : "text-slate-500 hover:bg-white hover:shadow-md hover:text-slate-900 hover:scale-[1.02]"
-                  )}
-                >
-                  <item.icon className={cn("w-5 h-5", isActive ? "text-slate-200" : "text-slate-400 group-hover:text-slate-600")} />
-                  <span className="font-display tracking-tight">{item.label}</span>
-                </div>
-              </Link>
+                      ? "bg-slate-900 text-white shadow-lg shadow-slate-900/15"
+                      : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+                  )}>
+                    <div className={cn(
+                      "w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-colors",
+                      isActive ? "bg-white/15 text-white" : "bg-slate-100 text-slate-400 group-hover:bg-slate-200 group-hover:text-slate-600"
+                    )}>
+                      <item.icon className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="font-display tracking-tight">{item.label}</span>
+                  </div>
+                </Link>
+              </div>
             );
           })}
         </nav>
@@ -346,7 +369,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="p-4 bg-slate-50/50 border-t border-slate-100/50">
           <div className="flex items-center justify-center gap-1 text-[10px] font-bold text-slate-300 uppercase tracking-widest">
             <ShieldCheck className="w-3 h-3" />
-            <span>{brand.name} v1.2</span>
+            <span>{brand.name} Managed Server</span>
           </div>
         </div>
       </aside>
@@ -458,5 +481,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </main>
       </div>
     </div>
+    </>
   );
 }

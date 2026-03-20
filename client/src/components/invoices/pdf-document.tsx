@@ -173,6 +173,16 @@ const styles = StyleSheet.create({
     qrCode: {
         width: 80,
         height: 80,
+    },
+    paidLabel: {
+        position: 'absolute',
+        top: 250,
+        left: 150,
+        fontSize: 100,
+        color: 'rgba(5, 150, 105, 0.15)', // Emerald 600 with low opacity
+        fontWeight: 700,
+        transform: 'rotate(-30deg)',
+        textTransform: 'uppercase',
     }
 });
 
@@ -238,6 +248,10 @@ export const InvoicePDF = ({ invoice, company, customer, qrCodeUrl, taxTypes }: 
                                     ? (company?.vatRegistered ? "FISCAL TAX INVOICE" : "FISCAL INVOICE")
                                     : (invoice.status === 'draft' ? "DRAFT INVOICE" : "PROFORMA INVOICE"))))}
                 </Text>
+                
+                {invoice.status === 'paid' && (
+                    <Text style={styles.paidLabel}>PAID</Text>
+                )}
 
 
                 {/* 2. Header (Seller & Buyer) */}

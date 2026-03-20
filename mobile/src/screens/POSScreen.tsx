@@ -65,7 +65,9 @@ import {
   getPendingShiftActions,
   removePendingShiftAction,
   getProvisionalShift,
-  setProvisionalShift
+  setProvisionalShift,
+  getPendingNotes,
+  removePendingNote,
 } from "../lib/offlineQueue";
 
 // ─── v3 colour tokens ─────────────────────────────────────────────────────────
@@ -111,6 +113,7 @@ type Props = {
 
 export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
   const [isOnline, setIsOnline] = useState(true);
+  const isOnlineRef = React.useRef(true);
   const [queueCount, setQueueCount] = useState(0);
 
   const {
@@ -202,8 +205,9 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener((state) => {
       const online = !!state.isConnected && !!state.isInternetReachable;
+      isOnlineRef.current = online;
       setIsOnline(online);
-      if (online) syncQueued(false);
+      if (online) syncQueuedRef.current(false);
     });
     return () => unsubscribe();
   }, [companyId]);
@@ -240,7 +244,8 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
     const refreshQueue = async () => {
       const sales = await getPendingSales(companyId);
       const shifts = await getPendingShiftActions(companyId);
-      if (!cancelled) setQueueCount(sales.length + shifts.length);
+      const notes = await getPendingNotes(companyId);
+      if (!cancelled) setQueueCount(sales.length + shifts.length + notes.length);
     };
     refreshQueue();
     const id = setInterval(refreshQueue, 5000);
@@ -349,7 +354,12 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
   const addToCart = (product: any) => {
     if (product.isTracked) {
       const inCart = cart.find((item: CartItem) => item.productId === product.id)?.quantity || 0;
-      if (inCart >= Number(product.stockLevel || 0)) return;
+      if (inCart >= Number(product.stockLevel || 0)) {
+        if (Number(product.stockLevel || 0) === 0) {
+          Alert.alert("Out of Stock", `${product.name} is currently out of stock.`);
+        }
+        return;
+      }
     }
     setCart((prev: CartItem[]) => {
       const existing = prev.find((item: CartItem) => item.productId === product.id);
@@ -480,18 +490,19 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
   };
 
   const syncQueued = async (isManual = false) => {
-    if (!isOnline || isSyncing) return;
+    if (!isOnlineRef.current || isSyncing) return;
     const shiftActions = await getPendingShiftActions(companyId);
     const sales = await getPendingSales(companyId);
+    const notes = await getPendingNotes(companyId);
 
-    if (shiftActions.length === 0 && sales.length === 0) {
+    if (shiftActions.length === 0 && sales.length === 0 && notes.length === 0) {
       if (isManual) Alert.alert("Sync", "Everything is already synced.");
       return;
     }
 
     setIsSyncing(true);
     if (isManual) {
-      Alert.alert("Syncing", `Starting sync of ${shiftActions.length + sales.length} queued actions...`);
+      Alert.alert("Syncing", `Starting sync of ${shiftActions.length + sales.length + notes.length} queued actions...`);
     }
 
     let successCount = 0;
@@ -519,6 +530,31 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
           break;
         }
       }
+      // Flush pending notes
+      const isFiscalCompany = !!(company?.vatRegistered && company?.vatNumber);
+      for (const note of notes) {
+        try {
+          const endpoint =
+            note.noteType === "credit"
+              ? `/api/invoices/${note.originalInvoiceId}/credit-note`
+              : `/api/invoices/${note.originalInvoiceId}/debit-note`;
+          const res = await apiFetch(endpoint, { method: "POST", body: JSON.stringify(note.payload) });
+          if (res.ok) {
+            const created = await res.json().catch(() => null);
+            await removePendingNote(note.id);
+            successCount++;
+            // Fiscalise for VAT companies
+            if (isFiscalCompany && created?.id) {
+              apiFetch(`/api/invoices/${created.id}/fiscalize`, { method: "POST" }).catch((e) => {
+                console.warn("Note fiscalisation failed after sync:", e);
+              });
+            }
+          }
+        } catch (err) {
+          console.error("Note sync error:", err);
+          break;
+        }
+      }
     } finally {
       setIsSyncing(false);
       if (successCount > 0 && isManual) {
@@ -526,6 +562,10 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
       }
     }
   };
+
+  // Stable ref so the NetInfo listener always calls the latest version
+  const syncQueuedRef = React.useRef(syncQueued);
+  useEffect(() => { syncQueuedRef.current = syncQueued; });
 
   const handleParkSale = async () => {
     Keyboard.dismiss();
@@ -610,7 +650,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
       currency: currencyObj.code, exchangeRate: currencyObj.exchangeRate,
       paymentMethod, status: "issued", notes: "POS Transaction (Mobile)",
       discountAmount: orderDiscount.toFixed(2), taxInclusive,
-      transactionType: "FiscalInvoice",
+      transactionType: company?.vatRegistered ? "FiscalInvoice" : "Invoice",
       isPos: true, // Mark as POS transaction
       invoiceNumber: `POS-${Date.now()}`,
       issueDate: new Date().toISOString(),

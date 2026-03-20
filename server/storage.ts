@@ -63,6 +63,7 @@ export interface IStorage {
   getProducts(companyId: number): Promise<Product[]>;
   createProduct(product: InsertProduct): Promise<Product>;
   updateProduct(id: number, product: Partial<InsertProduct>): Promise<Product>;
+  deleteCompanyProducts(companyId: number): Promise<void>;
   getProductsForExport(companyId: number): Promise<any[]>;
 
   // Invoices
@@ -100,6 +101,20 @@ export interface IStorage {
   // Analytics
   getCompanyStats(companyId: number): Promise<{ totalRevenue: number; pendingAmount: number; invoicesCount: number; customersCount: number }>;
   getRevenueOverTime(companyId: number, days?: number): Promise<{ date: string; amount: number }[]>;
+  getReceivablesAging(companyId: number): Promise<{
+    total: number;
+    current: number;
+    days1_15: number;
+    days16_30: number;
+    days31_45: number;
+    above45: number;
+  }>;
+  getFiscalYearStats(companyId: number): Promise<{
+    totalSales: number;
+    totalReceipts: number;
+    totalExpenses: number;
+    monthlyData: { month: string; sales: number; expenses: number }[];
+  }>;
   calculateFiscalCounters(companyId: number, fiscalDayNo: number): Promise<FiscalDayCounter[]>;
 
   // Locking
@@ -116,6 +131,7 @@ export interface IStorage {
   // Payments
   createPayment(payment: InsertPayment): Promise<Payment>;
   getPayments(invoiceId: number): Promise<Payment[]>;
+  getPayment(id: number): Promise<(Payment & { invoice?: Invoice; customer?: Customer; company?: Company }) | undefined>;
   deletePayment(id: number): Promise<void>;
 
   // Reports
@@ -207,6 +223,30 @@ export interface IStorage {
   // Reports & Analytics
   getStockValuationReport(companyId: number): Promise<any[]>;
   getFinancialSummary(companyId: number, dateFrom?: Date, dateTo?: Date, cashierId?: string): Promise<any>;
+
+  // Report Module Methods
+  getReportSalesSummary(companyId: number, start: Date, end: Date): Promise<{ date: string; invoiceCount: number; subtotal: string; taxAmount: string; total: string }[]>;
+  getReportSalesByCustomer(companyId: number, start: Date, end: Date): Promise<{ customerId: number; customerName: string; invoiceCount: number; total: string }[]>;
+  getReportSalesByItem(companyId: number, start: Date, end: Date): Promise<{ productId: number | null; description: string; quantitySold: string; revenue: string }[]>;
+  getReportSalesBySalesperson(companyId: number, start: Date, end: Date): Promise<{ userId: string; userName: string; invoiceCount: number; total: string }[]>;
+  getReportArAgingSummary(companyId: number, start: Date, end: Date): Promise<{ customerId: number; customerName: string; current: string; days31_60: string; days61_90: string; days90plus: string; total: string }[]>;
+  getReportArAgingDetails(companyId: number, start: Date, end: Date): Promise<{ invoiceId: number; invoiceNumber: string; customerName: string; dueDate: string; daysOverdue: number; balanceDue: string; bucket: "current" | "31-60" | "61-90" | "90+" }[]>;
+  getReportInvoiceDetails(companyId: number, start: Date, end: Date): Promise<{ invoiceId: number; invoiceNumber: string; customerName: string; issueDate: string; dueDate: string; status: string; total: string; paidAmount: string; balanceDue: string }[]>;
+  getReportQuoteDetails(companyId: number, start: Date, end: Date): Promise<{ quotationId: number; quotationNumber: string; customerName: string; issueDate: string; expiryDate: string | null; status: string; total: string }[]>;
+  getReportCustomerBalanceSummary(companyId: number, start: Date, end: Date): Promise<{ customerId: number; customerName: string; totalInvoiced: string; totalPaid: string; balance: string }[]>;
+  getReportReceivableSummary(companyId: number, start: Date, end: Date): Promise<{ totalInvoiced: string; totalCollected: string; totalOutstanding: string }>;
+  getReportReceivableDetails(companyId: number, start: Date, end: Date): Promise<{ invoiceId: number; invoiceNumber: string; customerName: string; issueDate: string; total: string; paidAmount: string; balanceDue: string; status: string }[]>;
+  getReportBadDebts(companyId: number, start: Date, end: Date): Promise<{ invoiceId: number; invoiceNumber: string; customerName: string; dueDate: string; daysOverdue: number; balanceDue: string }[]>;
+  getReportBankCharges(companyId: number, start: Date, end: Date): Promise<{ paymentId: number; invoiceNumber: string; customerName: string; paymentDate: string; reference: string; amount: string }[]>;
+  getReportTimeToGetPaid(companyId: number, start: Date, end: Date): Promise<{ invoiceId: number; invoiceNumber: string; customerName: string; issueDate: string; paymentDate: string; daysToPayment: number; amount: string }[]>;
+  getReportRefundHistory(companyId: number, start: Date, end: Date): Promise<{ invoiceId: number; invoiceNumber: string; customerName: string; issueDate: string; amount: string; relatedInvoiceNumber: string | null }[]>;
+  getReportWithholdingTax(companyId: number, start: Date, end: Date): Promise<{ invoiceId: number; invoiceNumber: string; customerName: string; issueDate: string; withheldAmount: string; total: string }[]>;
+  getReportExpenseDetails(companyId: number, start: Date, end: Date): Promise<{ expenseId: number; expenseDate: string; category: string; description: string; supplierName: string | null; paymentMethod: string | null; reference: string | null; amount: string; currency: string }[]>;
+  getReportExpensesByCategory(companyId: number, start: Date, end: Date): Promise<{ category: string; total: string; percentage: string; count: number }[]>;
+  getReportExpensesByCustomer(companyId: number, start: Date, end: Date): Promise<{ supplierId: number | null; supplierName: string; total: string; count: number }[]>;
+  getReportExpensesByProject(companyId: number, start: Date, end: Date): Promise<{ project: string; total: string; count: number }[]>;
+  getReportBillableExpenseDetails(companyId: number, start: Date, end: Date): Promise<{ expenseId: number; expenseDate: string; category: string; description: string; amount: string; status: string }[]>;
+  getReportTaxSummary(companyId: number, start: Date, end: Date): Promise<{ taxCode: string; taxName: string; taxRate: string; taxableAmount: string; outputTax: string; inputTax: string; netVat: string }[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -439,6 +479,10 @@ export class DatabaseStorage implements IStorage {
     }
     const [updated] = await db.update(products).set(data).where(eq(products.id, id)).returning();
     return updated;
+  }
+  
+  async deleteCompanyProducts(companyId: number): Promise<void> {
+    await db.delete(products).where(eq(products.companyId, companyId));
   }
   
   async getProductsForExport(companyId: number): Promise<any[]> {
@@ -1535,6 +1579,184 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(payments).where(eq(payments.invoiceId, invoiceId)).orderBy(desc(payments.paymentDate));
   }
 
+  async getReceivablesAging(companyId: number, currency: string = 'USD'): Promise<{
+    total: number;
+    current: number;
+    days1_15: number;
+    days16_30: number;
+    days31_45: number;
+    above45: number;
+  }> {
+    const allInvoices = await db.select()
+      .from(invoices)
+      .where(and(
+        eq(invoices.companyId, companyId),
+        eq(invoices.currency, currency),
+        ne(invoices.status, "draft"),
+        ne(invoices.status, "cancelled")
+      ));
+
+    const now = new Date();
+    const result = {
+      total: 0,
+      current: 0,
+      days1_15: 0,
+      days16_30: 0,
+      days31_45: 0,
+      above45: 0,
+    };
+
+    for (const inv of allInvoices) {
+      const total = Number(inv.total);
+      
+      // Calculate paid amount from payments for this invoice
+      const invoicePayments = await db.select({ amount: payments.amount })
+        .from(payments)
+        .where(eq(payments.invoiceId, inv.id));
+      const paid = invoicePayments.reduce((sum, p) => sum + Number(p.amount), 0);
+      
+      const balance = total - paid;
+
+      if (balance <= 0) continue;
+
+      result.total += balance;
+
+      const dueDate = inv.dueDate ? new Date(inv.dueDate) : new Date(inv.issueDate || now);
+      const diffTime = now.getTime() - dueDate.getTime();
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+      if (diffDays <= 0) {
+        result.current += balance;
+      } else if (diffDays <= 15) {
+        result.days1_15 += balance;
+      } else if (diffDays <= 30) {
+        result.days16_30 += balance;
+      } else if (diffDays <= 45) {
+        result.days31_45 += balance;
+      } else {
+        result.above45 += balance;
+      }
+    }
+
+    return result;
+  }
+
+  async getFiscalYearStats(companyId: number, currency: string = 'USD'): Promise<{
+    totalSales: number;
+    totalReceipts: number;
+    totalExpenses: number;
+    monthlyData: { month: string; sales: number; expenses: number }[];
+  }> {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const startOfYear = new Date(currentYear, 0, 1);
+    const endOfYear = new Date(currentYear, 11, 31, 23, 59, 59, 999);
+
+    const yearInvoices = await db.select()
+      .from(invoices)
+      .where(and(
+        eq(invoices.companyId, companyId),
+        eq(invoices.currency, currency),
+        gte(invoices.issueDate, startOfYear),
+        lte(invoices.issueDate, endOfYear),
+        ne(invoices.status, "draft"),
+        ne(invoices.status, "cancelled")
+      ));
+
+    const yearPayments = await db.select()
+      .from(payments)
+      .where(and(
+        eq(payments.companyId, companyId),
+        eq(payments.currency, currency),
+        gte(payments.paymentDate, startOfYear),
+        lte(payments.paymentDate, endOfYear)
+      ));
+
+    const yearExpenses = await db.select()
+      .from(expenses)
+      .where(and(
+        eq(expenses.companyId, companyId),
+        eq(expenses.currency, currency),
+        gte(expenses.expenseDate, startOfYear),
+        lte(expenses.expenseDate, endOfYear)
+      ));
+
+    let totalSales = 0;
+    let totalReceipts = 0;
+    let totalExpenses = 0;
+
+    const monthlyMap: Record<string, { sales: number; expenses: number }> = {};
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    months.forEach(m => {
+      monthlyMap[`${m} ${currentYear}`] = { sales: 0, expenses: 0 };
+    });
+
+    for (const inv of yearInvoices) {
+      const amount = Number(inv.total);
+      totalSales += amount;
+      const monthDate = inv.issueDate ? new Date(inv.issueDate) : now;
+      const month = months[monthDate.getMonth()];
+      const key = `${month} ${currentYear}`;
+      if (monthlyMap[key]) monthlyMap[key].sales += amount;
+    }
+
+    for (const pay of yearPayments) {
+      totalReceipts += Number(pay.amount);
+    }
+
+    for (const exp of yearExpenses) {
+      const amount = Number(exp.amount);
+      totalExpenses += amount;
+      const monthDate = exp.expenseDate ? new Date(exp.expenseDate) : now;
+      const month = months[monthDate.getMonth()];
+      const key = `${month} ${currentYear}`;
+      if (monthlyMap[key]) monthlyMap[key].expenses += amount;
+    }
+
+    const monthlyData = Object.entries(monthlyMap).map(([month, data]) => ({
+      month,
+      sales: data.sales,
+      expenses: data.expenses,
+    }));
+
+    // Ensure chronological order
+    monthlyData.sort((a, b) => {
+      const monthA = months.indexOf(a.month.split(" ")[0]);
+      const monthB = months.indexOf(b.month.split(" ")[0]);
+      return monthA - monthB;
+    });
+
+    return {
+      totalSales,
+      totalReceipts,
+      totalExpenses,
+      monthlyData,
+    };
+  }
+
+  async getPayment(id: number): Promise<(Payment & { invoice?: Invoice; customer?: Customer; company?: Company }) | undefined> {
+    const [result] = await db.select({
+      payment: payments,
+      invoice: invoices,
+      customer: customers,
+      company: companies
+    })
+    .from(payments)
+    .leftJoin(invoices, eq(payments.invoiceId, invoices.id))
+    .leftJoin(customers, eq(invoices.customerId, customers.id))
+    .leftJoin(companies, eq(payments.companyId, companies.id))
+    .where(eq(payments.id, id));
+
+    if (!result) return undefined;
+
+    return {
+      ...result.payment,
+      invoice: result.invoice || undefined,
+      customer: result.customer || undefined,
+      company: result.company || undefined
+    };
+  }
+
   async deletePayment(id: number): Promise<void> {
     await db.delete(payments).where(eq(payments.id, id));
   }
@@ -1674,6 +1896,8 @@ export class DatabaseStorage implements IStorage {
         notes: payments.notes,
         invoiceId: payments.invoiceId,
         invoiceNumber: invoices.invoiceNumber,
+        invoiceTotal: invoices.total,
+        invoicePaidAmount: sql<string>`(SELECT COALESCE(SUM(amount), 0) FROM payments WHERE invoice_id = ${invoices.id})`,
         customerId: customers.id,
         customerName: customers.name,
         customerEmail: customers.email,
@@ -2527,6 +2751,777 @@ export class DatabaseStorage implements IStorage {
       } : undefined
     };
   }
+  // ── Report Module Methods ──────────────────────────────────────────────────
+
+  async getReportSalesSummary(companyId: number, start: Date, end: Date) {
+    const rows = await db
+      .select()
+      .from(invoices)
+      .leftJoin(customers, eq(invoices.customerId, customers.id))
+      .where(and(
+        eq(invoices.companyId, companyId),
+        gte(invoices.issueDate, start),
+        lte(invoices.issueDate, end),
+        ne(invoices.transactionType, 'CreditNote')
+      ));
+
+    const byDate = new Map<string, { invoiceCount: number; subtotal: number; taxAmount: number; total: number }>();
+    for (const { invoices: inv } of rows) {
+      const dateKey = inv.issueDate ? inv.issueDate.toISOString().slice(0, 10) : 'unknown';
+      const existing = byDate.get(dateKey) ?? { invoiceCount: 0, subtotal: 0, taxAmount: 0, total: 0 };
+      existing.invoiceCount += 1;
+      existing.subtotal += Number(inv.subtotal);
+      existing.taxAmount += Number(inv.taxAmount);
+      existing.total += Number(inv.total);
+      byDate.set(dateKey, existing);
+    }
+
+    return Array.from(byDate.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, v]) => ({
+        date,
+        invoiceCount: v.invoiceCount,
+        subtotal: v.subtotal.toFixed(2),
+        taxAmount: v.taxAmount.toFixed(2),
+        total: v.total.toFixed(2),
+      }));
+  }
+
+  async getReportSalesByCustomer(companyId: number, start: Date, end: Date) {
+    const rows = await db
+      .select()
+      .from(invoices)
+      .leftJoin(customers, eq(invoices.customerId, customers.id))
+      .where(and(
+        eq(invoices.companyId, companyId),
+        gte(invoices.issueDate, start),
+        lte(invoices.issueDate, end),
+        ne(invoices.transactionType, 'CreditNote')
+      ));
+
+    const byCustomer = new Map<number, { customerName: string; invoiceCount: number; total: number }>();
+    for (const { invoices: inv, customers: cust } of rows) {
+      const custId = inv.customerId;
+      const existing = byCustomer.get(custId) ?? { customerName: cust?.name ?? 'Unknown', invoiceCount: 0, total: 0 };
+      existing.invoiceCount += 1;
+      existing.total += Number(inv.total);
+      byCustomer.set(custId, existing);
+    }
+
+    return Array.from(byCustomer.entries()).map(([customerId, v]) => ({
+      customerId,
+      customerName: v.customerName,
+      invoiceCount: v.invoiceCount,
+      total: v.total.toFixed(2),
+    }));
+  }
+
+  async getReportSalesByItem(companyId: number, start: Date, end: Date) {
+    const rows = await db
+      .select()
+      .from(invoiceItems)
+      .innerJoin(invoices, eq(invoiceItems.invoiceId, invoices.id))
+      .where(and(
+        eq(invoices.companyId, companyId),
+        gte(invoices.issueDate, start),
+        lte(invoices.issueDate, end),
+        ne(invoices.transactionType, 'CreditNote')
+      ));
+
+    const byItem = new Map<string, { productId: number | null; quantitySold: number; revenue: number }>();
+    for (const { invoice_items: item } of rows) {
+      const key = item.description;
+      const existing = byItem.get(key) ?? { productId: item.productId ?? null, quantitySold: 0, revenue: 0 };
+      existing.quantitySold += Number(item.quantity);
+      existing.revenue += Number(item.lineTotal);
+      byItem.set(key, existing);
+    }
+
+    return Array.from(byItem.entries()).map(([description, v]) => ({
+      productId: v.productId,
+      description,
+      quantitySold: v.quantitySold.toFixed(2),
+      revenue: v.revenue.toFixed(2),
+    }));
+  }
+
+  async getReportSalesBySalesperson(companyId: number, start: Date, end: Date) {
+    const rows = await db
+      .select()
+      .from(invoices)
+      .leftJoin(users, eq(invoices.createdBy, users.id))
+      .where(and(
+        eq(invoices.companyId, companyId),
+        gte(invoices.issueDate, start),
+        lte(invoices.issueDate, end),
+        ne(invoices.transactionType, 'CreditNote')
+      ));
+
+    const byUser = new Map<string, { userName: string; invoiceCount: number; total: number }>();
+    for (const { invoices: inv, users: u } of rows) {
+      const userId = inv.createdBy ?? 'unknown';
+      const existing = byUser.get(userId) ?? { userName: u?.name ?? u?.email ?? userId, invoiceCount: 0, total: 0 };
+      existing.invoiceCount += 1;
+      existing.total += Number(inv.total);
+      byUser.set(userId, existing);
+    }
+
+    return Array.from(byUser.entries()).map(([userId, v]) => ({
+      userId,
+      userName: v.userName,
+      invoiceCount: v.invoiceCount,
+      total: v.total.toFixed(2),
+    }));
+  }
+
+  async getReportArAgingSummary(companyId: number, start: Date, end: Date) {
+    const rows = await db
+      .select()
+      .from(invoices)
+      .leftJoin(customers, eq(invoices.customerId, customers.id))
+      .leftJoin(payments, eq(payments.invoiceId, invoices.id))
+      .where(and(
+        eq(invoices.companyId, companyId),
+        gte(invoices.issueDate, start),
+        lte(invoices.issueDate, end),
+        ne(invoices.transactionType, 'CreditNote')
+      ));
+
+    const today = new Date();
+    const byCustomer = new Map<number, { customerName: string; current: number; days31_60: number; days61_90: number; days90plus: number }>();
+    const paidByInvoice = new Map<number, number>();
+
+    for (const { invoices: inv, payments: pmt } of rows) {
+      if (pmt) {
+        paidByInvoice.set(inv.id, (paidByInvoice.get(inv.id) ?? 0) + Number(pmt.amount));
+      }
+    }
+
+    const seen = new Set<number>();
+    for (const { invoices: inv, customers: cust } of rows) {
+      if (seen.has(inv.id)) continue;
+      seen.add(inv.id);
+
+      const paid = paidByInvoice.get(inv.id) ?? 0;
+      const balance = Number(inv.total) - paid;
+      if (balance <= 0) continue;
+
+      const dueDate = inv.dueDate ? new Date(inv.dueDate) : new Date();
+      const daysOverdue = Math.floor((today.getTime() - dueDate.getTime()) / 86400000);
+      const custId = inv.customerId;
+      const existing = byCustomer.get(custId) ?? { customerName: cust?.name ?? 'Unknown', current: 0, days31_60: 0, days61_90: 0, days90plus: 0 };
+
+      if (daysOverdue <= 30) existing.current += balance;
+      else if (daysOverdue <= 60) existing.days31_60 += balance;
+      else if (daysOverdue <= 90) existing.days61_90 += balance;
+      else existing.days90plus += balance;
+
+      byCustomer.set(custId, existing);
+    }
+
+    return Array.from(byCustomer.entries()).map(([customerId, v]) => ({
+      customerId,
+      customerName: v.customerName,
+      current: v.current.toFixed(2),
+      days31_60: v.days31_60.toFixed(2),
+      days61_90: v.days61_90.toFixed(2),
+      days90plus: v.days90plus.toFixed(2),
+      total: (v.current + v.days31_60 + v.days61_90 + v.days90plus).toFixed(2),
+    }));
+  }
+
+  async getReportArAgingDetails(companyId: number, start: Date, end: Date) {
+    const rows = await db
+      .select()
+      .from(invoices)
+      .leftJoin(customers, eq(invoices.customerId, customers.id))
+      .leftJoin(payments, eq(payments.invoiceId, invoices.id))
+      .where(and(
+        eq(invoices.companyId, companyId),
+        gte(invoices.issueDate, start),
+        lte(invoices.issueDate, end),
+        ne(invoices.transactionType, 'CreditNote')
+      ));
+
+    const today = new Date();
+    const paidByInvoice = new Map<number, number>();
+    for (const { payments: pmt, invoices: inv } of rows) {
+      if (pmt) paidByInvoice.set(inv.id, (paidByInvoice.get(inv.id) ?? 0) + Number(pmt.amount));
+    }
+
+    const seen = new Set<number>();
+    const result: any[] = [];
+    for (const { invoices: inv, customers: cust } of rows) {
+      if (seen.has(inv.id)) continue;
+      seen.add(inv.id);
+
+      const paid = paidByInvoice.get(inv.id) ?? 0;
+      const balance = Number(inv.total) - paid;
+      if (balance <= 0) continue;
+
+      const dueDate = inv.dueDate ? new Date(inv.dueDate) : new Date();
+      const daysOverdue = Math.floor((today.getTime() - dueDate.getTime()) / 86400000);
+      let bucket: "current" | "31-60" | "61-90" | "90+";
+      if (daysOverdue <= 30) bucket = "current";
+      else if (daysOverdue <= 60) bucket = "31-60";
+      else if (daysOverdue <= 90) bucket = "61-90";
+      else bucket = "90+";
+
+      result.push({
+        invoiceId: inv.id,
+        invoiceNumber: inv.invoiceNumber,
+        customerName: cust?.name ?? 'Unknown',
+        dueDate: dueDate.toISOString().slice(0, 10),
+        daysOverdue,
+        balanceDue: balance.toFixed(2),
+        bucket,
+      });
+    }
+    return result;
+  }
+
+  async getReportInvoiceDetails(companyId: number, start: Date, end: Date) {
+    const rows = await db
+      .select()
+      .from(invoices)
+      .leftJoin(customers, eq(invoices.customerId, customers.id))
+      .leftJoin(payments, eq(payments.invoiceId, invoices.id))
+      .where(and(
+        eq(invoices.companyId, companyId),
+        gte(invoices.issueDate, start),
+        lte(invoices.issueDate, end)
+      ));
+
+    const paidByInvoice = new Map<number, number>();
+    for (const { payments: pmt, invoices: inv } of rows) {
+      if (pmt) paidByInvoice.set(inv.id, (paidByInvoice.get(inv.id) ?? 0) + Number(pmt.amount));
+    }
+
+    const seen = new Set<number>();
+    const result: any[] = [];
+    for (const { invoices: inv, customers: cust } of rows) {
+      if (seen.has(inv.id)) continue;
+      seen.add(inv.id);
+      const paid = paidByInvoice.get(inv.id) ?? 0;
+      const balance = Math.max(0, Number(inv.total) - paid);
+      result.push({
+        invoiceId: inv.id,
+        invoiceNumber: inv.invoiceNumber,
+        customerName: cust?.name ?? 'Unknown',
+        issueDate: inv.issueDate ? inv.issueDate.toISOString().slice(0, 10) : '',
+        dueDate: inv.dueDate ? new Date(inv.dueDate).toISOString().slice(0, 10) : '',
+        status: inv.status ?? 'draft',
+        total: Number(inv.total).toFixed(2),
+        paidAmount: paid.toFixed(2),
+        balanceDue: balance.toFixed(2),
+      });
+    }
+    return result;
+  }
+
+  async getReportQuoteDetails(companyId: number, start: Date, end: Date) {
+    const rows = await db
+      .select()
+      .from(quotations)
+      .leftJoin(customers, eq(quotations.customerId, customers.id))
+      .where(and(
+        eq(quotations.companyId, companyId),
+        gte(quotations.issueDate, start),
+        lte(quotations.issueDate, end)
+      ));
+
+    return rows.map(({ quotations: q, customers: cust }) => ({
+      quotationId: q.id,
+      quotationNumber: q.quotationNumber,
+      customerName: cust?.name ?? 'Unknown',
+      issueDate: q.issueDate ? q.issueDate.toISOString().slice(0, 10) : '',
+      expiryDate: q.expiryDate ? q.expiryDate.toISOString().slice(0, 10) : null,
+      status: q.status ?? 'draft',
+      total: Number(q.total).toFixed(2),
+    }));
+  }
+
+  async getReportCustomerBalanceSummary(companyId: number, start: Date, end: Date) {
+    const rows = await db
+      .select()
+      .from(invoices)
+      .leftJoin(customers, eq(invoices.customerId, customers.id))
+      .leftJoin(payments, eq(payments.invoiceId, invoices.id))
+      .where(and(
+        eq(invoices.companyId, companyId),
+        gte(invoices.issueDate, start),
+        lte(invoices.issueDate, end),
+        ne(invoices.transactionType, 'CreditNote')
+      ));
+
+    const paidByInvoice = new Map<number, number>();
+    for (const { payments: pmt, invoices: inv } of rows) {
+      if (pmt) paidByInvoice.set(inv.id, (paidByInvoice.get(inv.id) ?? 0) + Number(pmt.amount));
+    }
+
+    const byCustomer = new Map<number, { customerName: string; totalInvoiced: number; totalPaid: number }>();
+    const seen = new Set<number>();
+    for (const { invoices: inv, customers: cust } of rows) {
+      if (seen.has(inv.id)) continue;
+      seen.add(inv.id);
+      const custId = inv.customerId;
+      const paid = paidByInvoice.get(inv.id) ?? 0;
+      const existing = byCustomer.get(custId) ?? { customerName: cust?.name ?? 'Unknown', totalInvoiced: 0, totalPaid: 0 };
+      existing.totalInvoiced += Number(inv.total);
+      existing.totalPaid += paid;
+      byCustomer.set(custId, existing);
+    }
+
+    return Array.from(byCustomer.entries()).map(([customerId, v]) => ({
+      customerId,
+      customerName: v.customerName,
+      totalInvoiced: v.totalInvoiced.toFixed(2),
+      totalPaid: v.totalPaid.toFixed(2),
+      balance: (v.totalInvoiced - v.totalPaid).toFixed(2),
+    }));
+  }
+
+  async getReportReceivableSummary(companyId: number, start: Date, end: Date) {
+    const rows = await db
+      .select()
+      .from(invoices)
+      .leftJoin(payments, eq(payments.invoiceId, invoices.id))
+      .where(and(
+        eq(invoices.companyId, companyId),
+        gte(invoices.issueDate, start),
+        lte(invoices.issueDate, end),
+        ne(invoices.transactionType, 'CreditNote')
+      ));
+
+    const paidByInvoice = new Map<number, number>();
+    for (const { payments: pmt, invoices: inv } of rows) {
+      if (pmt) paidByInvoice.set(inv.id, (paidByInvoice.get(inv.id) ?? 0) + Number(pmt.amount));
+    }
+
+    let totalInvoiced = 0;
+    let totalCollected = 0;
+    const seen = new Set<number>();
+    for (const { invoices: inv } of rows) {
+      if (seen.has(inv.id)) continue;
+      seen.add(inv.id);
+      totalInvoiced += Number(inv.total);
+      totalCollected += paidByInvoice.get(inv.id) ?? 0;
+    }
+
+    return {
+      totalInvoiced: totalInvoiced.toFixed(2),
+      totalCollected: totalCollected.toFixed(2),
+      totalOutstanding: Math.max(0, totalInvoiced - totalCollected).toFixed(2),
+    };
+  }
+
+  async getReportReceivableDetails(companyId: number, start: Date, end: Date) {
+    const rows = await db
+      .select()
+      .from(invoices)
+      .leftJoin(customers, eq(invoices.customerId, customers.id))
+      .leftJoin(payments, eq(payments.invoiceId, invoices.id))
+      .where(and(
+        eq(invoices.companyId, companyId),
+        gte(invoices.issueDate, start),
+        lte(invoices.issueDate, end),
+        ne(invoices.transactionType, 'CreditNote')
+      ));
+
+    const paidByInvoice = new Map<number, number>();
+    for (const { payments: pmt, invoices: inv } of rows) {
+      if (pmt) paidByInvoice.set(inv.id, (paidByInvoice.get(inv.id) ?? 0) + Number(pmt.amount));
+    }
+
+    const seen = new Set<number>();
+    const result: any[] = [];
+    for (const { invoices: inv, customers: cust } of rows) {
+      if (seen.has(inv.id)) continue;
+      seen.add(inv.id);
+      const paid = paidByInvoice.get(inv.id) ?? 0;
+      const balance = Math.max(0, Number(inv.total) - paid);
+      result.push({
+        invoiceId: inv.id,
+        invoiceNumber: inv.invoiceNumber,
+        customerName: cust?.name ?? 'Unknown',
+        issueDate: inv.issueDate ? inv.issueDate.toISOString().slice(0, 10) : '',
+        total: Number(inv.total).toFixed(2),
+        paidAmount: paid.toFixed(2),
+        balanceDue: balance.toFixed(2),
+        status: inv.status ?? 'draft',
+      });
+    }
+    return result;
+  }
+
+  async getReportBadDebts(companyId: number, start: Date, end: Date) {
+    const rows = await db
+      .select()
+      .from(invoices)
+      .leftJoin(customers, eq(invoices.customerId, customers.id))
+      .leftJoin(payments, eq(payments.invoiceId, invoices.id))
+      .where(and(
+        eq(invoices.companyId, companyId),
+        gte(invoices.issueDate, start),
+        lte(invoices.issueDate, end),
+        ne(invoices.transactionType, 'CreditNote')
+      ));
+
+    const today = new Date();
+    const paidByInvoice = new Map<number, number>();
+    for (const { payments: pmt, invoices: inv } of rows) {
+      if (pmt) paidByInvoice.set(inv.id, (paidByInvoice.get(inv.id) ?? 0) + Number(pmt.amount));
+    }
+
+    const seen = new Set<number>();
+    const result: any[] = [];
+    for (const { invoices: inv, customers: cust } of rows) {
+      if (seen.has(inv.id)) continue;
+      seen.add(inv.id);
+      const paid = paidByInvoice.get(inv.id) ?? 0;
+      const balance = Number(inv.total) - paid;
+      if (balance <= 0) continue;
+      const dueDate = inv.dueDate ? new Date(inv.dueDate) : new Date();
+      const daysOverdue = Math.floor((today.getTime() - dueDate.getTime()) / 86400000);
+      if (daysOverdue <= 90) continue;
+      result.push({
+        invoiceId: inv.id,
+        invoiceNumber: inv.invoiceNumber,
+        customerName: cust?.name ?? 'Unknown',
+        dueDate: dueDate.toISOString().slice(0, 10),
+        daysOverdue,
+        balanceDue: balance.toFixed(2),
+      });
+    }
+    return result;
+  }
+
+  async getReportBankCharges(companyId: number, start: Date, end: Date) {
+    const rows = await db
+      .select()
+      .from(payments)
+      .leftJoin(invoices, eq(payments.invoiceId, invoices.id))
+      .leftJoin(customers, eq(invoices.customerId, customers.id))
+      .where(and(
+        eq(payments.companyId, companyId),
+        gte(payments.paymentDate, start),
+        lte(payments.paymentDate, end),
+        eq(payments.paymentMethod, 'BANK_TRANSFER')
+      ));
+
+    return rows.map(({ payments: pmt, invoices: inv, customers: cust }) => ({
+      paymentId: pmt.id,
+      invoiceNumber: inv?.invoiceNumber ?? '',
+      customerName: cust?.name ?? 'Unknown',
+      paymentDate: pmt.paymentDate.toISOString().slice(0, 10),
+      reference: pmt.reference ?? '',
+      amount: Number(pmt.amount).toFixed(2),
+    }));
+  }
+
+  async getReportTimeToGetPaid(companyId: number, start: Date, end: Date) {
+    const rows = await db
+      .select()
+      .from(payments)
+      .leftJoin(invoices, eq(payments.invoiceId, invoices.id))
+      .leftJoin(customers, eq(invoices.customerId, customers.id))
+      .where(and(
+        eq(payments.companyId, companyId),
+        gte(payments.paymentDate, start),
+        lte(payments.paymentDate, end)
+      ));
+
+    return rows.map(({ payments: pmt, invoices: inv, customers: cust }) => {
+      const issueDate = inv?.issueDate ? new Date(inv.issueDate) : new Date();
+      const paymentDate = new Date(pmt.paymentDate);
+      const daysToPayment = Math.max(0, Math.floor((paymentDate.getTime() - issueDate.getTime()) / 86400000));
+      return {
+        invoiceId: inv?.id ?? 0,
+        invoiceNumber: inv?.invoiceNumber ?? '',
+        customerName: cust?.name ?? 'Unknown',
+        issueDate: issueDate.toISOString().slice(0, 10),
+        paymentDate: paymentDate.toISOString().slice(0, 10),
+        daysToPayment,
+        amount: Number(pmt.amount).toFixed(2),
+      };
+    });
+  }
+
+  async getReportRefundHistory(companyId: number, start: Date, end: Date) {
+    const creditNotes = await db
+      .select()
+      .from(invoices)
+      .leftJoin(customers, eq(invoices.customerId, customers.id))
+      .where(and(
+        eq(invoices.companyId, companyId),
+        gte(invoices.issueDate, start),
+        lte(invoices.issueDate, end),
+        eq(invoices.transactionType, 'CreditNote')
+      ));
+
+    const relatedIds = creditNotes
+      .map(r => r.invoices.relatedInvoiceId)
+      .filter((id): id is number => id != null);
+
+    const relatedInvoices = relatedIds.length > 0
+      ? await db.select().from(invoices).where(inArray(invoices.id, relatedIds))
+      : [];
+
+    const relatedMap = new Map(relatedInvoices.map(inv => [inv.id, inv.invoiceNumber]));
+
+    return creditNotes.map(({ invoices: inv, customers: cust }) => ({
+      invoiceId: inv.id,
+      invoiceNumber: inv.invoiceNumber,
+      customerName: cust?.name ?? 'Unknown',
+      issueDate: inv.issueDate ? inv.issueDate.toISOString().slice(0, 10) : '',
+      amount: Number(inv.total).toFixed(2),
+      relatedInvoiceNumber: inv.relatedInvoiceId ? (relatedMap.get(inv.relatedInvoiceId) ?? null) : null,
+    }));
+  }
+
+  async getReportWithholdingTax(companyId: number, start: Date, end: Date) {
+    const rows = await db
+      .select()
+      .from(invoices)
+      .leftJoin(customers, eq(invoices.customerId, customers.id))
+      .innerJoin(invoiceItems, eq(invoiceItems.invoiceId, invoices.id))
+      .where(and(
+        eq(invoices.companyId, companyId),
+        gte(invoices.issueDate, start),
+        lte(invoices.issueDate, end),
+        ne(invoices.transactionType, 'CreditNote')
+      ));
+
+    // Group by invoice, sum withheld amounts from items with negative tax (withholding)
+    const byInvoice = new Map<number, { invoiceNumber: string; customerName: string; issueDate: string; withheldAmount: number; total: number }>();
+    for (const { invoices: inv, customers: cust, invoice_items: item } of rows) {
+      const taxRate = Number(item.taxRate);
+      if (taxRate >= 0) continue; // Only negative tax rates represent withholding
+      const withheld = Math.abs(Number(item.lineTotal));
+      const existing = byInvoice.get(inv.id) ?? {
+        invoiceNumber: inv.invoiceNumber,
+        customerName: cust?.name ?? 'Unknown',
+        issueDate: inv.issueDate ? inv.issueDate.toISOString().slice(0, 10) : '',
+        withheldAmount: 0,
+        total: Number(inv.total),
+      };
+      existing.withheldAmount += withheld;
+      byInvoice.set(inv.id, existing);
+    }
+
+    return Array.from(byInvoice.entries()).map(([invoiceId, v]) => ({
+      invoiceId,
+      invoiceNumber: v.invoiceNumber,
+      customerName: v.customerName,
+      issueDate: v.issueDate,
+      withheldAmount: v.withheldAmount.toFixed(2),
+      total: v.total.toFixed(2),
+    }));
+  }
+
+  async getReportExpenseDetails(companyId: number, start: Date, end: Date) {
+    const rows = await db
+      .select()
+      .from(expenses)
+      .leftJoin(suppliers, eq(expenses.supplierId, suppliers.id))
+      .where(and(
+        eq(expenses.companyId, companyId),
+        gte(expenses.expenseDate, start),
+        lte(expenses.expenseDate, end)
+      ));
+
+    return rows.map(({ expenses: exp, suppliers: sup }) => ({
+      expenseId: exp.id,
+      expenseDate: exp.expenseDate.toISOString().slice(0, 10),
+      category: exp.category,
+      description: exp.description,
+      supplierName: sup?.name ?? null,
+      paymentMethod: exp.paymentMethod ?? null,
+      reference: exp.reference ?? null,
+      amount: Number(exp.amount).toFixed(2),
+      currency: exp.currency,
+    }));
+  }
+
+  async getReportExpensesByCategory(companyId: number, start: Date, end: Date) {
+    const rows = await db
+      .select()
+      .from(expenses)
+      .where(and(
+        eq(expenses.companyId, companyId),
+        gte(expenses.expenseDate, start),
+        lte(expenses.expenseDate, end)
+      ));
+
+    const byCategory = new Map<string, { total: number; count: number }>();
+    let grandTotal = 0;
+    for (const exp of rows) {
+      const amt = Number(exp.amount);
+      grandTotal += amt;
+      const existing = byCategory.get(exp.category) ?? { total: 0, count: 0 };
+      existing.total += amt;
+      existing.count += 1;
+      byCategory.set(exp.category, existing);
+    }
+
+    return Array.from(byCategory.entries()).map(([category, v]) => ({
+      category,
+      total: v.total.toFixed(2),
+      percentage: grandTotal > 0 ? ((v.total / grandTotal) * 100).toFixed(2) : '0.00',
+      count: v.count,
+    }));
+  }
+
+  async getReportExpensesByCustomer(companyId: number, start: Date, end: Date) {
+    const rows = await db
+      .select()
+      .from(expenses)
+      .leftJoin(suppliers, eq(expenses.supplierId, suppliers.id))
+      .where(and(
+        eq(expenses.companyId, companyId),
+        gte(expenses.expenseDate, start),
+        lte(expenses.expenseDate, end)
+      ));
+
+    const bySupplier = new Map<string, { supplierId: number | null; supplierName: string; total: number; count: number }>();
+    for (const { expenses: exp, suppliers: sup } of rows) {
+      const key = sup ? String(sup.id) : 'no-supplier';
+      const existing = bySupplier.get(key) ?? { supplierId: sup?.id ?? null, supplierName: sup?.name ?? 'No Supplier', total: 0, count: 0 };
+      existing.total += Number(exp.amount);
+      existing.count += 1;
+      bySupplier.set(key, existing);
+    }
+
+    return Array.from(bySupplier.values()).map(v => ({
+      supplierId: v.supplierId,
+      supplierName: v.supplierName,
+      total: v.total.toFixed(2),
+      count: v.count,
+    }));
+  }
+
+  async getReportExpensesByProject(companyId: number, start: Date, end: Date) {
+    const rows = await db
+      .select()
+      .from(expenses)
+      .where(and(
+        eq(expenses.companyId, companyId),
+        gte(expenses.expenseDate, start),
+        lte(expenses.expenseDate, end)
+      ));
+
+    const byProject = new Map<string, { total: number; count: number }>();
+    for (const exp of rows) {
+      const project = exp.notes ?? 'Unassigned';
+      const existing = byProject.get(project) ?? { total: 0, count: 0 };
+      existing.total += Number(exp.amount);
+      existing.count += 1;
+      byProject.set(project, existing);
+    }
+
+    return Array.from(byProject.entries()).map(([project, v]) => ({
+      project,
+      total: v.total.toFixed(2),
+      count: v.count,
+    }));
+  }
+
+  async getReportBillableExpenseDetails(companyId: number, start: Date, end: Date) {
+    const rows = await db
+      .select()
+      .from(expenses)
+      .where(and(
+        eq(expenses.companyId, companyId),
+        gte(expenses.expenseDate, start),
+        lte(expenses.expenseDate, end),
+        eq(expenses.status, 'pending')
+      ));
+
+    return rows.map(exp => ({
+      expenseId: exp.id,
+      expenseDate: exp.expenseDate.toISOString().slice(0, 10),
+      category: exp.category,
+      description: exp.description,
+      amount: Number(exp.amount).toFixed(2),
+      status: exp.status ?? 'pending',
+    }));
+  }
+
+  async getReportTaxSummary(companyId: number, start: Date, end: Date) {
+    // Output tax from invoices grouped by tax type
+    const invoiceRows = await db
+      .select()
+      .from(invoiceItems)
+      .innerJoin(invoices, eq(invoiceItems.invoiceId, invoices.id))
+      .leftJoin(taxTypes, eq(invoiceItems.taxTypeId, taxTypes.id))
+      .where(and(
+        eq(invoices.companyId, companyId),
+        gte(invoices.issueDate, start),
+        lte(invoices.issueDate, end),
+        ne(invoices.transactionType, 'CreditNote')
+      ));
+
+    // Input tax from expenses grouped by category (using category as tax code proxy)
+    const expenseRows = await db
+      .select()
+      .from(expenses)
+      .where(and(
+        eq(expenses.companyId, companyId),
+        gte(expenses.expenseDate, start),
+        lte(expenses.expenseDate, end)
+      ));
+
+    type TaxEntry = { taxName: string; taxRate: string; taxableAmount: number; outputTax: number; inputTax: number };
+    const taxMap = new Map<string, TaxEntry>();
+
+    for (const { invoice_items: item, tax_types: tt } of invoiceRows) {
+      const taxCode = tt?.code ?? 'UNKNOWN';
+      const taxRate = Number(item.taxRate);
+      const lineTotal = Number(item.lineTotal);
+      const taxAmt = lineTotal * (taxRate / (100 + taxRate)); // back-calculate tax from inclusive total
+      const taxable = lineTotal - taxAmt;
+
+      const existing = taxMap.get(taxCode) ?? {
+        taxName: tt?.name ?? taxCode,
+        taxRate: Number(tt?.rate ?? item.taxRate).toFixed(2),
+        taxableAmount: 0,
+        outputTax: 0,
+        inputTax: 0,
+      };
+      existing.taxableAmount += taxable;
+      existing.outputTax += taxAmt;
+      taxMap.set(taxCode, existing);
+    }
+
+    // Estimate input tax from expenses: assume a standard VAT rate of 15% on expenses
+    const VAT_RATE = 0.15;
+    for (const exp of expenseRows) {
+      const amt = Number(exp.amount);
+      const inputTax = amt * VAT_RATE;
+      const taxCode = 'VAT-STD';
+      const existing = taxMap.get(taxCode) ?? {
+        taxName: 'Standard VAT',
+        taxRate: '15.00',
+        taxableAmount: 0,
+        outputTax: 0,
+        inputTax: 0,
+      };
+      existing.inputTax += inputTax;
+      taxMap.set(taxCode, existing);
+    }
+
+    return Array.from(taxMap.entries()).map(([taxCode, v]) => ({
+      taxCode,
+      taxName: v.taxName,
+      taxRate: v.taxRate,
+      taxableAmount: v.taxableAmount.toFixed(2),
+      outputTax: v.outputTax.toFixed(2),
+      inputTax: v.inputTax.toFixed(2),
+      netVat: (v.outputTax - v.inputTax).toFixed(2),
+    }));
+  }
+
+
 }
 
 export const storage = new DatabaseStorage();

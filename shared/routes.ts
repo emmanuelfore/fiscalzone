@@ -296,6 +296,14 @@ export const api = {
         200: z.array(z.custom<typeof payments.$inferSelect>()),
       }
     },
+    getOne: {
+      method: 'GET' as const,
+      path: '/api/payments/:id',
+      responses: {
+        200: z.any(), // Returning payment + invoice + customer
+        404: errorSchemas.notFound,
+      }
+    },
     create: {
       method: 'POST' as const,
       path: '/api/invoices/:invoiceId/payments',
@@ -438,6 +446,36 @@ export const api = {
             cogsItems: z.array(z.any()),
             expenseItems: z.array(z.any())
           }).optional()
+        })
+      }
+    },
+    receivablesAging: {
+      method: "GET" as const,
+      path: "/api/companies/:companyId/reports/receivables-aging",
+      responses: {
+        200: z.object({
+          total: z.number(),
+          current: z.number(),
+          days1_15: z.number(),
+          days16_30: z.number(),
+          days31_45: z.number(),
+          above45: z.number(),
+        })
+      }
+    },
+    fiscalYearStats: {
+      method: "GET" as const,
+      path: "/api/companies/:companyId/reports/fiscal-year-stats",
+      responses: {
+        200: z.object({
+          totalSales: z.number(),
+          totalReceipts: z.number(),
+          totalExpenses: z.number(),
+          monthlyData: z.array(z.object({
+            month: z.string(),
+            sales: z.number(),
+            expenses: z.number(),
+          }))
         })
       }
     }

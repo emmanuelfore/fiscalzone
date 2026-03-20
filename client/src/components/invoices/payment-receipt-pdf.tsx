@@ -7,46 +7,25 @@ import {
   Image,
   Font,
 } from "@react-pdf/renderer";
-import { format } from "date-fns";
+import { format, isValid } from "date-fns";
 
-// Register Roboto font for a cleaner look
-Font.register({
-  family: "Roboto",
-  fonts: [
-    {
-      src: "https://cdnjs.cloudflare.com/ajax/libs/ink/3.1.10/fonts/Roboto/roboto-light-webfont.ttf",
-      fontWeight: 300,
-    },
-    {
-      src: "https://cdnjs.cloudflare.com/ajax/libs/ink/3.1.10/fonts/Roboto/roboto-regular-webfont.ttf",
-      fontWeight: 400,
-    },
-    {
-      src: "https://cdnjs.cloudflare.com/ajax/libs/ink/3.1.10/fonts/Roboto/roboto-medium-webfont.ttf",
-      fontWeight: 500,
-    },
-    {
-      src: "https://cdnjs.cloudflare.com/ajax/libs/ink/3.1.10/fonts/Roboto/roboto-bold-webfont.ttf",
-      fontWeight: 700,
-    },
-  ],
-});
+// Use built-in Helvetica — removing font registration to eliminate fetch issues
 
 const s = StyleSheet.create({
   page: {
-    fontFamily: "Roboto",
+    fontFamily: "Helvetica",
     fontSize: 10,
     color: "#1e293b",
     backgroundColor: "#ffffff",
     padding: 0,
   },
   headerBanner: {
-    height: 60,
+    height: 80,
     backgroundColor: "#ffffff",
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 30,
+    paddingHorizontal: 40,
     borderBottomWidth: 1,
     borderBottomColor: "#f1f5f9",
   },
@@ -63,7 +42,7 @@ const s = StyleSheet.create({
     textAlign: "right",
   },
   content: {
-    padding: 24,
+    padding: 40,
   },
   topSection: {
     flexDirection: "row",
@@ -242,6 +221,7 @@ const s = StyleSheet.create({
 
 interface PaymentReceiptPDFProps {
   payment: {
+    id: number;
     amount: string | number;
     paymentMethod: string;
     reference?: string;
@@ -252,6 +232,8 @@ interface PaymentReceiptPDFProps {
     customerName?: string;
     customerEmail?: string;
   };
+  allPayments?: any[];
+  overallBalance?: number;
   company?: any;
   invoice?: any;
   taxTypes?: any[];
@@ -259,14 +241,34 @@ interface PaymentReceiptPDFProps {
 
 export const PaymentReceiptPDF = ({
   payment,
+  allPayments = [],
+  overallBalance,
   company,
   invoice,
   taxTypes,
 }: PaymentReceiptPDFProps) => {
   const currency = payment.currency || invoice?.currency || "USD";
-  const date = payment.paymentDate
-    ? format(new Date(payment.paymentDate), "dd MMM yyyy")
-    : format(new Date(), "dd MMM yyyy");
+
+  const getSafeDate = (d: any) => {
+    if (!d) return new Date();
+    const dateObj = new Date(d);
+    return isValid(dateObj) ? dateObj : new Date();
+  };
+
+  // Calculate balance due after THIS payment
+  // We sum all payments for this invoice that happened on or before this payment
+  const currentPaymentDate = getSafeDate(payment.paymentDate).getTime();
+  const paidUntilNow = (allPayments || []).reduce((sum, p) => {
+    const pDate = getSafeDate(p.paymentDate).getTime();
+    if (pDate < currentPaymentDate || (pDate === currentPaymentDate && p.id <= payment.id)) {
+      return sum + Number(p.amount || 0);
+    }
+    return sum;
+  }, 0);
+
+  const balanceDue = Math.max(0, Number(invoice?.total || 0) - paidUntilNow);
+
+  const date = format(getSafeDate(payment.paymentDate), "dd MMM yyyy");
 
   const taxRegistered = company?.vatRegistered || false;
 
@@ -298,25 +300,13 @@ export const PaymentReceiptPDF = ({
 
   return (
     <Document>
-      <Page size="A5" style={s.page}>
+      <Page size="A4" style={s.page}>
         <View style={s.headerBanner}>
           <View style={s.logoBox}>
-            {company?.logoUrl ? (
-              <Image
-                src={company.logoUrl}
-                style={{ width: 100, height: 30, objectFit: "contain" }}
-              />
+            {company?.logoUrl && (company.logoUrl.startsWith('http') || company.logoUrl.startsWith('/')) ? (
+              <Image src={company.logoUrl} style={{ width: 100, height: 30, objectFit: "contain" }} />
             ) : (
-              <Text
-                style={{
-                  fontSize: 10,
-                  fontWeight: 700,
-                  color: "#0f172a",
-                  textTransform: "uppercase",
-                }}
-              >
-                {company?.name?.substring(0, 15)}
-              </Text>
+              <Text style={{ fontSize: 10, fontWeight: 700, color: "#0f172a", textTransform: "uppercase" }}>{company?.name?.substring(0, 15)}</Text>
             )}
           </View>
           <View style={s.headerText}>
@@ -329,61 +319,45 @@ export const PaymentReceiptPDF = ({
           <View style={s.topSection}>
             <View style={s.companyInfo}>
               <Text style={s.companyName}>{company?.tradingName || company?.name}</Text>
-              {company?.address && <Text style={s.companyMeta}>{company.address}</Text>}
-              <Text style={s.companyMeta}>
-                {company?.city}, {company?.country}
-              </Text>
+              {company?.address ? <Text style={s.companyMeta}>{company.address}</Text> : null}
+              <Text style={s.companyMeta}>{company?.city || "Harare"}, {company?.country || "Zimbabwe"}</Text>
               <View style={{ flexDirection: "row", gap: 10, marginTop: 4 }}>
-                {company?.tin && (
-                  <Text style={[s.companyMeta, { fontWeight: 700 }]}>TIN: {company.tin}</Text>
-                )}
-                {company?.vatNumber && (
-                  <Text style={[s.companyMeta, { fontWeight: 700 }]}>VAT: {company.vatNumber}</Text>
-                )}
+                {company?.tin ? <Text style={[s.companyMeta, { fontWeight: 700 }]}>TIN: {company.tin}</Text> : null}
+                {company?.vatNumber ? <Text style={[s.companyMeta, { fontWeight: 700 }]}>VAT: {company.vatNumber}</Text> : null}
               </View>
             </View>
             <View>
               <Text style={s.receiptLabel}>Receipt</Text>
+              <Text style={[s.receiptNo, { fontSize: 12, color: "#1e293b", marginBottom: 2 }]}>Receipt No: {payment.reference || "N/A"}</Text>
               <Text style={s.receiptNo}>Date: {date}</Text>
-              <Text style={s.receiptNo}>Invoice: {payment.invoiceNumber}</Text>
             </View>
           </View>
-
+ 
           <View style={s.infoGrid}>
             <View style={s.infoCol}>
               <Text style={s.infoColLabel}>Received From</Text>
               <Text style={s.infoColValue}>{payment.customerName || "Walk-in Customer"}</Text>
-              {payment.customerEmail && (
-                <Text style={[s.companyMeta, { marginTop: 2 }]}>{payment.customerEmail}</Text>
-              )}
+              {payment.customerEmail ? <Text style={[s.companyMeta, { marginTop: 2 }]}>{payment.customerEmail}</Text> : null}
             </View>
             <View style={s.infoCol}>
               <Text style={s.infoColLabel}>Payment Method</Text>
-              <Text style={s.infoColValue}>{payment.paymentMethod}</Text>
+              <Text style={s.infoColValue}>{payment.paymentMethod || "Other"}</Text>
             </View>
             <View style={s.infoCol}>
-              <Text style={s.infoColLabel}>Reference</Text>
-              <Text style={s.infoColValue}>
-                {payment.reference || payment.invoiceNumber || "N/A"}
-              </Text>
+              <Text style={s.infoColLabel}>Invoice Reference</Text>
+              <Text style={[s.infoColValue, { fontWeight: 700 }]}>{payment.invoiceNumber || "N/A"}</Text>
             </View>
           </View>
 
-          {/* Amount Hero */}
           <View style={s.heroBox}>
             <View>
               <Text style={s.amountHeroLabel}>Amount Paid</Text>
-              <Text style={{ color: "#ffffff", fontSize: 12, opacity: 0.8 }}>
-                Currency: {currency}
-              </Text>
+              <Text style={{ color: "#ffffff", fontSize: 12, opacity: 0.8 }}>Currency: {currency}</Text>
             </View>
-            <Text style={s.amountHeroValue}>
-              {currency} {Number(payment.amount).toFixed(2)}
-            </Text>
+            <Text style={s.amountHeroValue}>{currency} {Number(payment.amount || 0).toFixed(2)}</Text>
           </View>
 
-          {/* Items Table - Added detail */}
-          {invoice?.items && invoice.items.length > 0 && (
+          {invoice?.items && invoice.items.length > 0 ? (
             <View style={s.table}>
               <View style={s.tableHeader}>
                 <Text style={[s.colDesc, s.columnHeader]}>Description</Text>
@@ -394,39 +368,33 @@ export const PaymentReceiptPDF = ({
               </View>
               {invoice.items.slice(0, 8).map((item: any, i: number) => {
                 const taxRate = Number(item.taxRate || 0);
-                const lineTotal = Number(item.lineTotal);
+                const lineTotal = Number(item.lineTotal || 0);
                 let lineTax = 0;
                 if (invoice.taxInclusive) {
                   lineTax = lineTotal - (lineTotal / (1 + taxRate / 100));
                 } else {
-                  lineTax = (Number(item.quantity) * Number(item.unitPrice)) * (taxRate / 100);
+                  lineTax = (Number(item.quantity || 0) * Number(item.unitPrice || 0)) * (taxRate / 100);
                 }
-
                 return (
                   <View key={i} style={s.tableRow}>
-                    <Text style={[s.colDesc, { fontSize: 8 }]}>{item.description}</Text>
-                    <Text style={[s.colQty, { fontSize: 8 }]}>{item.quantity}</Text>
-                    <Text style={[s.colPrice, { fontSize: 8 }]}>{Number(item.unitPrice).toFixed(2)}</Text>
+                    <Text style={[s.colDesc, { fontSize: 8 }]}>{item.description || "Item"}</Text>
+                    <Text style={[s.colQty, { fontSize: 8 }]}>{item.quantity || 0}</Text>
+                    <Text style={[s.colPrice, { fontSize: 8 }]}>{Number(item.unitPrice || 0).toFixed(2)}</Text>
                     <Text style={[s.colTax, { fontSize: 8 }]}>{lineTax.toFixed(2)}</Text>
-                    <Text style={[s.colTotal, { fontSize: 8, fontWeight: 700 }]}>
-                      {lineTotal.toFixed(2)}
-                    </Text>
+                    <Text style={[s.colTotal, { fontSize: 8, fontWeight: 700 }]}>{lineTotal.toFixed(2)}</Text>
                   </View>
                 );
               })}
-              {invoice.items.length > 8 && (
-                <Text style={{ fontSize: 8, color: "#94a3b8", marginTop: 4, textAlign: "center" }}>
-                  ... and {invoice.items.length - 8} more items
-                </Text>
-              )}
+              {invoice.items.length > 8 ? (
+                <Text style={{ fontSize: 8, color: "#94a3b8", marginTop: 4, textAlign: "center" }}>... and {invoice.items.length - 8} more items</Text>
+              ) : null}
             </View>
-          )}
+          ) : null}
 
-          {/* Totals and Tax Summary */}
           <View style={s.summarySection}>
             <View style={s.taxTable}>
-              {Object.keys(taxSummary).length > 0 && (
-                <>
+              {Object.keys(taxSummary).length > 0 ? (
+                <View>
                   <Text style={[s.infoColLabel, { marginBottom: 4 }]}>Tax Analysis</Text>
                   <View style={{ borderBottomWidth: 1, borderBottomColor: "#f1f5f9", paddingBottom: 2, marginBottom: 2, flexDirection: "row" }}>
                     <Text style={{ fontSize: 7, flex: 1, color: "#94a3b8" }}>Rate</Text>
@@ -440,8 +408,8 @@ export const PaymentReceiptPDF = ({
                       <Text style={{ fontSize: 7, flex: 2, textAlign: "right" }}>{data.taxAmount.toFixed(2)}</Text>
                     </View>
                   ))}
-                </>
-              )}
+                </View>
+              ) : null}
             </View>
 
             <View style={s.totalsBox}>
@@ -451,31 +419,39 @@ export const PaymentReceiptPDF = ({
               </View>
               <View style={s.totalRow}>
                 <Text style={s.totalLabel}>Amount Paid:</Text>
-                <Text style={s.totalValue}>{Number(payment.amount).toFixed(2)}</Text>
+                <Text style={s.totalValue}>{Number(payment.amount || 0).toFixed(2)}</Text>
               </View>
               <View style={s.grandTotal}>
                 <Text style={s.grandTotalLabel}>Balance Due:</Text>
-                <Text style={s.grandTotalValue}>
-                  {currency} {(Number(invoice?.total || 0) - Number(invoice?.paidAmount || 0)).toFixed(2)}
-                </Text>
+                <Text style={s.grandTotalValue}>{currency} {balanceDue.toFixed(2)}</Text>
+              </View>
+
+              <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: "#f1f5f9", borderTopStyle: "dashed" }}>
+                 <View style={s.totalRow}>
+                  <Text style={[s.totalLabel, { fontSize: 7, color: "#94a3b8" }]}>Overall Statement Balance:</Text>
+                  <Text style={[s.totalValue, { fontSize: 8, color: (overallBalance || 0) > 0 ? "#e11d48" : "#059669" }]}>
+                    {overallBalance !== undefined 
+                      ? `${currency} ${Number(overallBalance).toFixed(2)}`
+                      : "N/A"}
+                  </Text>
+                </View>
+                {overallBalance === undefined && (
+                  <Text style={{ fontSize: 6, color: "#94a3b8", textAlign: "right" }}>No customer linked to this payment</Text>
+                )}
               </View>
             </View>
           </View>
 
-          {payment.notes && (
+          {payment.notes ? (
             <View style={s.notes}>
               <Text style={[s.infoColLabel, { fontSize: 7, marginBottom: 2 }]}>Notes</Text>
               <Text style={s.notesText}>{payment.notes}</Text>
             </View>
-          )}
+          ) : null}
 
           <View style={s.footer}>
-            <Text style={s.footerText}>
-              This is a computer-generated payment receipt for your records.
-            </Text>
-            <Text style={{ fontSize: 10, fontWeight: 700, color: "#0f172a" }}>
-              Thank You!
-            </Text>
+            <Text style={s.footerText}>This is a computer-generated payment receipt for your records.</Text>
+            <Text style={{ fontSize: 10, fontWeight: 700, color: "#0f172a" }}>Thank You!</Text>
           </View>
         </View>
       </Page>

@@ -1,272 +1,545 @@
-
 import { Layout } from "@/components/layout";
-import { useCompanies } from "@/hooks/use-companies";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { useCurrencies } from "@/hooks/use-currencies";
-import { useQuery } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/api";
-import { SalesByCategoryChart, SalesByUserChart, SalesByPaymentMethodChart } from "@/components/charts/sales-charts";
+import { useActiveCompany } from "@/hooks/use-active-company";
+import { useAuth } from "@/hooks/use-auth";
+import { SalesReport, SalesByCustomerReport, SalesByItemReport, SalesBySalespersonReport } from "@/components/reports/sales-reports";
+import { ArAgingSummaryReport, ArAgingDetailsReport, InvoiceDetailsReport, QuoteDetailsReport, CustomerBalanceSummaryReport, ReceivableSummaryReport, ReceivableDetailsReport, BadDebtsReport, BankChargesReport } from "@/components/reports/receivables-reports";
+import { TimeToGetPaidReport, RefundHistoryReport, WithholdingTaxReport } from "@/components/reports/payments-reports";
+import { ExpenseDetailsReport, ExpensesByCategoryReport, ExpensesByCustomerReport, ExpensesByProjectReport, BillableExpenseDetailsReport } from "@/components/reports/expenses-reports";
+import { TaxSummaryReport } from "@/components/reports/tax-reports";
+import { cn } from "@/lib/utils";
+import { useState } from "react";
+import { Link } from "wouter";
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
-import {
-    AreaChart,
-    Area,
-    XAxis,
-    YAxis,
-    CartesianGrid,
-    Tooltip,
-    ResponsiveContainer
-} from "recharts";
-import { DollarSign, FileText, Users, TrendingUp, Calendar as CalendarIcon, ArrowRight, BarChart3, Receipt, Scale } from "lucide-react";
-import { useState, useEffect } from "react";
-import { startOfMonth, endOfMonth, format } from "date-fns";
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { ChevronDown, BarChart3, FileText, CreditCard, ShoppingCart, Receipt, Search, Download, Loader2, RefreshCw, Calendar as CalendarIcon } from "lucide-react";
+import { startOfMonth, endOfMonth, subMonths, startOfQuarter, endOfQuarter, format, isValid } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { cn } from "@/lib/utils";
-import { Link, useLocation } from "wouter";
-import { useActiveCompany } from "@/hooks/use-active-company";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
-import { StatsCard } from "@/components/reports/stats-card"; // Assuming StatsCard is extracted or defined below
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { type DateRange } from "react-day-picker";
+import { downloadCsv, generateCsv } from "@/lib/report-utils";
 
-export default function ReportsPage() {
-    const { activeCompany, isLoading: isLoadingActive } = useActiveCompany();
-    const companyId = activeCompany?.id || 0;
-    
-    // Determine active tab from URL query param if present
-    const queryParams = new URLSearchParams(window.location.search);
-    const initialTab = queryParams.get("tab") || "analytics";
-    const [activeTab, setActiveTab] = useState(initialTab);
+// ── Report definitions ────────────────────────────────────────────────────────
 
-    const { data: currencies } = useCurrencies(companyId);
-
-    // State
-    const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
-        from: startOfMonth(new Date()),
-        to: endOfMonth(new Date())
-    });
-    const [consolidatedCode, setConsolidatedCode] = useState<string>("USD");
-
-    const consolidatedCurrency = currencies?.find(c => c.code === consolidatedCode);
-    const consolidatedRate = Number(consolidatedCurrency?.exchangeRate || 1);
-    const consolidatedSymbol = consolidatedCurrency?.symbol || "$";
-
-    // Sync state with URL but don't force navigation
-    useEffect(() => {
-        const handleSearchParamsChange = () => {
-            const currentTab = new URLSearchParams(window.location.search).get("tab");
-            if (currentTab && currentTab !== activeTab) {
-                setActiveTab(currentTab);
-            }
-        };
-
-        window.addEventListener('popstate', handleSearchParamsChange);
-        return () => window.removeEventListener('popstate', handleSearchParamsChange);
-    }, [activeTab]);
-
-    // Queries
-    const { data: summary, isLoading: isLoadingSummary } = useQuery({
-        queryKey: ["reports-summary", companyId, dateRange.from, dateRange.to],
-        queryFn: async () => {
-            if (!companyId) return null;
-            const params = new URLSearchParams({
-                startDate: format(dateRange.from, 'yyyy-MM-dd'),
-                endDate: format(dateRange.to, 'yyyy-MM-dd')
-            });
-            const res = await apiFetch(`/api/reports/summary/${companyId}?${params.toString()}`);
-            if (!res.ok) return null;
-            return await res.json();
-        },
-        enabled: !!companyId
-    });
-
-    const { data: revenueData, isLoading: isLoadingRevenue } = useQuery({
-        queryKey: ["reports-revenue-chart", companyId, dateRange.from, dateRange.to],
-        queryFn: async () => {
-            if (!companyId) return [];
-            const params = new URLSearchParams({
-                startDate: format(dateRange.from, 'yyyy-MM-dd'),
-                endDate: format(dateRange.to, 'yyyy-MM-dd')
-            });
-            const res = await apiFetch(`/api/reports/charts/revenue/${companyId}?${params.toString()}`);
-            if (!res.ok) return [];
-            return await res.json();
-        },
-        enabled: !!companyId && activeTab === 'analytics'
-    });
-
-    const handleTabChange = (value: string) => {
-        setActiveTab(value);
-        const newUrl = `${window.location.pathname}?tab=${value}`;
-        window.history.replaceState({ ...window.history.state, url: newUrl }, '', newUrl);
-    };
-
-    return (
-        <Layout>
-            <div className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                    <h1 className="text-3xl font-display font-bold text-slate-900 uppercase tracking-tight">Intelligence Hub</h1>
-                    <p className="text-slate-500 mt-1 font-medium italic">Data-driven performance insights for {activeCompany?.name}</p>
-                </div>
-
-                {/* Global Controls */}
-                <div className="flex flex-wrap items-center gap-3 bg-white/50 backdrop-blur-md p-2 rounded-[1.5rem] border border-slate-100 shadow-sm">
-                    <div className="flex items-center gap-2 pl-2">
-                        <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Base:</span>
-                        <Select value={consolidatedCode} onValueChange={setConsolidatedCode}>
-                            <SelectTrigger className="w-[90px] h-8 text-xs font-bold border-none bg-slate-100/50 rounded-xl focus:ring-0">
-                                <SelectValue placeholder="USD" />
-                            </SelectTrigger>
-                            <SelectContent className="rounded-xl border-slate-100 shadow-xl">
-                                <SelectItem value="USD" className="text-xs font-bold">USD</SelectItem>
-                                {currencies?.filter(c => c.code !== 'USD').map(c => (
-                                    <SelectItem key={c.id} value={c.code} className="text-xs font-bold">{c.code}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-
-                    <div className="h-6 w-px bg-slate-200" />
-
-                    <Popover>
-                        <PopoverTrigger asChild>
-                            <Button variant="ghost" className={cn("h-8 px-3 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl", !dateRange && "text-muted-foreground")}>
-                                <CalendarIcon className="mr-2 h-3.5 w-3.5 text-indigo-500" />
-                                {dateRange.from ? (
-                                    dateRange.to ? (
-                                        <>
-                                            {format(dateRange.from, "MMM dd")} - {format(dateRange.to, "MMM dd, yyyy")}
-                                        </>
-                                    ) : (
-                                        format(dateRange.from, "MMM dd, yyyy")
-                                    )
-                                ) : (
-                                    <span>Pick a date range</span>
-                                )}
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0 rounded-3xl border-none shadow-2xl" align="end">
-                            <Calendar
-                                initialFocus
-                                mode="range"
-                                defaultMonth={dateRange.from}
-                                selected={{ from: dateRange.from, to: dateRange.to }}
-                                onSelect={(range: any) => {
-                                    if (range?.from) {
-                                        setDateRange({ from: range.from, to: range.to || range.from });
-                                    }
-                                }}
-                                numberOfMonths={2}
-                                className="rounded-3xl"
-                            />
-                        </PopoverContent>
-                    </Popover>
-                </div>
-            </div>
-
-            <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-8">
-                <TabsList className="bg-slate-100/50 p-1 rounded-2xl border border-slate-200/60 h-auto self-start">
-                    <TabsTrigger value="analytics" className="data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-sm rounded-xl px-6 py-2.5 text-xs font-black uppercase tracking-widest gap-2">
-                        <BarChart3 className={cn("w-4 h-4", activeTab === 'analytics' ? "text-indigo-500" : "text-slate-400")} />
-                        Analytics
-                    </TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="analytics" className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300 outline-none">
-                    {/* Stats Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <StatsCard
-                            title="Total Revenue"
-                            value={Number(summary?.totalRevenue || 0) * Number(consolidatedRate)}
-                            isLoading={isLoadingSummary}
-                            symbol={consolidatedSymbol}
-                            icon={DollarSign}
-                            color="text-indigo-600"
-                            bg="bg-indigo-50"
-                        />
-                        <StatsCard
-                            title="Pending Payments"
-                            value={Number(summary?.pendingAmount || 0) * Number(consolidatedRate)}
-                            isLoading={isLoadingSummary}
-                            symbol={consolidatedSymbol}
-                            icon={TrendingUp}
-                            color="text-amber-600"
-                            bg="bg-amber-50"
-                        />
-                        <StatsCard
-                            title="Total Invoices"
-                            value={summary?.invoicesCount}
-                            isLoading={isLoadingSummary}
-                            symbol=""
-                            decimals={0}
-                            icon={FileText}
-                            color="text-blue-600"
-                            bg="bg-blue-50"
-                        />
-                        <StatsCard
-                            title="Total Customers"
-                            value={summary?.customersCount}
-                            isLoading={isLoadingSummary}
-                            symbol=""
-                            decimals={0}
-                            icon={Users}
-                            color="text-violet-600"
-                            bg="bg-violet-50"
-                        />
-                    </div>
-
-                    {/* Revenue Trends */}
-                    <Card className="border-none shadow-xl bg-white rounded-[2rem] overflow-hidden">
-                        <CardHeader className="p-8">
-                            <CardTitle className="text-xl font-black text-slate-900 font-display uppercase tracking-tight">Revenue Trends</CardTitle>
-                            <CardDescription className="text-slate-400 font-medium font-sans">Daily revenue performance</CardDescription>
-                        </CardHeader>
-                        <CardContent className="h-[400px] p-8 pt-0">
-                            {isLoadingRevenue ? (
-                                <div className="h-full w-full bg-slate-50 animate-pulse rounded-2xl" />
-                            ) : (
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <AreaChart data={revenueData}>
-                                        <defs>
-                                            <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.15} />
-                                                <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-                                            </linearGradient>
-                                        </defs>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                        <XAxis dataKey="name" stroke="#94a3b8" fontSize={10} fontWeight={700} tickLine={false} axisLine={false} tick={{ dy: 10 }} />
-                                        <YAxis stroke="#94a3b8" fontSize={10} fontWeight={700} tickLine={false} axisLine={false} tickFormatter={(value) => `${consolidatedSymbol}${value}`} tick={{ dx: -10 }} />
-                                        <Popover>
-                                            <Tooltip
-                                                contentStyle={{ backgroundColor: '#fff', borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px' }}
-                                                labelStyle={{ fontWeight: 800, color: '#1e293b', marginBottom: '4px' }}
-                                                formatter={(value: any) => [`${consolidatedSymbol}${Number(value).toFixed(2)}`, "Revenue"]}
-                                            />
-                                        </Popover>
-                                        <Area type="monotone" dataKey="total" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorRevenue)" />
-                                    </AreaChart>
-                                </ResponsiveContainer>
-                            )}
-                        </CardContent>
-                    </Card>
-
-                    {/* Charts Grid */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pb-12">
-                        <SalesByCategoryChart companyId={companyId} dateRange={dateRange} consolidatedSymbol={consolidatedSymbol} consolidatedRate={consolidatedRate} />
-                        <SalesByPaymentMethodChart companyId={companyId} dateRange={dateRange} consolidatedSymbol={consolidatedSymbol} consolidatedRate={consolidatedRate} />
-                        <div className="lg:col-span-2">
-                            <SalesByUserChart companyId={companyId} dateRange={dateRange} consolidatedSymbol={consolidatedSymbol} consolidatedRate={consolidatedRate} />
-                        </div>
-                    </div>
-                </TabsContent>
-            </Tabs>
-        </Layout>
-    );
+interface ReportDefinition {
+  key: string;
+  label: string;
+  category: string;
+  endpoint?: string;
+  externalHref?: string;
 }
 
+const REPORT_CATEGORIES: {
+  key: string;
+  label: string;
+  icon: React.ElementType;
+  reports: ReportDefinition[];
+}[] = [
+  {
+    key: "sales",
+    label: "Sales",
+    icon: BarChart3,
+    reports: [
+      { key: "sales", label: "Sales", category: "sales", endpoint: "sales-summary" },
+      { key: "sales-by-customer", label: "Sales by Customer", category: "sales", endpoint: "sales-by-customer" },
+      { key: "sales-by-item", label: "Sales by Item", category: "sales", endpoint: "sales-by-item" },
+      { key: "sales-by-salesperson", label: "Sales by Sales Person", category: "sales", endpoint: "sales-by-salesperson" },
+    ],
+  },
+  {
+    key: "receivables",
+    label: "Receivables",
+    icon: FileText,
+    reports: [
+      { key: "ar-aging-summary", label: "AR Aging Summary", category: "receivables", endpoint: "ar-aging-summary" },
+      { key: "ar-aging-details", label: "AR Aging Details", category: "receivables", endpoint: "ar-aging-details" },
+      { key: "invoice-details", label: "Invoice Details", category: "receivables", endpoint: "invoice-details" },
+      { key: "quote-details", label: "Quote Details", category: "receivables", endpoint: "quote-details" },
+      { key: "bad-debts", label: "Bad Debts", category: "receivables", endpoint: "bad-debts" },
+      { key: "bank-charges", label: "Bank Charges", category: "receivables", endpoint: "bank-charges" },
+      { key: "customer-balance-summary", label: "Customer Balance Summary", category: "receivables", endpoint: "customer-balance-summary" },
+      { key: "receivable-summary", label: "Receivable Summary", category: "receivables", endpoint: "receivable-summary" },
+      { key: "receivable-details", label: "Receivable Details", category: "receivables", endpoint: "receivable-details" },
+    ],
+  },
+  {
+    key: "payments-received",
+    label: "Payments Received",
+    icon: CreditCard,
+    reports: [
+      { key: "payments-received", label: "Payments Received", category: "payments-received", externalHref: "/payments-received" },
+      { key: "time-to-get-paid", label: "Time to Get Paid", category: "payments-received", endpoint: "time-to-get-paid" },
+      { key: "refund-history", label: "Refund History", category: "payments-received", endpoint: "refund-history" },
+      { key: "withholding-tax", label: "Withholding Tax", category: "payments-received", endpoint: "withholding-tax" },
+    ],
+  },
+  {
+    key: "purchases-expenses",
+    label: "Purchases & Expenses",
+    icon: ShoppingCart,
+    reports: [
+      { key: "expense-details", label: "Expense Details", category: "purchases-expenses", endpoint: "expense-details" },
+      { key: "expenses-by-category", label: "Expenses by Category", category: "purchases-expenses", endpoint: "expenses-by-category" },
+      { key: "expenses-by-customer", label: "Expenses by Customer", category: "purchases-expenses", endpoint: "expenses-by-customer" },
+      { key: "expenses-by-project", label: "Expenses by Project", category: "purchases-expenses", endpoint: "expenses-by-project" },
+      { key: "billable-expense-details", label: "Billable Expense Details", category: "purchases-expenses", endpoint: "billable-expense-details" },
+    ],
+  },
+  {
+    key: "taxes",
+    label: "Taxes",
+    icon: Receipt,
+    reports: [
+      { key: "tax-summary", label: "Tax Summary", category: "taxes", endpoint: "tax-summary" },
+    ],
+  },
+];
+
+// ── Shared types ──────────────────────────────────────────────────────────────
+
+interface DateRangeState {
+  from: Date;
+  to: Date;
+}
+
+interface ReportContentProps {
+  reportKey: string;
+  companyId: number;
+  dateRange: DateRangeState;
+  onDateRangeChange: (range: DateRangeState) => void;
+  search: string;
+  onSearchChange: (s: string) => void;
+  children?: React.ReactNode;
+  // For StatBar
+  totalAmount?: number;
+  recordCount?: number;
+  totalLabel?: string;
+  // For CSV export
+  csvData?: any[];
+  csvColumns?: string[];
+  csvFilename?: string;
+  // Loading/error state
+  isLoading?: boolean;
+  error?: Error | null;
+  onRetry?: () => void;
+}
+
+// ── ReportSidebar ─────────────────────────────────────────────────────────────
+
+interface ReportSidebarProps {
+  activeReport: string;
+  onSelect: (key: string) => void;
+  openCategories: Set<string>;
+  onToggleCategory: (key: string) => void;
+}
+
+function ReportSidebar({ activeReport, onSelect, openCategories, onToggleCategory }: ReportSidebarProps) {
+  return (
+    <div className="w-64 shrink-0 flex flex-col border-r border-slate-200 bg-white sticky top-0 h-screen overflow-hidden">
+      {/* Sidebar header */}
+      <div className="px-4 py-3 border-b border-slate-100 shrink-0">
+        <span className="text-sm font-black text-slate-800 uppercase tracking-tight">Reports</span>
+      </div>
+
+      {/* Category groups */}
+      <div className="flex-1 overflow-y-auto py-2">
+        {REPORT_CATEGORIES.map((category) => {
+          const isOpen = openCategories.has(category.key);
+          const CategoryIcon = category.icon;
+
+          return (
+            <Collapsible
+              key={category.key}
+              open={isOpen}
+              onOpenChange={() => onToggleCategory(category.key)}
+              className="mb-0.5"
+            >
+              <CollapsibleTrigger asChild>
+                <div className={cn(
+                  "flex items-center justify-between w-full px-3 py-2.5 text-sm font-semibold transition-all duration-200 cursor-pointer select-none group",
+                  category.reports.some(r => r.key === activeReport)
+                    ? "text-violet-700 bg-violet-50"
+                    : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+                )}>
+                  <div className="flex items-center gap-2.5">
+                    <div className={cn(
+                      "w-6 h-6 rounded-md flex items-center justify-center shrink-0 transition-colors",
+                      category.reports.some(r => r.key === activeReport)
+                        ? "bg-violet-100 text-violet-600"
+                        : "bg-slate-100 text-slate-400 group-hover:bg-slate-200 group-hover:text-slate-600"
+                    )}>
+                      <CategoryIcon className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="text-[13px] tracking-tight">{category.label}</span>
+                  </div>
+                  <ChevronDown className={cn(
+                    "w-3.5 h-3.5 transition-transform duration-200 shrink-0",
+                    isOpen ? "rotate-180 text-violet-400" : "text-slate-300"
+                  )} />
+                </div>
+              </CollapsibleTrigger>
+
+              <CollapsibleContent>
+                <div className="ml-3 pl-3 border-l-2 border-slate-100 space-y-0.5 mt-0.5 pb-1">
+                  {category.reports.map((report) => {
+                    const isActive = report.key === activeReport;
+
+                    if (report.externalHref) {
+                      return (
+                        <Link key={report.key} href={report.externalHref}>
+                          <div className={cn(
+                            "flex items-center gap-2 px-3 py-2 rounded-lg text-[12px] font-semibold transition-all duration-150 cursor-pointer",
+                            isActive
+                              ? "bg-violet-600 text-white shadow-sm shadow-violet-500/20"
+                              : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
+                          )}>
+                            <span className="truncate">{report.label}</span>
+                          </div>
+                        </Link>
+                      );
+                    }
+
+                    return (
+                      <div
+                        key={report.key}
+                        className={cn(
+                          "flex items-center gap-2 px-3 py-2 rounded-lg text-[12px] font-semibold transition-all duration-150 cursor-pointer",
+                          isActive
+                            ? "bg-violet-600 text-white shadow-sm shadow-violet-500/20"
+                            : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
+                        )}
+                        onClick={() => onSelect(report.key)}
+                      >
+                        <span className="truncate">{report.label}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── ReportContent ─────────────────────────────────────────────────────────────
+
+function ReportContent({
+  reportKey,
+  companyId,
+  dateRange,
+  onDateRangeChange,
+  search,
+  onSearchChange,
+  children,
+  totalAmount,
+  recordCount,
+  totalLabel = "Total",
+  csvData,
+  csvColumns,
+  csvFilename,
+  isLoading,
+  error,
+  onRetry,
+}: ReportContentProps) {
+  const [calendarOpen, setCalendarOpen] = useState(false);
+
+  const handleQuickSelect = (preset: "this-month" | "last-month" | "this-quarter" | "all-time") => {
+    const now = new Date();
+    switch (preset) {
+      case "this-month":
+        onDateRangeChange({ from: startOfMonth(now), to: endOfMonth(now) });
+        break;
+      case "last-month": {
+        const last = subMonths(now, 1);
+        onDateRangeChange({ from: startOfMonth(last), to: endOfMonth(last) });
+        break;
+      }
+      case "this-quarter":
+        onDateRangeChange({ from: startOfQuarter(now), to: endOfQuarter(now) });
+        break;
+      case "all-time":
+        onDateRangeChange({ from: new Date("2000-01-01"), to: new Date("2099-12-31") });
+        break;
+    }
+  };
+
+  const handleExport = () => {
+    if (!csvData || !csvColumns || !csvFilename) return;
+    const csv = generateCsv(csvData, csvColumns);
+    downloadCsv(csvFilename, csv);
+  };
+
+  const calendarRange: DateRange = { from: dateRange.from, to: dateRange.to };
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Controls bar */}
+      <div className="flex flex-wrap items-center gap-2 px-6 py-3 border-b border-slate-100 bg-white shrink-0">
+        {/* Date range picker */}
+        <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className={cn(
+                "h-8 px-3 text-xs gap-1.5 border-slate-200 rounded-lg font-medium",
+                calendarOpen && "border-violet-300 bg-violet-50 text-violet-700"
+              )}
+            >
+              <CalendarIcon className="w-3.5 h-3.5" />
+              {isValid(dateRange.from) && isValid(dateRange.to)
+                ? `${format(dateRange.from, "dd MMM yyyy")} – ${format(dateRange.to, "dd MMM yyyy")}`
+                : "Select date range"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0 rounded-2xl shadow-2xl" align="start">
+            <Calendar
+              initialFocus
+              mode="range"
+              defaultMonth={dateRange.from}
+              selected={calendarRange}
+              onSelect={(r) => {
+                if (r?.from && r?.to) {
+                  onDateRangeChange({ from: r.from, to: r.to });
+                  setCalendarOpen(false);
+                } else if (r?.from) {
+                  onDateRangeChange({ from: r.from, to: r.from });
+                }
+              }}
+              numberOfMonths={2}
+              className="p-3"
+            />
+          </PopoverContent>
+        </Popover>
+
+        {/* Quick-select buttons */}
+        <div className="flex gap-1">
+          {(["this-month", "last-month", "this-quarter", "all-time"] as const).map((preset) => (
+            <Button
+              key={preset}
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2.5 text-[11px] font-semibold text-slate-500 hover:text-violet-700 hover:bg-violet-50 rounded-lg capitalize"
+              onClick={() => handleQuickSelect(preset)}
+            >
+              {preset === "this-month" ? "This Month" : preset === "last-month" ? "Last Month" : preset === "this-quarter" ? "This Quarter" : "All Time"}
+            </Button>
+          ))}
+        </div>
+
+        <div className="flex-1" />
+
+        {/* Search input */}
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+          <Input
+            placeholder="Search..."
+            className="pl-8 h-8 text-xs border-slate-200 rounded-lg w-48"
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+          />
+        </div>
+
+        {/* Export button */}
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 px-3 text-xs gap-1.5 border-slate-200 rounded-lg"
+          disabled={!csvData || csvData.length === 0}
+          onClick={handleExport}
+        >
+          <Download className="w-3.5 h-3.5" />
+          Export CSV
+        </Button>
+      </div>
+
+      {/* Stat bar */}
+      {(totalAmount !== undefined || recordCount !== undefined) && (
+        <div className="flex items-center gap-6 px-6 py-2.5 bg-slate-50 border-b border-slate-100 shrink-0">
+          {totalAmount !== undefined && (
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">{totalLabel}</span>
+              <span className="text-sm font-black text-slate-800">{totalAmount.toFixed(2)}</span>
+            </div>
+          )}
+          {recordCount !== undefined && (
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Records</span>
+              <span className="text-sm font-black text-slate-800">{recordCount}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Content area */}
+      <div className="flex-1 overflow-auto">
+        {isLoading ? (
+          <div className="flex items-center justify-center h-64 gap-3 text-slate-400">
+            <Loader2 className="w-6 h-6 animate-spin text-violet-400" />
+            <span className="text-sm font-medium">Loading report...</span>
+          </div>
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center h-64 gap-3 text-slate-400">
+            <p className="text-sm font-medium text-red-500">Failed to load report</p>
+            <p className="text-xs text-slate-400">{error.message}</p>
+            {onRetry && (
+              <Button variant="outline" size="sm" className="gap-1.5 mt-1" onClick={onRetry}>
+                <RefreshCw className="w-3.5 h-3.5" /> Retry
+              </Button>
+            )}
+          </div>
+        ) : (
+          children
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── ActiveReportComponent ─────────────────────────────────────────────────────
+
+function ActiveReportComponent({ reportKey, companyId, dateRange, search }: {
+  reportKey: string;
+  companyId: number;
+  dateRange: { from: Date; to: Date };
+  search: string;
+}) {
+  const props = { companyId, dateRange, search };
+  switch (reportKey) {
+    case "sales": return <SalesReport {...props} />;
+    case "sales-by-customer": return <SalesByCustomerReport {...props} />;
+    case "sales-by-item": return <SalesByItemReport {...props} />;
+    case "sales-by-salesperson": return <SalesBySalespersonReport {...props} />;
+    case "ar-aging-summary": return <ArAgingSummaryReport {...props} />;
+    case "ar-aging-details": return <ArAgingDetailsReport {...props} />;
+    case "invoice-details": return <InvoiceDetailsReport {...props} />;
+    case "quote-details": return <QuoteDetailsReport {...props} />;
+    case "customer-balance-summary": return <CustomerBalanceSummaryReport {...props} />;
+    case "receivable-summary": return <ReceivableSummaryReport companyId={companyId} dateRange={dateRange} />;
+    case "receivable-details": return <ReceivableDetailsReport {...props} />;
+    case "bad-debts": return <BadDebtsReport {...props} />;
+    case "bank-charges": return <BankChargesReport {...props} />;
+    case "time-to-get-paid": return <TimeToGetPaidReport {...props} />;
+    case "refund-history": return <RefundHistoryReport {...props} />;
+    case "withholding-tax": return <WithholdingTaxReport {...props} />;
+    case "expense-details": return <ExpenseDetailsReport {...props} />;
+    case "expenses-by-category": return <ExpensesByCategoryReport {...props} />;
+    case "expenses-by-customer": return <ExpensesByCustomerReport {...props} />;
+    case "expenses-by-project": return <ExpensesByProjectReport {...props} />;
+    case "billable-expense-details": return <BillableExpenseDetailsReport {...props} />;
+    case "tax-summary": return <TaxSummaryReport {...props} />;
+    default: return (
+      <div className="flex items-center justify-center h-64 text-slate-400">
+        <p className="text-sm">Select a report from the sidebar</p>
+      </div>
+    );
+  }
+}
+
+// ── ReportsPage ───────────────────────────────────────────────────────────────
+
+export default function ReportsPage() {
+  const { user } = useAuth();
+  const { activeCompanyId, isLoading } = useActiveCompany(!!user);
+
+  const [activeReport, setActiveReport] = useState<string>("");
+  const [openCategories, setOpenCategories] = useState<Set<string>>(
+    new Set(["sales", "receivables"])
+  );
+  const [dateRange, setDateRange] = useState<DateRangeState>({
+    from: startOfMonth(new Date()),
+    to: endOfMonth(new Date()),
+  });
+  const [search, setSearch] = useState("");
+
+  const handleToggleCategory = (key: string) => {
+    setOpenCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectReport = (key: string) => {
+    setActiveReport(key);
+    // Auto-expand the category containing this report
+    const category = REPORT_CATEGORIES.find(c => c.reports.some(r => r.key === key));
+    if (category) {
+      setOpenCategories(prev => new Set([...prev, category.key]));
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center h-64 text-slate-400">
+          Loading...
+        </div>
+      </Layout>
+    );
+  }
+
+  if (!activeCompanyId) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center h-64">
+          <p className="text-slate-500 font-medium">Please select a company to view reports</p>
+        </div>
+      </Layout>
+    );
+  }
+
+  return (
+    <Layout>
+      <div className="flex -mx-4 sm:-mx-8 -mt-6">
+        {/* Left: Report Sidebar */}
+        <ReportSidebar
+          activeReport={activeReport}
+          onSelect={handleSelectReport}
+          openCategories={openCategories}
+          onToggleCategory={handleToggleCategory}
+        />
+
+        {/* Right: Report Content */}
+        <div className="flex-1 min-w-0 flex flex-col bg-white">
+          {!activeReport ? (
+            <div className="flex items-center justify-center h-full min-h-[400px] text-slate-400">
+              <div className="text-center">
+                <BarChart3 className="w-12 h-12 mx-auto mb-3 text-slate-200" />
+                <p className="font-medium text-slate-500">Select a report from the sidebar</p>
+                <p className="text-sm text-slate-400 mt-1">Choose a category and report to get started</p>
+              </div>
+            </div>
+          ) : (
+            <ReportContent
+              reportKey={activeReport}
+              companyId={activeCompanyId}
+              dateRange={dateRange}
+              onDateRangeChange={setDateRange}
+              search={search}
+              onSearchChange={setSearch}
+            >
+              <ActiveReportComponent
+                reportKey={activeReport}
+                companyId={activeCompanyId}
+                dateRange={dateRange}
+                search={search}
+              />
+            </ReportContent>
+          )}
+        </div>
+      </div>
+    </Layout>
+  );
+}

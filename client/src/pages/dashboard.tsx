@@ -8,23 +8,42 @@ import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
-import {
-  Users,
-  ShoppingCart,
-  TrendingUp,
-  AlertCircle,
-  Plus,
-  Server,
-  Wifi,
-  FileText,
-  Settings,
-  Building2,
-  Fingerprint,
-  Activity,
-  RefreshCw,
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer, 
+  AreaChart, 
+  Area,
+  Cell,
+  Legend
+} from "recharts";
+import { 
+  Building2, 
+  Users, 
+  FileText, 
+  TrendingUp, 
+  ArrowUpRight, 
+  ArrowDownRight,
+  DollarSign,
   Clock,
-  ClipboardList
+  CalendarDays,
+  Receipt,
+  ShoppingCart,
+  Plus,
+  Settings,
+  Server,
+  RefreshCw,
+  Activity,
+  Wifi,
+  AlertCircle,
+  Fingerprint
 } from "lucide-react";
+import { api, buildUrl } from "@shared/routes";
+import { cn } from "@/lib/utils";
 import React, { useMemo } from "react";
 import { Link, useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -50,15 +69,29 @@ export default function Dashboard() {
   const invoices = invoicesResult?.data;
   const [, setLocation] = useLocation();
 
-  const { data: summary, isLoading: isLoadingSummary } = useQuery({
-    queryKey: ["stats", "summary", selectedCompany?.id],
+  const { data: currencies } = useCurrencies(selectedCompany?.id || 0);
+  const [reportCurrencyCode, setReportCurrencyCode] = React.useState<string>("USD");
+
+  const consolidatedCurrency = currencies?.find(c => c.code === reportCurrencyCode) || currencies?.find(c => c.code === 'USD');
+  const consolidatedRate = Number(consolidatedCurrency?.exchangeRate || 1);
+  const consolidatedSymbol = consolidatedCurrency?.symbol || (reportCurrencyCode === 'USD' ? '$' : reportCurrencyCode);
+
+  const { data: aging } = useQuery<any>({
+    queryKey: [api.reports.receivablesAging.path, selectedCompany?.id, reportCurrencyCode],
     queryFn: async () => {
-      if (!selectedCompany?.id) return null;
-      const res = await apiFetch(`/api/companies/${selectedCompany.id}/stats/summary`);
-      if (!res.ok) throw new Error("Failed to fetch stats");
-      return await res.json();
+      const res = await apiFetch(buildUrl(api.reports.receivablesAging.path, { companyId: selectedCompany?.id }) + `?currency=${reportCurrencyCode}`);
+      return res.json();
     },
-    enabled: !!selectedCompany?.id
+    enabled: !!selectedCompany?.id,
+  });
+
+  const { data: fiscalStats } = useQuery<any>({
+    queryKey: [api.reports.fiscalYearStats.path, selectedCompany?.id, reportCurrencyCode],
+    queryFn: async () => {
+      const res = await apiFetch(buildUrl(api.reports.fiscalYearStats.path, { companyId: selectedCompany?.id }) + `?currency=${reportCurrencyCode}`);
+      return res.json();
+    },
+    enabled: !!selectedCompany?.id,
   });
 
   const queryClient = useQueryClient();
@@ -99,27 +132,21 @@ export default function Dashboard() {
     }
   }, [selectedCompany?.fdmsDeviceId]);
 
-  const { data: currencies } = useCurrencies(selectedCompany?.id || 0);
-  const [reportCurrencyCode, setReportCurrencyCode] = React.useState<string>("USD");
-
-  const consolidatedCurrency = currencies?.find(c => c.code === reportCurrencyCode) || currencies?.find(c => c.code === 'USD');
-  const consolidatedRate = Number(consolidatedCurrency?.exchangeRate || 1);
-  const consolidatedSymbol = consolidatedCurrency?.symbol || (reportCurrencyCode === 'USD' ? '$' : reportCurrencyCode);
-
   const stats = useMemo(() => {
     return {
-      total: (summary?.totalRevenue || 0) * consolidatedRate,
-      pending: (summary?.pendingAmount || 0) * consolidatedRate,
-      count: summary?.invoicesCount || 0
+      total: (fiscalStats?.totalSales || 0),
+      pending: (aging?.total || 0),
+      count: invoices?.length || 0
     };
-  }, [summary, consolidatedRate]);
+  }, [fiscalStats, aging, invoices]);
 
   // Fiscal Day Alert Logic
   const { data: deviceStatus } = useDeviceStatus(selectedCompany?.id || 0);
   const showTimeAlert = React.useMemo(() => {
-    if (!deviceStatus?.fiscalDayOpen) return false;
-    const hour = new Date().getHours();
-    return hour >= 17; // 5 PM
+    const now = new Date();
+    const isPast5PM = now.getHours() >= 17;
+    const isFiscalDayOpen = deviceStatus?.isFiscalDayOpen || deviceStatus?.fiscalDayOpen;
+    return isPast5PM && isFiscalDayOpen;
   }, [deviceStatus]);
 
   const isConfigured = selectedCompany?.tin && selectedCompany.fdmsDeviceId;
@@ -138,267 +165,278 @@ export default function Dashboard() {
     );
   }
 
+
+  const formatCurrency = (val: number) => {
+    try {
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: reportCurrencyCode }).format(val);
+    } catch (e) {
+      // Fallback for non-standard ISO codes or symbols
+      return `${consolidatedSymbol}${val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+  };
+
   return (
     <Layout>
-      {showTimeAlert && (
-        <div className="mb-4">
-          <Alert variant="destructive" className="bg-amber-50 border-amber-200 text-amber-800">
-            <Clock className="h-4 w-4" />
-            <AlertTitle>Fiscal Day is still Open</AlertTitle>
-            <AlertDescription>
-              It is past 5:00 PM. Please remember to <Link href="/zimra-settings" className="font-bold underline">Close the Fiscal Day</Link> to ensure compliance.
-            </AlertDescription>
-          </Alert>
-        </div>
-      )}
-      {/* Header Section */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-3xl font-display font-bold text-slate-900">Dashboard</h1>
-          <p className="text-slate-500 mt-1">
-            Welcome back, <span className="font-semibold text-slate-700">{user?.name}</span>
-          </p>
-        </div>
-        {!isConfigured && (
-          <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-xl flex items-center gap-3 animate-pulse">
-            <AlertCircle className="w-5 h-5" />
-            <span className="font-medium">FDMS Configuration Incomplete</span>
-            <Button variant="outline" size="sm" className="ml-auto bg-white border-amber-300 text-amber-900 hover:bg-amber-100" onClick={() => setLocation("/zimra-settings")}>
-              Fix Now
-            </Button>
+      <div className="space-y-8 pb-12">
+        {showTimeAlert && (
+          <div className="mb-4">
+            <Alert variant="destructive" className="bg-amber-50 border-amber-200 text-amber-800">
+              <Clock className="h-4 w-4" />
+              <AlertTitle>Fiscal Day is still Open</AlertTitle>
+              <AlertDescription>
+                It is past 5:00 PM. Please remember to <Link href="/zimra-settings" className="font-bold underline">Close the Fiscal Day</Link> to ensure compliance.
+              </AlertDescription>
+            </Alert>
           </div>
         )}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pb-8">
-        {/* Business Identity Card */}
-        <Link href="/settings">
-          <Card className="h-full border-none bg-white rounded-[2rem] hover:shadow-2xl hover:shadow-slate-200/50 transition-all duration-300 cursor-pointer group relative overflow-hidden ring-1 ring-slate-100">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-slate-50/80 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:bg-violet-50/80 transition-colors pointer-events-none" />
-            <CardHeader className="p-8 pb-4 relative z-10">
-              <CardTitle className="flex items-start gap-5">
-                <div className="w-16 h-16 rounded-2xl bg-white border border-slate-100 shadow-lg shadow-slate-200/50 flex items-center justify-center text-slate-400 group-hover:text-violet-600 group-hover:scale-110 group-hover:shadow-violet-200/50 transition-all duration-300">
-                  {selectedCompany.logoUrl ? (
-                    <img src={selectedCompany.logoUrl} alt="Logo" className="w-full h-full object-contain rounded-xl" />
-                  ) : (
-                    <Building2 className="w-8 h-8" />
-                  )}
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="text-xl font-black font-display text-slate-900 group-hover:text-violet-700 transition-colors">{selectedCompany.name}</div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-[10px] px-2 py-1 rounded-md font-black uppercase tracking-wider border ${selectedCompany.zimraEnvironment === 'production' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>
-                      {selectedCompany.zimraEnvironment === 'production' ? 'Production' : 'Test Mode'}
-                    </span>
-                    <div className="text-xs text-slate-500 font-bold bg-slate-100/80 px-2.5 py-1 rounded-md group-hover:bg-violet-50 group-hover:text-violet-700 transition-colors">
-                      {selectedCompany.city || "Harare"}, ZW
-                    </div>
-                  </div>
-                </div>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-8 pt-2 space-y-4 relative z-10">
-              <div className="flex justify-between items-center py-3 border-b border-slate-100/50">
-                <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  <Fingerprint className="w-4 h-4" /> TIN / BP
-                </div>
-                <div className="font-mono text-sm font-bold text-slate-700 bg-slate-50 px-2 py-1 rounded-md border border-slate-100 group-hover:bg-white transition-colors">
-                  {selectedCompany.tin || selectedCompany.bpNumber || "Not Set"}
-                </div>
-              </div>
-              <div className="flex justify-between items-center py-1">
-                <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  <FileText className="w-4 h-4" /> VAT Status
-                </div>
-                <div className={`px-2.5 py-1 rounded-md text-xs font-black uppercase tracking-wider ${selectedCompany.vatEnabled ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                  {selectedCompany.vatEnabled ? "Registered" : "Non-VAT"}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-
-        {/* Stats Cards */}
-        <div className="col-span-1 lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card className="border-none bg-gradient-to-br from-white to-slate-50 rounded-[2rem] flex flex-col justify-between shadow-sm hover:shadow-xl transition-all duration-300 ring-1 ring-slate-100">
-            <CardHeader className="p-8 pb-2 flex flex-row items-center justify-between space-y-0">
-              <CardTitle className="text-xs font-black text-slate-400 uppercase tracking-widest">Total Revenue</CardTitle>
-              <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
-                <TrendingUp className="w-5 h-5" />
-              </div>
-            </CardHeader>
-            <CardContent className="p-8 pt-0">
-              <div className="text-3xl sm:text-4xl lg:text-5xl font-black font-display text-slate-900 tracking-tight">
-                {consolidatedSymbol}{stats.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-              </div>
-              <div className="text-xs font-bold text-slate-400 mt-4 flex items-center gap-2">
-                <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">+12%</span>
-                <span>vs last month</span>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="border-none bg-gradient-to-br from-white to-slate-50 rounded-[2rem] flex flex-col justify-between shadow-sm hover:shadow-xl transition-all duration-300 ring-1 ring-slate-100">
-            <CardHeader className="p-8 pb-2 flex flex-row items-center justify-between space-y-0">
-              <CardTitle className="text-xs font-black text-slate-400 uppercase tracking-widest">Pending Invoices</CardTitle>
-              <div className="p-2 rounded-xl bg-amber-50 text-amber-600">
-                <Clock className="w-5 h-5" />
-              </div>
-            </CardHeader>
-            <CardContent className="p-8 pt-0">
-              <div className="text-3xl sm:text-4xl lg:text-5xl font-black font-display text-slate-900 tracking-tight">
-                {consolidatedSymbol}{stats.pending.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-              </div>
-              <div className="text-xs font-bold text-slate-400 mt-4">
-                <span className="text-amber-600 font-extrabold">{((stats.pending / (stats.total || 1)) * 100).toFixed(0)}%</span> of total revenue
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Quick Actions & FDMS Status */}
-        <div className="lg:col-span-2 space-y-8">
-          {/* Quick Actions */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <Button
-              variant="outline"
-              className="h-28 flex-col gap-3 bg-white card-depth border-none hover:border-violet-200 hover:bg-violet-50 group transition-all"
-              onClick={() => setLocation("/invoices/new")}
-            >
-              <div className="w-10 h-10 rounded-full bg-violet-100 flex items-center justify-center text-violet-600 group-hover:bg-violet-600 group-hover:text-white transition-all shadow-sm group-hover:shadow-md">
-                <Plus className="w-5 h-5" />
-              </div>
-              <span className="font-semibold text-slate-700">New Invoice</span>
-            </Button>
-            <Button
-              variant="outline"
-              className="h-28 flex-col gap-3 bg-white card-depth border-none hover:border-blue-200 hover:bg-blue-50 group transition-all"
-              onClick={() => setLocation("/customers")}
-            >
-              <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-sm group-hover:shadow-md">
-                <Users className="w-5 h-5" />
-              </div>
-              <span className="font-semibold text-slate-700">Customers</span>
-            </Button>
-            <Button
-              variant="outline"
-              className="h-28 flex-col gap-3 bg-white card-depth border-none hover:border-emerald-200 hover:bg-emerald-50 group transition-all"
-              onClick={() => setLocation("/products")}
-            >
-              <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-all shadow-sm group-hover:shadow-md">
-                <ShoppingCart className="w-5 h-5" />
-              </div>
-              <span className="font-semibold text-slate-700">Products</span>
-            </Button>
-            <Button
-              variant="outline"
-              className="h-28 flex-col gap-3 bg-white card-depth border-none hover:border-slate-200 hover:bg-slate-50 group transition-all"
-              onClick={() => setLocation("/settings")}
-            >
-              <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 group-hover:bg-slate-600 group-hover:text-white transition-all shadow-sm group-hover:shadow-md">
-                <Settings className="w-5 h-5" />
-              </div>
-              <span className="font-semibold text-slate-700">All Settings</span>
-            </Button>
+        <div className="flex justify-between items-end">
+          <div>
+            <h1 className="text-3xl font-display font-black text-slate-900 tracking-tight uppercase">Dashboard</h1>
+            <p className="text-slate-500 font-medium italic mt-1">Financial overview for the current fiscal year</p>
           </div>
-
-          {/* FDMS Status Card */}
-          <Card className="border-none bg-slate-900 text-white rounded-xl overflow-hidden relative shadow-slate-900/20 shadow-2xl">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-violet-600/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-            <div className="absolute bottom-0 left-0 w-48 h-48 bg-emerald-600/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2 pointer-events-none" />
-
-            <CardHeader>
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center backdrop-blur-sm">
-                    <Server className="w-5 h-5 text-emerald-400" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-white text-lg">Fiscal Device</CardTitle>
-                    <CardDescription className="text-slate-400 text-xs mt-0.5">
-                      ZIMRA FDMS Compliance Hook
-                    </CardDescription>
-                  </div>
-                </div>
-                {/* Status Badge: Dependent on Ping Result */}
-                {isPinging ? (
-                  <span className="bg-slate-500/20 text-slate-300 border border-slate-500/30 backdrop-blur-md px-3 py-0.5 rounded-full text-xs font-medium uppercase tracking-wide">
-                    Checking...
-                  </span>
-                ) : (
-                  <span
-                    className={`backdrop-blur-md px-3 py-0.5 rounded-full text-xs font-medium border uppercase tracking-wide ${isOnline ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" : "bg-red-500/20 text-red-400 border-red-500/30"}`}
-                  >
-                    {isOnline ? "Connected" : "Offline"}
-                  </span>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <DayManagementControls company={selectedCompany} variant="dark" />
-
-              <div className="p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs text-slate-400 mb-2 uppercase tracking-wider font-semibold">System Status</div>
-                  <Button variant="ghost" size="icon" className="h-5 w-5 text-slate-400 hover:text-white" onClick={() => pingZimra()} disabled={isPinging}>
-                    <RefreshCw className={`w-3 h-3 ${isPinging ? 'animate-spin' : ''}`} />
-                  </Button>
-                </div>
-                <div className="text-xl font-bold font-display tracking-tight text-white flex items-center gap-2">
-                  {pingSuccess ? new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (isPinging ? '...' : (
-                    selectedCompany.lastPing ? 'Offline' : 'Offline'
+          <div className="flex items-center gap-4">
+            {currencies && currencies.length > 0 && (
+              <Select value={reportCurrencyCode} onValueChange={setReportCurrencyCode}>
+                <SelectTrigger className="w-[120px] bg-white border-slate-200">
+                  <SelectValue placeholder="Currency" />
+                </SelectTrigger>
+                <SelectContent>
+                  {currencies.map(c => (
+                    <SelectItem key={c.id} value={c.code}>{c.code}</SelectItem>
                   ))}
-                  <div className={`text-xs ml-auto flex items-center gap-1 ${isOnline ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {isOnline ? <Activity className="w-3 h-3" /> : <Wifi className="w-3 h-3" />}
-                    {isOnline ? 'Online' : 'No Signal'}
-                  </div>
-                </div>
+                </SelectContent>
+              </Select>
+            )}
+            <div className="hidden sm:flex bg-white px-4 py-2 rounded-2xl border border-slate-100 shadow-sm items-center gap-2">
+              <CalendarDays className="w-4 h-4 text-primary" />
+              <span className="text-xs font-black uppercase tracking-widest text-slate-700">Fiscal Year {new Date().getFullYear()}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Links */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Link href="/invoices?new=true" className="flex items-center gap-3 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all hover:border-primary/20 group">
+            <div className="p-2 bg-primary/10 rounded-xl group-hover:bg-primary/20 transition-colors">
+              <Plus className="w-5 h-5 text-primary" />
+            </div>
+            <span className="font-bold text-slate-700 text-sm">New Invoice</span>
+          </Link>
+          <Link href="/customers" className="flex items-center gap-3 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all hover:border-blue-500/20 group">
+            <div className="p-2 bg-blue-500/10 rounded-xl group-hover:bg-blue-500/20 transition-colors">
+              <Users className="w-5 h-5 text-blue-600" />
+            </div>
+            <span className="font-bold text-slate-700 text-sm">Customers</span>
+          </Link>
+          <Link href="/products" className="flex items-center gap-3 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all hover:border-emerald-500/20 group">
+            <div className="p-2 bg-emerald-500/10 rounded-xl group-hover:bg-emerald-500/20 transition-colors">
+              <ShoppingCart className="w-5 h-5 text-emerald-600" />
+            </div>
+            <span className="font-bold text-slate-700 text-sm">Products</span>
+          </Link>
+          <Link href="/settings" className="flex items-center gap-3 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all hover:border-purple-500/20 group">
+            <div className="p-2 bg-purple-500/10 rounded-xl group-hover:bg-purple-500/20 transition-colors">
+              <Settings className="w-5 h-5 text-purple-600" />
+            </div>
+            <span className="font-bold text-slate-700 text-sm">Settings</span>
+          </Link>
+        </div>
+
+        {/* Total Receivables Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <Card className="lg:col-span-1 glass-card border-none shadow-xl bg-gradient-to-br from-slate-900 to-slate-800 text-white overflow-hidden relative">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full -mr-16 -mt-16 blur-3xl opacity-50" />
+            <CardHeader className="pb-2 relative z-10">
+              <CardTitle className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Total Receivables</CardTitle>
+            </CardHeader>
+            <CardContent className="relative z-10">
+              <div className="text-4xl font-black font-display mb-1">{formatCurrency(aging?.total || 0)}</div>
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
+                <Clock className="w-3 h-3" />
+                <span>Across all categories</span>
               </div>
             </CardContent>
           </Card>
+
+          <div className="lg:col-span-3 grid grid-cols-2 sm:grid-cols-5 gap-4">
+            {[
+              { label: "Current", value: aging?.current, color: "text-emerald-600", bg: "bg-emerald-50" },
+              { label: "1-15 Days", value: aging?.days1_15, color: "text-blue-600", bg: "bg-blue-50" },
+              { label: "16-30 Days", value: aging?.days16_30, color: "text-amber-600", bg: "bg-amber-50" },
+              { label: "31-45 Days", value: aging?.days31_45, color: "text-orange-600", bg: "bg-orange-50" },
+              { label: "Above 45 Days", value: aging?.above45, color: "text-rose-600", bg: "bg-rose-50" },
+            ].map((item, i) => (
+              <Card key={i} className="border-none shadow-sm hover:shadow-md transition-all rounded-2xl overflow-hidden bg-white">
+                <CardContent className="p-4 flex flex-col justify-between h-full">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">{item.label}</p>
+                  <p className={cn("text-lg font-black font-display", item.color)}>
+                    {formatCurrency(item.value || 0)}
+                  </p>
+                  <div className={cn("w-full h-1 mt-3 rounded-full opacity-30", item.bg.replace('50', '200'))} />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
 
-        {/* Recent Invoices */}
-        <Card className="card-depth border-none h-full bg-white/50 backdrop-blur-sm">
-          <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {isLoading ? (
-                <div className="text-sm text-slate-500 text-center py-8">Loading activity...</div>
-              ) : invoices?.slice(0, 5).map((inv: any) => (
-                <Link key={inv.id} href={`/invoices/${inv.id}`}>
-                  <div className="flex items-center justify-between p-3 rounded-xl bg-white hover:bg-slate-50 transition-all cursor-pointer border border-slate-100 hover:border-violet-100 shadow-sm group">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-violet-100 group-hover:text-violet-600 transition-all">
-                        <FileText className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-bold text-slate-900 group-hover:text-violet-600 transition-colors">{inv.invoiceNumber}</p>
-                        <p className="text-xs text-slate-500">{inv.issueDate ? new Date(inv.issueDate).toLocaleDateString() : 'N/A'}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-slate-900 group-hover:scale-105 transition-transform origin-right">${Number(inv.total).toFixed(2)}</p>
-                      <StatusBadge status={inv.status!} className="scale-75 origin-right" />
-                    </div>
-                  </div>
-                </Link>
-              ))}
-              {invoices?.length === 0 && (
-                <div className="text-sm text-slate-500 text-center py-8">No invoices generated yet.</div>
-              )}
+        {/* Charts & Fiscal Summary */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <Card className="lg:col-span-2 border-none shadow-xl rounded-3xl overflow-hidden bg-white">
+            <CardHeader className="border-b border-slate-50 flex flex-row items-center justify-between pb-4">
+              <div>
+                <CardTitle className="text-sm font-black uppercase tracking-widest text-slate-900">Sales and Expenses</CardTitle>
+                <p className="text-xs text-slate-400 font-medium mt-1">Monthly performance trend</p>
+              </div>
+              <div className="flex gap-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-primary" />
+                  <span className="text-[10px] font-bold uppercase text-slate-500">Sales</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-rose-500" />
+                  <span className="text-[10px] font-bold uppercase text-slate-500">Expenses</span>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-8">
+              <div className="h-[350px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={fiscalStats?.monthlyData || []}>
+                    <defs>
+                      <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.1}/>
+                        <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+                      </linearGradient>
+                      <linearGradient id="colorExp" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.1}/>
+                        <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis 
+                      dataKey="month" 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 700}}
+                      dy={10}
+                    />
+                    <YAxis 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 700}}
+                      tickFormatter={(val) => `$${val}`}
+                    />
+                    <Tooltip 
+                      contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '12px'}}
+                      cursor={{stroke: 'hsl(var(--primary))', strokeWidth: 2, strokeDasharray: '5 5'}}
+                    />
+                    <Area type="monotone" dataKey="sales" stroke="hsl(var(--primary))" strokeWidth={3} fillOpacity={1} fill="url(#colorSales)" />
+                    <Area type="monotone" dataKey="expenses" stroke="#f43f5e" strokeWidth={3} fillOpacity={1} fill="url(#colorExp)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
 
-              <Link href="/invoices">
-                <Button variant="ghost" className="w-full mt-4 text-slate-500 hover:text-violet-600 transition-colors">View All History</Button>
-              </Link>
+          <div className="space-y-6">
+            <Card className="border-none shadow-xl rounded-3xl bg-white p-6">
+              <CardTitle className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-6 flex items-center gap-2">
+                <Receipt className="w-3 h-3 text-primary" /> Fiscal Year Summary
+              </CardTitle>
+              
+              <div className="space-y-4">
+                {[
+                  { label: "Total Sales", value: fiscalStats?.totalSales, color: "text-slate-900", icon: TrendingUp, iconColor: "text-emerald-500" },
+                  { label: "Total Receipts", value: fiscalStats?.totalReceipts, color: "text-primary", icon: Receipt, iconColor: "text-primary" },
+                  { label: "Total Expenses", value: fiscalStats?.totalExpenses, color: "text-rose-600", icon: ArrowDownRight, iconColor: "text-rose-500" },
+                ].map((item, i) => (
+                  <div key={i} className="bg-slate-50 p-4 rounded-2xl flex items-center justify-between group hover:bg-slate-100 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <div className={cn("p-2 rounded-xl bg-white shadow-sm", item.iconColor.replace('text', 'bg').replace('500', '50'))}>
+                        <item.icon className={cn("w-4 h-4", item.iconColor)} />
+                      </div>
+                      <span className="text-xs font-bold text-slate-500 uppercase tracking-tight">{item.label}</span>
+                    </div>
+                    <span className={cn("text-lg font-black font-display tracking-tight", item.color)}>
+                      {formatCurrency(item.value || 0)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-8 bg-primary/5 p-4 rounded-2xl border border-primary/10">
+                <div className="flex justify-between items-end">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-primary/60 mb-1">Estimated Net</p>
+                    <p className="text-2xl font-black text-primary font-display">
+                      {formatCurrency((fiscalStats?.totalSales || 0) - (fiscalStats?.totalExpenses || 0))}
+                    </p>
+                  </div>
+                  <div className="p-2 bg-primary rounded-xl">
+                    <TrendingUp className="w-5 h-5 text-white" />
+                  </div>
+                </div>
+              </div>
+            </Card>
+
+            <div className="space-y-4">
+              <CardTitle className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                <AlertCircle className="w-3 h-3 text-primary" /> Compliance Status
+              </CardTitle>
+              
+              <div className="grid grid-cols-2 gap-4">
+                {/* VAT Status */}
+                <Card className={cn("border-none shadow-sm rounded-2xl p-4", activeCompany?.vatRegistered ? "bg-emerald-50/50" : "bg-slate-50")}>
+                  <p className={cn("text-[9px] font-black uppercase tracking-widest mb-1", activeCompany?.vatRegistered ? "text-emerald-600/60" : "text-slate-500")}>VAT Status</p>
+                  <div className="flex items-center gap-2">
+                    <div className={cn("w-2 h-2 rounded-full", activeCompany?.vatRegistered ? "bg-emerald-500" : "bg-slate-400")} />
+                    <span className={cn("text-xs font-black uppercase tracking-tight", activeCompany?.vatRegistered ? "text-emerald-700" : "text-slate-600")}>
+                      {activeCompany?.vatRegistered ? "Registered" : "Not Registered"}
+                    </span>
+                  </div>
+                </Card>
+
+                {/* Fiscal Device */}
+                <Card className={cn("border-none shadow-sm rounded-2xl p-4", selectedCompany?.fdmsDeviceId ? "bg-blue-50/50" : "bg-amber-50/50")}>
+                  <p className={cn("text-[9px] font-black uppercase tracking-widest mb-1", selectedCompany?.fdmsDeviceId ? "text-blue-600/60" : "text-amber-600/60")}>Fiscal Device</p>
+                  <div className="flex items-center gap-2">
+                    <Server className={cn("w-3 h-3", selectedCompany?.fdmsDeviceId ? "text-blue-500" : "text-amber-500")} />
+                    <span className={cn("text-[10px] font-black uppercase tracking-tight truncate", selectedCompany?.fdmsDeviceId ? "text-blue-700" : "text-amber-700")} title={selectedCompany?.fdmsDeviceSerialNo || "Not Configured"}>
+                      {selectedCompany?.fdmsDeviceSerialNo ? selectedCompany.fdmsDeviceSerialNo.substring(0, 10) + '...' : "Not Configured"}
+                    </span>
+                  </div>
+                </Card>
+
+                {/* Connection Status */}
+                <Card className={cn("border-none shadow-sm rounded-2xl p-4", pingSuccess ? "bg-emerald-50/50" : "bg-rose-50/50")}>
+                  <p className={cn("text-[9px] font-black uppercase tracking-widest mb-1", pingSuccess ? "text-emerald-600/60" : "text-rose-600/60")}>Zimra Server</p>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className={cn("w-2 h-2 rounded-full", pingSuccess ? "bg-emerald-500 animate-pulse" : "bg-rose-500")} />
+                      <span className={cn("text-xs font-black uppercase tracking-tight", pingSuccess ? "text-emerald-700" : "text-rose-700")}>
+                        {isPinging ? "Checking..." : (pingSuccess ? "Online" : "Offline")}
+                      </span>
+                    </div>
+                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => pingZimra()} disabled={isPinging}>
+                      <RefreshCw className={cn("w-3 h-3", isPinging ? "animate-spin text-slate-400" : "text-slate-500")} />
+                    </Button>
+                  </div>
+                </Card>
+
+                {/* Day Status */}
+                <Card className={cn("border-none shadow-sm rounded-2xl p-4", deviceStatus?.isFiscalDayOpen ? "bg-amber-50/50" : "bg-slate-50")}>
+                  <p className={cn("text-[9px] font-black uppercase tracking-widest mb-1", deviceStatus?.isFiscalDayOpen ? "text-amber-600/60" : "text-slate-500")}>Day Status</p>
+                  <div className="flex items-center gap-2">
+                    <Activity className={cn("w-3 h-3", deviceStatus?.isFiscalDayOpen ? "text-amber-500" : "text-slate-400")} />
+                    <span className={cn("text-xs font-black uppercase tracking-tight", deviceStatus?.isFiscalDayOpen ? "text-amber-700" : "text-slate-600")}>
+                      {deviceStatus?.isFiscalDayOpen ? "Day Open" : "Day Closed"}
+                    </span>
+                  </div>
+                </Card>
+              </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     </Layout>
   );

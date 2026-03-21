@@ -243,8 +243,9 @@ export function Receipt48({ id = "receipt-48", invoice, company, customer, items
                         padding: 2mm !important;
                         box-sizing: border-box;
                         background: white;
-                        overflow: hidden;
-                        ${isA4 ? 'position: relative;' : 'position: fixed; left: 0; top: 0;'}
+                        overflow: visible !important;
+                        position: relative !important;
+                        height: auto !important;
                     }
                     * {
                         box-sizing: border-box;

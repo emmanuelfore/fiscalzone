@@ -22,7 +22,15 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Pr
         : input;
 
     const controller = init?.signal ? null : new AbortController();
-    const timeoutId = controller ? window.setTimeout(() => controller.abort(), 30000) : null;
+    const timeoutId = controller ? window.setTimeout(() => {
+        console.warn(`[apiFetch] Request to ${url} timed out after 120s - aborting.`);
+        try {
+            // @ts-ignore - abort with reason is supported in modern browsers
+            controller.abort("TIMEOUT");
+        } catch (e) {
+            controller.abort();
+        }
+    }, 120000) : null;
 
     try {
         return await fetch(url, {

@@ -77,138 +77,100 @@ export const processInvoiceFiscalization = async (invoiceId: number, companyId: 
     let currentCompany = company;
 
     try {
-        console.time(`[ZIMRA] getStatus-${companyId}`);
-        const status = await device.getStatus() as any;
-        console.timeEnd(`[ZIMRA] getStatus-${companyId}`);
-        console.log(`[ZIMRA] Check Status: ${status.fiscalDayStatus}, LastDay: ${status.lastFiscalDayNo}`);
+        let status: any = null;
+        
+        // 🚀 OPTIMIZATION: Skip getStatus if the day is already open locally
+        const needsStatusSync = !company.fiscalDayOpen || !company.currentFiscalDayNo;
 
-        const now = new Date();
-        const fiscalDayOpenedAt = company.fiscalDayOpenedAt ? new Date(company.fiscalDayOpenedAt) : null;
-        const oneDayMs = 24 * 60 * 60 * 1000;
-        const isStale = fiscalDayOpenedAt && (now.getTime() - fiscalDayOpenedAt.getTime() > oneDayMs);
+        if (needsStatusSync) {
+            console.time(`[ZIMRA] getStatus-${companyId}`);
+            status = await device.getStatus() as any;
+            console.timeEnd(`[ZIMRA] getStatus-${companyId}`);
+            console.log(`[ZIMRA] Check Status: ${status.fiscalDayStatus}, LastDay: ${status.lastFiscalDayNo}`);
 
-        if (isStale) console.log(`[ZIMRA] Day is Stale. OpenedAt: ${fiscalDayOpenedAt?.toISOString()}, Now: ${now.toISOString()}`);
+            const now = new Date();
+            const fiscalDayOpenedAt = company.fiscalDayOpenedAt ? new Date(company.fiscalDayOpenedAt) : null;
+            const oneDayMs = 24 * 60 * 60 * 1000;
+            const isStale = fiscalDayOpenedAt && (now.getTime() - fiscalDayOpenedAt.getTime() > oneDayMs);
 
-        // Auto-close if stale or explicitly reported by ZIMRA status
-        const statusStr = (status.fiscalDayStatus || "").toLowerCase();
+            if (isStale) console.log(`[ZIMRA] Day is Stale (>24h). OpenedAt: ${fiscalDayOpenedAt?.toISOString()}, but continuing to fiscalize on it.`);
 
-        if (isStale || (statusStr !== 'fiscaldayopened' && statusStr !== 'fiscaldayclosefailed')) {
-            if (isStale) {
-                console.log(`[ZIMRA] Fiscal Day ${company.currentFiscalDayNo} is stale (>24h). Auto-replacing...`);
+            // ZIMRA Day Management:
+            const statusStr = (status.fiscalDayStatus || "").toLowerCase();
+
+            if (statusStr === 'fiscaldayclosed') {
+                // Day is closed on ZIMRA's side — we must open a new day to fiscalize
+                try {
+                    const nextDayNo = (status.lastFiscalDayNo || 0) + 1;
+                    console.log(`[ZIMRA] Day is Closed. Opening new fiscal day ${nextDayNo}...`);
+                    const openResult = await device.openDay(nextDayNo) as any;
+
+                    const openedAt = new Date();
+                    company = await storage.updateCompany(company.id, {
+                        currentFiscalDayNo: openResult.fiscalDayNo || nextDayNo,
+                        fiscalDayOpen: true,
+                        fiscalDayOpenedAt: openedAt,
+                        lastFiscalDayStatus: 'FiscalDayOpened',
+                        dailyReceiptCount: 0,
+                        lastFiscalHash: null
+                    });
+                    console.log(`[ZIMRA] Fiscal Day Opened: ${openResult.fiscalDayNo} at ${openedAt.toISOString()}`);
+
+                    status.fiscalDayStatus = 'FiscalDayOpened';
+                    status.lastFiscalDayNo = openResult.fiscalDayNo || nextDayNo;
+                    justOpened = true;
+                } catch (openErr: any) {
+                    console.error(`[ZIMRA] Failed to open new fiscal day: ${openErr.message}`);
+                }
+            } else if (statusStr === 'fiscaldayopened' || statusStr === 'fiscaldayclosefailed') {
+                // Day is open (or close failed) — continue fiscalizing on it. Do NOT close it proactively.
+                console.log(`[ZIMRA] Day status: ${status.fiscalDayStatus}. Continuing to fiscalize on current day.`);
+                if (!company.fiscalDayOpen) {
+                    company = await storage.updateCompany(company.id, {
+                        fiscalDayOpen: true,
+                        currentFiscalDayNo: status.lastFiscalDayNo,
+                        lastFiscalDayStatus: status.fiscalDayStatus
+                    });
+                }
             } else {
-                console.log("[ZIMRA] Fiscal Day Closed (or invalid status). Auto-opening...");
+                console.warn(`[ZIMRA] Unknown day status: ${status.fiscalDayStatus}. Proceeding with caution.`);
             }
 
-            // 1. Force close the current stale day (or retry failed closure) if it was still "open/failed" on ZIMRA side
-            if ((status.fiscalDayStatus === 'FiscalDayOpened' || status.fiscalDayStatus === 'FiscalDayCloseFailed') && isStale) {
-                try {
-                    // Get current counters for closure
-                    const receiptCounter = company.dailyReceiptCount || 0;
-                    const invoicesToClose = await storage.getInvoicesByFiscalDay(company.id, company.currentFiscalDayNo || 0);
-                    const counters = await storage.calculateFiscalCounters(company.id, company.currentFiscalDayNo || 0);
+            // 2. SYNC COUNTERS FROM ZIMRA
+            const zimraGlobalNo = status.lastReceiptGlobalNo || 0;
+            let zimraDailyCount = status.lastReceiptCounter || 0;
 
-                    let signDate = new Date().toLocaleDateString('sv-SE');
-                    if (company.fiscalDayOpenedAt) {
-                        signDate = new Date(company.fiscalDayOpenedAt).toLocaleDateString('sv-SE');
-                    }
+            if (zimraDailyCount === 0 && status.fiscalDayDocumentQuantities) {
+                zimraDailyCount = status.fiscalDayDocumentQuantities.reduce((sum: number, dq: any) => sum + (dq.receiptQuantity || 0), 0);
+            }
 
-                    const closeResult = await device.closeDay(
-                        company.currentFiscalDayNo || 0,
-                        signDate,
-                        receiptCounter,
-                        counters
-                    ) as any;
-                    
-                    // console.log(`[ZIMRA] CloseDay Response:`, JSON.stringify(closeResult));
+            console.log(`[Fiscalize] ZIMRA Status Sync - GlobalNo: ${zimraGlobalNo}, DailyCount: ${zimraDailyCount}`);
 
-                    // Since CloseDay response might not contain status, we re-verify with checkStatus (getStatus)
-                    console.log(`[ZIMRA] Verifying closure for Day ${company.currentFiscalDayNo}...`);
-                    const verifyStatus = await device.getStatus() as any;
-                    console.log(`[ZIMRA] Verification Status: ${verifyStatus.fiscalDayStatus}`);
+            if (status.lastReceiptGlobalNo !== undefined || status.lastReceiptCounter !== undefined) {
+                const updateData: any = {};
+                const localGlobal = company.lastReceiptGlobalNo ?? 0;
+                const localDaily = company.dailyReceiptCount ?? 0;
 
-                    if (verifyStatus.fiscalDayStatus !== 'FiscalDayClosed' && verifyStatus.fiscalDayStatus !== 'FiscalDayCloseFailed') {
-                        console.warn(`[ZIMRA] Day ${company.currentFiscalDayNo} still NOT closed. ZIMRA: ${verifyStatus.fiscalDayStatus}. Skipping auto-open and continuing with current day.`);
-                        // Ensure local state is synced
-                        if (!company.fiscalDayOpen) {
-                            company = await storage.updateCompany(company.id, {
-                                fiscalDayOpen: true,
-                                currentFiscalDayNo: verifyStatus.lastFiscalDayNo,
-                                lastFiscalDayStatus: verifyStatus.fiscalDayStatus
-                            });
-                        }
-                    } else {
-                        // 2. Only open new day if closure was confirmed or at least failed at ZIMRA (so we can try to skip)
-                        const nextDayNo = (status.lastFiscalDayNo || 0) + 1;
-                        console.log(`[ZIMRA] Opening new fiscal day ${nextDayNo}...`);
-                        const openResult = await device.openDay(nextDayNo) as any;
+                if (status.lastReceiptGlobalNo !== undefined && status.lastReceiptGlobalNo > localGlobal) {
+                    updateData.lastReceiptGlobalNo = status.lastReceiptGlobalNo;
+                    console.log(`[ZIMRA] Advancing globalNo from ${localGlobal} → ${status.lastReceiptGlobalNo} (ZIMRA is ahead)`);
+                } else if (status.lastReceiptGlobalNo !== undefined) {
+                    console.log(`[ZIMRA] Skipping globalNo sync: local ${localGlobal} >= ZIMRA ${status.lastReceiptGlobalNo} (keeping local)`);
+                }
 
-                        // Update company state
-                        const openedAt = new Date();
-                        company = await storage.updateCompany(company.id, {
-                            currentFiscalDayNo: openResult.fiscalDayNo || nextDayNo,
-                            fiscalDayOpen: true,
-                            fiscalDayOpenedAt: openedAt,
-                            lastFiscalDayStatus: 'FiscalDayOpened',
-                            dailyReceiptCount: 0,
-                            lastFiscalHash: null
-                        });
-                        console.log(`Fiscal Day Opened: ${openResult.fiscalDayNo} at ${openedAt.toISOString()}`);
+                if (status.lastReceiptCounter !== undefined && status.lastReceiptCounter > localDaily) {
+                    updateData.dailyReceiptCount = status.lastReceiptCounter;
+                    console.log(`[ZIMRA] Advancing dailyCount from ${localDaily} → ${status.lastReceiptCounter} (ZIMRA is ahead)`);
+                } else if (status.lastReceiptCounter !== undefined) {
+                    console.log(`[ZIMRA] Skipping dailyCount sync: local ${localDaily} >= ZIMRA ${status.lastReceiptCounter} (keeping local)`);
+                }
 
-                        // Re-fetch status to update local variables below
-                        status.fiscalDayStatus = 'FiscalDayOpened';
-                        status.lastFiscalDayNo = openResult.fiscalDayNo || nextDayNo;
-                        justOpened = true;
-                    }
-                } catch (closeErr) {
-                    console.warn(`[ZIMRA] Failed to manage stale day: ${closeErr}. Continuing with current status.`);
+                if (Object.keys(updateData).length > 0) {
+                    company = await storage.updateCompany(company.id, updateData);
                 }
             }
         } else {
-            // Ensure local state is synced if it was somehow out
-            if (!company.fiscalDayOpen) {
-                company = await storage.updateCompany(company.id, {
-                    fiscalDayOpen: true,
-                    currentFiscalDayNo: status.lastFiscalDayNo,
-                    lastFiscalDayStatus: 'FiscalDayOpened'
-                });
-            }
-        }
-
-        // 2. SYNC COUNTERS FROM ZIMRA
-        const zimraGlobalNo = status.lastReceiptGlobalNo || 0;
-        let zimraDailyCount = status.lastReceiptCounter || 0;
-
-        if (zimraDailyCount === 0 && status.fiscalDayDocumentQuantities) {
-            zimraDailyCount = status.fiscalDayDocumentQuantities.reduce((sum: number, dq: any) => sum + (dq.receiptQuantity || 0), 0);
-        }
-
-        console.log(`[Fiscalize] ZIMRA Status Sync - GlobalNo: ${zimraGlobalNo}, DailyCount: ${zimraDailyCount}`);
-
-        // Only advance local counters to ZIMRA's value — never go backwards.
-        // Going backwards is what causes RCPT012: local DB had N+2 claimed, ZIMRA
-        // returned N, sync reset to N, next claim gave N+1 which ZIMRA already saw.
-        if (status.lastReceiptGlobalNo !== undefined || status.lastReceiptCounter !== undefined) {
-            const updateData: any = {};
-            const localGlobal = company.lastReceiptGlobalNo ?? 0;
-            const localDaily = company.dailyReceiptCount ?? 0;
-
-            if (status.lastReceiptGlobalNo !== undefined && status.lastReceiptGlobalNo > localGlobal) {
-                updateData.lastReceiptGlobalNo = status.lastReceiptGlobalNo;
-                console.log(`[ZIMRA] Advancing globalNo from ${localGlobal} → ${status.lastReceiptGlobalNo} (ZIMRA is ahead)`);
-            } else if (status.lastReceiptGlobalNo !== undefined) {
-                console.log(`[ZIMRA] Skipping globalNo sync: local ${localGlobal} >= ZIMRA ${status.lastReceiptGlobalNo} (keeping local)`);
-            }
-
-            if (status.lastReceiptCounter !== undefined && status.lastReceiptCounter > localDaily) {
-                updateData.dailyReceiptCount = status.lastReceiptCounter;
-                console.log(`[ZIMRA] Advancing dailyCount from ${localDaily} → ${status.lastReceiptCounter} (ZIMRA is ahead)`);
-            } else if (status.lastReceiptCounter !== undefined) {
-                console.log(`[ZIMRA] Skipping dailyCount sync: local ${localDaily} >= ZIMRA ${status.lastReceiptCounter} (keeping local)`);
-            }
-
-            if (Object.keys(updateData).length > 0) {
-                company = await storage.updateCompany(company.id, updateData);
-            }
+            console.log(`[ZIMRA] Fast-path: Skipping getStatus (Day ${company.currentFiscalDayNo} already open locally)`);
         }
 
         // Re-fetch to get the resulting peaked counters

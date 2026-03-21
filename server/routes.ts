@@ -3890,34 +3890,45 @@ export async function registerRoutes(
 
       const input = api.invoices.create.input.parse(body);
 
-      // POS Shift Validation: Ensure shift is open before processing POS sales
+      const companyId = Number(req.params.companyId);
+      const userId = (req.user as any)?.id;
+
+      // 1. Parallelize initial validation and data fetching
+      let activeShiftPromise: Promise<any> = Promise.resolve(null);
+      let companyPromise = storage.getCompany(companyId);
+      let customerPromise = input.customerId ? storage.getCustomer(input.customerId) : Promise.resolve(null);
+
       if (input.isPos) {
-        const companyId = Number(req.params.companyId);
-        const userId = (req.user as any)?.id;
-
         if (!userId) {
-          return res.status(401).json({
-            message: "User authentication required for POS sales"
-          });
+          return res.status(401).json({ message: "User authentication required for POS sales" });
         }
-
-        const activeShift = await storage.getActivePosShift(companyId, userId);
-
-        if (!activeShift) {
-          return res.status(400).json({
-            message: "No active shift found. Please open a shift before processing POS sales.",
-            code: "NO_ACTIVE_SHIFT"
-          });
-        }
+        activeShiftPromise = storage.getActivePosShift(companyId, userId);
       }
+
+      const [activeShift, company, customer] = await Promise.all([
+        activeShiftPromise,
+        companyPromise,
+        customerPromise
+      ]);
+
+      if (input.isPos && !activeShift) {
+        return res.status(400).json({
+          message: "No active shift found. Please open a shift before processing POS sales.",
+          code: "NO_ACTIVE_SHIFT"
+        });
+      }
+
+      // POS sales are paid upfront, so set status immediately
+      const initialStatus = input.isPos ? "paid" : (input.status || "issued");
 
       let invoice = await storage.createInvoice({
         ...input,
+        status: initialStatus,
         items: input.items as any,
-        companyId: Number(req.params.companyId)
+        companyId
       });
 
-      // POS Payment Recording: Automatically record payment for POS sales
+      // 2. POS Payment Recording
       if (input.isPos) {
         try {
           await storage.createPayment({
@@ -3927,29 +3938,22 @@ export async function registerRoutes(
             currency: invoice.currency,
             paymentMethod: invoice.paymentMethod || "CASH",
             paymentDate: new Date(),
-            createdBy: (req.user as any)?.id,
+            createdBy: userId,
             exchangeRate: invoice.exchangeRate?.toString() || "1.000000",
           });
-          
-          // Force status to paid for POS sales since they are upfront
-          await storage.updateInvoice(invoice.id, { status: "paid" });
+          // Redundant updateInvoice(paid) Removed
           invoice.status = "paid";
         } catch (payErr) {
           console.error("[POS] Auto-payment recording failed:", payErr);
         }
       }
 
-      // ZIMRA Fiscalization Trigger: 
-      // 1. All POS sales for VAT registered companies
-      // 2. Any sale (POS or standard) where the customer has a VAT Number (Automated fiscalization)
-      const company = await storage.getCompany(Number(req.params.companyId));
+      // 3. ZIMRA Fiscalization Trigger Logic
       let shouldFiscalize = false;
-      
-      if (input.isPos && company?.vatRegistered !== false) {
-        shouldFiscalize = true;
-      } else if (input.customerId && company?.vatRegistered !== false) {
-        const customer = await storage.getCustomer(input.customerId);
-        if (customer?.vatNumber && customer.vatNumber.trim()) {
+      if (company?.vatRegistered !== false) {
+        if (input.isPos) {
+          shouldFiscalize = true;
+        } else if (input.customerId && customer?.vatNumber && customer.vatNumber.trim()) {
           shouldFiscalize = true;
         }
       }

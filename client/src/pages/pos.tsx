@@ -444,6 +444,13 @@ export default function POSPage() {
             // ── Barcode accumulation — chars arriving < 100ms apart are from a scanner ──
             if (gap > 100) {
                 barcodeBufferRef.current = e.key === 'Enter' ? '' : e.key;
+                
+                // Allow Enter key to quickly complete POS checkout (human press, not scanner)
+                if (e.key === 'Enter' && isCheckoutOpen && !isProcessing && paidAmount) {
+                    e.preventDefault();
+                    processOrder();
+                    return;
+                }
             } else {
                 if (e.key === 'Enter') {
                     const barcode = barcodeBufferRef.current.trim();

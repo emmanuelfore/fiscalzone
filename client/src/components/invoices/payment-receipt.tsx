@@ -1,4 +1,4 @@
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Printer, X, Loader2, Download } from "lucide-react";
 import { format } from "date-fns";
@@ -46,7 +46,19 @@ export function PaymentReceipt({ open, onClose, payment, invoice, company, custo
         <head>
           <title>Payment Receipt</title>
           <style>
-            body { font-family: 'Courier New', monospace; font-size: 11px; margin: 0; padding: 8px; color: #000; }
+            @media print {
+              @page { margin: 0; size: auto; }
+              body { margin: 0; padding: 0; }
+            }
+            body { 
+              font-family: 'Courier New', monospace; 
+              font-size: 11px; 
+              margin: 0; 
+              padding: 8px; 
+              color: #000; 
+              overflow: visible !important;
+              height: auto !important;
+            }
             .center { text-align: center; }
             .bold { font-weight: bold; }
             .row { display: flex; justify-content: space-between; margin-bottom: 3px; }
@@ -55,7 +67,7 @@ export function PaymentReceipt({ open, onClose, payment, invoice, company, custo
             .small { font-size: 9px; }
           </style>
         </head>
-        <body>${content.innerHTML}</body>
+        <body style="overflow: visible; height: auto;">${content.innerHTML}</body>
       </html>
     `);
     win.document.close();
@@ -70,8 +82,11 @@ export function PaymentReceipt({ open, onClose, payment, invoice, company, custo
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Payment Receipt</DialogTitle>
+          <DialogDescription className="sr-only">View and print or download your payment receipt.</DialogDescription>
+        </DialogHeader>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold">Payment Receipt</h2>
           <div className="flex gap-2">
             <PDFDownloadLink
               document={
@@ -86,10 +101,11 @@ export function PaymentReceipt({ open, onClose, payment, invoice, company, custo
                     invoiceNumber: invoice?.invoiceNumber,
                     customerName: customer?.name || invoice?.customer?.name,
                     customerEmail: customer?.email || invoice?.customer?.email,
+                    id: (payment as any).id || 0
                   }}
                   company={company}
                   invoice={invoice}
-                  taxTypes={taxTypes}
+                  taxTypes={taxTypes.data || []}
                 />
               }
               fileName={`Receipt-${invoice?.invoiceNumber || "NEW"}-${format(new Date(), "yyyyMMdd")}.pdf`}

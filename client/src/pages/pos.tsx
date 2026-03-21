@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { DialogDescription } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { MySalesModal } from "@/components/pos/my-sales-modal";
@@ -920,6 +921,12 @@ export default function POSPage() {
                 // Prompt user to open shift
                 setShiftModalType("OPEN");
                 setIsShiftModalOpen(true);
+            } else if (error.name === 'AbortError' || error.message?.includes('aborted')) {
+                toast({ 
+                    title: "Request Timed Out", 
+                    description: "The request took too long or was interrupted. Please check your connection and try again.", 
+                    variant: "destructive" 
+                });
             } else {
                 toast({ title: "Error", description: error.message || "Could not process transaction", variant: "destructive" });
             }
@@ -1103,18 +1110,26 @@ export default function POSPage() {
                 await window.electronAPI.printReceipt(html, posSettings.printerName || undefined);
             } else {
                 // Wrap in a basic document with styling if needed, but receipt-48 already has <style>
-                const response = await fetch(`${posSettings.printServerUrl}/print`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        html,
-                        printerName: posSettings.printerName || undefined
-                    })
-                });
+                const printController = new AbortController();
+                const printTimeout = setTimeout(() => printController.abort(), 60000);
 
-                if (!response.ok) {
-                    const err = await response.json();
-                    throw new Error(err.error || "Failed to send print job");
+                try {
+                    const response = await fetch(`${posSettings.printServerUrl}/print`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            html,
+                            printerName: posSettings.printerName || undefined
+                        }),
+                        signal: printController.signal
+                    });
+
+                    if (!response.ok) {
+                        const err = await response.json();
+                        throw new Error(err.error || "Failed to send print job");
+                    }
+                } finally {
+                    clearTimeout(printTimeout);
                 }
             }
 
@@ -1610,6 +1625,7 @@ export default function POSPage() {
                                         <DialogContent className="w-[90%] rounded-2xl">
                                             <DialogHeader>
                                                 <DialogTitle>Select Customer</DialogTitle>
+                                                <DialogDescription className="sr-only">Choose a customer for this transaction.</DialogDescription>
                                             </DialogHeader>
                                             <div className="space-y-4 py-4">
                                                 <Button
@@ -2266,6 +2282,10 @@ export default function POSPage() {
                 {/* High-End Elite Checkout Modal */}
                 <Dialog open={isCheckoutOpen} onOpenChange={setIsCheckoutOpen}>
                     <DialogContent className="max-w-[95vw] h-auto my-auto md:max-w-[650px] p-0 overflow-hidden border-none rounded-[1.5rem] shadow-2xl flex flex-col">
+                        <DialogHeader className="sr-only">
+                            <DialogTitle>Checkout</DialogTitle>
+                            <DialogDescription>Complete your transaction by selecting a payment method.</DialogDescription>
+                        </DialogHeader>
                         <div className="flex flex-col md:flex-row h-full md:min-h-[400px]">
                             {/* Summary Side - Compact for all devices */}
                             <div className="md:flex-[0.8] bg-slate-900 text-white p-2 md:p-5 flex flex-row md:flex-col justify-between items-center md:items-stretch relative overflow-hidden shrink-0">
@@ -2397,6 +2417,10 @@ export default function POSPage() {
                 {/* Held Sales (Restored with Elite Styling) */}
                 <Dialog open={isHoldsModalOpen} onOpenChange={setIsHoldsModalOpen}>
                     <DialogContent className="sm:max-w-[500px] border-none rounded-[2rem] shadow-2xl p-0 overflow-hidden">
+                        <DialogHeader className="sr-only">
+                            <DialogTitle>Transaction Success</DialogTitle>
+                            <DialogDescription>Your transaction has been processed successfully.</DialogDescription>
+                        </DialogHeader>
                         <div className="bg-slate-900 p-8 text-white">
                             <h3 className="text-xl font-black flex items-center gap-3">
                                 <History className="h-6 w-6 text-primary" />
@@ -2442,6 +2466,10 @@ export default function POSPage() {
                 {/* Advanced Shift Control Modal */}
                 <Dialog open={isShiftModalOpen} onOpenChange={setIsShiftModalOpen}>
                     <DialogContent className="sm:max-w-[425px] rounded-[2rem] border-none shadow-2xl p-0 overflow-hidden">
+                        <DialogHeader className="sr-only">
+                            <DialogTitle>Apply Discount</DialogTitle>
+                            <DialogDescription>Enter a percentage or fixed amount to apply a discount to this order.</DialogDescription>
+                        </DialogHeader>
                         <div className={cn(
                             "p-8 text-white",
                             shiftModalType === "OPEN" ? "bg-emerald-600" : "bg-red-600"
@@ -2486,6 +2514,10 @@ export default function POSPage() {
                 {/* Terminal Settings Modal */}
                 <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
                     <DialogContent className="sm:max-w-[450px] rounded-[2rem] border-none shadow-2xl p-0 overflow-hidden">
+                        <DialogHeader className="sr-only">
+                            <DialogTitle>Terminal Settings</DialogTitle>
+                            <DialogDescription>Configure local POS settings like printing preferences and terminal ID.</DialogDescription>
+                        </DialogHeader>
                         <div className="p-8 bg-slate-900 text-white">
                             <h3 className="text-xl font-black flex items-center gap-3">
                                 <SettingsIcon className="h-6 w-6 text-primary" />
@@ -2588,6 +2620,10 @@ export default function POSPage() {
                 {/* Success/Confetti Modal */}
                 <Dialog open={!!lastSuccessfulInvoice} onOpenChange={() => { setLastSuccessfulInvoice(null); setActiveView("products"); }}>
                     <DialogContent className="sm:max-w-[450px] p-0 overflow-hidden border-none rounded-[3rem] shadow-2xl">
+                        <DialogHeader className="sr-only">
+                            <DialogTitle>Sale Complete</DialogTitle>
+                            <DialogDescription>Transaction processed successfully. You can now print the receipt.</DialogDescription>
+                        </DialogHeader>
                         <div className="bg-emerald-500 p-12 text-center text-white relative print:hidden">
                             <div className="absolute top-0 left-0 w-full h-full opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white to-transparent" />
                             <div className="relative z-10 flex flex-col items-center">
@@ -2666,6 +2702,10 @@ export default function POSPage() {
             {/* Reprint — single receipt confirm */}
             <Dialog open={!!reprintInvoice} onOpenChange={() => setReprintInvoice(null)}>
                 <DialogContent className="sm:max-w-[400px] rounded-3xl p-0 overflow-hidden border-none">
+                    <DialogHeader className="sr-only">
+                        <DialogTitle>Reprint Receipt</DialogTitle>
+                        <DialogDescription>Review and reprint a specific transaction receipt.</DialogDescription>
+                    </DialogHeader>
                     <div className="bg-slate-900 p-6 text-white relative">
                         <button onClick={() => setReprintInvoice(null)} className="absolute top-4 right-4 h-8 w-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all">
                             <XCircle className="h-4 w-4 text-white" />
@@ -2699,6 +2739,10 @@ export default function POSPage() {
             {/* Today's Receipts List */}
             <Dialog open={isReprintOpen} onOpenChange={v => { setIsReprintOpen(v); if (!v) setReprintList([]); }}>
                 <DialogContent className="sm:max-w-[480px] rounded-3xl p-0 overflow-hidden border-none max-h-[85vh] flex flex-col">
+                    <DialogHeader className="sr-only">
+                        <DialogTitle>Today's Receipts</DialogTitle>
+                        <DialogDescription>Browse and select receipts from today's transactions for reprinting.</DialogDescription>
+                    </DialogHeader>
                     <div className="bg-slate-900 p-6 text-white relative shrink-0">
                         <button onClick={() => setIsReprintOpen(false)} className="absolute top-4 right-4 h-8 w-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all">
                             <XCircle className="h-4 w-4 text-white" />
@@ -2746,6 +2790,10 @@ export default function POSPage() {
             {/* Credit / Debit Note Modal */}
             <Dialog open={isCreditNoteOpen} onOpenChange={setIsCreditNoteOpen}>
                 <DialogContent className="sm:max-w-[520px] rounded-3xl p-0 overflow-hidden border-none max-h-[85vh] flex flex-col">
+                    <DialogHeader className="sr-only">
+                        <DialogTitle>Issue Credit or Debit Note</DialogTitle>
+                        <DialogDescription>Search for an existing invoice to issue a credit or debit adjustment.</DialogDescription>
+                    </DialogHeader>
                     <div className="bg-amber-500 p-6 text-white relative shrink-0">
                         <button onClick={() => { setIsCreditNoteOpen(false); setCnSearchResults([]); setCnSearchQuery(""); }} className="absolute top-4 right-4 h-8 w-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-all">
                             <XCircle className="h-4 w-4 text-white" />
@@ -2810,6 +2858,10 @@ export default function POSPage() {
             {/* X / Z Report Modal */}
             <Dialog open={isReportOpen} onOpenChange={setIsReportOpen}>
                 <DialogContent className="sm:max-w-[560px] rounded-3xl p-0 overflow-hidden border-none max-h-[90vh] flex flex-col">
+                    <DialogHeader className="sr-only">
+                        <DialogTitle>Daily Reports</DialogTitle>
+                        <DialogDescription>Generate and view X-Reports and Z-Reports for daily reconciliation.</DialogDescription>
+                    </DialogHeader>
                     <div className="bg-purple-600 p-6 text-white relative shrink-0">
                         <button onClick={() => setIsReportOpen(false)} className="absolute top-4 right-4 h-8 w-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-all">
                             <XCircle className="h-4 w-4 text-white" />

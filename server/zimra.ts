@@ -98,6 +98,7 @@ export interface ReceiptData {
     buyerData?: any;
     receiptNotes?: string;
     creditDebitNote?: any;
+    fiscalDayNo?: number;
 }
 
 export interface TaxpayerAddress {
@@ -295,6 +296,7 @@ export class ZimraDevice {
         this.axiosInstance = axios.create({
             baseURL: this.config.baseUrl,
             httpsAgent,
+            timeout: 30000, // 30 seconds timeout
             headers: {
                 'Content-Type': 'application/json',
                 Accept: 'application/json',
@@ -304,6 +306,13 @@ export class ZimraDevice {
         });
 
         this.logger = logger;
+    }
+
+    public static getTaxID(taxPercent: number): number {
+        const percent = Math.abs(taxPercent);
+        if (percent === 15.5 || percent === 15) return 3; // Standard
+        if (percent === 0) return 2; // Default to Zero Rated
+        return 3; // Fallback to Standard
     }
 
     // --- Core Utils ---

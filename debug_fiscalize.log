@@ -516,3 +516,10 @@
         Calculated NextGlobalNo: 5
         Calculated NextReceiptCounter: 5
         --------------------------------
+[2026-03-20T16:42:47.829Z] Invoice 743
+        Existing GlobalNo: null
+        Existing ReceiptCounter: null
+        ZimraSync: undefined
+        Calculated NextGlobalNo: 6
+        Calculated NextReceiptCounter: 6
+        --------------------------------

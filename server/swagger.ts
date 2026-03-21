@@ -1,4 +1,3 @@
-
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerUi from 'swagger-ui-express';
 import { Express } from 'express';
@@ -7,420 +6,170 @@ const options: swaggerJsdoc.Options = {
     definition: {
         openapi: '3.0.0',
         info: {
-            title: 'Zimra Invoicing SaaS API',
+            title: 'FiscalStack Integration API (v1)',
             version: '1.0.0',
-            description: 'API documentation for the Zimra Invoicing SaaS application, including FDMS integration.',
+            description: 'API documentation for the FiscalStack v1 Integration layer, providing direct ERP/Accounting hooks for seamless ZIMRA FDMS integration.',
         },
         servers: [
             {
-                url: '/api',
-                description: 'API Server',
+                url: '/',
+                description: 'Current Environment',
             },
         ],
         components: {
+            securitySchemes: {
+                ApiKeyAuth: {
+                    type: 'apiKey',
+                    in: 'header',
+                    name: 'x-api-key',
+                    description: 'Integration API key acquired from the FiscalStack Dashboard',
+                },
+            },
             schemas: {
-                LoginRequest: {
-                    type: 'object',
-                    required: ['username', 'password'],
-                    properties: {
-                        username: { type: 'string', example: 'admin' },
-                        password: { type: 'string', example: 'password123' },
-                    },
-                },
-                UserResponse: {
-                    type: 'object',
-                    properties: {
-                        id: { type: 'integer' },
-                        username: { type: 'string' },
-                        role: { type: 'string' },
-                        companyId: { type: 'integer' },
-                    },
-                },
                 Customer: {
                     type: 'object',
+                    required: ['name'],
                     properties: {
-                        id: { type: 'integer' },
+                        id: { type: 'integer', readOnly: true },
                         name: { type: 'string' },
-                        vatNumber: { type: 'string' },
-                        address: { type: 'string' },
-                        email: { type: 'string' },
-                        phoneNumber: { type: 'string' },
+                        email: { type: 'string', nullable: true },
+                        phone: { type: 'string', nullable: true },
+                        address: { type: 'string', nullable: true },
+                        vatNumber: { type: 'string', nullable: true },
+                        tin: { type: 'string', nullable: true },
                     },
                 },
                 Product: {
                     type: 'object',
+                    required: ['name', 'price', 'taxRate'],
                     properties: {
-                        id: { type: 'integer' },
+                        id: { type: 'integer', readOnly: true },
                         name: { type: 'string' },
+                        description: { type: 'string', nullable: true },
+                        sku: { type: 'string', nullable: true },
                         price: { type: 'number' },
                         taxRate: { type: 'number' },
-                        currency: { type: 'string' },
-                        taxCode: { type: 'string' },
+                        currency: { type: 'string', default: 'USD' },
+                        hsCode: { type: 'string', nullable: true },
+                    },
+                },
+                InvoiceItem: {
+                    type: 'object',
+                    required: ['name', 'quantity', 'unitPrice'],
+                    properties: {
+                        productId: { type: 'integer', nullable: true },
+                        name: { type: 'string' },
+                        description: { type: 'string', nullable: true },
+                        quantity: { type: 'number' },
+                        unitPrice: { type: 'number' },
+                        taxRate: { type: 'number', nullable: true },
+                        hsCode: { type: 'string', nullable: true },
                     },
                 },
                 Invoice: {
                     type: 'object',
+                    required: ['customerId', 'items'],
                     properties: {
-                        id: { type: 'integer' },
-                        invoiceNumber: { type: 'string' },
-                        customerName: { type: 'string' },
-                        total: { type: 'number' },
-                        status: { type: 'string', enum: ['draft', 'issued', 'paid', 'cancelled'] },
-                        issueDate: { type: 'string', format: 'date-time' },
-                        fiscalCode: { type: 'string' },
-                        currency: { type: 'string', example: 'USD' },
+                        id: { type: 'integer', readOnly: true },
+                        invoiceNumber: { type: 'string', nullable: true },
                         customerId: { type: 'integer' },
-                        companyId: { type: 'integer' },
+                        issueDate: { type: 'string', format: 'date-time' },
+                        dueDate: { type: 'string', format: 'date-time', nullable: true },
+                        currency: { type: 'string', default: 'USD' },
+                        exchangeRate: { type: 'number', default: 1 },
+                        subtotal: { type: 'number', readOnly: true },
+                        taxTotal: { type: 'number', readOnly: true },
+                        total: { type: 'number', readOnly: true },
+                        status: { type: 'string', readOnly: true },
+                        fiscalCode: { type: 'string', readOnly: true },
+                        items: {
+                            type: 'array',
+                            items: { $ref: '#/components/schemas/InvoiceItem' },
+                        },
                     },
                 },
-                FiscalizeInvoiceRequest: {
+                PassThroughFiscalizePayload: {
                     type: 'object',
-                    properties: {},
-                    description: 'No specific body required, uses existing invoice data.',
-                },
-                FiscalizeInvoiceResponse: {
-                    type: 'object',
+                    description: 'Minimum viable request: only `items` is required. Everything else is optional and defaults from your company profile.',
+                    required: ['items'],
                     properties: {
-                        fiscalCode: { type: 'string' },
-                        fiscalSignature: { type: 'string' },
-                        qrCodeData: { type: 'string' },
-                        status: { type: 'string', example: 'issued' },
-                        syncedWithFdms: { type: 'boolean' },
+                        items: {
+                            type: 'array',
+                            minItems: 1,
+                            items: {
+                                type: 'object',
+                                required: ['name', 'quantity', 'unitPrice'],
+                                properties: {
+                                    name: { type: 'string', description: 'Item name as shown on the receipt' },
+                                    quantity: { type: 'number', minimum: 0 },
+                                    unitPrice: { type: 'number', minimum: 0 },
+                                    taxRate: { type: 'number', minimum: 0, maximum: 100, nullable: true, description: 'Defaults to company default (usually 15%)' },
+                                    hsCode: { type: 'string', nullable: true, description: 'Defaults to company default HS code' },
+                                    sku: { type: 'string', nullable: true, description: 'Client reference — not sent to ZIMRA' },
+                                }
+                            }
+                        },
+                        buyer: {
+                            type: 'object',
+                            description: 'Optional buyer info. Defaults to "Walk-in Customer" if omitted.',
+                            nullable: true,
+                            properties: {
+                                name: { type: 'string' },
+                                vatNumber: { type: 'string' },
+                                tin: { type: 'string' },
+                                email: { type: 'string', format: 'email' },
+                                phone: { type: 'string' },
+                                address: { type: 'string' },
+                            }
+                        },
+                        invoiceNumber: { type: 'string', nullable: true, description: 'Auto-generated if omitted' },
+                        date: { type: 'string', format: 'date', nullable: true, description: 'Defaults to today' },
+                        currency: { type: 'string', minLength: 3, maxLength: 3, nullable: true, description: 'ISO 4217. Defaults to company currency' },
+                        paymentMethod: { type: 'string', enum: ['CASH', 'CARD', 'MOBILE', 'TRANSFER'], default: 'CASH' },
+                        transactionType: { type: 'string', enum: ['FiscalInvoice', 'CreditNote', 'DebitNote'], default: 'FiscalInvoice' },
+                        relatedFiscalCode: { type: 'string', nullable: true, description: 'Required for CreditNote or DebitNote' },
                     },
+                    example: {
+                        items: [
+                            { name: 'Widget A', quantity: 2, unitPrice: 10 },
+                            { name: 'Service Fee', quantity: 1, unitPrice: 50, taxRate: 0 },
+                        ],
+                        paymentMethod: 'CARD'
+                    }
                 },
-                ZimraRegistrationRequest: {
-                    type: 'object',
-                    required: ['deviceId', 'activationKey', 'deviceSerialNo'],
-                    properties: {
-                        deviceId: { type: 'string', example: '1112223334' },
-                        activationKey: { type: 'string', example: '88776655' },
-                        deviceSerialNo: { type: 'string', example: 'SW123456' },
-                    },
-                },
-                ZimraRegistrationResponse: {
+                DeviceStatus: {
                     type: 'object',
                     properties: {
+                        deviceId: { type: 'string' },
+                        serialNumber: { type: 'string' },
+                        activationKey: { type: 'string' },
+                        environment: { type: 'string' },
+                        lastPingTime: { type: 'string', format: 'date-time', nullable: true },
+                        status: { type: 'string' },
+                        currentDayNo: { type: 'integer', nullable: true },
+                    }
+                },
+                ApiError: {
+                    type: 'object',
+                    properties: {
+                        error: { type: 'string' },
                         message: { type: 'string' },
-                        certificate: { type: 'string', description: 'PEM encoded certificate' },
-                    },
-                },
-                // RevMax/ZIMRA API Schemas
-                DeviceCardDetails: {
-                    type: 'object',
-                    properties: {
-                        Code: { type: 'string', example: '1', description: 'Status code' },
-                        Message: { type: 'string', example: 'Success' },
-                        QRcode: { type: 'string' },
-                        VerificationCode: { type: 'string' },
-                        VerificationLink: { type: 'string', example: 'https://fdmstest.zimra.co.zw' },
-                        DeviceID: { type: 'string', example: '8135' },
-                        DeviceSerialNumber: { type: 'string', example: '460FF1DA017C' },
-                        FiscalDay: { type: 'string', example: '61' },
-                        Data: {
-                            type: 'object',
-                            properties: {
-                                TIN: { type: 'string', example: '1234567890' },
-                                BPN: { type: 'string', example: '200027482' },
-                                VAT: { type: 'string', example: '123456789' },
-                                COMPANYNAME: { type: 'string', example: 'Axis Solutions Pvt Ltd' },
-                                ADDRESS: { type: 'string', example: '14 Arundel Road Alexandra Park Harare' },
-                                REGISTRATIONNUMBER: { type: 'string', example: '0000' },
-                                SERIALNUMBER: { type: 'string', example: '460FF1DA017C' },
-                            },
-                        },
-                    },
-                },
-                DeviceStatusResponse: {
-                    type: 'object',
-                    properties: {
-                        Code: { type: 'string', example: '1' },
-                        Message: { type: 'string', example: 'Success' },
-                        DeviceID: { type: 'string' },
-                        DeviceSerialNumber: { type: 'string' },
-                        FiscalDay: { type: 'string' },
-                        Data: {
-                            type: 'object',
-                            properties: {
-                                fiscalDayStatus: { type: 'string', enum: ['FiscalDayOpened', 'FiscalDayClosed'], example: 'FiscalDayOpened' },
-                                lastReceiptGlobalNo: { type: 'integer', example: 444 },
-                                lastFiscalDayNo: { type: 'integer', example: 61 },
-                                operationID: { type: 'string', example: '0HN1OVTDITH0C:00000001' },
-                            },
-                        },
-                    },
-                },
-                TransactMRequest: {
-                    type: 'object',
-                    required: ['CURRENCY', 'CUSTOMEREMAIL', 'INVOICENUMBER', 'CUSTOMERNAME', 'INVOICEAMOUNT', 'INVOICETAXAMOUNT', 'INVOICEFLAG', 'ITEMSXML', 'CURRENCIES'],
-                    properties: {
-                        CURRENCY: { type: 'string', example: 'USD', description: 'Base currency (ISO 4217 code)' },
-                        CUSTOMEREMAIL: { type: 'string', example: 'customer@example.com' },
-                        INVOICENUMBER: { type: 'string', example: 'INV-2024-001' },
-                        CUSTOMERNAME: { type: 'string', example: 'John Doe' },
-                        CUSTOMERVATNUMBER: { type: 'string', example: '1234567890', description: '10 digits' },
-                        CUSTOMERADDRESS: { type: 'string', example: '14 Arundel Road, Alexandra Park, Harare' },
-                        CUSTOMERTELEPHONENUMBER: { type: 'string', example: '+263 XX XXX XXXX' },
-                        CUSTOMERTIN: { type: 'string', example: '2000000000', description: '10 digits' },
-                        INVOICEAMOUNT: { type: 'string', example: '1010.00' },
-                        INVOICETAXAMOUNT: { type: 'string', example: '130.43' },
-                        INVOICEFLAG: { type: 'string', enum: ['01', '02', '03'], example: '01', description: '01=Invoice, 02=CreditNote, 03=DebitNote' },
-                        ORIGINALINVOICENUMBER: { type: 'string', example: '', description: 'Required for credit/debit notes' },
-                        INVOICECOMMENT: { type: 'string', example: '', description: 'Required for credit/debit notes' },
-                        ITEMSXML: { type: 'string', example: '<ITEMS><ITEM><HH>1</HH><ITEMCODE>CODE123</ITEMCODE><ITEMNAME1>Product</ITEMNAME1><ITEMNAME2>Description</ITEMNAME2><QTY>1</QTY><PRICE>1000.00</PRICE><AMT>1000.00</AMT><TAX>130.43</TAX><TAXR>15</TAXR></ITEM></ITEMS>' },
-                        CURRENCIES: { type: 'string', example: '<CurrenciesReceived><Currency><Name>USD</Name><Amount>1010.00</Amount><Rate>1</Rate></Currency></CurrenciesReceived>' },
-                    },
-                },
-                TransactMExtRequest: {
-                    type: 'object',
-                    required: ['Currency', 'InvoiceNumber', 'InvoiceAmount', 'InvoiceTaxAmount', 'InvoiceFlag', 'ItemsXML', 'Currencies', 'CustomerEmail'],
-                    properties: {
-                        Currency: { type: 'string', example: 'USD' },
-                        InvoiceNumber: { type: 'string', example: 'INV-2024-001' },
-                        InvoiceAmount: { type: 'string', example: '1010.00' },
-                        InvoiceTaxAmount: { type: 'string', example: '130.43' },
-                        InvoiceFlag: { type: 'string', enum: ['01', '02', '03'], example: '01' },
-                        InvoiceComment: { type: 'string' },
-                        OriginalInvoiceNumber: { type: 'string' },
-                        ItemsXML: { type: 'string' },
-                        Currencies: { type: 'string' },
-                        CustomerEmail: { type: 'string', example: 'customer@example.com' },
-                        CustomerRegisteredName: { type: 'string', example: 'ABC Company (Pvt) Ltd' },
-                        CustomerTradeName: { type: 'string', example: 'ABC Trading' },
-                        CustomerVATNumber: { type: 'string', example: '1234567890' },
-                        CustomerTIN: { type: 'string', example: '2000000000' },
-                        CustomerTelephoneNumber: { type: 'string', example: '+263 XX XXX XXXX' },
-                        CustomerFullAddress: { type: 'string', example: '14 Arundel Road, Alexandra Park, Harare' },
-                        buyerProvince: { type: 'string', example: 'Harare' },
-                        buyerStreet: { type: 'string', example: 'Arundel Road' },
-                        buyerHouseNo: { type: 'string', example: '14' },
-                        buyerCity: { type: 'string', example: 'Alexandra Park' },
-                        refDeviceId: { type: 'string', description: 'Optional: Reference device ID for cross-device credit notes' },
-                        refReceiptGlobalnumber: { type: 'string', description: 'Optional: Reference receipt global number' },
-                        refFiscalDay: { type: 'string', description: 'Optional: Reference fiscal day' },
-                    },
-                },
-                TransactionResponse: {
-                    type: 'object',
-                    properties: {
-                        Code: { type: 'string', example: '1' },
-                        Message: { type: 'string', example: 'Upload Success - Transacted to Card' },
-                        QRcode: { type: 'string', example: 'https://fdmstest.zimra.co.zw/00000000691008202300000001759AD9E75F2222AEC7' },
-                        VerificationCode: { type: 'string', example: '9AD9-E75F-2222-AEC7' },
-                        DeviceSerialNumber: { type: 'string' },
-                        DeviceID: { type: 'string' },
-                        FiscalDay: { type: 'string' },
-                        Data: {
-                            type: 'object',
-                            properties: {
-                                receipt: { type: 'object', description: 'Full receipt data with line items, taxes, payments, and signature' },
-                            },
-                        },
-                    },
-                },
-                ZReportResponse: {
-                    type: 'object',
-                    properties: {
-                        Code: { type: 'string', example: '1' },
-                        Message: { type: 'string', example: 'Success: Fiscal Day Opened' },
-                        DeviceID: { type: 'string' },
-                        FiscalDay: { type: 'string' },
-                        Data: {
-                            type: 'object',
-                            properties: {
-                                ZREPORTS: {
-                                    type: 'array',
-                                    items: {
-                                        type: 'object',
-                                        properties: {
-                                            Signature: { type: 'string' },
-                                            DATE: { type: 'string' },
-                                            TIME: { type: 'string' },
-                                            VATNUM: { type: 'string' },
-                                            TIN: { type: 'string' },
-                                            BPNUM: { type: 'string' },
-                                            CURRENCY: { type: 'string' },
-                                            TOTALS: { type: 'object' },
-                                            VATTOTALS: { type: 'array', items: { type: 'object' } },
-                                        },
-                                    },
-                                },
-                            },
-                        },
-                    },
-                },
-                GetTransactionResponse: {
-                    type: 'object',
-                    properties: {
-                        Code: { type: 'string', example: '1' },
-                        Message: { type: 'string', example: 'Success' },
-                        Data: {
-                            type: 'object',
-                            properties: {
-                                invoiceNumber: { type: 'string' },
-                                receiptData: { type: 'object' },
-                                qrCode: { type: 'string' },
-                                verificationCode: { type: 'string' },
-                                fiscalDayNo: { type: 'integer' },
-                                receiptGlobalNo: { type: 'integer' },
-                            },
-                        },
-                    },
-                },
-                UnProcessedTransactionSummary: {
-                    type: 'object',
-                    properties: {
-                        Code: { type: 'string', example: '1' },
-                        Message: { type: 'string', example: 'Success' },
-                        Data: {
-                            type: 'object',
-                            properties: {
-                                fiscalDayNumber: { type: 'string' },
-                                fiscalDate: { type: 'string' },
-                                totalUnprocessed: { type: 'integer', example: 5 },
-                                totalAmount: { type: 'number', example: 5050.00 },
-                            },
-                        },
-                    },
-                },
-                UnProcessedTransactionsResponse: {
-                    type: 'object',
-                    properties: {
-                        Code: { type: 'string', example: '1' },
-                        Message: { type: 'string', example: 'Success' },
-                        Data: {
-                            type: 'object',
-                            properties: {
-                                page: { type: 'integer', example: 1 },
-                                pageSize: { type: 'integer', example: 50 },
-                                totalRecords: { type: 'integer', example: 125 },
-                                totalPages: { type: 'integer', example: 3 },
-                                transactions: {
-                                    type: 'array',
-                                    items: { type: 'object', description: 'Unprocessed transaction details' },
-                                },
-                            },
-                        },
-                    },
-                },
-                ClearTransactionsResponse: {
-                    type: 'object',
-                    properties: {
-                        Code: { type: 'string', example: '1' },
-                        Message: { type: 'string', example: 'Successfully cleared unprocessed transactions' },
-                        Data: {
-                            type: 'object',
-                            properties: {
-                                clearedCount: { type: 'integer', example: 15 },
-                                fiscalDayNumber: { type: 'string' },
-                                fiscalDate: { type: 'string' },
-                            },
-                        },
-                    },
-                },
-            },
-        },
-        paths: {
-            '/auth/login': {
-                post: {
-                    summary: 'Login',
-                    tags: ['Auth'],
-                    requestBody: {
-                        required: true,
-                        content: { 'application/json': { schema: { $ref: '#/components/schemas/LoginRequest' } } },
-                    },
-                    responses: {
-                        200: {
-                            description: 'Logged in successfully',
-                            content: { 'application/json': { schema: { $ref: '#/components/schemas/UserResponse' } } },
-                        },
-                        401: { description: 'Invalid credentials' },
-                    },
-                },
-            },
-            '/auth/user': {
-                get: {
-                    summary: 'Get Current User',
-                    tags: ['Auth'],
-                    responses: {
-                        200: {
-                            description: 'Current user session',
-                            content: { 'application/json': { schema: { $ref: '#/components/schemas/UserResponse' } } },
-                        },
-                        401: { description: 'Not authenticated' },
-                    },
-                },
-            },
-            '/companies/{companyId}/invoices': {
-                get: {
-                    summary: 'List Company Invoices',
-                    tags: ['Invoices'],
-                    parameters: [
-                        { in: 'path', name: 'companyId', required: true, schema: { type: 'integer' } }
-                    ],
-                    responses: {
-                        200: {
-                            description: 'List of invoices',
-                            content: { 'application/json': { schema: { type: 'array', items: { $ref: '#/components/schemas/Invoice' } } } },
-                        },
-                    },
-                },
-                post: {
-                    summary: 'Create Invoice',
-                    tags: ['Invoices'],
-                    parameters: [
-                        { in: 'path', name: 'companyId', required: true, schema: { type: 'integer' } }
-                    ],
-                    requestBody: {
-                        required: true,
-                        content: { 'application/json': { schema: { $ref: '#/components/schemas/Invoice' } } },
-                    },
-                    responses: {
-                        201: { description: 'Invoice created' },
-                    },
+                        statusCode: { type: 'integer' },
+                        details: { type: 'array', items: { type: 'object' } },
+                    }
                 }
             },
-            '/invoices/{id}': {
-                get: {
-                    summary: 'Get Invoice Details',
-                    tags: ['Invoices'],
-                    parameters: [
-                        { in: 'path', name: 'id', required: true, schema: { type: 'integer' } },
-                    ],
-                    responses: {
-                        200: {
-                            description: 'Invoice details',
-                            content: { 'application/json': { schema: { $ref: '#/components/schemas/Invoice' } } },
-                        },
-                        404: { description: 'Invoice not found' },
-                    },
-                },
+        },
+        security: [
+            {
+                ApiKeyAuth: [],
             },
-            '/invoices/{id}/fiscalize': {
-                post: {
-                    summary: 'Fiscalize an Invoice',
-                    description: 'Submits an existing invoice to the ZIMRA FDMS for fiscalization. Signs the receipt and generates a QR code.',
-                    tags: ['Invoices', 'ZIMRA'],
-                    parameters: [
-                        { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Invoice ID' },
-                    ],
-                    responses: {
-                        200: {
-                            description: 'Invoice successfully fiscalized',
-                            content: { 'application/json': { schema: { $ref: '#/components/schemas/FiscalizeInvoiceResponse' } } },
-                        },
-                        404: { description: 'Invoice or Company not found' },
-                        400: { description: 'Company not registered or validation specific error' },
-                        500: { description: 'Fiscalization failed' },
-                    },
-                },
-            },
-            '/companies/{companyId}/customers': {
+        ],
+        paths: {
+            '/api/v1/customers': {
                 get: {
                     summary: 'List Customers',
                     tags: ['Customers'],
-                    parameters: [
-                        { in: 'path', name: 'companyId', required: true, schema: { type: 'integer' } }
-                    ],
                     responses: {
                         200: {
                             description: 'List of customers',
@@ -431,25 +180,44 @@ const options: swaggerJsdoc.Options = {
                 post: {
                     summary: 'Create Customer',
                     tags: ['Customers'],
-                    parameters: [
-                        { in: 'path', name: 'companyId', required: true, schema: { type: 'integer' } }
-                    ],
                     requestBody: {
                         required: true,
                         content: { 'application/json': { schema: { $ref: '#/components/schemas/Customer' } } },
                     },
                     responses: {
-                        201: { description: 'Customer created' },
+                        201: { description: 'Customer created', content: { 'application/json': { schema: { $ref: '#/components/schemas/Customer' } } } },
+                        400: { description: 'Validation Error', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiError' } } } },
                     },
                 }
             },
-            '/companies/{companyId}/products': {
+            '/api/v1/customers/{id}': {
+                get: {
+                    summary: 'Get Customer',
+                    tags: ['Customers'],
+                    parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'integer' } }],
+                    responses: {
+                        200: { description: 'Customer details', content: { 'application/json': { schema: { $ref: '#/components/schemas/Customer' } } } },
+                        404: { description: 'Not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiError' } } } },
+                    },
+                },
+                put: {
+                    summary: 'Update Customer',
+                    tags: ['Customers'],
+                    parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'integer' } }],
+                    requestBody: {
+                        required: true,
+                        content: { 'application/json': { schema: { $ref: '#/components/schemas/Customer' } } },
+                    },
+                    responses: {
+                        200: { description: 'Customer updated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Customer' } } } },
+                        404: { description: 'Not found' },
+                    },
+                }
+            },
+            '/api/v1/products': {
                 get: {
                     summary: 'List Products',
                     tags: ['Products'],
-                    parameters: [
-                        { in: 'path', name: 'companyId', required: true, schema: { type: 'integer' } }
-                    ],
                     responses: {
                         200: {
                             description: 'List of products',
@@ -460,332 +228,238 @@ const options: swaggerJsdoc.Options = {
                 post: {
                     summary: 'Create Product',
                     tags: ['Products'],
-                    parameters: [
-                        { in: 'path', name: 'companyId', required: true, schema: { type: 'integer' } }
-                    ],
                     requestBody: {
                         required: true,
                         content: { 'application/json': { schema: { $ref: '#/components/schemas/Product' } } },
                     },
                     responses: {
-                        201: { description: 'Product created' },
+                        201: { description: 'Product created', content: { 'application/json': { schema: { $ref: '#/components/schemas/Product' } } } },
+                        400: { description: 'Validation Error' },
                     },
                 }
             },
-            '/companies/{id}/zimra/register': {
-                post: {
-                    summary: 'Register a ZIMRA Device',
-                    description: 'Registers a physical fiscal device with the ZIMRA FDMS servers using the provided activation key and serial number.',
-                    tags: ['ZIMRA'],
-                    parameters: [
-                        { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Company ID' },
-                    ],
+            '/api/v1/products/{id}': {
+                get: {
+                    summary: 'Get Product',
+                    tags: ['Products'],
+                    parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'integer' } }],
+                    responses: {
+                        200: { description: 'Product details', content: { 'application/json': { schema: { $ref: '#/components/schemas/Product' } } } },
+                        404: { description: 'Not found' },
+                    },
+                },
+                put: {
+                    summary: 'Update Product',
+                    tags: ['Products'],
+                    parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'integer' } }],
                     requestBody: {
                         required: true,
-                        content: { 'application/json': { schema: { $ref: '#/components/schemas/ZimraRegistrationRequest' } } },
+                        content: { 'application/json': { schema: { $ref: '#/components/schemas/Product' } } },
+                    },
+                    responses: {
+                        200: { description: 'Product updated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Product' } } } },
+                        404: { description: 'Not found' },
+                    },
+                }
+            },
+            '/api/v1/invoices': {
+                get: {
+                    summary: 'List Invoices',
+                    tags: ['Invoices'],
+                    responses: {
+                        200: {
+                            description: 'List of invoices',
+                            content: { 'application/json': { schema: { type: 'array', items: { $ref: '#/components/schemas/Invoice' } } } },
+                        },
+                    },
+                },
+                post: {
+                    summary: 'Create Invoice',
+                    tags: ['Invoices'],
+                    requestBody: {
+                        required: true,
+                        content: { 'application/json': { schema: { $ref: '#/components/schemas/Invoice' } } },
+                    },
+                    responses: {
+                        201: { description: 'Invoice created', content: { 'application/json': { schema: { $ref: '#/components/schemas/Invoice' } } } },
+                        400: { description: 'Validation Error' },
+                    },
+                }
+            },
+            '/api/v1/invoices/{id}': {
+                get: {
+                    summary: 'Get Invoice',
+                    tags: ['Invoices'],
+                    parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'integer' } }],
+                    responses: {
+                        200: { description: 'Invoice details', content: { 'application/json': { schema: { $ref: '#/components/schemas/Invoice' } } } },
+                        404: { description: 'Not found' },
+                    },
+                },
+                put: {
+                    summary: 'Update Invoice',
+                    tags: ['Invoices'],
+                    parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'integer' } }],
+                    requestBody: {
+                        required: true,
+                        content: { 'application/json': { schema: { $ref: '#/components/schemas/Invoice' } } },
+                    },
+                    responses: {
+                        200: { description: 'Invoice updated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Invoice' } } } },
+                        404: { description: 'Not found' },
+                    },
+                },
+                delete: {
+                    summary: 'Delete Invoice',
+                    tags: ['Invoices'],
+                    parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'integer' } }],
+                    responses: {
+                        200: { description: 'Invoice deleted' },
+                        404: { description: 'Not found' },
+                    },
+                }
+            },
+            '/api/v1/invoices/{id}/fiscalize': {
+                post: {
+                    summary: 'Fiscalize a stored Invoice',
+                    tags: ['Invoices'],
+                    parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'integer' } }],
+                    responses: {
+                        200: { description: 'Invoice successfully fiscalized' },
+                        404: { description: 'Invoice not found' },
+                        409: { description: 'Invoice already fiscalized' },
+                    },
+                }
+            },
+            '/api/v1/fiscalize': {
+                post: {
+                    summary: 'Pass-through Fiscalization (Recommended for integrations)',
+                    description: `Fiscalizes a receipt directly against ZIMRA in a single API call.
+**Minimum viable request** — only \`items\` is required:
+\`\`\`json
+{ "items": [{ "name": "Widget", "quantity": 1, "unitPrice": 100 }] }
+\`\`\`
+All totals are computed server-side. Tax rate and HS code default from your company profile.
+Buyer defaults to "Walk-in Customer" if not provided. Invoice number is auto-generated.
+On error, the orphaned invoice is automatically cleaned up so you can retry safely.`,
+                    tags: ['Pass-through'],
+                    requestBody: {
+                        required: true,
+                        content: {
+                            'application/json': {
+                                schema: { $ref: '#/components/schemas/PassThroughFiscalizePayload' },
+                            }
+                        },
                     },
                     responses: {
                         200: {
-                            description: 'Device successfully registered',
-                            content: { 'application/json': { schema: { $ref: '#/components/schemas/ZimraRegistrationResponse' } } },
+                            description: 'Successfully fiscalized. Receipt proof returned.',
+                            content: {
+                                'application/json': {
+                                    schema: {
+                                        type: 'object',
+                                        properties: {
+                                            success: { type: 'boolean' },
+                                            fiscalCode: { type: 'string', description: 'ZIMRA fiscal (verification) code' },
+                                            qrCode: { type: 'string', description: 'QR code URL — render this visually on the receipt' },
+                                            receiptNumber: { type: 'integer', description: 'ZIMRA global receipt sequence number' },
+                                            invoiceNumber: { type: 'string' },
+                                            date: { type: 'string', format: 'date' },
+                                            total: { type: 'string' },
+                                            subtotal: { type: 'string' },
+                                            taxTotal: { type: 'string' },
+                                            currency: { type: 'string' },
+                                            buyer: { type: 'string' },
+                                            _fiscal: {
+                                                type: 'object',
+                                                properties: {
+                                                    fiscalDayNo: { type: 'integer' },
+                                                    receiptCounter: { type: 'integer' },
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         },
-                        400: { description: 'Missing required fields or invalid data' },
-                        404: { description: 'Company not found' },
-                        500: { description: 'Registration failed' },
+                        400: { description: 'Validation error — invalid request body', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiError' } } } },
+                        422: {
+                            description: 'Fiscalization rejected by ZIMRA (device not registered, day not open, etc.)',
+                            content: {
+                                'application/json': {
+                                    schema: {
+                                        type: 'object',
+                                        properties: {
+                                            error: { type: 'string', example: 'FISCALIZATION_FAILED' },
+                                            message: { type: 'string' },
+                                            statusCode: { type: 'integer' },
+                                            hint: { type: 'string', description: 'Actionable guidance on what to fix' },
+                                        }
+                                    }
+                                }
+                            }
+                        },
                     },
-                },
+                }
             },
-            '/companies/{id}/zimra/open-day': {
+            '/api/v1/fiscal/device': {
+                get: {
+                    summary: 'Device Status',
+                    tags: ['ZIMRA Device'],
+                    responses: {
+                        200: { description: 'Status retrieved', content: { 'application/json': { schema: { $ref: '#/components/schemas/DeviceStatus' } } } },
+                    },
+                }
+            },
+            '/api/v1/fiscal/ping': {
+                post: {
+                    summary: 'Ping ZIMRA Server',
+                    tags: ['ZIMRA Device'],
+                    responses: {
+                        200: { description: 'Server online' },
+                        500: { description: 'Connection failed' },
+                    },
+                }
+            },
+            '/api/v1/fiscal/open-day': {
                 post: {
                     summary: 'Open Fiscal Day',
-                    description: 'Opens a new fiscal day on the ZIMRA device. Required before any fiscalization can occur. Used to start a Z-Report cycle.',
-                    tags: ['ZIMRA'],
-                    parameters: [
-                        { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Company ID' },
-                    ],
+                    tags: ['ZIMRA Device'],
                     responses: {
-                        200: {
-                            description: 'Fiscal day opened successfully',
-                            content: { 'application/json': { schema: { type: 'object', properties: { fiscalDayNo: { type: 'integer' }, fiscalDayOpened: { type: 'string', format: 'date-time' } } } } },
-                        },
-                        400: { description: 'Company not registered or fiscal day already open' },
-                        500: { description: 'Failed to open fiscal day' },
+                        200: { description: 'Fiscal day opened' },
                     },
-                },
+                }
             },
-            '/companies/{id}/zimra/close-day': {
+            '/api/v1/fiscal/close-day': {
                 post: {
                     summary: 'Close Fiscal Day (Z-Report)',
-                    description: 'Closes the current fiscal day. This ACTION Generates the Z-Report for the day. Submits fiscal counters and generates signatures.',
-                    tags: ['ZIMRA'],
-                    parameters: [
-                        { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Company ID' },
-                    ],
+                    tags: ['ZIMRA Device'],
                     responses: {
-                        200: {
-                            description: 'Fiscal day closed successfully (Z-Report Generated)',
-                            content: { 'application/json': { schema: { type: 'object', properties: { fiscalDayNo: { type: 'integer' }, fiscalDayClosed: { type: 'string', format: 'date-time' }, fiscalDayServerSignature: { type: 'object' } } } } },
-                        },
-                        400: { description: 'No open fiscal day or validation failed' },
-                        500: { description: 'Failed to close fiscal day' },
+                        200: { description: 'Z-Report generated' },
                     },
-                },
+                }
             },
-            '/companies/{id}/zimra/ping': {
+            '/api/v1/webhooks/sage': {
                 post: {
-                    summary: 'Ping ZIMRA Device',
-                    tags: ['ZIMRA'],
-                    parameters: [
-                        { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Company ID' },
-                    ],
+                    summary: 'Sage Integration Webhook',
+                    description: 'Webhook endpoint for Sage accounting system connectivity. Does not require API token authentication.',
+                    tags: ['Webhooks'],
+                    security: [],
                     responses: {
-                        200: {
-                            description: 'Ping successful',
-                            content: { 'application/json': { schema: { type: 'object', properties: { reportingFrequency: { type: 'integer' }, operationID: { type: 'string' } } } } },
-                        },
+                        200: { description: 'Webhook received' },
                     },
-                },
-            },
-            '/companies/{id}/zimra/status': {
-                get: {
-                    summary: 'Get ZIMRA Device Status (X-Report)',
-                    description: 'Retrieves the current status of the ZIMRA device including fiscal day status and counters. Acts as an X-Report (Current Status read).',
-                    tags: ['ZIMRA'],
-                    parameters: [
-                        { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Company ID' },
-                    ],
-                    responses: {
-                        200: {
-                            description: 'Status retrieved successfully',
-                            content: { 'application/json': { schema: { type: 'object', properties: { fiscalDayStatus: { type: 'string', example: 'FiscalDayOpened' }, lastReceiptGlobalNo: { type: 'integer' }, lastFiscalDayNo: { type: 'integer' } } } } },
-                        },
-                    },
-                },
-            },
-            '/companies/{id}/zimra/logs': {
-                get: {
-                    summary: 'Get ZIMRA Transaction Logs',
-                    tags: ['ZIMRA'],
-                    parameters: [
-                        { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Company ID' },
-                        { in: 'query', name: 'limit', schema: { type: 'integer', default: 100 }, description: 'Maximum number of logs to return' },
-                    ],
-                    responses: {
-                        200: {
-                            description: 'Logs retrieved successfully',
-                            content: { 'application/json': { schema: { type: 'array', items: { type: 'object' } } } },
-                        },
-                    },
-                },
-            },
-            // RevMax/ZIMRA API Endpoints
-            '/api/zimra/device-details': {
-                get: {
-                    summary: 'Get Device Card Details (RevMax: GetCardDetails)',
-                    description: 'Returns device registration details including TIN, BPN, VAT, company name, address, and serial number.',
-                    tags: ['ZIMRA - RevMax API'],
-                    responses: {
-                        200: {
-                            description: 'Device details retrieved successfully',
-                            content: { 'application/json': { schema: { $ref: '#/components/schemas/DeviceCardDetails' } } },
-                        },
-                        404: { description: 'Device not found or not registered' },
-                    },
-                },
-            },
-            '/api/companies/{id}/zimra/device-status': {
-                get: {
-                    summary: 'Get Device Status (RevMax: GetDeviceStatus)',
-                    description: 'Returns current fiscal day status (Open/Closed), receipt counters, and operation ID.',
-                    tags: ['ZIMRA - RevMax API'],
-                    parameters: [
-                        { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Company ID' },
-                    ],
-                    responses: {
-                        200: {
-                            description: 'Device status retrieved successfully',
-                            content: { 'application/json': { schema: { $ref: '#/components/schemas/DeviceStatusResponse' } } },
-                        },
-                    },
-                },
-            },
-            '/api/companies/{id}/zimra/transact': {
-                post: {
-                    summary: 'Create Transaction (RevMax: TransactM)',
-                    description: 'Create and fiscalize an invoice, credit note, or debit note. Accepts XML format for line items and currencies.',
-                    tags: ['ZIMRA - RevMax API'],
-                    parameters: [
-                        { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Company ID' },
-                    ],
-                    requestBody: {
-                        required: true,
-                        content: { 'application/json': { schema: { $ref: '#/components/schemas/TransactMRequest' } } },
-                    },
-                    responses: {
-                        200: {
-                            description: 'Transaction created and fiscalized successfully',
-                            content: { 'application/json': { schema: { $ref: '#/components/schemas/TransactionResponse' } } },
-                        },
-                        400: { description: 'Invalid request data or validation error' },
-                        500: { description: 'Fiscalization failed' },
-                    },
-                },
-            },
-            '/api/companies/{id}/zimra/transact-ext': {
-                post: {
-                    summary: 'Create Transaction Extended (RevMax: TransactMExt)',
-                    description: 'Enhanced transaction creation with granular address fields and support for cross-device credit note references.',
-                    tags: ['ZIMRA - RevMax API'],
-                    parameters: [
-                        { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Company ID' },
-                    ],
-                    requestBody: {
-                        required: true,
-                        content: { 'application/json': { schema: { $ref: '#/components/schemas/TransactMExtRequest' } } },
-                    },
-                    responses: {
-                        200: {
-                            description: 'Transaction created successfully',
-                            content: { 'application/json': { schema: { $ref: '#/components/schemas/TransactionResponse' } } },
-                        },
-                        400: { description: 'Invalid request data' },
-                        500: { description: 'Fiscalization failed' },
-                    },
-                },
-            },
-            '/api/companies/{id}/zimra/z-report': {
-                post: {
-                    summary: 'Z-Report - Open/Close Fiscal Day (RevMax: ZReport)',
-                    description: 'Unified endpoint for opening or closing fiscal day. Query parameter "action" determines operation: "open" or "close".',
-                    tags: ['ZIMRA - RevMax API'],
-                    parameters: [
-                        { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Company ID' },
-                        { in: 'query', name: 'action', required: true, schema: { type: 'string', enum: ['open', 'close'] }, description: 'Action to perform: open or close fiscal day' },
-                    ],
-                    responses: {
-                        200: {
-                            description: 'Z-Report generated successfully',
-                            content: { 'application/json': { schema: { $ref: '#/components/schemas/ZReportResponse' } } },
-                        },
-                        400: { description: 'Invalid action or fiscal day already open/closed' },
-                        500: { description: 'Failed to open/close fiscal day' },
-                    },
-                },
-            },
-            '/api/companies/{id}/zimra/transactions/{invoiceNumber}': {
-                get: {
-                    summary: 'Get Transaction by Invoice Number (RevMax: GetTransaction)',
-                    description: 'Retrieves complete transaction details for a specific invoice number including verification code and QR data.',
-                    tags: ['ZIMRA - RevMax API'],
-                    parameters: [
-                        { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Company ID' },
-                        { in: 'path', name: 'invoiceNumber', required: true, schema: { type: 'string' }, description: 'Invoice Number' },
-                    ],
-                    responses: {
-                        200: {
-                            description: 'Transaction retrieved successfully',
-                            content: { 'application/json': { schema: { $ref: '#/components/schemas/GetTransactionResponse' } } },
-                        },
-                        404: { description: 'Transaction not found' },
-                    },
-                },
-            },
-            '/api/companies/{id}/zimra/transactions/unprocessed/summary': {
-                get: {
-                    summary: 'Get Unprocessed Transactions Summary (RevMax: GetUnProcessedTransactionSummary)',
-                    description: 'Returns summary of unprocessed/failed transactions for a specific fiscal day or date.',
-                    tags: ['ZIMRA - RevMax API'],
-                    parameters: [
-                        { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Company ID' },
-                        { in: 'query', name: 'fiscalDayNumber', schema: { type: 'string' }, description: 'Fiscal day number (use fiscalDayNumber OR fiscalDate, not both)' },
-                        { in: 'query', name: 'fiscalDate', schema: { type: 'string', format: 'date' }, description: 'Fiscal date (YYYY-MM-DD format)' },
-                    ],
-                    responses: {
-                        200: {
-                            description: 'Summary retrieved successfully',
-                            content: { 'application/json': { schema: { $ref: '#/components/schemas/UnProcessedTransactionSummary' } } },
-                        },
-                        400: { description: 'Invalid parameters' },
-                    },
-                },
-            },
-            '/api/companies/{id}/zimra/transactions/unprocessed': {
-                get: {
-                    summary: 'Get Unprocessed Transactions (RevMax: GetUnProcessedTransactions)',
-                    description: 'Returns paginated list of unprocessed transactions for a specific fiscal day.',
-                    tags: ['ZIMRA - RevMax API'],
-                    parameters: [
-                        { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Company ID' },
-                        { in: 'query', name: 'fiscalDayNumber', required: true, schema: { type: 'string' }, description: 'Fiscal day number' },
-                        { in: 'query', name: 'page', schema: { type: 'integer', default: 1, minimum: 1 }, description: 'Page number' },
-                        { in: 'query', name: 'pageSize', schema: { type: 'integer', default: 50, maximum: 1000 }, description: 'Records per page' },
-                    ],
-                    responses: {
-                        200: {
-                            description: 'Transactions retrieved successfully',
-                            content: { 'application/json': { schema: { $ref: '#/components/schemas/UnProcessedTransactionsResponse' } } },
-                        },
-                    },
-                },
-                delete: {
-                    summary: 'Clear Unprocessed Transactions (RevMax: ClearUnprocessedTransactions)',
-                    description: 'Soft deletes all unprocessed transactions for a specific fiscal day. Includes safety checks - only clears if newer fiscal day exists.',
-                    tags: ['ZIMRA - RevMax API'],
-                    parameters: [
-                        { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Company ID' },
-                        { in: 'query', name: 'fiscalDayNumber', required: true, schema: { type: 'string' }, description: 'Fiscal day number to clear' },
-                    ],
-                    responses: {
-                        200: {
-                            description: 'Transactions cleared successfully',
-                            content: { 'application/json': { schema: { $ref: '#/components/schemas/ClearTransactionsResponse' } } },
-                        },
-                        400: { description: 'Safety check failed - no newer fiscal day exists' },
-                    },
-                },
-            },
-            '/api/companies/{id}/zimra/transactions/unprocessed/by-date': {
-                get: {
-                    summary: 'Get Unprocessed Transactions by Date (RevMax: GetUnProcessedTransactionsByDate)',
-                    description: 'Returns paginated list of unprocessed transactions filtered by fiscal date.',
-                    tags: ['ZIMRA - RevMax API'],
-                    parameters: [
-                        { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Company ID' },
-                        { in: 'query', name: 'fiscalDate', required: true, schema: { type: 'string', format: 'date' }, description: 'Fiscal date (YYYY-MM-DD)' },
-                        { in: 'query', name: 'page', schema: { type: 'integer', default: 1, minimum: 1 }, description: 'Page number' },
-                        { in: 'query', name: 'pageSize', schema: { type: 'integer', default: 50, maximum: 1000 }, description: 'Records per page' },
-                    ],
-                    responses: {
-                        200: {
-                            description: 'Transactions retrieved successfully',
-                            content: { 'application/json': { schema: { $ref: '#/components/schemas/UnProcessedTransactionsResponse' } } },
-                        },
-                    },
-                },
-                delete: {
-                    summary: 'Clear Unprocessed Transactions by Date (RevMax: ClearUnprocessedTransactionsByDate)',
-                    description: 'Soft deletes all unprocessed transactions for a specific fiscal date with safety checks.',
-                    tags: ['ZIMRA - RevMax API'],
-                    parameters: [
-                        { in: 'path', name: 'id', required: true, schema: { type: 'integer' }, description: 'Company ID' },
-                        { in: 'query', name: 'fiscalDate', required: true, schema: { type: 'string', format: 'date' }, description: 'Fiscal date to clear (YYYY-MM-DD)' },
-                    ],
-                    responses: {
-                        200: {
-                            description: 'Transactions cleared successfully',
-                            content: { 'application/json': { schema: { $ref: '#/components/schemas/ClearTransactionsResponse' } } },
-                        },
-                        400: { description: 'Safety check failed' },
-                    },
-                },
-            },
+                }
+            }
         },
     },
-    apis: ['./server/routes.ts'], // Path to the API docs
+    apis: [], // No longer scanning files, using pure definition
 };
 
 export function setupSwagger(app: Express) {
     const specs = swaggerJsdoc(options);
-    app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
-    console.log('Swagger UI available at /api-docs');
+    app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs, {
+        customCss: '.swagger-ui .topbar { display: none }',
+        customSiteTitle: "FiscalStack Integration API Docs"
+    }));
+    console.log('Swagger UI configured for Integration API (v1)');
 }

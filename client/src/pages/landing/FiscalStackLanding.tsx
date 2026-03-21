@@ -47,8 +47,7 @@ interface FeatureItem {
 
 // ─── Config — update these to match your project ───────────────────────────────
 const WHATSAPP_NUMBER = "263771234567"; // e.g. 263771234567 (no + or spaces)
-const WHATSAPP_MESSAGE = (brandName: string) => encodeURIComponent(`Hi ${brandName}! I'd like to learn more about your fiscalization platform.`);
-const WHATSAPP_URL = `https://wa.me/${WHATSAPP_NUMBER}?text=${WHATSAPP_MESSAGE}`;
+const getWhatsAppUrl = (brandName: string) => `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`Hi ${brandName}! I'd like to learn more about your fiscalization platform.`)}`;
 
 // ── Google Fonts ────────────────────────────────────────────────────────────────
 const FontLoader = () => (
@@ -443,6 +442,7 @@ const POSHighlight = () => {
 
 // ── Pricing ─────────────────────────────────────────────────────────────────────
 const Pricing = () => {
+  const { brand } = useBranding();
   const [, setLocation] = useLocation();
 
   const plans: PlanType[] = [
@@ -491,7 +491,7 @@ const Pricing = () => {
                 ))}
               </ul>
               <button
-                onClick={() => p.cta === "Contact Sales" ? window.open(WHATSAPP_URL, "_blank") : setLocation("/auth?mode=signup")}
+                onClick={() => p.cta === "Contact Sales" ? window.open(getWhatsAppUrl(brand.name), "_blank") : setLocation("/auth?mode=signup")}
                 style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 700, fontSize: 14, padding: "12px", borderRadius: 14, background: p.highlight ? C.gold : "rgba(13,27,42,0.07)", color: p.highlight ? "#fff" : C.navy, border: "none", cursor: "pointer", transition: "all 0.2s" }}
                 onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = "0.88"; (e.currentTarget as HTMLButtonElement).style.transform = "scale(1.02)"; }}
                 onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = "1"; (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)"; }}
@@ -507,19 +507,20 @@ const Pricing = () => {
 };
 
 // ── FAQ ─────────────────────────────────────────────────────────────────────────
-const faqs: FaqType[] = [
-  { q: "What is ZIMRA compliance and why do I need it?",         a: `ZIMRA (Zimbabwe Revenue Authority) requires all VAT-registered businesses to use a certified Fiscal Device Management System (FDMS) to generate tamper-proof tax receipts. Non-compliance carries heavy penalties. ${useBranding().brand.name} is a certified solution that handles all of this automatically.` },
-  { q: "How does the FDMS integration work?",                    a: `${useBranding().brand.name} connects directly to Zimbabwe's FDMS infrastructure via secure API. Every invoice is cryptographically signed and submitted to FDMS in real time. A unique QR code is embedded on every receipt for instant verification by ZIMRA officials.` },
-  { q: `Can I try ${useBranding().brand.name} before committing to a paid plan?`,a: "Yes — our Test Mode is completely free and gives you full access to a sandboxed FDMS environment, unlimited test invoices, and API access. No credit card required. When you're ready, upgrade to Production with one click." },
-  { q: "What happens to my data if I cancel my subscription?",   a: "Your data remains yours. You have a 90-day window to export all invoices, reports, and records in standard formats (PDF, CSV, JSON). We never delete data unilaterally, and you can reinstate your account at any time." },
-  { q: "Is my financial data secure?",                           a: "All data is encrypted in transit (TLS 1.3) and at rest (AES-256). We are hosted on ISO 27001-certified infrastructure with daily encrypted backups. We never share or sell your financial data." },
-  { q: `Can I use ${useBranding().brand.name} for multiple businesses?`,         a: "Absolutely. You can manage multiple business entities under a single account, each with their own FDMS devices, VAT numbers, invoice sequences, and reporting dashboards." },
-  { q: "Do you provide customer support?",                       a: "All plans include email support. Production plans include priority support with a 4-hour response SLA. Enterprise plans receive a dedicated account manager and a guaranteed SLA for uptime and response times." },
-  { q: "Can I customize my invoice templates?",                  a: `Yes. ${useBranding().brand.name}'s invoice builder supports full branding — logo, colors, fonts, custom line-item fields, and footer notes — while maintaining ZIMRA-required fiscal elements on every document.` },
-];
-
 const FAQ = () => {
+  const { brand } = useBranding();
   const [open, setOpen] = useState<number | null>(null);
+
+  const faqs: FaqType[] = [
+    { q: "What is ZIMRA compliance and why do I need it?",         a: `ZIMRA (Zimbabwe Revenue Authority) requires all VAT-registered businesses to use a certified Fiscal Device Management System (FDMS) to generate tamper-proof tax receipts. Non-compliance carries heavy penalties. ${brand.name} is a certified solution that handles all of this automatically.` },
+    { q: "How does the FDMS integration work?",                    a: `${brand.name} connects directly to Zimbabwe's FDMS infrastructure via secure API. Every invoice is cryptographically signed and submitted to FDMS in real time. A unique QR code is embedded on every receipt for instant verification by ZIMRA officials.` },
+    { q: `Can I try ${brand.name} before committing to a paid plan?`,a: "Yes — our Test Mode is completely free and gives you full access to a sandboxed FDMS environment, unlimited test invoices, and API access. No credit card required. When you're ready, upgrade to Production with one click." },
+    { q: "What happens to my data if I cancel my subscription?",   a: "Your data remains yours. You have a 90-day window to export all invoices, reports, and records in standard formats (PDF, CSV, JSON). We never delete data unilaterally, and you can reinstate your account at any time." },
+    { q: "Is my financial data secure?",                           a: "All data is encrypted in transit (TLS 1.3) and at rest (AES-256). We are hosted on ISO 27001-certified infrastructure with daily encrypted backups. We never share or sell your financial data." },
+    { q: `Can I use ${brand.name} for multiple businesses?`,         a: "Absolutely. You can manage multiple business entities under a single account, each with their own FDMS devices, VAT numbers, invoice sequences, and reporting dashboards." },
+    { q: "Do you provide customer support?",                       a: "All plans include email support. Production plans include priority support with a 4-hour response SLA. Enterprise plans receive a dedicated account manager and a guaranteed SLA for uptime and response times." },
+    { q: "Can I customize my invoice templates?",                  a: `Yes. ${brand.name}'s invoice builder supports full branding — logo, colors, fonts, custom line-item fields, and footer notes — while maintaining ZIMRA-required fiscal elements on every document.` },
+  ];
   return (
     <section id="faq" style={{ background: C.charcoal, padding: "100px 24px" }}>
       <div style={{ maxWidth: 780, margin: "0 auto" }}>
@@ -564,7 +565,7 @@ const FAQ = () => {
             Our support team is here to help. Get in touch and we'll respond as soon as possible.
           </p>
           <button
-            onClick={() => window.open(WHATSAPP_URL, "_blank")}
+            onClick={() => window.open(getWhatsAppUrl(brand.name), "_blank")}
             style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 700, fontSize: 13, padding: "11px 24px", borderRadius: 99, background: C.gold, color: "#fff", border: "none", cursor: "pointer" }}
           >
             Contact Support

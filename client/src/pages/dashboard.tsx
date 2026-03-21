@@ -40,7 +40,9 @@ import {
   Activity,
   Wifi,
   AlertCircle,
-  Fingerprint
+  ShoppingBag,
+  Package,
+  Key
 } from "lucide-react";
 import { api, buildUrl } from "@shared/routes";
 import { cn } from "@/lib/utils";
@@ -124,6 +126,34 @@ export default function Dashboard() {
   // Track ping success locally for UI state
   const [pingSuccess, setPingSuccess] = React.useState(false);
   const isOnline = pingSuccess;
+
+  // Add API Key Generation Mutation
+  const { mutate: generateApiKey, isPending: isGeneratingKey } = useMutation({
+    mutationFn: async () => {
+      const res = await apiFetch(`/api/companies/${selectedCompany.id}/api-keys/generate`, { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || "Failed to generate API Key");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "API Key Generated",
+        description: "Your new API key has been created successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      // In a real app we might show the full key once here, but 
+      // the endpoint currently just saves it and the list/user endpoint returns a masked version.
+    },
+    onError: (error: Error) => {
+      toast({
+        variant: "destructive",
+        title: "Generation Failed",
+        description: error.message,
+      });
+    }
+  });
 
   // Auto-Ping on Mount if Configured
   React.useEffect(() => {
@@ -434,6 +464,32 @@ export default function Dashboard() {
                   </div>
                 </Card>
               </div>
+            </div>
+
+            <div className="space-y-4 pt-4">
+              <CardTitle className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                <Key className="w-3 h-3 text-primary" /> Integration & API
+              </CardTitle>
+              
+              <Card className="border-none shadow-sm rounded-2xl p-4 bg-indigo-50/50">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-indigo-600/60 mb-1">API Key</p>
+                    <p className="text-xs font-mono font-bold text-indigo-900">
+                      {activeCompany?.apiKey ? (activeCompany.apiKey.substring(0, 12) + "...") : "No API Key Generated"}
+                    </p>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="h-8 text-xs bg-white text-indigo-700 hover:bg-indigo-50 border-indigo-200"
+                    onClick={() => generateApiKey()}
+                    disabled={isGeneratingKey}
+                  >
+                    {isGeneratingKey ? "Generating..." : "Generate New Key"}
+                  </Button>
+                </div>
+              </Card>
             </div>
           </div>
         </div>

@@ -44,7 +44,7 @@ export function BottomTabs({
   const tabs = allTabs.filter(tab => {
     if (tab.id === "menu") return true;
     const role = userRole.toLowerCase();
-    if (role === "owner" || role === "admin" || userName === "Super Admin") return true;
+    if (role === "owner" || role === "admin" || role === "superadmin" || userName === "Super Admin") return true;
     
     if (role === "cashier" || role === "member") {
       return ["pos", "customers", "reports"].includes(tab.id);

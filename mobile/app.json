@@ -10,7 +10,7 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0a0600"
+      "backgroundColor": "#2c1800"
     },
     "ios": {
       "supportsTablet": true
@@ -18,9 +18,17 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0a0600"
+        "backgroundColor": "#2c1800"
       },
-      "package": "com.emmmanuelfore.fieldpos"
+      "package": "com.emmmanuelfore.fieldpos",
+      "permissions": [
+        "INTERNET",
+        "BLUETOOTH",
+        "BLUETOOTH_ADMIN",
+        "BLUETOOTH_SCAN",
+        "BLUETOOTH_CONNECT",
+        "ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",

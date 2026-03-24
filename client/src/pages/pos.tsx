@@ -1809,6 +1809,34 @@ export default function POSPage() {
                                     placeholder="Search products... (F1)"
                                     className="pl-10 md:pl-12 h-10 md:h-14 w-full bg-slate-50 border-none rounded-xl md:rounded-2xl text-xs md:text-sm font-bold text-slate-800 focus:bg-white focus:ring-4 focus:ring-primary/5 transition-all shadow-inner"
                                     value={searchQuery}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            const query = searchQuery.trim().toLowerCase();
+                                            if (!query) return;
+
+                                            // 1. Check for exact SKU or Barcode match
+                                            const directMatch = resolvedProducts.find((p: any) => 
+                                                p.sku?.toLowerCase() === query || 
+                                                p.barcode?.toLowerCase() === query
+                                            );
+
+                                            if (directMatch) {
+                                                addToCart(directMatch);
+                                                setSearchQuery("");
+                                                toast({ title: "✓ Added to cart", description: directMatch.name });
+                                                e.preventDefault();
+                                                return;
+                                            }
+
+                                            // 2. If no direct match, check if there is only one filtered result
+                                            if (filteredProducts.length === 1) {
+                                                addToCart(filteredProducts[0]);
+                                                setSearchQuery("");
+                                                toast({ title: "✓ Added to cart", description: filteredProducts[0].name });
+                                                e.preventDefault();
+                                            }
+                                        }
+                                    }}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                 />
                             </div>

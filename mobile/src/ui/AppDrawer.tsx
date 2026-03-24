@@ -72,7 +72,7 @@ export function AppDrawer({
   const menuItems = allMenuItems.filter(item => {
     const role = (userRole || "member").toLowerCase();
     // Super-admins, owners, and admins see everything
-    if (role === "owner" || role === "admin" || (userName === "Super Admin")) return true;
+    if (role === "owner" || role === "admin" || role === "superadmin" || (userName === "Super Admin")) return true;
 
     // Cashiers/Members are restricted
     if (role === "cashier" || role === "member") {

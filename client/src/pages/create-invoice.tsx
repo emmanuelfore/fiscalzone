@@ -1,4 +1,4 @@
-﻿﻿import { Layout } from "@/components/layout";
+import { Layout } from "@/components/layout";
 import { useCustomers, useCreateCustomer } from "@/hooks/use-customers";
 import { useProducts, useCreateProduct } from "@/hooks/use-products";
 import { useCreateInvoice, useInvoice, useUpdateInvoice } from "@/hooks/use-invoices";
@@ -410,6 +410,17 @@ export default function CreateInvoicePage() {
       return;
     }
 
+    const hasInvalidItems = items.some(item => !item.productId);
+    if (hasInvalidItems) {
+      toast({
+        title: "Validation Error",
+        description: "One or more invoice lines have no item selected. Please select a product for all lines or remove empty lines.",
+        variant: "destructive",
+      });
+      setLoadingAction(null);
+      return;
+    }
+
     if (!dueDate) {
       toast({
         title: "Validation Error",
@@ -501,6 +512,17 @@ export default function CreateInvoicePage() {
       return;
     }
 
+    const hasInvalidItems = items.some(item => !item.productId);
+    if (hasInvalidItems) {
+      toast({
+        title: "Validation Error",
+        description: "One or more invoice lines have no item selected. Please select a product for all lines or remove empty lines.",
+        variant: "destructive",
+      });
+      setLoadingAction(null);
+      return;
+    }
+
     const invoiceNumber = isEditing && existingInvoice
       ? existingInvoice.invoiceNumber
       : `QT-${Date.now().toString().slice(-6)}`;
@@ -575,6 +597,17 @@ export default function CreateInvoicePage() {
       toast({
         title: "Validation Error",
         description: "Please select a customer.",
+        variant: "destructive",
+      });
+      setLoadingAction(null);
+      return;
+    }
+
+    const hasInvalidItems = items.some(item => !item.productId);
+    if (hasInvalidItems) {
+      toast({
+        title: "Validation Error",
+        description: "One or more invoice lines have no item selected. Please select a product for all lines or remove empty lines.",
         variant: "destructive",
       });
       setLoadingAction(null);

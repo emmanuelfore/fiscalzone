@@ -13,16 +13,26 @@
     },
     "preview": {
       "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
       "env": {
-        "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://tzczbbsdvrlonwjwcwss.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR6Y3piYnNkdnJsb253andjd3NzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg1NTU1MjcsImV4cCI6MjA4NDEzMTUyN30.UK-iG3UXirfm1RyO2xWzOkzFYYYsotoHGgqFmK6FMks",
+        "EXPO_PUBLIC_API_BASE_URL": "https://fiscalstack.co.zw"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://tzczbbsdvrlonwjwcwss.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR6Y3piYnNkdnJsb253andjd3NzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg1NTU1MjcsImV4cCI6MjA4NDEzMTUyN30.UK-iG3UXirfm1RyO2xWzOkzFYYYsotoHGgqFmK6FMks",
+        "EXPO_PUBLIC_API_BASE_URL": "https://fiscalstack.co.zw"
       }
     }
+
   },
   "submit": {
     "production": {}

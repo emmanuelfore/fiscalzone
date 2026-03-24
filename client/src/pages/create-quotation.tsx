@@ -207,6 +207,15 @@ export default function CreateQuotationPage() {
     const handleSave = async (status: string = "draft") => {
         if (!customerId) return toast({ title: "Error", description: "Select a customer", variant: "destructive" });
 
+        const hasInvalidItems = items.some(item => !item.productId);
+        if (hasInvalidItems) {
+            return toast({
+                title: "Validation Error",
+                description: "One or more lines have no item selected. Please select a product for all lines or remove empty lines.",
+                variant: "destructive"
+            });
+        }
+
         const payload = {
             companyId,
             customerId: parseInt(customerId),

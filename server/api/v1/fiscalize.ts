@@ -30,6 +30,7 @@ const router = Router();
 //    STANDARD → company VAT rate (usually 15%)
 //    ZERO_RATED → 0% (taxable, zero rated)
 //    EXEMPT → 0% (not subject to VAT)
+
 const TAX_TYPE = z.enum(["STANDARD", "ZERO_RATED", "EXEMPT"]).default("STANDARD");
 
 const itemSchema = z.object({

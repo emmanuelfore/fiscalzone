@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Platform,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   LayoutDashboard,
   PieChart,
@@ -33,6 +34,7 @@ export function BottomTabs({
   userRole = "member",
   userName = "",
 }: BottomTabsProps) {
+  const insets = useSafeAreaInsets();
   const allTabs: { icon: any; label: string; id: ScreenName | "menu" }[] = [
     { icon: LayoutDashboard, label: "POS", id: "pos" },
     { icon: Package, label: "Inventory", id: "inventory" },
@@ -58,7 +60,13 @@ export function BottomTabs({
   });
 
   return (
-    <View style={styles.container}>
+    <View style={[
+      styles.container, 
+      { 
+        height: Platform.OS === "ios" ? 88 : 68 + insets.bottom,
+        paddingBottom: Platform.OS === "ios" ? 28 : Math.max(insets.bottom, 8)
+      }
+    ]}>
       {tabs.map((tab) => {
         const Icon = tab.icon;
         const isActive = currentScreen === tab.id;

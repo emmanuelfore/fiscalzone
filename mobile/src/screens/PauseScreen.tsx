@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Pause, Play, ShieldCheck, User, Wifi, WifiOff, X } from "lucide-react-native";
 import { apiFetch } from "../lib/api";
@@ -28,6 +29,7 @@ type ApiUser = {
 };
 
 export function PauseScreen({ companyId, onChangeCompany, onSignOut }: Props) {
+  const insets = useSafeAreaInsets();
   const [pausedState, setPausedStateLocal] = useState<PausedState>({ paused: false, pausedAt: null });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -132,7 +134,7 @@ export function PauseScreen({ companyId, onChangeCompany, onSignOut }: Props) {
   };
 
   return (
-    <View style={{ flex: 1, paddingHorizontal: 20, paddingTop: 18 }}>
+    <View style={{ flex: 1, paddingHorizontal: 20, paddingTop: Math.max(insets.top, 18) }}>
       {/* Header */}
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <View>

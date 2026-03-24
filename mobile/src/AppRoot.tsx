@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, SafeAreaView, Text, View } from "react-native";
+import { ActivityIndicator, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { assertEnv } from "./lib/env";
 import { supabase } from "./lib/supabase";
@@ -20,6 +21,7 @@ import { ExpensesScreen } from "./screens/ExpensesScreen";
 import { OnboardingScreen } from "./screens/OnboardingScreen";
 import { AppDrawer } from "./ui/AppDrawer";
 import { BottomTabs } from "./ui/BottomTabs";
+import { Button } from "./ui/Button";
 import { getSelectedCompanyId, setSelectedCompanyId } from "./lib/storage";
 
 type Stage = "boot" | "login" | "forgot-password" | "onboarding" | "company" | "main";
@@ -342,9 +344,9 @@ export function AppRoot() {
   }, [bootError, stage, companyId, currentScreen, showDrawer, userName, userRole]);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: PremiumColors.bg.base }}>
+    <View style={{ flex: 1, backgroundColor: PremiumColors.bg.base }}>
       {content}
-    </SafeAreaView>
+    </View>
   );
 }
 

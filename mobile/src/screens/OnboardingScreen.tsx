@@ -9,9 +9,9 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Alert,
-  SafeAreaView
+  Alert
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { 
   Building2, 
@@ -38,6 +38,7 @@ type OnboardingProps = {
 };
 
 export function OnboardingScreen({ onComplete, onSignOut }: OnboardingProps) {
+  const insets = useSafeAreaInsets();
   const [step, setStep] = useState(1);
   const [busy, setBusy] = useState(false);
   
@@ -112,8 +113,8 @@ export function OnboardingScreen({ onComplete, onSignOut }: OnboardingProps) {
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <SafeAreaView style={{ flex: 1 }}>
-          <View style={styles.header}>
+        <View style={{ flex: 1 }}>
+          <View style={[styles.header, { paddingTop: Math.max(insets.top, 15) }]}>
             <TouchableOpacity onPress={onSignOut} style={styles.iconBtn}>
               <X size={20} color={C.text.primary} />
             </TouchableOpacity>
@@ -268,7 +269,7 @@ export function OnboardingScreen({ onComplete, onSignOut }: OnboardingProps) {
               </TouchableOpacity>
             </View>
           </ScrollView>
-        </SafeAreaView>
+        </View>
       </KeyboardAvoidingView>
     </View>
   );

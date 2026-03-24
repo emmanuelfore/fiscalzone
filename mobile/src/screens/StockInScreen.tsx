@@ -4,6 +4,7 @@ import {
   StyleSheet, SafeAreaView, ActivityIndicator, Alert, ScrollView, Modal,
   KeyboardAvoidingView, Platform,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Menu, Search, Package, ChevronDown, Plus, X } from "lucide-react-native";
 import { StatusBar } from "expo-status-bar";
 import { useProducts } from "../hooks/usePosData";
@@ -14,6 +15,7 @@ import { PremiumColors as C } from "../ui/PremiumColors";
 interface Props { onOpenDrawer: () => void; onClose?: () => void; companyId: number; }
 
 export function StockInScreen({ onOpenDrawer, onClose, companyId }: Props) {
+  const insets = useSafeAreaInsets();
   const { data: products, isLoading } = useProducts(companyId);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [showPicker, setShowPicker] = useState(false);
@@ -74,8 +76,8 @@ export function StockInScreen({ onOpenDrawer, onClose, companyId }: Props) {
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
-      <SafeAreaView style={{ flex: 1 }}>
-        <View style={styles.header}>
+      <View style={{ flex: 1 }}>
+        <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
           <TouchableOpacity onPress={onOpenDrawer} style={styles.iconBtn}><Menu size={20} color={C.text.primary} /></TouchableOpacity>
           <Text style={styles.title}>Stock In</Text>
           <View style={{ width: 34 }} />
@@ -177,7 +179,7 @@ export function StockInScreen({ onOpenDrawer, onClose, companyId }: Props) {
             </View>
           </View>
         </Modal>
-      </SafeAreaView>
+      </View>
     </View>
   );
 }

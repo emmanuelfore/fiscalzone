@@ -4,6 +4,7 @@ import {
   StyleSheet, SafeAreaView, ActivityIndicator, Alert, ScrollView, Modal,
   KeyboardAvoidingView, Platform,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Menu, Search, Plus, Receipt, X, Calendar, DollarSign, Edit2, ChevronDown } from "lucide-react-native";
 import { StatusBar } from "expo-status-bar";
 import { apiJson, apiFetch } from "../lib/api";
@@ -40,6 +41,7 @@ const CATEGORIES = ["Rent", "Utilities", "Salary", "Supplies", "Marketing", "Tra
 const emptyExpense = { description: "", amount: "", category: "Other", supplierId: null, expenseDate: new Date().toISOString() };
 
 export function ExpensesScreen({ onOpenDrawer, companyId }: Props) {
+  const insets = useSafeAreaInsets();
   const { data: expenses, isLoading, refresh } = useExpenses(companyId);
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -144,8 +146,8 @@ export function ExpensesScreen({ onOpenDrawer, companyId }: Props) {
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
-      <SafeAreaView style={{ flex: 1 }}>
-        <View style={styles.header}>
+      <View style={{ flex: 1 }}>
+        <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
           <TouchableOpacity onPress={onOpenDrawer} style={styles.iconBtn}><Menu size={20} color={C.text.primary} /></TouchableOpacity>
           <Text style={styles.title}>Expenses</Text>
           <TouchableOpacity onPress={openAdd} style={[styles.iconBtn, { backgroundColor: C.amber.primary }]}><Plus size={20} color="#000" /></TouchableOpacity>
@@ -219,7 +221,7 @@ export function ExpensesScreen({ onOpenDrawer, companyId }: Props) {
             </View>
           </KeyboardAvoidingView>
         </Modal>
-      </SafeAreaView>
+      </View>
     </View>
   );
 }

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, FlatList, Text, TouchableOpacity, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Building2, CheckCircle2, LogOut, RefreshCw } from "lucide-react-native";
 import { apiFetch } from "../lib/api";
 import { PremiumColors } from "../ui/PremiumColors";
@@ -18,6 +19,7 @@ type Props = {
 };
 
 export function CompanySelectScreen({ onSelected, onSignOut }: Props) {
+  const insets = useSafeAreaInsets();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +51,7 @@ export function CompanySelectScreen({ onSelected, onSignOut }: Props) {
   }, [loading, error, companies.length]);
 
   return (
-    <View style={{ flex: 1, paddingHorizontal: 20, paddingTop: 18 }}>
+    <View style={{ flex: 1, paddingHorizontal: 20, paddingTop: Math.max(insets.top, 18) }}>
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
         <View>
           <Text style={{ color: PremiumColors.text.primary, fontSize: 26, fontWeight: "900", letterSpacing: -0.5 }}>

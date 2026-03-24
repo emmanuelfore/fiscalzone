@@ -482,7 +482,53 @@ export class DatabaseStorage implements IStorage {
   }
   
   async deleteCompanyProducts(companyId: number): Promise<void> {
-    await db.delete(products).where(eq(products.companyId, companyId));
+    await db.transaction(async (tx) => {
+      // 1. Identify non-test products for this company
+      // We exclude any product that has "TEST" in its name (case-insensitive)
+      const nonTestProducts = await tx
+        .select({ id: products.id })
+        .from(products)
+        .where(
+          and(
+            eq(products.companyId, companyId),
+            sql`LOWER(${products.name}) NOT LIKE '%test%'`
+          )
+        );
+
+      const productIds = nonTestProducts.map(p => p.id);
+
+      if (productIds.length === 0) return;
+
+      // 2. Clear related data for these products
+      
+      // Nullify references in invoice items
+      await tx.update(invoiceItems)
+        .set({ productId: null })
+        .where(inArray(invoiceItems.productId, productIds));
+
+      // Nullify references in quotation items
+      await tx.update(quotationItems)
+        .set({ productId: null })
+        .where(inArray(quotationItems.productId, productIds));
+
+      // Delete inventory transactions
+      await tx.delete(inventoryTransactions)
+        .where(inArray(inventoryTransactions.productId, productIds));
+
+      // 3. Clear company-wide product structures
+      
+      // Delete POS holds (since they contain cart snapshots)
+      await tx.delete(posHolds)
+        .where(eq(posHolds.companyId, companyId));
+
+      // 4. Finally delete the products themselves
+      await tx.delete(products)
+        .where(inArray(products.id, productIds));
+
+      // 5. Delete categories (only if they belong to this company)
+      await tx.delete(productCategories)
+        .where(eq(productCategories.companyId, companyId));
+    });
   }
   
   async getProductsForExport(companyId: number): Promise<any[]> {

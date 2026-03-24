@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useEffect } from "react";
 import {
   View, Text, FlatList, TouchableOpacity, TextInput,
-  StyleSheet, SafeAreaView, ActivityIndicator, Alert,
+  StyleSheet, ActivityIndicator, Alert,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Menu, PieChart, TrendingUp, DollarSign, Calendar,
   ChevronDown, ChevronUp, Receipt, Package, Clock,
@@ -156,6 +157,7 @@ function InvoiceItemRow({ invoiceId, currencyCode, exchangeRate, symbols }: {
 }
 
 export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", userId, userName }: ReportsScreenProps) {
+  const insets = useSafeAreaInsets();
   const isCashier = userRole.toLowerCase() === "cashier" || userRole.toLowerCase() === "member";
   const { data: company } = useCompany(companyId);
   const [isPrinting, setIsPrinting] = useState(false);
@@ -556,8 +558,8 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
-      <SafeAreaView style={{ flex: 1 }}>
-        <View style={styles.header}>
+      <View style={{ flex: 1 }}>
+        <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
           <TouchableOpacity onPress={onOpenDrawer} style={styles.iconBtn}><Menu size={20} color={C.text.primary} /></TouchableOpacity>
           <Text style={styles.title}>Reports</Text>
           <View style={{ width: 34 }} />
@@ -642,7 +644,7 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
             </View>
           </View>
         </Modal>
-      </SafeAreaView>
+      </View>
       {noteModal && (
         <NoteModal
           visible={noteModal.visible}

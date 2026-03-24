@@ -15,6 +15,7 @@ import {
   Image,
   Alert
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import NetInfo from "@react-native-community/netinfo";
 import { LinearGradient } from "expo-linear-gradient";
 import {
@@ -112,6 +113,7 @@ type Props = {
 };
 
 export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
+  const insets = useSafeAreaInsets();
   const [isOnline, setIsOnline] = useState(true);
   const isOnlineRef = React.useRef(true);
   const [queueCount, setQueueCount] = useState(0);
@@ -793,7 +795,13 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
       <StatusBar style="light" />
 
       {/* ── HEADER ─────────────────────────────────────────────────────────── */}
-      <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 0, borderBottomWidth: 1, borderBottomColor: C.border.default }}>
+      <View style={{
+        paddingHorizontal: 16,
+        paddingTop: Math.max(insets.top, 8),
+        paddingBottom: 0,
+        borderBottomWidth: 1,
+        borderBottomColor: C.border.default
+      }}>
 
         {/* Row 1: brand + online pill + customer */}
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
@@ -820,9 +828,9 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
                 shadowColor: isOnline ? C.status.success : C.status.error, shadowOpacity: 0.8, shadowRadius: 4, shadowOffset: { width: 0, height: 0 }
               }} />
               {isOnline ? <Wifi size={10} color={C.status.success} /> : <WifiOff size={10} color={C.status.error} />}
-              {/*<Text style={{ fontSize: 9, fontWeight: "700", color: isOnline ? C.status.success : C.status.error, textTransform: "uppercase" }}>
+              <Text style={{ fontSize: 9, fontWeight: "700", color: isOnline ? C.status.success : C.status.error, textTransform: "uppercase" }}>
                 {isOnline ? "Online" : "Offline"}
-              </Text>*/}
+              </Text>
             </View>
             {(productsFromCache || customersFromCache) && (
               <View style={{
@@ -960,11 +968,11 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
         {/* Search + scan */}
         <View style={{ flexDirection: "row", gap: 8, marginBottom: 10 }}>
           <View style={{
-            flex: 1, flexDirection: "row", alignItems: "center", gap: 8,
+            flex: 1, height: 44, flexDirection: "row", alignItems: "center", gap: 8,
             backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default,
-            borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10
+            borderRadius: 12, paddingHorizontal: 8, paddingVertical: 2
           }}>
-            <Search size={14} color={C.text.secondary} />
+            <Search size={12} color={C.text.secondary} />
             <TextInput
               style={{ flex: 1, color: C.text.primary, fontSize: 14 }}
               placeholder="Search products…"

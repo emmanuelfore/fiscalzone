@@ -8,6 +8,7 @@ import {
   TextInput,
   Alert,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Menu,
   User,
@@ -30,6 +31,7 @@ interface ProfileScreenProps {
 }
 
 export function ProfileScreen({ onOpenDrawer, userName, onLogout }: ProfileScreenProps) {
+  const insets = useSafeAreaInsets();
   const [newPassword, setNewPassword] = useState("");
   const [isChangingPass, setIsChangingPass] = useState(false);
 
@@ -56,8 +58,8 @@ export function ProfileScreen({ onOpenDrawer, userName, onLogout }: ProfileScree
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
-      <SafeAreaView style={{ flex: 1 }}>
-        <View style={styles.header}>
+      <View style={{ flex: 1 }}>
+        <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
           <TouchableOpacity onPress={onOpenDrawer} style={styles.iconBtn}>
             <Menu size={20} color={C.text.primary} />
           </TouchableOpacity>
@@ -123,7 +125,7 @@ export function ProfileScreen({ onOpenDrawer, userName, onLogout }: ProfileScree
             </TouchableOpacity>
           </View>
         </View>
-      </SafeAreaView>
+      </View>
     </View>
   );
 }

@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Dimensions
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Mail, ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react-native";
 import { supabase } from "../lib/supabase";
@@ -23,6 +24,7 @@ type Props = {
 };
 
 export function ForgotPasswordScreen({ onBack }: Props) {
+  const insets = useSafeAreaInsets();
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +67,7 @@ export function ForgotPasswordScreen({ onBack }: Props) {
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <ScrollView contentContainerStyle={styles.scrollContent} bounces={false}>
+        <ScrollView contentContainerStyle={[styles.scrollContent, { paddingTop: Math.max(insets.top + 20, 40) }]} bounces={false}>
           <TouchableOpacity style={styles.backButton} onPress={onBack}>
             <ArrowLeft size={20} color={C.text.secondary} />
             <Text style={styles.backText}>Back to Login</Text>
@@ -174,7 +176,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 24,
-    paddingTop: 60,
+    paddingTop: 20,
     paddingBottom: 40,
     flexGrow: 1,
     justifyContent: "center",

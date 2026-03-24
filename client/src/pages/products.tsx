@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { apiFetch } from "@/lib/api";
 
 const ITEMS_PER_PAGE = 10;
 
@@ -55,10 +56,13 @@ export default function ProductsPage() {
 
   const bulkDeleteMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch(`/api/companies/${companyId}/products/bulk-delete`, {
+      const response = await apiFetch(`/api/companies/${companyId}/products/bulk-delete`, {
         method: "DELETE",
       });
-      if (!response.ok) throw new Error("Failed to delete products");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || errorData.detail || "Failed to delete products");
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products", companyId] });

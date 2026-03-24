@@ -10,6 +10,7 @@ import {
   Dimensions,
   StyleSheet
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Lock, Mail, User as UserIcon, ArrowRight, Eye, EyeOff } from "lucide-react-native";
 import { supabase } from "../lib/supabase";
@@ -24,6 +25,7 @@ type Props = {
 };
 
 export function LoginScreen({ onLoggedIn, onForgotPassword }: Props) {
+  const insets = useSafeAreaInsets();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -90,7 +92,7 @@ export function LoginScreen({ onLoggedIn, onForgotPassword }: Props) {
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <ScrollView contentContainerStyle={styles.scrollContent} bounces={false}>
+        <ScrollView contentContainerStyle={[styles.scrollContent, { paddingTop: Math.max(insets.top + 20, 60) }]} bounces={false}>
           <View style={styles.header}>
             <View style={styles.logoGlow} />
             <Text style={styles.brandText}>
@@ -262,7 +264,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 24,
-    paddingTop: 80,
+    paddingTop: 40,
     paddingBottom: 40,
     flexGrow: 1,
     justifyContent: "center",

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Settings, Users, ShieldCheck, Save, Printer, Key, UserPlus, Trash2, Wrench, AlertTriangle, RefreshCw } from "lucide-react";
+import { Settings, Users, ShieldCheck, Save, Printer, Key, UserPlus, Trash2, Wrench, AlertTriangle, RefreshCw, Download } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
@@ -425,14 +425,30 @@ export default function PosSettingsPage() {
                                 </div>
 
                                 {posConfig.silentPrinting && !window.electronAPI && (
-                                    <div className="space-y-1 animate-in slide-in-from-top-2 duration-300">
-                                        <Label className="text-xs">Print Server URL</Label>
-                                        <Input
-                                            value={posConfig.printServerUrl}
-                                            onChange={(e) => setPosConfig({ ...posConfig, printServerUrl: e.target.value })}
-                                            placeholder="http://localhost:12312"
-                                        />
-                                        <p className="text-[10px] text-slate-500 italic">Requires middleware running at this address</p>
+                                    <div className="space-y-3 animate-in slide-in-from-top-2 duration-300">
+                                        <div className="space-y-1">
+                                            <Label className="text-xs">Print Server URL</Label>
+                                            <Input
+                                                value={posConfig.printServerUrl}
+                                                onChange={(e) => setPosConfig({ ...posConfig, printServerUrl: e.target.value })}
+                                                placeholder="http://localhost:12312"
+                                            />
+                                            <p className="text-[10px] text-slate-500 italic">Requires middleware running at this address</p>
+                                        </div>
+
+                                        <a 
+                                            href="/printer-client.zip" 
+                                            download 
+                                            className="flex items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors group"
+                                        >
+                                            <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-600 group-hover:text-blue-600 group-hover:border-blue-200 transition-colors">
+                                                <Download className="w-4 h-4" />
+                                            </div>
+                                            <div className="flex-1">
+                                                <p className="text-[11px] font-bold text-slate-700">Download Printer Utility</p>
+                                                <p className="text-[9px] text-slate-500">Windows Client (ZIP)</p>
+                                            </div>
+                                        </a>
                                     </div>
                                 )}
 

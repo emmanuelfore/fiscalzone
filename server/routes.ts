@@ -3712,9 +3712,13 @@ export async function registerRoutes(
 
       await storage.deleteCompanyProducts(companyId);
       res.status(204).end();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Bulk delete products error:", err);
-      res.status(500).json({ message: "Failed to delete products" });
+      res.status(500).json({ 
+        message: err.message || "Failed to delete products",
+        detail: err.detail,
+        constraint: err.constraint
+      });
     }
   });
 

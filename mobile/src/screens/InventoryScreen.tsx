@@ -4,6 +4,7 @@ import {
   StyleSheet, SafeAreaView, ActivityIndicator, Alert, ScrollView, Modal,
   KeyboardAvoidingView, Platform,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Menu, Search, Plus, Package, X, Edit2, Check,
 } from "lucide-react-native";
@@ -28,6 +29,7 @@ const emptyProduct = {
 };
 
 export function InventoryScreen({ onOpenDrawer, companyId }: Props) {
+  const insets = useSafeAreaInsets();
   const { data: products, isLoading, error, refresh: refreshProducts } = useProducts(companyId);
   const { data: taxTypes } = useTaxTypes(companyId);
   const [search, setSearch] = useState("");
@@ -137,8 +139,8 @@ export function InventoryScreen({ onOpenDrawer, companyId }: Props) {
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
-      <SafeAreaView style={{ flex: 1 }}>
-        <View style={styles.header}>
+      <View style={{ flex: 1 }}>
+        <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
           <TouchableOpacity onPress={onOpenDrawer} style={styles.iconBtn}><Menu size={20} color={C.text.primary} /></TouchableOpacity>
           <Text style={styles.title}>Inventory</Text>
           <TouchableOpacity onPress={openAdd} style={[styles.iconBtn, { backgroundColor: C.amber.primary }]}><Plus size={20} color="#000" /></TouchableOpacity>
@@ -246,7 +248,7 @@ export function InventoryScreen({ onOpenDrawer, companyId }: Props) {
             </View>
           </KeyboardAvoidingView>
         </Modal>
-      </SafeAreaView>
+      </View>
     </View>
   );
 }

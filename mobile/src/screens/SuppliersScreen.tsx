@@ -4,6 +4,7 @@ import {
   StyleSheet, SafeAreaView, ActivityIndicator, Modal, Alert, ScrollView,
   KeyboardAvoidingView, Platform,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Menu, Search, Plus, Truck, X, Phone, Mail, Edit2 } from "lucide-react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSuppliers } from "../hooks/usePosData";
@@ -18,6 +19,7 @@ interface Props { onOpenDrawer: () => void; companyId: number; }
 const emptySupplier = { name: "", contactPerson: "", email: "", phone: "", address: "", tin: "", vatNumber: "", isActive: true };
 
 export function SuppliersScreen({ onOpenDrawer, companyId }: Props) {
+  const insets = useSafeAreaInsets();
   const { data: suppliers, isLoading, refresh: refreshSuppliers } = useSuppliers(companyId);
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -94,8 +96,8 @@ export function SuppliersScreen({ onOpenDrawer, companyId }: Props) {
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
-      <SafeAreaView style={{ flex: 1 }}>
-        <View style={styles.header}>
+      <View style={{ flex: 1 }}>
+        <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
           <TouchableOpacity onPress={onOpenDrawer} style={styles.iconBtn}><Menu size={20} color={C.text.primary} /></TouchableOpacity>
           <Text style={styles.title}>Suppliers</Text>
           <TouchableOpacity onPress={openAdd} style={[styles.iconBtn, { backgroundColor: C.amber.primary }]}><Plus size={20} color="#000" /></TouchableOpacity>
@@ -152,7 +154,7 @@ export function SuppliersScreen({ onOpenDrawer, companyId }: Props) {
             </View>
           </KeyboardAvoidingView>
         </Modal>
-      </SafeAreaView>
+      </View>
     </View>
   );
 }

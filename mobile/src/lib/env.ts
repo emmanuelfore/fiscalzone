@@ -1,10 +1,9 @@
-const getRaw = (key: string) => process.env[key] ?? "";
-
 export const ENV = {
-  supabaseUrl: getRaw("EXPO_PUBLIC_SUPABASE_URL").trim(),
-  supabaseAnonKey: getRaw("EXPO_PUBLIC_SUPABASE_ANON_KEY").trim(),
-  apiBaseUrl: (getRaw("EXPO_PUBLIC_API_BASE_URL").trim()).replace(/\/+$/, "")
+  supabaseUrl: (process.env.EXPO_PUBLIC_SUPABASE_URL ?? "").trim(),
+  supabaseAnonKey: (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "").trim(),
+  apiBaseUrl: (process.env.EXPO_PUBLIC_API_BASE_URL ?? "").trim().replace(/\/+$/, "")
 };
+
 
 export function assertEnv() {
   const missing: string[] = [];

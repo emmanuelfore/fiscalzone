@@ -16,17 +16,20 @@ export async function apiFetch(path: string, init?: RequestInit) {
   // Skip session check for health endpoint to speed up online detection
   if (path !== "/api/health") {
     try {
-      const sessionResult = await Promise.race([
-        supabase.auth.getSession(),
-        new Promise<{ data: { session: null } }>((resolve) =>
-          setTimeout(() => resolve({ data: { session: null } }), 5000)
-        )
-      ]);
-      session = sessionResult?.data?.session ?? null;
+      if (supabase) {
+        const sessionResult = await Promise.race([
+          supabase.auth.getSession(),
+          new Promise<{ data: { session: null } }>((resolve) =>
+            setTimeout(() => resolve({ data: { session: null } }), 5000)
+          )
+        ]);
+        session = sessionResult?.data?.session ?? null;
+      }
     } catch (e) {
       console.warn("[API] Session fetch failed:", e);
     }
   }
+
 
   const headers = new Headers(init?.headers);
 

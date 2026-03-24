@@ -3,8 +3,11 @@ import * as Print from 'expo-print';
 // Lazy-load native thermal printer to avoid crash on Expo Go / unsupported builds
 let ThermalPrinterModule: any = null;
 try {
-  ThermalPrinterModule = require('react-native-thermal-printer').default;
-} catch (_) {
+  // Use a dynamic require within a try-catch for maximum safety
+  const Printer = require('react-native-thermal-printer');
+  ThermalPrinterModule = Printer.default || Printer;
+} catch (e) {
+  console.warn("[Printing] Thermal printer module not available:", e);
   // Not available in this build (e.g. Expo Go) — Bluetooth printing will be disabled
 }
 
@@ -45,7 +48,7 @@ function getNoteLabels(noteType: "credit" | "debit" | undefined, fiscal: boolean
 }
 
 export const generateReceiptHtml = (data: TicketData) => {
-  const { invoice, company, items, currencySymbol, cashierName, paidAmount, paperWidth, noteType, originalInvoiceNumber } = data;
+  const { invoice, company, items, customer, currencySymbol, cashierName, paidAmount, paperWidth, noteType, originalInvoiceNumber } = data;
   const symbol = currencySymbol || '$';
   const receiptItems = items || invoice.items || [];
   const width = paperWidth || 58;
@@ -117,6 +120,7 @@ export const generateReceiptHtml = (data: TicketData) => {
         </style>
       </head>
       <body>
+        ${company.logoUrl ? `<div class="text-center"><img src="${company.logoUrl}" class="logo" /></div>` : ''}
         <h1 class="text-center font-bold uppercase text-xs mb-1">${company.name}</h1>
         <div class="text-center mb-1">
           <p>TIN: ${company.tin}</p>
@@ -136,13 +140,30 @@ export const generateReceiptHtml = (data: TicketData) => {
           <p>${title}</p>
         </div>
 
+        ${customer ? `
         <div class="mb-2 pb-2 border-b">
-          ${cashierName ? `<p>Cashier: ${cashierName}</p>` : ''}
-          ${invoice.invoiceNumber ? `<p>Invoice No: ${invoice.invoiceNumber}</p>` : ''}
+          <p class="font-bold">Buyer:</p>
+          <p>${customer.name}</p>
+          ${customer.tin ? `<p>TIN: ${customer.tin}</p>` : ''}
+          ${customer.vatNumber ? `<p>VAT: ${customer.vatNumber}</p>` : ''}
+          ${customer.address ? `<p>${customer.address}</p>` : ''}
+        </div>
+        ` : ''}
+
+        <div class="mb-2 pb-2 border-b">
+          <p>Invoice No: ${invoice.invoiceNumber || 'N/A'}</p>
+          ${invoice.fiscalCode ? `
+            <p>Receipt No: ${invoice.receiptCounter || 'N/A'} / ${invoice.receiptGlobalNo || 'N/A'}</p>
+            <p>Fiscal Day No: ${invoice.fiscalDayNo || 'N/A'}</p>
+            <p>Device Serial: ${company.fdmsDeviceSerialNo || company.deviceSerialNo || 'N/A'}</p>
+            <p>Device ID: ${company.fdmsDeviceId || company.deviceId || 'N/A'}</p>
+          ` : ''}
+          ${invoice.customerReference ? `<p>Customer Ref: ${invoice.customerReference}</p>` : ''}
           ${originalInvoiceNumber ? `<p>Ref: ${originalInvoiceNumber}</p>` : ''}
           <p>Date: ${new Date(invoice.issueDate || invoice.createdAt).toLocaleString(undefined, {
             day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit'
           })}</p>
+          ${cashierName ? `<p>Cashier: ${cashierName}</p>` : ''}
         </div>
 
         <div class="flex justify-between font-bold mb-1 border-b pb-1">
@@ -155,7 +176,7 @@ export const generateReceiptHtml = (data: TicketData) => {
           ${receiptItems.map((item: any) => `
             <div class="mb-2">
               <div class="flex justify-between">
-                <span class="w-60 font-bold">${item.description || item.name}</span>
+                <span class="w-60 font-bold">${(item.description || item.name || '').slice(0, 20)}</span>
                 <span class="w-30 text-right font-bold">${Number(item.lineTotal || (item.price * item.quantity)).toFixed(2)}</span>
                 <span class="w-10 text-right">${item.taxCode || (item.taxRate > 0 ? "VT" : "ZE")}</span>
               </div>
@@ -173,7 +194,7 @@ export const generateReceiptHtml = (data: TicketData) => {
 
         <div class="mb-2 pb-2 border-b">
           <div class="flex justify-between">
-            <span>${invoice.paymentMethod || "Cash"}</span>
+            <span>Method: ${invoice.paymentMethod || "Cash"}</span>
             <span>${paid.toFixed(2)}</span>
           </div>
           ${change > 0 ? `<div class="flex justify-between"><span>Change</span><span>${change.toFixed(2)}</span></div>` : ''}
@@ -197,12 +218,13 @@ export const generateReceiptHtml = (data: TicketData) => {
         ` : ''}
 
         <div class="text-center mb-2">
-          <p>${invoice.notes || "Thank you for your business!"}</p>
+          <p>${invoice.notes || "Invoice is issued after purchasing goods"}</p>
         </div>
 
         ${qrUrl ? `
           <div class="flex flex-col items-center mb-2 mt-1">
             <img src="${qrUrl}" width="100" height="100" />
+            <p style="font-size: 7px; margin-top: 4px;">Scan to verify with ZIMRA</p>
             ${invoice.verificationCode ? `<div class="text-center mt-1"><p>Verification Code:</p><p class="font-bold">${invoice.verificationCode}</p></div>` : ''}
           </div>
         ` : ''}
@@ -233,7 +255,7 @@ export const printToBluetooth = async (data: TicketData, address?: string) => {
     throw new Error("Bluetooth printing is not available in this build. Please use a custom dev client.");
   }
 
-  const { invoice, company, items, cashierName, paidAmount, paperWidth, noteType, originalInvoiceNumber } = data;
+  const { invoice, company, items, customer, cashierName, paidAmount, paperWidth, noteType, originalInvoiceNumber } = data;
   const receiptItems = items || invoice.items || [];
   const width = paperWidth || 58;
   const fiscal = isFiscal(company);
@@ -283,16 +305,30 @@ export const printToBluetooth = async (data: TicketData, address?: string) => {
   text += `[C]<b>${title}</b>\n`;
   text += `[C]${sep}\n`;
 
-  if (cashierName) text += `[L]Cashier: [R]${cashierName}\n`;
+  if (customer) {
+    text += `[L]Buyer: ${customer.name}\n`;
+    if (customer.tin) text += `[L]TIN: ${customer.tin}\n`;
+    if (customer.vatNumber) text += `[L]VAT: ${customer.vatNumber}\n`;
+    text += `[C]${sep}\n`;
+  }
+
   if (invoice.invoiceNumber) text += `[L]Invoice No: [R]${invoice.invoiceNumber}\n`;
+  if (invoice.fiscalCode) {
+    text += `[L]Receipt No: [R]${invoice.receiptCounter || 'N/A'} / ${invoice.receiptGlobalNo || 'N/A'}\n`;
+    text += `[L]Fiscal Day No: [R]${invoice.fiscalDayNo || 'N/A'}\n`;
+    text += `[L]Device Serial: [R]${company.fdmsDeviceSerialNo || company.deviceSerialNo || 'N/A'}\n`;
+    text += `[L]Device ID: [R]${company.fdmsDeviceId || company.deviceId || 'N/A'}\n`;
+  }
+  if (invoice.customerReference) text += `[L]Customer Ref: [R]${invoice.customerReference}\n`;
   if (originalInvoiceNumber) text += `[L]Ref: [R]${originalInvoiceNumber}\n`;
   text += `[L]Date: [R]${new Date(invoice.issueDate || invoice.createdAt).toLocaleString(undefined, { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}\n`;
+  if (cashierName) text += `[L]Cashier: [R]${cashierName}\n`;
   text += `[C]${sep}\n`;
 
   text += `[L]<b>Description</b>[R]<b>Amount</b> Tax\n`;
   receiptItems.forEach((item: any) => {
     const nameLimit = Math.max(5, maxChars - 12);
-    const name = (item.description || item.name).slice(0, nameLimit);
+    const name = (item.description || item.name || '').slice(0, nameLimit);
     const qty = Number(item.quantity).toFixed(0);
     const lineTotal = (Number(item.lineTotal || (Number(item.price) * Number(item.quantity))) * rate).toFixed(2);
     const taxCode = item.taxCode || (item.taxRate > 0 ? "VT" : "ZE");
@@ -320,11 +356,12 @@ export const printToBluetooth = async (data: TicketData, address?: string) => {
     text += `[C]${sep}\n`;
   }
 
-  text += `[C]${invoice.notes || "Thank you for your business!"}\n`;
+  text += `[C]${invoice.notes || "Invoice is issued after purchasing goods"}\n`;
   text += `[C]${sep}\n`;
 
   if (fiscal && invoice.qrCodeData) {
     text += `[C][QR]${invoice.qrCodeData}\n`;
+    text += `[C]Scan to verify with ZIMRA\n`;
     if (invoice.verificationCode) {
       text += `[C]Verification Code:\n`;
       text += `[C]<b>${invoice.verificationCode}</b>\n`;

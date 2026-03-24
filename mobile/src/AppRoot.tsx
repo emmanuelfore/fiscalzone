@@ -35,6 +35,7 @@ export function AppRoot() {
   const [userName, setUserName] = useState("Cashier");
   const [userRole, setUserRole] = useState("member");
   const [userId, setUserId] = useState<string | null>(null);
+  const [companies, setCompanies] = useState<any[]>([]);
 
   const fetchUser = async () => {
     const { data } = await supabase.auth.getUser();
@@ -53,6 +54,7 @@ export function AppRoot() {
       if (Array.isArray(companies)) {
         // Cache for offline use
         await AsyncStorage.setItem('cached_companies', JSON.stringify(companies));
+        setCompanies(companies);
         return companies;
       }
       return [];
@@ -78,54 +80,66 @@ export function AppRoot() {
     let cancelled = false;
 
     (async () => {
-      const cachedCompanyId = await getSelectedCompanyId();
-      if (!cancelled) setCompanyId(cachedCompanyId);
+      try {
+        const cachedCompanyId = await getSelectedCompanyId();
+        if (!cancelled) setCompanyId(cachedCompanyId);
 
-      const session = await supabase.auth.getSession();
-      const authed = !!session.data.session?.access_token;
-      
-      if (!cancelled) {
-        if (!authed) {
-          setStage("login");
-        } else {
-          const companies = await fetchUser();
-          const cachedId = await getSelectedCompanyId();
-          const validCompany = companies.find(c => c.id === cachedId);
-
-          if (validCompany) {
-            if (validCompany.role) setUserRole(validCompany.role);
-            setCompanyId(cachedId);
-            setStage("main");
+        const session = await supabase.auth.getSession();
+        const authed = !!session.data.session?.access_token;
+        
+        if (!cancelled) {
+          if (!authed) {
+            setStage("login");
           } else {
-            await setSelectedCompanyId(null);
-            setCompanyId(null);
-            setStage(companies.length > 0 ? "company" : "onboarding");
+            const companies = await fetchUser();
+            const cachedId = await getSelectedCompanyId();
+            const validCompany = companies.find(c => c.id === cachedId);
+
+            if (validCompany) {
+              if (validCompany.role) setUserRole(validCompany.role);
+              setCompanyId(cachedId);
+              setStage("main");
+            } else {
+              await setSelectedCompanyId(null);
+              setCompanyId(null);
+              setStage(companies.length > 0 ? "company" : "onboarding");
+            }
           }
         }
+      } catch (e: any) {
+        console.error("[Auth] Error in initial session check:", e);
+        setBootError("Initialization failed: " + (e?.message || "Unknown error"));
+        setStage("boot");
       }
     })();
 
     const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log("[Auth] Event:", event, session ? "Session active" : "No session");
-      const authed = !!session?.access_token;
-      
-      if (!authed) {
-        setStage("login");
-        return;
-      }
+      try {
+        console.log("[Auth] Event:", event, session ? "Session active" : "No session");
+        const authed = !!session?.access_token;
+        
+        if (!authed) {
+          setStage("login");
+          return;
+        }
 
-      const companies = await fetchUser();
-      const cachedId = await getSelectedCompanyId();
-      const validCompany = companies.find(c => c.id === cachedId);
+        const companies = await fetchUser();
+        const cachedId = await getSelectedCompanyId();
+        const validCompany = companies.find(c => c.id === cachedId);
 
-      if (validCompany) {
-        if (validCompany.role) setUserRole(validCompany.role);
-        setCompanyId(cachedId);
-        setStage("main");
-      } else {
-        await setSelectedCompanyId(null);
-        setCompanyId(null);
-        setStage(companies.length > 0 ? "company" : "onboarding");
+        if (validCompany) {
+          if (validCompany.role) setUserRole(validCompany.role);
+          setCompanyId(cachedId);
+          setStage("main");
+        } else {
+          await setSelectedCompanyId(null);
+          setCompanyId(null);
+          setStage(companies.length > 0 ? "company" : "onboarding");
+        }
+      } catch (e: any) {
+        console.error("[Auth] Error in onAuthStateChange:", e);
+        setBootError("Authentication sync failed: " + (e?.message || "Unknown error"));
+        setStage("boot");
       }
     });
 
@@ -216,6 +230,11 @@ export function AppRoot() {
               setStage("onboarding");
               return;
             }
+            
+            // Re-sync role for the newly selected company
+            const selected = companies.find(c => c.id === id);
+            if (selected?.role) setUserRole(selected.role);
+            
             await setSelectedCompanyId(id);
             setCompanyId(id);
             setStage("main");

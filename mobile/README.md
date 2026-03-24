@@ -34,6 +34,17 @@ npm install
 npm run start
 ```
 
+### Deployment (EAS Build)
+
+To build standalone binaries for Android or iOS:
+
+1. **Install EAS CLI**: `npm install -g eas-cli`
+2. **Login**: `eas login`
+3. **Build**:
+   - **Android APK**: `eas build --platform android --profile preview`
+   - **Android AAB**: `eas build --platform android --profile production`
+   - **iOS**: `eas build --platform ios --profile production`
+
 ### Notes
 
 - The app uses `@supabase/supabase-js` with `AsyncStorage` for persisted sessions.

@@ -81,6 +81,10 @@ export function AppRoot() {
 
     (async () => {
       try {
+        if (!supabase) {
+          throw new Error("Supabase client not initialized. Check your environment variables.");
+        }
+
         const cachedCompanyId = await getSelectedCompanyId();
         if (!cancelled) setCompanyId(cachedCompanyId);
 
@@ -93,7 +97,7 @@ export function AppRoot() {
           } else {
             const companies = await fetchUser();
             const cachedId = await getSelectedCompanyId();
-            const validCompany = companies.find(c => c.id === cachedId);
+            const validCompany = companies.find(c => (c && c.id === cachedId));
 
             if (validCompany) {
               if (validCompany.role) setUserRole(validCompany.role);
@@ -113,7 +117,10 @@ export function AppRoot() {
       }
     })();
 
+    if (!supabase) return;
+
     const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+
       try {
         console.log("[Auth] Event:", event, session ? "Session active" : "No session");
         const authed = !!session?.access_token;

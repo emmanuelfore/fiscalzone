@@ -637,18 +637,28 @@ export function PosTerminalSettings({ formData, setFormData, isLoading, companyI
                     <div className="p-3 bg-white/10 rounded-2xl">
                       <Monitor className="w-6 h-6 text-white" />
                     </div>
-                    <div className="px-3 py-1 bg-indigo-500 rounded-full text-[10px] font-black uppercase tracking-wider">Windows</div>
+                    <div className="px-3 py-1 bg-indigo-500 rounded-full text-[10px] font-black uppercase tracking-wider">Desktop</div>
                   </div>
                   <div>
                     <h4 className="text-xl font-black">Desktop POS App</h4>
-                    <p className="text-slate-400 text-xs">Run your POS faster with the native Windows application.</p>
+                    <p className="text-slate-400 text-xs">Run your POS faster with the native desktop application.</p>
                   </div>
-                  <Button 
-                    className="w-full bg-white text-slate-900 hover:bg-slate-100 font-bold rounded-xl gap-2 h-11"
-                    onClick={() => window.open('/downloads/fiscalstack-pos-setup.exe')}
-                  >
-                    <Download className="w-4 h-4" /> Download Installer
-                  </Button>
+                  <div className="flex flex-col gap-2">
+                    <Button 
+                      className="w-full bg-white text-slate-900 hover:bg-slate-100 font-bold rounded-xl gap-2 h-11"
+                      onClick={() => window.open('https://github.com/FiscalStack/fisczim/releases/latest')}
+                    >
+                      <ExternalLink className="w-4 h-4" /> Windows Installer (.exe)
+                    </Button>
+                    <Button 
+                      variant="ghost"
+                      className="w-full text-slate-400 hover:text-white hover:bg-white/10 font-bold rounded-xl gap-2 h-10 text-xs"
+                      onClick={() => window.open('https://github.com/FiscalStack/fisczim/releases/latest')}
+                    >
+                      <Download className="w-3.5 h-3.5" /> Linux AppImage
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-slate-500 text-center">Available from GitHub Releases</p>
                 </CardContent>
               </Card>
 

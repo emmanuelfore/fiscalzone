@@ -140,7 +140,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       icon: ShieldCheck,
       label: "Compliance",
       children: [
-        { icon: Server, label: "ZIMRA Device", href: "/zimra-settings" },
+        { icon: Server, label: "ZIMRA Device", href: "/settings?tab=zimra" },
         { icon: ClipboardList, label: "Transaction Logs", href: "/zimra-logs" },
         { icon: Activity, label: "FDMS Test", href: "/fdms-test" },
       ]
@@ -149,10 +149,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
       icon: Settings,
       label: "Administration",
       children: [
-        { icon: UserCog, label: "Team", href: "/team-settings" },
-        { icon: Settings, label: "Settings", href: "/settings" },
-        { icon: MonitorCheck, label: "POS Settings", href: "/pos-settings" },
-        { icon: Coins, label: "Currencies", href: "/currencies" },
+        { icon: UserCog, label: "Team Management", href: "/settings?tab=team" },
+        { icon: Settings, label: "General Settings", href: "/settings?tab=profile" },
+        { icon: MonitorCheck, label: "POS Configuration", href: "/settings?tab=pos" },
+        { icon: Coins, label: "Currencies", href: "/settings?tab=currencies" },
         { icon: CreditCard, label: "Subscription", href: "/subscription" },
       ]
     },
@@ -445,8 +445,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <span>Dashboard</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setLocation("/settings")} className="p-3 rounded-xl font-bold text-slate-600 cursor-pointer hover:bg-slate-50 hover:text-slate-900 hover:scale-[1.02] transition-all">
-                  <UserCog className="mr-3 h-4 w-4" />
-                  <span>Account Settings</span>
+                  <Settings className="mr-3 h-4 w-4" />
+                  <span>Admin Console</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setLocation("/profile")} className="p-3 rounded-xl font-bold text-slate-600 cursor-pointer hover:bg-slate-50 hover:text-slate-900 hover:scale-[1.02] transition-all">
                   <UserCog className="mr-3 h-4 w-4" />

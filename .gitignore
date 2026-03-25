@@ -7,4 +7,8 @@ vite.config.ts.*
 .env
 .vercel
 .vs/
-/dist
+desktop/dist/
+public/*.AppImage
+public/*.exe
+client/public/downloads/*.exe
+client/public/downloads/*.AppImage

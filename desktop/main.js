@@ -6,7 +6,7 @@ const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
 const { SerialPort } = require('serialport');
 
-const PROD_URL = 'https://fiscalzone.com/pos-login'; // TODO: Replace with actual deployed URL
+const PROD_URL = 'https://fisczim.fiscalstack.co.zw/pos-login';
 const DEV_URL = 'http://localhost:5001/pos-login';
 
 // Manager PIN cache helpers (Task 8.1)

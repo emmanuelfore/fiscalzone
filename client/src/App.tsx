@@ -208,7 +208,7 @@ function Router() {
       <Route path="/pos/reports">{() => <Redirect to="/reports/pos" />}</Route>
       <Route path="/pos/all-sales">{() => <ProtectedRoute component={RecentSalesPage} />}</Route>
       <Route path="/pos">{() => <ProtectedRoute component={POSPage} />}</Route>
-      <Route path="/pos-settings">{() => <ProtectedRoute component={PosSettingsPage} />}</Route>
+      <Route path="/pos-settings">{() => <Redirect to="/settings?tab=pos" />}</Route>
       <Route path="/">
         {user ? <Redirect to={isOnline ? "/dashboard" : "/pos"} /> : <LandingPage />}
       </Route>

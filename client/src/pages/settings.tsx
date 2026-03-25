@@ -1,694 +1,269 @@
 import { Layout } from "@/components/layout";
-import { Link } from "wouter";
-import { useCompanies, useUpdateCompany } from "@/hooks/use-companies";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
+import { useActiveCompany } from "@/hooks/use-active-company";
+import { useUpdateCompany } from "@/hooks/use-companies";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, Settings, Landmark, Save, RefreshCw, Upload, Image as ImageIcon, ShieldCheck, Mail, Key, Copy } from "lucide-react";
+import { 
+  Building2, 
+  Users, 
+  ShieldCheck, 
+  Landmark, 
+  Coins, 
+  Server, 
+  MonitorCheck, 
+  Mail, 
+  Save, 
+  RefreshCw,
+  ChevronRight,
+  Settings as SettingsIcon,
+  LayoutDashboard
+} from "lucide-react";
 import { useState, useEffect } from "react";
-import { Checkbox } from "@/components/ui/checkbox";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
+import { motion, AnimatePresence } from "framer-motion";
 
-import { apiFetch } from "@/lib/api";
-
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-
-import { useActiveCompany } from "@/hooks/use-active-company";
-import { TaxTypesManager } from "@/components/settings/tax-types-manager";
+// Import Sub-components
+import { OrganizationProfile } from "@/components/settings/organization-profile";
+import { TeamManagement } from "@/components/settings/team-management";
+import { SecuritySettings } from "@/components/settings/security-settings";
+import { BankingSettings } from "@/components/settings/banking-settings";
+import { CurrencySettings } from "@/components/settings/currency-settings";
+import { TaxComplianceSettings } from "@/components/settings/tax-compliance-settings";
+import { ZimraDeviceSettings } from "@/components/settings/zimra-device-settings";
+import { PosTerminalSettings } from "@/components/settings/pos-terminal-settings";
+import { CommunicationSettings } from "@/components/settings/communication-settings";
 
 export default function SettingsPage() {
   const { toast } = useToast();
+  const [location, setLocation] = useLocation();
   const { activeCompany, isLoading: isLoadingActive } = useActiveCompany();
-  const currentCompany = activeCompany;
-  const companyId = currentCompany?.id || 0;
-  const isLoading = isLoadingActive;
+  const updateCompany = useUpdateCompany(activeCompany?.id || 0);
 
-  const updateCompany = useUpdateCompany(companyId);
-  const queryClient = useQueryClient();
+  // Deep-linking support via URL query params
+  const queryParams = new URLSearchParams(window.location.search);
+  const initialTab = queryParams.get("tab") || "profile";
+  const [activeTab, setActiveTab] = useState(initialTab);
 
-  const { mutate: syncZimra, isPending: isSyncing } = useMutation({
-    mutationFn: async () => {
-      const res = await apiFetch(`/api/companies/${companyId}/zimra/config/sync`, { method: "POST" });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "Failed to sync ZIMRA configuration");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      toast({
-        title: "Sync Successful",
-        description: "ZIMRA configuration and tax levels updated.",
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
-    },
-    onError: (err: any) => {
-      toast({
-        title: "Sync Failed",
-        description: err.message,
-        variant: "destructive",
-      });
-    }
-  });
-
-  const { mutate: generateApiKey, isPending: isGeneratingKey } = useMutation({
-    mutationFn: async () => {
-      const res = await apiFetch(`/api/companies/${companyId}/api-key`, { method: "POST" });
-      if (!res.ok) throw new Error("Failed to generate API Key");
-      return res.json();
-    },
-    onSuccess: () => {
-      toast({ title: "Success", description: "API Key generated successfully" });
-      queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to generate API Key", variant: "destructive" });
-    }
-  });
-
-  // Form State
+  // Form State for global fields
   const [formData, setFormData] = useState<any>({});
-  const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
-    if (currentCompany) {
+    if (activeCompany) {
       setFormData({
-        name: currentCompany.name || "",
-        tradingName: currentCompany.tradingName || "",
-        email: currentCompany.email || "",
-        phone: currentCompany.phone || "",
-        address: currentCompany.address || "",
-        city: currentCompany.city || "",
-        website: currentCompany.website || "",
-        tin: currentCompany.tin || "",
-        vatNumber: currentCompany.vatNumber || "",
-        bpNumber: currentCompany.bpNumber || "",
-        vatEnabled: currentCompany.vatEnabled ?? true,
-        vatRegistered: currentCompany.vatRegistered ?? true,
-        bankName: currentCompany.bankName || "",
-        accountName: currentCompany.accountName || "",
-        accountNumber: currentCompany.accountNumber || "",
-        branchCode: currentCompany.branchCode || "",
-        currency: currentCompany.currency || "USD",
-        branchName: currentCompany.branchName || "",
-        emailSettings: currentCompany.emailSettings || {
+        name: activeCompany.name || "",
+        tradingName: activeCompany.tradingName || "",
+        email: activeCompany.email || "",
+        phone: activeCompany.phone || "",
+        address: activeCompany.address || "",
+        city: activeCompany.city || "",
+        website: activeCompany.website || "",
+        tin: activeCompany.tin || "",
+        vatNumber: activeCompany.vatNumber || "",
+        bpNumber: activeCompany.bpNumber || "",
+        vatEnabled: activeCompany.vatEnabled ?? true,
+        vatRegistered: activeCompany.vatRegistered ?? true,
+        bankName: activeCompany.bankName || "",
+        accountName: activeCompany.accountName || "",
+        accountNumber: activeCompany.accountNumber || "",
+        branchCode: activeCompany.branchCode || "",
+        currency: activeCompany.currency || "USD",
+        branchName: activeCompany.branchName || "",
+        emailSettings: activeCompany.emailSettings || {
           provider: 'resend',
           apiKey: '',
-          fromEmail: 'billing@yourdomain.com',
-          fromName: currentCompany.name || 'Accounts'
+          fromEmail: '',
+          fromName: activeCompany.name || ''
         },
-        posSettings: currentCompany.posSettings || {
+        posSettings: activeCompany.posSettings || {
+          terminalId: "",
+          receiptHeader: "",
+          receiptFooter: "",
+          receiptPaperSize: "80mm",
+          receiptShowLogo: true,
           requireOverrideForDiscount: false,
           requireOverrideForPriceChange: false,
           requireOverrideForDelete: false,
-          requireOverrideForOpenDrawer: false
+          requireOverrideForOpenDrawer: false,
+          autoPrintReceipt: true,
+          usePrinterClient: false,
+          printingEnabled: true,
+          allowSellOutOfStock: false,
+          allowedPaymentMethods: ["CASH", "CARD", "ECOCASH", "usd", "zig"],
+          defaultCustomerId: "",
+          silentPrinting: false,
+          printServerUrl: "http://localhost:12312",
+          printerName: ""
         }
       });
     }
-  }, [currentCompany]);
+  }, [activeCompany]);
 
-  const handleSave = async (section: string) => {
+  // Update URL when tab changes
+  useEffect(() => {
+    const newUrl = `${window.location.pathname}?tab=${activeTab}`;
+    window.history.replaceState({ ...window.history.state, as: newUrl, url: newUrl }, '', newUrl);
+  }, [activeTab]);
+
+  const handleGlobalSave = async () => {
     try {
       await updateCompany.mutateAsync(formData);
       toast({
-        title: "Success",
-        description: `${section} updated successfully`,
+        title: "Configuration Saved",
+        description: "Your organization settings have been updated successfully.",
+        className: "bg-slate-900 text-white border-none rounded-2xl"
       });
-    } catch (error: any) {
+    } catch (err: any) {
       toast({
-        title: "Error",
-        description: error.message || "Failed to update company",
-        variant: "destructive",
+        title: "Save Failed",
+        description: err.message || "An unexpected error occurred",
+        variant: "destructive"
       });
     }
   };
 
-  if (isLoading) return <Layout><div className="flex items-center justify-center h-[60vh]"><RefreshCw className="animate-spin w-8 h-8 text-slate-300" /></div></Layout>;
-  if (!currentCompany) return <Layout><div className="p-8">No company details available.</div></Layout>;
+  if (isLoadingActive) return <Layout><div className="flex items-center justify-center h-[60vh]"><RefreshCw className="animate-spin w-8 h-8 text-slate-300" /></div></Layout>;
+  if (!activeCompany) return <Layout><div className="p-8">No company details available. Please select a company from the sidebar.</div></Layout>;
+
+  const menuGroups = [
+    {
+      title: "Organization",
+      items: [
+        { id: "profile", label: "Profile", icon: Building2, desc: "Primary identity & info" },
+        { id: "team", label: "Team", icon: Users, desc: "Managers & staff" },
+        { id: "security", label: "Security", icon: ShieldCheck, desc: "API & Access logs" },
+      ]
+    },
+    {
+      title: "Financial",
+      items: [
+        { id: "banking", label: "Banking", icon: Landmark, desc: "Payout destinations" },
+        { id: "currencies", label: "Currencies", icon: Coins, desc: "Multi-currency rates" },
+      ]
+    },
+    {
+      title: "Fiscal (Tax)",
+      items: [
+        { id: "zimra", label: "ZIMRA Device", icon: Server, desc: "Fiscalization hardware" },
+        { id: "tax", label: "Tax Config", icon: SettingsIcon, desc: "VAT/BP & mapping" },
+      ]
+    },
+    {
+      title: "Point of Sale",
+      items: [
+        { id: "pos", label: "POS Terminal", icon: MonitorCheck, desc: "UI, Receipt & Rules" },
+      ]
+    },
+    {
+      title: "System",
+      items: [
+        { id: "communication", label: "Communication", icon: Mail, desc: "Email & notifications" },
+      ]
+    }
+  ];
+
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'profile': return <OrganizationProfile company={activeCompany} formData={formData} setFormData={setFormData} />;
+      case 'team': return <TeamManagement companyId={activeCompany.id} />;
+      case 'security': return <SecuritySettings company={activeCompany} />;
+      case 'banking': return <BankingSettings formData={formData} setFormData={setFormData} />;
+      case 'currencies': return <CurrencySettings companyId={activeCompany.id} />;
+      case 'tax': return <TaxComplianceSettings companyId={activeCompany.id} formData={formData} setFormData={setFormData} />;
+      case 'zimra': return <ZimraDeviceSettings company={activeCompany} />;
+      case 'pos': return <PosTerminalSettings companyId={activeCompany.id} formData={formData} setFormData={setFormData} />;
+      case 'communication': return <CommunicationSettings formData={formData} setFormData={setFormData} />;
+      default: return <OrganizationProfile company={activeCompany} formData={formData} setFormData={setFormData} />;
+    }
+  };
+
+  const showGlobalSave = ['profile', 'banking', 'tax', 'pos', 'communication'].includes(activeTab);
 
   return (
     <Layout>
-      <div className="mb-8">
-        <h1 className="text-3xl font-display font-bold text-slate-900">Settings</h1>
-        <p className="text-slate-500 mt-1">Manage your company profile and preferences</p>
-      </div>
-
-      <Tabs defaultValue="general" className="space-y-6">
-        <div className="overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-none">
-          <TabsList className="bg-slate-100/80 p-1 border border-slate-200 shadow-sm w-full sm:w-auto inline-flex min-w-max">
-            <TabsTrigger value="general" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">General</TabsTrigger>
-            <TabsTrigger value="finance" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">Finance & Tax</TabsTrigger>
-            <TabsTrigger value="communication" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">Communication</TabsTrigger>
-            <TabsTrigger value="pos" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">POS Settings</TabsTrigger>
-            <TabsTrigger value="security" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">Security</TabsTrigger>
-          </TabsList>
+      <div className="flex flex-col gap-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h1 className="text-4xl font-black text-slate-900 tracking-tight font-display">Administration</h1>
+            <p className="text-slate-500 font-medium">Configure your core business infrastructure</p>
+          </div>
+          {showGlobalSave && (
+            <Button 
+              onClick={handleGlobalSave} 
+              disabled={updateCompany.isPending} 
+              className="h-12 px-8 rounded-2xl btn-gradient shadow-xl shadow-indigo-100 font-black gap-2 active:scale-95 transition-all w-full sm:w-auto"
+            >
+              {updateCompany.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Save All Changes
+            </Button>
+          )}
         </div>
 
-        {/* GENERAL TAB */}
-        <TabsContent value="general" className="space-y-6">
-          <div className="flex justify-between items-center mb-2">
-            <h2 className="text-lg font-semibold text-slate-800">General Settings</h2>
-            <Button onClick={() => handleSave("Company profile")} disabled={updateCompany.isPending} size="sm" className="btn-gradient shadow-md">
-              <Save className="mr-2 h-4 w-4" /> Save General
-            </Button>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <Card className="card-depth border-none h-fit">
-              <CardHeader>
-                <CardTitle className="flex items-center text-base">
-                  <Building2 className="w-5 h-5 mr-2 text-blue-600" />
-                  Company Details
-                </CardTitle>
-                <CardDescription>Official business identification and contacts</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Company Name</Label>
-                    <Input
-                      value={formData.name}
-                      onChange={e => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="Official Name"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Trading Name</Label>
-                    <Input
-                      value={formData.tradingName}
-                      onChange={e => setFormData({ ...formData, tradingName: e.target.value })}
-                      placeholder="DBA (Optional)"
-                    />
-                  </div>
-                </div>
-
+        <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-8">
+          {/* Admin Sidebar */}
+          <aside className="space-y-8 bg-white/50 backdrop-blur-md p-4 rounded-[2.5rem] border border-white shadow-sm h-fit sticky top-24">
+            {menuGroups.map((group, idx) => (
+              <div key={idx} className="space-y-2">
+                <h3 className="px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">{group.title}</h3>
                 <div className="space-y-1">
-                  <Label className="text-xs">Branch Name (ZIMRA [5])</Label>
-                  <Input
-                    value={formData.branchName}
-                    onChange={e => setFormData({ ...formData, branchName: e.target.value })}
-                    placeholder="Only if different from Company Name"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Email Address</Label>
-                    <Input
-                      value={formData.email}
-                      onChange={e => setFormData({ ...formData, email: e.target.value })}
-                      placeholder="contact@business.com"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Phone Number</Label>
-                    <Input
-                      value={formData.phone}
-                      onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                      placeholder="+263..."
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <Label className="text-xs">Street Address</Label>
-                  <Input
-                    value={formData.address}
-                    onChange={e => setFormData({ ...formData, address: e.target.value })}
-                    placeholder="123 Business Way"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label className="text-xs">City</Label>
-                    <Input
-                      value={formData.city}
-                      onChange={e => setFormData({ ...formData, city: e.target.value })}
-                      placeholder="Harare"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Website</Label>
-                    <Input
-                      value={formData.website}
-                      onChange={e => setFormData({ ...formData, website: e.target.value })}
-                      placeholder="https://..."
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <div className="space-y-8">
-              <Card className="card-depth border-none h-fit">
-                <CardHeader>
-                  <CardTitle className="flex items-center text-base">
-                    <Upload className="w-5 h-5 mr-2 text-indigo-600" />
-                    Company Logo
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-xl p-6 bg-slate-50/50">
-                    {currentCompany.logoUrl ? (
-                      <div className="relative group mb-4">
-                        <img src={currentCompany.logoUrl} alt="Logo" className="h-24 w-auto object-contain rounded shadow-sm" />
-                      </div>
-                    ) : (
-                      <div className="h-24 w-24 bg-slate-100 rounded flex items-center justify-center mb-4 border border-slate-200">
-                        <ImageIcon className="w-8 h-8 text-slate-300" />
-                      </div>
-                    )}
-                    <div className="w-full">
-                      <Input
-                        type="file"
-                        accept="image/*"
-                        disabled={isUploading}
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          setIsUploading(true);
-                          try {
-                            const fd = new FormData();
-                            fd.append("file", file);
-                            const res = await apiFetch("/api/upload", { method: "POST", body: fd });
-                            if (!res.ok) throw new Error("Upload failed");
-                            const data = await res.json();
-                            await updateCompany.mutateAsync({ logoUrl: data.url });
-                            toast({ title: "Success", description: "Logo updated" });
-                          } catch (err: any) {
-                            toast({ title: "Error", description: err.message, variant: "destructive" });
-                          } finally {
-                            setIsUploading(false);
-                          }
-                        }}
-                        className="text-xs cursor-pointer"
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="card-depth border-none h-fit">
-                <CardHeader>
-                  <CardTitle className="flex items-center text-base">
-                    <RefreshCw className="w-5 h-5 mr-2 text-blue-600" />
-                    Regional Settings
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Default Currency</Label>
-                    <Input
-                      value={formData.currency}
-                      onChange={e => setFormData({ ...formData, currency: e.target.value })}
-                      placeholder="USD"
-                    />
-                  </div>
-                  <div className="space-y-1 opacity-50">
-                    <Label className="text-xs">Date Format</Label>
-                    <Input value="DD/MM/YYYY" disabled className="bg-slate-50" />
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </TabsContent>
-
-        {/* FINANCE TAB */}
-        <TabsContent value="finance" className="space-y-6">
-          <div className="flex justify-between items-center mb-2">
-            <h2 className="text-lg font-semibold text-slate-800">Finance & Tax</h2>
-            <Button onClick={() => handleSave("Financial details")} disabled={updateCompany.isPending} size="sm" className="btn-gradient shadow-md">
-              <Save className="mr-2 h-4 w-4" /> Save Finance Settings
-            </Button>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <Card className="card-depth border-none h-fit">
-              <CardHeader>
-                <CardTitle className="flex items-center text-base">
-                  <Landmark className="w-5 h-5 mr-2 text-emerald-600" />
-                  Banking Details
-                </CardTitle>
-                <CardDescription>Default payment info for invoices</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-8">
-                <div className="space-y-3">
-                  <Label className="text-base font-bold text-slate-800 block">Bank Name</Label>
-                  <Input
-                    value={formData.bankName}
-                    onChange={e => setFormData({ ...formData, bankName: e.target.value })}
-                    placeholder="e.g. Stanbic, CBZ, Ecocash"
-                    className="h-12 text-base"
-                  />
-                </div>
-                <div className="space-y-3">
-                  <Label className="text-base font-bold text-slate-800 block">Account Name</Label>
-                  <Input
-                    value={formData.accountName}
-                    onChange={e => setFormData({ ...formData, accountName: e.target.value })}
-                    placeholder="Beneficiary Name"
-                    className="h-12 text-base"
-                  />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                  <div className="space-y-3">
-                    <Label className="text-base font-bold text-slate-800 block">Account Number</Label>
-                    <Input
-                      value={formData.accountNumber}
-                      onChange={e => setFormData({ ...formData, accountNumber: e.target.value })}
-                      placeholder="Account #"
-                      className="h-12 text-base"
-                    />
-                  </div>
-                  <div className="space-y-3">
-                    <Label className="text-base font-bold text-slate-800 block">Branch Code</Label>
-                    <Input
-                      value={formData.branchCode}
-                      onChange={e => setFormData({ ...formData, branchCode: e.target.value })}
-                      placeholder="Sort Code"
-                      className="h-12 text-base"
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="card-depth border-none h-fit">
-              <CardHeader>
-                <CardTitle className="flex items-center text-base">
-                  <Settings className="w-5 h-5 mr-2 text-slate-600" />
-                  Tax & Compliance
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label className="text-xs">TIN</Label>
-                    <Input
-                      value={formData.tin}
-                      onChange={e => setFormData({ ...formData, tin: e.target.value })}
-                      placeholder="Tax ID Number"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">BP Number</Label>
-                    <Input
-                      value={formData.bpNumber}
-                      onChange={e => setFormData({ ...formData, bpNumber: e.target.value })}
-                      placeholder="Business Partner Number"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">VAT Number</Label>
-                  <Input
-                    value={formData.vatNumber}
-                    onChange={e => setFormData({ ...formData, vatNumber: e.target.value })}
-                    placeholder="VAT Reg #"
-                  />
-                </div>
-                <div className="flex items-center space-x-2 pt-2">
-                  <Checkbox
-                    id="vatEnabled"
-                    checked={formData.vatEnabled}
-                    onCheckedChange={(checked) => setFormData({ ...formData, vatEnabled: checked === true })}
-                  />
-                  <label htmlFor="vatEnabled" className="text-sm font-medium">Apply VAT by default</label>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="vatRegistered"
-                    checked={formData.vatRegistered}
-                    onCheckedChange={(checked) => setFormData({ ...formData, vatRegistered: checked === true })}
-                  />
-                  <label htmlFor="vatRegistered" className="text-sm font-medium">Company is VAT registered</label>
-                </div>
-
-                <div className="pt-6 border-t border-slate-100 mt-6 flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label className="text-sm font-semibold text-slate-700">ZIMRA Sync</Label>
-                    <p className="text-[10px] text-slate-500">Update rates and config from gateway</p>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => syncZimra()}
-                    disabled={isSyncing}
-                    className="h-8"
-                  >
-                    {isSyncing ? <RefreshCw className="w-3 h-3 mr-2 animate-spin" /> : <ShieldCheck className="w-3 h-3 mr-2" />}
-                    Sync Now
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="grid grid-cols-1 gap-8">
-            <Card className="card-depth border-none h-fit">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <CardTitle className="flex items-center text-base">
-                      <Settings className="w-5 h-5 mr-2 text-slate-600" />
-                      Tax Rates Management
-                    </CardTitle>
-                  </div>
-                  <Button size="sm" variant="outline" onClick={() => document.getElementById('add-tax-trigger')?.click()}>
-                    Add Tax Rate
-                  </Button>
-                </div>
-                <CardDescription>Configure specific tax rates and their ZIMRA mapping.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <TaxTypesManager companyId={companyId} />
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        {/* COMMUNICATION TAB */}
-        <TabsContent value="communication" className="space-y-6">
-          <div className="flex justify-between items-center mb-2">
-            <h2 className="text-lg font-semibold text-slate-800">Email Configuration</h2>
-            <Button onClick={() => handleSave("Email settings")} disabled={updateCompany.isPending} size="sm" className="btn-gradient shadow-md">
-              <Save className="mr-2 h-4 w-4" /> Save Communication
-            </Button>
-          </div>
-
-          <Card className="card-depth border-none max-w-2xl">
-            <CardHeader>
-              <CardTitle className="flex items-center text-base">
-                <Mail className="w-5 h-5 mr-2 text-violet-600" />
-                Resend API Integration
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-1">
-                <Label className="text-xs">API Key</Label>
-                <Input
-                  type="password"
-                  value={formData.emailSettings?.apiKey || ""}
-                  onChange={e => setFormData({
-                    ...formData,
-                    emailSettings: { ...formData.emailSettings, apiKey: e.target.value }
-                  })}
-                  placeholder="re_..."
-                />
-              </div>
-
-               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <Label className="text-xs">From Name</Label>
-                  <Input
-                    value={formData.emailSettings?.fromName || ""}
-                    onChange={e => setFormData({
-                      ...formData,
-                      emailSettings: { ...formData.emailSettings, fromName: e.target.value }
-                    })}
-                    placeholder="e.g. Accounts Team"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">From Email</Label>
-                  <Input
-                    value={formData.emailSettings?.fromEmail || ""}
-                    onChange={e => setFormData({
-                      ...formData,
-                      emailSettings: { ...formData.emailSettings, fromEmail: e.target.value }
-                    })}
-                    placeholder="billing@..."
-                  />
-                </div>
-              </div>
-              <div className="bg-amber-50 p-3 rounded border border-amber-100 text-[11px] text-amber-800 italic">
-                <strong>Note:</strong> Verify your domain in Resend. For testing, use <code>onboarding@resend.dev</code>.
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        {/* POS SETTINGS TAB */}
-        <TabsContent value="pos" className="space-y-6">
-          <div className="flex justify-between items-center mb-2">
-            <h2 className="text-lg font-semibold text-slate-800">Point of Sale Settings</h2>
-            <Button onClick={() => handleSave("POS settings")} disabled={updateCompany.isPending} size="sm" className="btn-gradient shadow-md">
-              <Save className="mr-2 h-4 w-4" /> Save POS Settings
-            </Button>
-          </div>
-
-          <Card className="card-depth border-none max-w-2xl">
-            <CardHeader>
-              <CardTitle className="flex items-center text-base">
-                <Landmark className="w-5 h-5 mr-2 text-indigo-600" />
-                Admin Override Requirements
-              </CardTitle>
-              <CardDescription>Select which actions require an Admin PIN to proceed at the point of sale.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between p-4 bg-slate-50/50 rounded-2xl border border-slate-100 group hover:border-indigo-100 transition-all">
-                <div className="space-y-0.5">
-                  <Label className="text-sm font-bold text-slate-700">Manual Discount</Label>
-                  <p className="text-xs text-slate-500">Require admin PIN when applying a manual discount to an order.</p>
-                </div>
-                <Checkbox 
-                  checked={formData.posSettings?.requireOverrideForDiscount}
-                  onCheckedChange={(checked) => setFormData({
-                    ...formData,
-                    posSettings: { ...formData.posSettings, requireOverrideForDiscount: checked === true }
-                  })}
-                />
-              </div>
-
-              <div className="flex items-center justify-between p-4 bg-slate-50/50 rounded-2xl border border-slate-100 group hover:border-indigo-100 transition-all">
-                <div className="space-y-0.5">
-                  <Label className="text-sm font-bold text-slate-700">Price Change</Label>
-                  <p className="text-xs text-slate-500">Require admin PIN when manually changing the price of an item.</p>
-                </div>
-                <Checkbox 
-                  checked={formData.posSettings?.requireOverrideForPriceChange}
-                  onCheckedChange={(checked) => setFormData({
-                    ...formData,
-                    posSettings: { ...formData.posSettings, requireOverrideForPriceChange: checked === true }
-                  })}
-                />
-              </div>
-
-              <div className="flex items-center justify-between p-4 bg-slate-50/50 rounded-2xl border border-slate-100 group hover:border-indigo-100 transition-all">
-                <div className="space-y-0.5">
-                  <Label className="text-sm font-bold text-slate-700">Delete Item / Void</Label>
-                  <p className="text-xs text-slate-500">Require admin PIN to remove items from a cart or void a transaction.</p>
-                </div>
-                <Checkbox 
-                  checked={formData.posSettings?.requireOverrideForDelete}
-                  onCheckedChange={(checked) => setFormData({
-                    ...formData,
-                    posSettings: { ...formData.posSettings, requireOverrideForDelete: checked === true }
-                  })}
-                />
-              </div>
-
-              <div className="flex items-center justify-between p-4 bg-slate-50/50 rounded-2xl border border-slate-100 group hover:border-indigo-100 transition-all">
-                <div className="space-y-0.5">
-                  <Label className="text-sm font-bold text-slate-700">Open Cash Drawer</Label>
-                  <p className="text-xs text-slate-500">Require admin PIN to open the cash drawer without a sale.</p>
-                </div>
-                <Checkbox 
-                  checked={formData.posSettings?.requireOverrideForOpenDrawer}
-                  onCheckedChange={(checked) => setFormData({
-                    ...formData,
-                    posSettings: { ...formData.posSettings, requireOverrideForOpenDrawer: checked === true }
-                  })}
-                />
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* SECURITY TAB */}
-        <TabsContent value="security" className="space-y-6">
-          <h2 className="text-lg font-semibold text-slate-800">Security & Privacy</h2>
-          <Card className="card-depth border-none max-w-md">
-            <CardHeader>
-              <CardTitle className="flex items-center text-base">
-                <ShieldCheck className="w-5 h-5 mr-2 text-red-600" />
-                Audit System
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-slate-500">
-                Track all critical actions performed by team members within your organization.
-              </p>
-              <Link href="/audit-logs">
-                <Button variant="outline" className="w-full">
-                  Access Audit Logs
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
-
-          <Card className="card-depth border-none max-w-md">
-            <CardHeader>
-              <CardTitle className="flex items-center text-base">
-                <Key className="w-5 h-5 mr-2 text-violet-600" />
-                API Access
-              </CardTitle>
-              <CardDescription>
-                Manage API keys for accessing Swagger documentation and external integrations.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {currentCompany.apiKey ? (
-                <div className="space-y-2">
-                  <Label className="text-xs">Current API Key</Label>
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <Input
-                        value={currentCompany.apiKey}
-                        readOnly
-                        type="password"
-                        className="pr-10 bg-slate-50 font-mono text-xs"
-                      />
-                    </div>
-                    <Button
-                      size="icon"
-                      variant="outline"
-                      onClick={() => {
-                        navigator.clipboard.writeText(currentCompany.apiKey!);
-                        toast({ title: "Copied", description: "API Key copied to clipboard" });
-                      }}
+                  {group.items.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => setActiveTab(item.id)}
+                      className={`w-full group flex items-start gap-3 px-4 py-3 rounded-2xl transition-all duration-300 relative ${
+                        activeTab === item.id 
+                          ? "bg-slate-900 text-white shadow-2xl shadow-slate-300 translate-x-1" 
+                          : "text-slate-500 hover:bg-white hover:shadow-lg hover:shadow-slate-100 hover:text-slate-900 hover:translate-x-1"
+                      }`}
                     >
-                      <Copy className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <div className="bg-amber-50 p-3 rounded border border-amber-100 text-[11px] text-amber-800">
-                    <p>Use this key to authenticate requests to the API. Keep it secret.</p>
-                  </div>
+                      <div className={`p-2 rounded-xl transition-colors ${
+                        activeTab === item.id ? "bg-white/10 text-white" : "bg-slate-100 text-slate-400 group-hover:bg-slate-200/50 group-hover:text-slate-600"
+                      }`}>
+                        <item.icon className="w-4 h-4" />
+                      </div>
+                      <div className="text-left overflow-hidden">
+                        <p className={`text-sm font-bold leading-tight ${activeTab === item.id ? "text-white" : "text-slate-700"}`}>{item.label}</p>
+                        <p className={`text-[10px] truncate max-w-[160px] ${activeTab === item.id ? "text-slate-400" : "text-slate-400"}`}>{item.desc}</p>
+                      </div>
+                      {activeTab === item.id && (
+                        <motion.div layoutId="active-indicator" className="ml-auto flex items-center h-full">
+                           <ChevronRight className="w-4 h-4 text-white/40" />
+                        </motion.div>
+                      )}
+                    </button>
+                  ))}
                 </div>
-              ) : (
-                <div className="bg-slate-50 p-4 rounded-lg border border-slate-100 text-center">
-                  <p className="text-sm text-slate-500 mb-4">No API Key generated yet.</p>
-                </div>
-              )}
-
-              <Button
-                variant={currentCompany.apiKey ? "outline" : "default"}
-                className="w-full"
-                disabled={isGeneratingKey}
-                onClick={() => generateApiKey()}
+              </div>
+            ))}
+            
+            <div className="pt-4 border-t border-slate-100">
+               <Button 
+                variant="ghost" 
+                className="w-full justify-start px-4 h-11 rounded-2xl text-slate-400 hover:text-slate-900 font-bold text-xs gap-3"
+                onClick={() => setLocation("/dashboard")}
               >
-                {isGeneratingKey && <RefreshCw className="w-4 h-4 mr-2 animate-spin" />}
-                {currentCompany.apiKey ? "Regenerate API Key" : "Generate API Key"}
+                <LayoutDashboard className="w-4 h-4" />
+                Return to Dashboard
               </Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+            </div>
+          </aside>
+
+          {/* Setting Section Container */}
+          <div className="relative min-h-[600px] mb-20">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeTab}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2, ease: "easeInOut" }}
+                className="w-full"
+              >
+                {renderContent()}
+              </motion.div>
+            </AnimatePresence>
+          </div>
+        </div>
+      </div>
     </Layout>
   );
 }

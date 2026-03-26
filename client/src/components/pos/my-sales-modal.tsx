@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Receipt, ChevronDown, ChevronUp, Printer, Calendar as CalendarIcon, FileText, AlertTriangle } from "lucide-react";
+import { Loader2, Receipt, ChevronDown, ChevronUp, Printer, Calendar as CalendarIcon, FileText, AlertTriangle, History } from "lucide-react";
 import { format, startOfDay, endOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
@@ -98,7 +98,12 @@ export function MySalesModal({ companyId, company, posSettings, user, trigger }:
                 if (!html) throw new Error("Receipt content not found. Please expand the row first.");
 
                 if (window.electronAPI) {
-                    await window.electronAPI.printReceipt(html, posSettings.printerName || undefined);
+                    const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]')).map(s => {
+                        if (s.tagName === 'LINK') return `<link rel="stylesheet" href="${(s as HTMLLinkElement).href}">`;
+                        return s.outerHTML;
+                    }).join('');
+                    const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8">${styles}</head><body class="bg-white p-0 m-0" style="margin:0;padding:0;">${html}</body></html>`;
+                    await window.electronAPI.printReceipt(fullHtml, posSettings.printerName || undefined);
                 } else {
                     const response = await fetch(`${posSettings.printServerUrl}/print`, {
                         method: "POST",
@@ -286,6 +291,7 @@ export function MySalesModal({ companyId, company, posSettings, user, trigger }:
                                                                 company={company}
                                                                 user={user}
                                                                 items={tx.items}
+                                                                paperSize={posSettings?.paperSize || company?.posSettings?.receiptPaperSize || '80mm'}
                                                             />
                                                         </div>
                                                     </TableCell>

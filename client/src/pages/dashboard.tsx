@@ -96,6 +96,33 @@ export default function Dashboard() {
     enabled: !!selectedCompany?.id,
   });
 
+  const { data: operationalMetrics } = useQuery<any>({
+    queryKey: [api.reports.operationalMetrics.path, selectedCompany?.id],
+    queryFn: async () => {
+      const res = await apiFetch(buildUrl(api.reports.operationalMetrics.path, { companyId: selectedCompany?.id }));
+      return res.json();
+    },
+    enabled: !!selectedCompany?.id,
+  });
+
+  const { data: hourlySales } = useQuery<any[]>({
+    queryKey: [api.reports.hourlySales.path, selectedCompany?.id],
+    queryFn: async () => {
+      const res = await apiFetch(buildUrl(api.reports.hourlySales.path, { companyId: selectedCompany?.id }));
+      return res.json();
+    },
+    enabled: !!selectedCompany?.id,
+  });
+
+  const { data: stockAlerts } = useQuery<any[]>({
+    queryKey: [api.reports.stockAlerts.path, selectedCompany?.id],
+    queryFn: async () => {
+      const res = await apiFetch(buildUrl(api.reports.stockAlerts.path, { companyId: selectedCompany?.id }));
+      return res.json();
+    },
+    enabled: !!selectedCompany?.id,
+  });
+
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -143,8 +170,6 @@ export default function Dashboard() {
         description: "Your new API key has been created successfully.",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/user"] });
-      // In a real app we might show the full key once here, but 
-      // the endpoint currently just saves it and the list/user endpoint returns a masked version.
     },
     onError: (error: Error) => {
       toast({
@@ -179,7 +204,13 @@ export default function Dashboard() {
     return isPast5PM && isFiscalDayOpen;
   }, [deviceStatus]);
 
-  const isConfigured = selectedCompany?.tin && selectedCompany.fdmsDeviceId;
+  const formatCurrency = (val: number) => {
+    try {
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: reportCurrencyCode }).format(val);
+    } catch (e) {
+      return `${consolidatedSymbol}${val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+  };
 
   if (!selectedCompany) {
     return (
@@ -194,16 +225,6 @@ export default function Dashboard() {
       </Layout>
     );
   }
-
-
-  const formatCurrency = (val: number) => {
-    try {
-      return new Intl.NumberFormat('en-US', { style: 'currency', currency: reportCurrencyCode }).format(val);
-    } catch (e) {
-      // Fallback for non-standard ISO codes or symbols
-      return `${consolidatedSymbol}${val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    }
-  };
 
   return (
     <Layout>
@@ -309,6 +330,56 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* Operational Retail Metrics [NEW] */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card className="border-none shadow-xl rounded-3xl bg-white overflow-hidden group hover:scale-[1.02] transition-transform duration-300">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                <ShoppingCart className="w-3 h-3 text-blue-500" /> Avg. Transaction (ATV)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-black font-display text-slate-900">
+                {formatCurrency(operationalMetrics?.atv || 0)}
+              </div>
+              <p className="text-[10px] text-slate-500 mt-1 font-medium italic">Average spend per customer</p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-none shadow-xl rounded-3xl bg-white overflow-hidden group hover:scale-[1.02] transition-transform duration-300">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                <TrendingUp className="w-3 h-3 text-emerald-500" /> Gross Profit Margin
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-black font-display text-emerald-600">
+                {Math.round(operationalMetrics?.profitMargin || 0)}%
+              </div>
+              <div className="w-full h-1.5 bg-slate-100 rounded-full mt-2 overflow-hidden">
+                <div 
+                  className="h-full bg-emerald-500 rounded-full" 
+                  style={{ width: `${Math.min(100, operationalMetrics?.profitMargin || 0)}%` }}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-none shadow-xl rounded-3xl bg-white overflow-hidden group hover:scale-[1.02] transition-transform duration-300">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                <ShoppingBag className="w-3 h-3 text-purple-500" /> Items per Receipt
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-black font-display text-slate-900">
+                {(operationalMetrics?.itemsPerReceipt || 0).toFixed(1)}
+              </div>
+              <p className="text-[10px] text-slate-500 mt-1 font-medium italic">Average items per basket</p>
+            </CardContent>
+          </Card>
+        </div>
+
         {/* Charts & Fiscal Summary */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <Card className="lg:col-span-2 border-none shadow-xl rounded-3xl overflow-hidden bg-white">
@@ -354,7 +425,7 @@ export default function Dashboard() {
                       axisLine={false} 
                       tickLine={false} 
                       tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 700}}
-                      tickFormatter={(val) => `$${val}`}
+                      tickFormatter={(val) => consolidatedSymbol + val}
                     />
                     <Tooltip 
                       contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '12px'}}
@@ -365,6 +436,42 @@ export default function Dashboard() {
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Hourly Distribution [NEW] */}
+          <Card className="border-none shadow-xl rounded-3xl overflow-hidden bg-white">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                <Clock className="w-3 h-3 text-primary" /> Hourly Sales Heatmap
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+                <div className="h-[300px] w-full mt-4">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={hourlySales?.filter(d => d.total > 0) || []}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis 
+                        dataKey="hour" 
+                        tickFormatter={(h) => `${h}:00`}
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{fill: '#94a3b8', fontSize: 9, fontWeight: 700}}
+                      />
+                      <YAxis hide />
+                      <Tooltip 
+                        contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}}
+                        formatter={(val: number) => [formatCurrency(val), "Sales"]}
+                        labelFormatter={(h) => `${h}:00`}
+                      />
+                      <Bar dataKey="total" radius={[4, 4, 0, 0]}>
+                        {hourlySales?.filter(d => d.total > 0).map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={index % 2 === 0 ? "hsl(var(--primary))" : "hsl(var(--primary) / 0.6)"} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
             </CardContent>
           </Card>
 
@@ -490,6 +597,29 @@ export default function Dashboard() {
                   </Button>
                 </div>
               </Card>
+
+              {/* Stock Alerts [NEW] */}
+              {stockAlerts && stockAlerts.length > 0 && (
+                <Card className="border-none shadow-xl rounded-3xl bg-white p-6 mt-6">
+                  <CardTitle className="text-[10px] font-black uppercase tracking-widest text-rose-500 mb-4 flex items-center gap-2">
+                    <AlertCircle className="w-3 h-3" /> Low Stock Warning
+                  </CardTitle>
+                  <div className="space-y-3">
+                    {stockAlerts.slice(0, 4).map((item, i) => (
+                      <div key={i} className="flex justify-between items-center border-b border-slate-50 pb-2">
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold text-slate-800">{item.name}</span>
+                          <span className="text-[9px] text-slate-400 font-medium italic">{item.categoryName || "General"}</span>
+                        </div>
+                        <div className="flex flex-col items-end">
+                          <span className="text-xs font-black text-rose-600">{Number(item.stockLevel).toFixed(0)}</span>
+                          <span className="text-[8px] font-black uppercase tracking-tighter text-slate-400">Inventory</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              )}
             </div>
           </div>
         </div>

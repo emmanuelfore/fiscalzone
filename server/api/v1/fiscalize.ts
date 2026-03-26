@@ -59,6 +59,7 @@ export const passThroughFiscalizeSchema = z.object({
   //  PRESELECTED LISTS — enum with default, client picks or omits
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   paymentMethod:   z.enum(["CASH", "CARD", "MOBILE", "TRANSFER"]).default("CASH"),
+  splitPayments:   z.array(z.object({ method: z.string(), amount: z.number() })).optional(),
   transactionType: z.enum(["FiscalInvoice", "CreditNote", "DebitNote"]).default("FiscalInvoice"),
   currency:        z.enum(["USD", "ZWG"]).default("USD"),
 
@@ -341,6 +342,7 @@ router.post("/", async (req, res) => {
       currency:         companyCurrency,
       taxInclusive:     false, // always store tax-exclusive after normalisation
       paymentMethod:    body.paymentMethod,
+      splitPayments:    body.splitPayments ?? null,
       transactionType:  body.transactionType,
       subtotal:         subtotal.toFixed(2),
       taxAmount:        taxAmount.toFixed(2),
@@ -418,11 +420,27 @@ router.post("/", async (req, res) => {
       } : {}),
     } : undefined;
 
-    const moneyTypeCode = body.paymentMethod === "CASH"     ? "Cash"
-                        : body.paymentMethod === "CARD"     ? "Card"
-                        : body.paymentMethod === "MOBILE"   ? "MobileWallet"
-                        : body.paymentMethod === "TRANSFER" ? "BankTransfer"
-                        : "Other";
+    const getZimraPaymentMethodCode = (methodName: string): 'Cash' | 'Card' | 'Other' | 'BankTransfer' | 'MobileWallet' => {
+        const m = methodName.toUpperCase();
+        if (['CASH'].includes(m)) return 'Cash';
+        if (['CARD', 'SWIPE', 'POS'].includes(m)) return 'Card';
+        if (['MOBILE', 'ECOCASH', 'ONE_MONEY', 'TELE_CASH', 'MOBILEWALLET'].includes(m)) return 'MobileWallet';
+        if (['EFT', 'RTGS', 'TRANSFER', 'ZIPIT', 'BANKTRANSFER'].includes(m)) return 'BankTransfer';
+        return 'Other';
+    };
+
+    let receiptPayments: Array<{ moneyTypeCode: string, paymentAmount: number }> = [];
+    if (body.splitPayments && Array.isArray(body.splitPayments) && body.splitPayments.length > 0) {
+        receiptPayments = body.splitPayments.map(p => ({
+            moneyTypeCode: getZimraPaymentMethodCode(p.method),
+            paymentAmount: parseFloat(p.amount.toFixed(2))
+        }));
+    } else {
+        receiptPayments = [{
+            moneyTypeCode: getZimraPaymentMethodCode(body.paymentMethod || 'CASH'),
+            paymentAmount: total
+        }];
+    }
 
     return res.status(200).json({
       success: true,
@@ -444,7 +462,7 @@ router.post("/", async (req, res) => {
         buyerData,
         receiptLines,
         receiptTaxes,
-        receiptPayments: [{ moneyTypeCode, paymentAmount: total }],
+        receiptPayments,
         ...(body.creditNoteReason ? { receiptNotes: body.creditNoteReason } : {}),
       },
     });

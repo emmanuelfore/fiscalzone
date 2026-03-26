@@ -478,6 +478,84 @@ export const api = {
           }))
         })
       }
+    },
+    operationalMetrics: {
+      method: "GET" as const,
+      path: "/api/reports/operational-metrics/:companyId",
+      responses: {
+        200: z.object({
+          atv: z.number(),
+          profitMargin: z.number(),
+          itemsPerReceipt: z.number(),
+          totalRevenue: z.number(),
+          totalCogs: z.number()
+        })
+      }
+    },
+    hourlySales: {
+      method: "GET" as const,
+      path: "/api/reports/charts/hourly-sales/:companyId",
+      responses: {
+        200: z.array(z.object({
+          hour: z.number(),
+          count: z.number(),
+          total: z.number()
+        }))
+      }
+    },
+    stockAlerts: {
+      method: "GET" as const,
+      path: "/api/reports/stock-alerts/:companyId",
+      responses: {
+        200: z.array(z.any())
+      }
+    },
+    stockOnHand: {
+      method: "GET" as const,
+      path: "/api/reports/inventory/stock-on-hand/:companyId",
+      responses: {
+        200: z.array(z.object({
+          productId: z.number(),
+          name: z.string(),
+          sku: z.string().nullable(),
+          category: z.string().nullable(),
+          stockLevel: z.string(),
+          unitCost: z.string(),
+          totalValue: z.string()
+        }))
+      }
+    },
+    inventoryMovements: {
+      method: "GET" as const,
+      path: "/api/reports/inventory/movements/:companyId",
+      responses: {
+        200: z.array(z.object({
+          transactionId: z.number(),
+          date: z.string(),
+          productName: z.string(),
+          type: z.string(),
+          quantity: z.string(),
+          unitCost: z.string().nullable(),
+          reference: z.string().nullable(),
+          notes: z.string().nullable()
+        }))
+      }
+    },
+    purchaseHistory: {
+      method: "GET" as const,
+      path: "/api/reports/inventory/purchases/:companyId",
+      responses: {
+        200: z.array(z.object({
+          transactionId: z.number(),
+          date: z.string(),
+          productName: z.string(),
+          supplierName: z.string().nullable(),
+          quantity: z.string(),
+          unitCost: z.string(),
+          totalCost: z.string(),
+          reference: z.string().nullable()
+        }))
+      }
     }
   }
 };

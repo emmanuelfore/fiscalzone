@@ -49,11 +49,14 @@ import {
   Pause,
   MonitorSmartphone
 } from "lucide-react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { printReceipt, printToBluetooth } from "../lib/printing";
-import * as Print from 'expo-print';
+import { usePrinter } from "../hooks/usePrinter";
+import { PrinterSettingsModal } from "../ui/PrinterSettingsModal";
 import { StatusBar } from "expo-status-bar";
-import { PremiumColors } from "../ui/PremiumColors";
+import { useTheme } from "../ui/PremiumColors";
+import * as Haptics from "expo-haptics";
+import { playCheckoutSound } from "../lib/checkoutSound";
+import { useFrequentItems } from "../hooks/useFrequentItems";
+import { Swipeable } from "react-native-gesture-handler";
 import { useProducts, useCreateInvoice, useCustomers, useCompany, useCurrencies, useTaxTypes } from "../hooks/usePosData";
 import { apiFetch } from "../lib/api";
 import { supabase } from "../lib/supabase";
@@ -71,8 +74,7 @@ import {
   removePendingNote,
 } from "../lib/offlineQueue";
 
-// ─── v3 colour tokens ─────────────────────────────────────────────────────────
-import { PremiumColors as C } from "../ui/PremiumColors";
+// ─── v3 colour tokens resolved at runtime via theme ──────────────────────────
 
 const CAT_PALETTE = [
   "#f0a500", "#3b9eff", "#00d084", "#ff6b35",
@@ -113,6 +115,7 @@ type Props = {
 };
 
 export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
+  const { theme: C, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const [isOnline, setIsOnline] = useState(true);
   const isOnlineRef = React.useRef(true);
@@ -147,30 +150,11 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [showPrinterSettings, setShowPrinterSettings] = useState(false);
-
-  // -- Advanced Printer Settings --
-  const [tempPrinterAddress, setTempPrinterAddress] = useState("");
-  const [tempAutoPrint, setTempAutoPrint] = useState(false);
-  const [tempAutoShowModal, setTempAutoShowModal] = useState(true);
-  const [tempSilentPrint, setTempSilentPrint] = useState(false);
-  const [tempTerminalId, setTempTerminalId] = useState("");
-  const [tempTargetPrinter, setTempTargetPrinter] = useState("");
-  const [tempPaperWidth, setTempPaperWidth] = useState(58);
-
-  const [printerConfig, setPrinterConfig] = useState({
-    macAddress: "",
-    autoPrint: false,
-    autoShowModal: true,
-    silentPrint: false,
-    terminalId: "POS-01",
-    targetPrinter: "",
-    paperWidth: 58
-  });
+  const { config: printerConfig, print, isPrinting, failedPrints, retryFailedPrints } = usePrinter();
+  const { frequent, recordAdd } = useFrequentItems(companyId);
 
   const [lastInvoice, setLastInvoice] = useState<any | null>(null);
   const [user, setUser] = useState<any | null>(null);
-  const [printerAddress, setPrinterAddress] = useState<string>("");
-  const [isPrinting, setIsPrinting] = useState(false);
   const [cashierName, setCashierName] = useState<string>("Cashier");
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -182,6 +166,14 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
   const [shiftBalance, setShiftBalance] = useState("");
 
   const [pendingOverride, setPendingOverride] = useState<{ type: "DISCOUNT" | "VOID_CART"; data: any } | null>(null);
+
+  // Vendor Productivity States
+  const [showPayoutModal, setShowPayoutModal] = useState(false);
+  const [payoutAmount, setPayoutAmount] = useState("");
+  const [payoutReason, setPayoutReason] = useState("");
+  const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const [shiftSummary, setShiftSummary] = useState<any>(null);
+  const [isFetchingSummary, setIsFetchingSummary] = useState(false);
 
   // Sync input field when orderDiscount is changed from OUTSIDE (e.g. resuming hold, manager override)
   // Use a ref to avoid the loop: don't overwrite when the user is actively typing
@@ -254,21 +246,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
     return () => { cancelled = true; clearInterval(id); };
   }, [companyId]);
 
-  useEffect(() => {
-    AsyncStorage.getItem(`printer_config_${user?.id}`).then(val => {
-      if (val) {
-        try {
-          const cfg = JSON.parse(val);
-          setPrinterConfig(cfg);
-        } catch (e) { }
-      }
-    });
-  }, [companyId, user?.id]);
 
-  const savePrinterConfig = async (cfg: any) => {
-    setPrinterConfig(cfg);
-    await AsyncStorage.setItem(`printer_config_${user?.id}`, JSON.stringify(cfg));
-  };
 
 
   const defaultCustomerId = useMemo(() => {
@@ -363,9 +341,17 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
         return;
       }
     }
+
+    const existing = cart.find((item: CartItem) => item.productId === product.id);
+    if (existing) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } else {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+
     setCart((prev: CartItem[]) => {
-      const existing = prev.find((item: CartItem) => item.productId === product.id);
-      if (existing) {
+      const existingInPre = prev.find((item: CartItem) => item.productId === product.id);
+      if (existingInPre) {
         return prev.map((item: CartItem) =>
           item.productId === product.id ? { ...item, quantity: item.quantity + 1 } : item
         );
@@ -382,9 +368,12 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
         stockLevel: Number(product.stockLevel || 0), isTracked: product.isTracked
       }];
     });
+    // Record this product as frequently sold (fire-and-forget)
+    recordAdd({ productId: product.id, name: product.name, price: Number(product.price), category: product.category });
   };
 
   const updateQuantity = (productId: number, delta: number) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setCart((prev: CartItem[]) =>
       prev.map((item: CartItem) => {
         if (item.productId !== productId) return item;
@@ -397,6 +386,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
   };
 
   const removeFromCart = (productId: number) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setCart((prev: CartItem[]) => prev.filter((item: CartItem) => item.productId !== productId));
   };
 
@@ -489,6 +479,49 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
       await addPendingShiftAction({ companyId, type: "close", payload: { shiftId: Number(currentShift.id), closingBalance } });
       setCurrentShift(null); await setProvisionalShift(companyId, null); setShowShiftModal(false); setShiftBalance("");
     } catch { /* ignore */ }
+  };
+
+  const handlePayout = async () => {
+    if (!currentShift || !payoutAmount || !payoutReason) return;
+    setIsSubmitting(true);
+    try {
+      const res = await apiFetch(`/api/pos/shifts/${currentShift.id}/transactions`, {
+        method: "POST",
+        body: JSON.stringify({
+          type: "PAYOUT",
+          amount: parseFloat(payoutAmount),
+          reason: payoutReason
+        })
+      });
+      if (res.ok) {
+        setShowPayoutModal(false);
+        setPayoutAmount("");
+        setPayoutReason("");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        Alert.alert("Error", "Failed to log payout");
+      }
+    } catch (e) {
+      Alert.alert("Error", "Network error logging payout");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const fetchShiftSummary = async () => {
+    if (!currentShift) return;
+    setIsFetchingSummary(true);
+    try {
+      const res = await apiFetch(`/api/pos/shifts/${currentShift.id}/summary`);
+      if (res.ok) {
+        setShiftSummary(await res.json());
+        setShowSummaryModal(true);
+      } else {
+        Alert.alert("Error", "Failed to fetch shift summary");
+      }
+    } catch (e) { /* ignore */ } finally {
+      setIsFetchingSummary(false);
+    }
   };
 
   const syncQueued = async (isManual = false) => {
@@ -653,7 +686,8 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
       paymentMethod, status: "issued", notes: "POS Transaction (Mobile)",
       discountAmount: orderDiscount.toFixed(2), taxInclusive,
       transactionType: company?.vatRegistered ? "FiscalInvoice" : "Invoice",
-      isPos: true, // Mark as POS transaction
+      isPos: true,
+      shiftId: currentShift?.id, // Link to current shift for accurate summaries
       invoiceNumber: `POS-${Date.now()}`,
       issueDate: new Date().toISOString(),
       dueDate: new Date().toISOString(),
@@ -696,12 +730,14 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
     resetToDefaultCustomer();
     setIsSubmitting(false);
     if (printerConfig.autoShowModal) setShowSuccess(true);
+    // Success haptic + sound
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    playCheckoutSound().catch(() => { });
 
     // Trigger auto-print with a short delay now that state is already cleared
     if (printerConfig.autoPrint) {
       setTimeout(() => {
-        if (printerConfig.macAddress) handlePrintThermal();
-        else handlePrintStandard();
+        handlePrint();
       }, 200);
     }
 
@@ -726,63 +762,18 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
 
   const cartItemCount = cart.reduce((sum: number, item: CartItem) => sum + item.quantity, 0);
 
-  const handlePrintStandard = async () => {
+  const handlePrint = async () => {
     if (!lastInvoice || !company) return;
-    setIsPrinting(true);
-    try {
-      await printReceipt({
-        invoice: lastInvoice,
-        company,
-        customer: lastInvoice.customerId ? resolvedCustomers?.find((c: any) => c.id === lastInvoice.customerId) : null,
-        terminalId: printerConfig.terminalId,
-        currencySymbol: currencyInfo.symbol,
-        cashierName: userName,
-        paidAmount: parseFloat(paidAmount || "0"),
-        paperWidth: printerConfig.paperWidth
-      }, printerConfig.targetPrinter, printerConfig.silentPrint);
-    } catch (e: any) {
-      if (e.message !== "Print preview was cancelled.") {
-        Alert.alert("Print Error", e.message || "Could not print receipt");
-      }
-    } finally {
-      setIsPrinting(false);
-    }
-  };
-
-  const handleSelectSystemPrinter = async () => {
-    try {
-      const printer = await Print.selectPrinterAsync();
-      if (printer && printer.url) {
-        setTempTargetPrinter(printer.url);
-      }
-    } catch (error) {
-      console.warn("Printer selection canceled or failed:", error);
-    }
-  };
-
-  const handlePrintThermal = async () => {
-    if (!lastInvoice || !company) return;
-    if (!printerConfig.macAddress) {
-      Alert.alert("Printer Busy", "Please configure your Bluetooth printer address first.");
-      return;
-    }
-    setIsPrinting(true);
-    try {
-      await printToBluetooth({
-        invoice: lastInvoice,
-        company,
-        customer: lastInvoice.customerId ? resolvedCustomers?.find((c: any) => c.id === lastInvoice.customerId) : null,
-        terminalId: printerConfig.terminalId,
-        currencySymbol: currencyInfo.symbol,
-        cashierName: userName,
-        paidAmount: parseFloat(paidAmount || "0"),
-        paperWidth: printerConfig.paperWidth
-      }, printerConfig.macAddress);
-    } catch (e: any) {
-      Alert.alert("Thermal Error", e.message || "Failed to print to Bluetooth device");
-    } finally {
-      setIsPrinting(false);
-    }
+    await print({
+      invoice: lastInvoice,
+      company,
+      customer: lastInvoice.customerId ? resolvedCustomers?.find((c: any) => c.id === lastInvoice.customerId) : null,
+      terminalId: printerConfig.terminalId,
+      currencySymbol: currencyInfo.symbol,
+      cashierName: userName,
+      paidAmount: parseFloat(paidAmount || "0"),
+      paperWidth: printerConfig.paperWidth
+    });
   };
 
   const getProductMeta = (product: any, index: number) => ({
@@ -792,7 +783,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
 
   return (
     <View style={{ flex: 1, backgroundColor: C.bg.base }}>
-      <StatusBar style="light" />
+      <StatusBar style={isDark ? "light" : "dark"} />
 
       {/* ── HEADER ─────────────────────────────────────────────────────────── */}
       <View style={{
@@ -871,16 +862,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
               {isDarkMode ? <Sun size={16} color="#fbbf24" /> : <Moon size={16} color="#6366f1" />}
             </TouchableOpacity> */}
 
-            <TouchableOpacity activeOpacity={0.7} onPress={() => {
-              setTempPrinterAddress(printerConfig.macAddress);
-              setTempAutoPrint(printerConfig.autoPrint);
-              setTempAutoShowModal(printerConfig.autoShowModal ?? true);
-              setTempSilentPrint(printerConfig.silentPrint);
-              setTempTerminalId(printerConfig.terminalId);
-              setTempTargetPrinter(printerConfig.targetPrinter);
-              setTempPaperWidth(printerConfig.paperWidth || 58);
-              setShowPrinterSettings(true);
-            }}
+            <TouchableOpacity activeOpacity={0.7} onPress={() => setShowPrinterSettings(true)}
               style={{
                 width: 34, height: 34, borderRadius: 10, backgroundColor: C.bg.hover,
                 borderWidth: 1, borderColor: C.border.default, alignItems: "center", justifyContent: "center"
@@ -933,25 +915,62 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
 
         {/* Row 2: shift status + VAT label + queue badge */}
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-          <TouchableOpacity activeOpacity={0.7}
-            onPress={() => { setShiftModalType(currentShift ? "CLOSE" : "OPEN"); setShowShiftModal(true); }}
-            style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-            <View style={{
-              width: 7, height: 7, borderRadius: 4,
-              backgroundColor: currentShift ? C.status.success : "#fbbf24",
-              shadowColor: currentShift ? C.status.success : "#fbbf24", shadowOpacity: 0.7,
-              shadowRadius: 4, shadowOffset: { width: 0, height: 0 }
-            }} />
-            <Text style={{ color: "rgba(232,237,245,0.6)", fontSize: 11, fontWeight: "600" }}>
-              {currentShift ? "Shift active" : "Shift closed"}
-            </Text>
-            <Clock size={10} color={C.text.secondary} />
-          </TouchableOpacity>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+            <TouchableOpacity activeOpacity={0.7}
+              onPress={() => { setShiftModalType(currentShift ? "CLOSE" : "OPEN"); setShowShiftModal(true); }}
+              style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <View style={{
+                width: 7, height: 7, borderRadius: 4,
+                backgroundColor: currentShift ? C.status.success : "#fbbf24",
+                shadowColor: currentShift ? C.status.success : "#fbbf24", shadowOpacity: 0.7,
+                shadowRadius: 4, shadowOffset: { width: 0, height: 0 }
+              }} />
+              <Text style={{ color: C.text.secondary, fontSize: 11, fontWeight: "600" }}>
+                {currentShift ? "Shift active" : "Shift closed"}
+              </Text>
+            </TouchableOpacity>
+
+            {currentShift && (
+              <>
+                <View style={{ width: 1, height: 12, backgroundColor: C.border.default }} />
+                <TouchableOpacity
+                  onPress={() => setShowPayoutModal(true)}
+                  style={{ flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 4 }}>
+                  <Banknote size={14} color={C.amber.primary} />
+                  <Text style={{ color: C.text.primary, fontSize: 11, fontWeight: "700" }}>Payout</Text>
+                </TouchableOpacity>
+
+                <View style={{ width: 1, height: 12, backgroundColor: C.border.default }} />
+                <TouchableOpacity
+                  onPress={fetchShiftSummary}
+                  style={{ flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 4 }}>
+                  <ActivityIndicator size="small" color={C.amber.primary} animating={isFetchingSummary} style={{ display: isFetchingSummary ? 'flex' : 'none' }} />
+                  {!isFetchingSummary && <History size={14} color={C.amber.primary} />}
+                  <Text style={{ color: C.text.primary, fontSize: 11, fontWeight: "700" }}>Summary</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
 
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <Text style={{ color: C.text.secondary, fontSize: 9, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.5 }}>
-              {taxInclusive ? "VAT incl." : "VAT excl."}
-            </Text>
+            <TouchableOpacity onPress={() => setShowPayoutModal(true)}
+              style={{
+                width: 32, height: 32, borderRadius: 10, backgroundColor: C.bg.hover,
+                borderWidth: 1, borderColor: C.border.default, alignItems: "center", justifyContent: "center"
+              }}>
+              <Banknote size={16} color={C.amber.primary} />
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={fetchShiftSummary} disabled={isFetchingSummary}
+              style={{
+                paddingHorizontal: 10, height: 32, borderRadius: 10, backgroundColor: C.bg.hover,
+                borderWidth: 1, borderColor: C.border.default, alignItems: "center", justifyContent: "center"
+              }}>
+              {isFetchingSummary ? <ActivityIndicator size="small" color={C.amber.primary} /> : (
+                <Text style={{ color: C.text.primary, fontSize: 10, fontWeight: "800" }}>Summary</Text>
+              )}
+            </TouchableOpacity>
+
             <View style={{
               flexDirection: "row", alignItems: "center", gap: 5,
               backgroundColor: isSyncing ? C.amber.primary : C.bg.hover, borderRadius: 20, paddingHorizontal: 8, paddingVertical: 4,
@@ -1047,6 +1066,37 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
             showsVerticalScrollIndicator={false}
             keyExtractor={(item: any) => item.id.toString()}
             contentContainerStyle={{ paddingBottom: 100, paddingTop: 8 }}
+            // ListHeaderComponent={frequent.length > 0 && !search ? (
+            //   <View style={{ marginBottom: 12 }}>
+            //     <Text style={{
+            //       color: C.text.secondary, fontSize: 9, fontWeight: "700",
+            //       textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 8
+            //     }}>Quick Add</Text>
+            //     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4 }}>
+            //       {(frequent as any[]).map((item: any) => (
+            //         <TouchableOpacity
+            //           key={item.productId}
+            //           activeOpacity={0.82}
+            //           onPress={() => addToCart({ id: item.productId, name: item.name, price: item.price, category: item.category, isTracked: false })}
+            //           style={{
+            //             marginHorizontal: 4, paddingHorizontal: 12, paddingVertical: 8,
+            //             borderRadius: 14, borderWidth: 1,
+            //             borderColor: C.border.default,
+            //             backgroundColor: C.bg.hover,
+            //             alignItems: "center", minWidth: 72,
+            //           }}>
+            //           <Text style={{ fontSize: 16, marginBottom: 3 }}>⚡</Text>
+            //           <Text style={{ color: C.text.primary, fontSize: 10, fontWeight: "700", textAlign: "center" }} numberOfLines={1}>
+            //             {item.name.length > 10 ? item.name.slice(0, 10) + "…" : item.name}
+            //           </Text>
+            //           <Text style={{ color: C.amber.primary, fontSize: 9, fontWeight: "800" }}>
+            //             {fmt(item.price)}
+            //           </Text>
+            //         </TouchableOpacity>
+            //       ))}
+            //     </ScrollView>
+            //   </View>
+            // ) : null}
             renderItem={({ item, index }: { item: any; index: number }) => {
               const inCartItem = cart.find((c: CartItem) => c.productId === item.id);
               const inCart = !!inCartItem;
@@ -1061,26 +1111,41 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
                 <TouchableOpacity
                   activeOpacity={0.82}
                   onPress={() => !outOfStock && addToCart(item)}
-                  style={{ width: "49%", marginBottom: 8, opacity: outOfStock ? 0.35 : 1 }}
+                  style={{ 
+                    width: "49%", 
+                    marginBottom: 8, 
+                    opacity: outOfStock ? 0.35 : 1,
+                  }}
                 >
                   <View style={{
                     borderRadius: 16, paddingHorizontal: 12, paddingTop: 12, paddingBottom: 10,
                     backgroundColor: inCart ? C.bg.hover : C.bg.card,
-                    borderWidth: inCart ? 1.5 : 1,
-                    borderColor: inCart ? color : C.border.default,
+                    borderWidth: (inCart || stockLow || outOfStock) ? 1.5 : 1,
+                    borderColor: outOfStock ? C.status.error : stockLow ? "#fbbf24" : inCart ? color : C.border.default,
                     overflow: "hidden",
-                    shadowColor: inCart ? color : "#000",
-                    shadowOpacity: inCart ? 0.28 : 0.08,
-                    shadowRadius: inCart ? 10 : 4,
-                    shadowOffset: { width: 0, height: inCart ? 4 : 1 },
-                    elevation: inCart ? 6 : 1,
+                    shadowColor: outOfStock ? C.status.error : stockLow ? "#fbbf24" : inCart ? color : "#000",
+                    shadowOpacity: (inCart || stockLow || outOfStock) ? 0.35 : 0.08,
+                    shadowRadius: (inCart || stockLow || outOfStock) ? 12 : 4,
+                    shadowOffset: { width: 0, height: (inCart || stockLow || outOfStock) ? 4 : 1 },
+                    elevation: (inCart || stockLow || outOfStock) ? 8 : 1,
                   }}>
                     {/* Corner tint */}
                     <View style={{
                       position: "absolute", top: 0, right: 0,
                       width: 48, height: 48, borderTopRightRadius: 16,
-                      backgroundColor: color, opacity: 0.07,
+                      backgroundColor: stockLow ? "#fbbf24" : color, opacity: stockLow ? 0.15 : 0.07,
                     }} />
+
+                    {/* Low Stock Badge */}
+                    {stockLow && !outOfStock && (
+                      <View style={{
+                        position: "absolute", top: 0, left: 0, 
+                        backgroundColor: "#fbbf24", paddingHorizontal: 6, paddingVertical: 2,
+                        borderBottomRightRadius: 8, zIndex: 1
+                      }}>
+                        <Text style={{ color: "#000", fontSize: 8, fontWeight: "900" }}>LOW</Text>
+                      </View>
+                    )}
 
                     {/* Qty badge */}
                     {inCart && (
@@ -1116,7 +1181,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
 
                     {/* Product name — 2 lines so nothing gets cut */}
                     <Text style={{
-                      color: inCart ? C.text.primary : "rgba(232,237,245,0.85)",
+                      color: inCart ? C.text.primary : C.text.secondary,
                       fontSize: 12, fontWeight: "700", lineHeight: 16, marginBottom: 6
                     }} numberOfLines={2}>
                       {toTitleCase(item.name)}
@@ -1272,50 +1337,67 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
                 </View>
               ) : cart.map((item: CartItem, idx: number) => {
                 const { color } = getProductMeta(item, idx);
+
+                const renderRightActions = () => (
+                  <TouchableOpacity
+                    onPress={() => removeFromCart(item.productId)}
+                    style={{
+                      backgroundColor: C.status.error,
+                      justifyContent: "center",
+                      alignItems: "center",
+                      width: 80,
+                      marginBottom: 8,
+                      borderRadius: 14,
+                      marginLeft: 8,
+                    }}>
+                    <Trash2 size={20} color="#fff" />
+                    <Text style={{ color: "#fff", fontSize: 10, fontWeight: "700", marginTop: 4 }}>Remove</Text>
+                  </TouchableOpacity>
+                );
+
                 return (
-                  <View key={item.productId} style={{
-                    marginBottom: 8, backgroundColor: C.bg.hover,
-                    padding: 10, borderRadius: 14, borderWidth: 1, borderColor: C.border.default
-                  }}>
-                    <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between" }}>
-                      <View style={{ flex: 1, marginRight: 12 }}>
-                        <Text style={{ color: C.text.primary, fontSize: 13, fontWeight: "600" }} numberOfLines={2}>
-                          {item.name}
-                        </Text>
-                        <Text style={{ color: C.text.secondary, fontSize: 11, marginTop: 4 }}>
-                          {fmt(item.price)} each
+                  <Swipeable key={item.productId} renderRightActions={renderRightActions}>
+                    <View style={{
+                      marginBottom: 8, backgroundColor: C.bg.hover,
+                      padding: 10, borderRadius: 14, borderWidth: 1, borderColor: C.border.default
+                    }}>
+                      <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between" }}>
+                        <View style={{ flex: 1, marginRight: 12 }}>
+                          <Text style={{ color: C.text.primary, fontSize: 13, fontWeight: "600" }} numberOfLines={2}>
+                            {item.name}
+                          </Text>
+                          <Text style={{ color: C.text.secondary, fontSize: 11, marginTop: 4 }}>
+                            {fmt(item.price)} each
+                          </Text>
+                        </View>
+                        {/* We hide the inline trash icon since they can now swipe */}
+                      </View>
+                      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+                        <View style={{
+                          flexDirection: "row", alignItems: "center",
+                          backgroundColor: `${color}18`, borderRadius: 10, overflow: "hidden",
+                          borderWidth: 1, borderColor: `${color}30`
+                        }}>
+                          <TouchableOpacity
+                            onPress={() => item.quantity > 1 ? updateQuantity(item.productId, -1) : removeFromCart(item.productId)}
+                            style={{ width: 30, height: 30, alignItems: "center", justifyContent: "center" }}>
+                            <Minus size={12} color={color} />
+                          </TouchableOpacity>
+                          <Text style={{ color: C.text.primary, fontSize: 15, fontWeight: "800", marginHorizontal: 12, minWidth: 20, textAlign: "center" }}>
+                            {item.quantity}
+                          </Text>
+                          <TouchableOpacity
+                            onPress={() => updateQuantity(item.productId, 1)}
+                            style={{ width: 30, height: 30, alignItems: "center", justifyContent: "center" }}>
+                            <Plus size={12} color={color} />
+                          </TouchableOpacity>
+                        </View>
+                        <Text style={{ color, fontSize: 16, fontWeight: "800" }}>
+                          {fmt(item.price * item.quantity)}
                         </Text>
                       </View>
-                      <TouchableOpacity onPress={() => removeFromCart(item.productId)}
-                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                        <Trash2 size={15} color={C.status.error} />
-                      </TouchableOpacity>
                     </View>
-                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
-                      <View style={{
-                        flexDirection: "row", alignItems: "center",
-                        backgroundColor: `${color}18`, borderRadius: 10, overflow: "hidden",
-                        borderWidth: 1, borderColor: `${color}30`
-                      }}>
-                        <TouchableOpacity
-                          onPress={() => item.quantity > 1 ? updateQuantity(item.productId, -1) : removeFromCart(item.productId)}
-                          style={{ width: 30, height: 30, alignItems: "center", justifyContent: "center" }}>
-                          <Minus size={12} color={color} />
-                        </TouchableOpacity>
-                        <Text style={{ color: C.text.primary, fontSize: 15, fontWeight: "800", marginHorizontal: 12, minWidth: 20, textAlign: "center" }}>
-                          {item.quantity}
-                        </Text>
-                        <TouchableOpacity
-                          onPress={() => updateQuantity(item.productId, 1)}
-                          style={{ width: 30, height: 30, alignItems: "center", justifyContent: "center" }}>
-                          <Plus size={12} color={color} />
-                        </TouchableOpacity>
-                      </View>
-                      <Text style={{ color, fontSize: 16, fontWeight: "800" }}>
-                        {fmt(item.price * item.quantity)}
-                      </Text>
-                    </View>
-                  </View>
+                  </Swipeable>
                 );
               })}
             </ScrollView>
@@ -1864,8 +1946,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
               <View style={{ width: "100%", gap: 10, marginBottom: 20 }}>
                 <TouchableOpacity activeOpacity={0.8}
                   onPress={() => {
-                    if (printerConfig.macAddress) handlePrintThermal();
-                    else handlePrintStandard();
+                    handlePrint();
                   }}
                   disabled={isPrinting}
                   style={{
@@ -1954,7 +2035,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
             <TouchableOpacity onPress={() => syncQueued(true)} disabled={!isOnline || queueCount === 0}
               style={{ marginTop: 14, alignItems: "center" }}>
               <Text style={{
-                color: !isOnline || queueCount === 0 ? C.text.secondary : "rgba(232,237,245,0.65)",
+                color: !isOnline || queueCount === 0 ? C.text.secondary : C.text.secondary,
                 fontSize: 11, fontWeight: "900", textTransform: "uppercase", letterSpacing: 1.2
               }}>
                 Sync queued now
@@ -1965,180 +2046,10 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
       </Modal>
 
       {/* ── PRINTER SETTINGS MODAL ─────────────────────────────────────────── */}
-      <Modal visible={showPrinterSettings} transparent animationType="slide" onRequestClose={() => setShowPrinterSettings(false)}>
-        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "flex-end" }}>
-          <View style={{
-            backgroundColor: C.bg.card, borderTopLeftRadius: 32, borderTopRightRadius: 32,
-            borderTopWidth: 1, borderColor: C.border.default, padding: 24, paddingBottom: 36
-          }}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-              <View>
-                <Text style={{ color: C.text.primary, fontSize: 22, fontWeight: "800" }}>Printer Settings</Text>
-                <Text style={{ color: C.text.secondary, fontSize: 12, marginTop: 2 }}>Configure Bluetooth Hardware</Text>
-              </View>
-              <TouchableOpacity onPress={() => setShowPrinterSettings(false)}
-                style={{
-                  width: 38, height: 38, borderRadius: 12, backgroundColor: C.bg.hover,
-                  borderWidth: 1, borderColor: C.border.default, alignItems: "center", justifyContent: "center"
-                }}>
-                <X size={16} color={C.text.primary} />
-              </TouchableOpacity>
-            </View>
-            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: '80%' }} contentContainerStyle={{ paddingBottom: 24 }}>
-              <Text style={{ color: C.text.secondary, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8, marginTop: 10 }}>
-                Device MAC Address (e.g. 00:11:22:33:44:55)
-              </Text>
-              <TextInput
-                style={{
-                  backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default,
-                  borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14,
-                  color: C.text.primary, fontSize: 16, fontWeight: "600",
-                  textTransform: "uppercase", marginBottom: 20
-                }}
-                placeholder="Leave blank to use OS Dialog"
-                placeholderTextColor={C.text.secondary}
-                autoCapitalize="characters"
-                returnKeyType="done"
-                value={tempPrinterAddress}
-                onChangeText={setTempPrinterAddress}
-              />
-
-              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-                <View>
-                  <Text style={{ color: C.text.primary, fontSize: 16, fontWeight: "700" }}>Auto-Print</Text>
-                  <Text style={{ color: C.text.secondary, fontSize: 12, marginTop: 2 }}>Print receipt immediately after sale</Text>
-                </View>
-                <TouchableOpacity onPress={() => setTempAutoPrint(!tempAutoPrint)}>
-                  {tempAutoPrint ? <ToggleRight size={32} color={C.status.success} /> : <ToggleLeft size={32} color={C.text.secondary} />}
-                </TouchableOpacity>
-              </View>
-
-              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-                <View>
-                  <Text style={{ color: C.text.primary, fontSize: 16, fontWeight: "700" }}>Show Success Modal</Text>
-                  <Text style={{ color: C.text.secondary, fontSize: 12, marginTop: 2 }}>Show ticket/print options after sale</Text>
-                </View>
-                <TouchableOpacity onPress={() => setTempAutoShowModal(!tempAutoShowModal)}>
-                  {tempAutoShowModal ? <ToggleRight size={32} color={C.status.success} /> : <ToggleLeft size={32} color={C.text.secondary} />}
-                </TouchableOpacity>
-              </View>
-
-              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-                <View>
-                  <Text style={{ color: C.text.primary, fontSize: 16, fontWeight: "700" }}>Silent Print (System)</Text>
-                  <Text style={{ color: C.text.secondary, fontSize: 12, marginTop: 2 }}>Bypass print dialog (if target specified)</Text>
-                </View>
-                <TouchableOpacity onPress={() => setTempSilentPrint(!tempSilentPrint)}>
-                  {tempSilentPrint ? <ToggleRight size={32} color={C.status.success} /> : <ToggleLeft size={32} color={C.text.secondary} />}
-                </TouchableOpacity>
-              </View>
-
-              <Text style={{ color: C.text.secondary, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
-                Terminal ID
-              </Text>
-              <TextInput
-                style={{
-                  backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default,
-                  borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14,
-                  color: C.text.primary, fontSize: 16, fontWeight: "600", marginBottom: 20
-                }}
-                placeholder="POS-01"
-                placeholderTextColor={C.text.secondary}
-                returnKeyType="done"
-                value={tempTerminalId}
-                onChangeText={setTempTerminalId}
-              />
-
-              <Text style={{ color: C.text.secondary, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
-                Target System Printer URL/Name
-              </Text>
-
-              <View style={{ flexDirection: "row", gap: 10, marginBottom: 24 }}>
-                <TextInput
-                  style={{
-                    flex: 1, backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default,
-                    borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14,
-                    color: C.text.primary, fontSize: 16, fontWeight: "600"
-                  }}
-                  placeholder="OS Printer URL"
-                  placeholderTextColor={C.text.secondary}
-                  returnKeyType="done"
-                  value={tempTargetPrinter}
-                  onChangeText={setTempTargetPrinter}
-                />
-
-                {Platform.OS !== 'web' && (
-                  <TouchableOpacity onPress={handleSelectSystemPrinter} style={{
-                    backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default,
-                    borderRadius: 14, alignItems: "center", justifyContent: "center", paddingHorizontal: 16
-                  }}>
-                    <MonitorSmartphone size={20} color={C.text.primary} />
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              <Text style={{ color: C.text.secondary, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
-                Paper Size
-              </Text>
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
-                {[30, 40, 50, 58, 80].map((w) => (
-                  <TouchableOpacity
-                    key={w}
-                    onPress={() => setTempPaperWidth(w)}
-                    style={{
-                      width: "18%", height: 44, borderRadius: 10,
-                      backgroundColor: tempPaperWidth === w ? C.amber.primary : C.bg.hover,
-                      borderWidth: 1, borderColor: tempPaperWidth === w ? C.amber.primary : C.border.default,
-                      alignItems: "center", justifyContent: "center"
-                    }}
-                  >
-                    <Text style={{
-                      color: tempPaperWidth === w ? C.bg.base : C.text.primary,
-                      fontWeight: "800", fontSize: 13
-                    }}>
-                      {w}mm
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-            </ScrollView>
-
-            <View style={{ paddingTop: 16, borderTopWidth: 1, borderTopColor: C.border.default, marginTop: 10 }}>
-              <TouchableOpacity activeOpacity={0.88} onPress={() => {
-                savePrinterConfig({
-                  macAddress: tempPrinterAddress,
-                  autoPrint: tempAutoPrint,
-                  autoShowModal: tempAutoShowModal,
-                  silentPrint: tempSilentPrint,
-                  terminalId: tempTerminalId,
-                  targetPrinter: tempTargetPrinter,
-                  paperWidth: tempPaperWidth
-                });
-                setShowPrinterSettings(false);
-              }}>
-                <LinearGradient
-                  colors={[C.amber.primary, C.amber.light]}
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                  style={{
-                    borderRadius: 22, height: 56, paddingHorizontal: 22,
-                    flexDirection: "row", alignItems: "center", justifyContent: "center"
-                  }}>
-                  <Text style={{
-                    color: "#000",
-                    fontSize: 14, fontWeight: "900", textTransform: "uppercase", letterSpacing: 1.2
-                  }}>
-                    Save Configuration
-                  </Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <PrinterSettingsModal visible={showPrinterSettings} onClose={() => setShowPrinterSettings(false)} />
 
       {/* ── MANAGER PIN MODAL ──────────────────────────────────────────────── */}
-      {pendingOverride ? (
+      {pendingOverride && (
         <ManagerPinModal
           visible={!!pendingOverride}
           companyId={companyId}
@@ -2151,12 +2062,128 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
             setOrderDiscountInput(orderDiscount === 0 ? "" : orderDiscount.toString());
           }}
           onAuthorized={() => {
-            if (pendingOverride.type === "DISCOUNT") setOrderDiscount(pendingOverride.data);
-            else { setCart([]); setOrderDiscount(0); setSelectedCustomerId(defaultCustomerId); }
+            const po = pendingOverride!;
+            if (po.type === "DISCOUNT") {
+              setOrderDiscount(po.data);
+            } else {
+              setCart([]);
+              setOrderDiscount(0);
+              setSelectedCustomerId(defaultCustomerId);
+            }
             setPendingOverride(null);
           }}
         />
-      ) : null}
+      )}
+
+      {/* ── PAYOUT MODAL ─────────────────────────────────────────────────── */}
+      <Modal visible={showPayoutModal} transparent animationType="slide" onRequestClose={() => setShowPayoutModal(false)}>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "flex-end" }}
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={{ flex: 1, justifyContent: "flex-end" }}>
+              <View style={{
+                backgroundColor: C.bg.card, borderTopLeftRadius: 32, borderTopRightRadius: 32,
+                borderTopWidth: 1, borderColor: C.border.default, padding: 24, paddingBottom: 40
+              }}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+                  <Text style={{ color: C.text.primary, fontSize: 22, fontWeight: "800" }}>Log Payout</Text>
+                  <TouchableOpacity onPress={() => setShowPayoutModal(false)}
+                    style={{
+                      width: 38, height: 38, borderRadius: 12, backgroundColor: C.bg.hover,
+                      borderWidth: 1, borderColor: C.border.default, alignItems: "center", justifyContent: "center"
+                    }}>
+                    <X size={16} color={C.text.primary} />
+                  </TouchableOpacity>
+                </View>
+                
+                <Text style={{ color: C.text.secondary, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Amount (Out of Till)</Text>
+                <TextInput
+                  style={{
+                    backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default,
+                    borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14,
+                    color: C.text.primary, fontSize: 18, fontWeight: "800", marginBottom: 16
+                  }}
+                  placeholder="0.00"
+                  placeholderTextColor={C.text.secondary}
+                  keyboardType="decimal-pad"
+                  autoFocus
+                  returnKeyType="next"
+                  value={payoutAmount}
+                  onChangeText={setPayoutAmount}
+                />
+
+                <Text style={{ color: C.text.secondary, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Reason (e.g. Lunch, Transport)</Text>
+                <TextInput
+                  style={{
+                    backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default,
+                    borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14,
+                    color: C.text.primary, fontSize: 16, marginBottom: 24
+                  }}
+                  placeholder="What was this for?"
+                  placeholderTextColor={C.text.secondary}
+                  returnKeyType="done"
+                  onSubmitEditing={handlePayout}
+                  value={payoutReason}
+                  onChangeText={setPayoutReason}
+                />
+
+                <TouchableOpacity activeOpacity={0.88} onPress={handlePayout} disabled={isSubmitting}>
+                  <LinearGradient colors={[C.status.error, "#dc2626"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                    style={{ borderRadius: 22, height: 60, alignItems: "center", justifyContent: "center" }}>
+                    {isSubmitting ? <ActivityIndicator color="#fff" /> : (
+                      <Text style={{ color: "#fff", fontSize: 14, fontWeight: "900", textTransform: "uppercase", letterSpacing: 1.2 }}>Confirm Payout</Text>
+                    )}
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── SUMMARY MODAL ────────────────────────────────────────────────── */}
+      <Modal visible={showSummaryModal} transparent animationType="slide" onRequestClose={() => setShowSummaryModal(false)}>
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "center", padding: 24 }}>
+          <View style={{
+            backgroundColor: C.bg.card, borderRadius: 24,
+            borderWidth: 1, borderColor: C.border.default, padding: 24
+          }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+              <Text style={{ color: C.text.primary, fontSize: 22, fontWeight: "800" }}>Cash-Up Summary</Text>
+              <TouchableOpacity onPress={() => setShowSummaryModal(false)}>
+                <X size={20} color={C.text.secondary} />
+              </TouchableOpacity>
+            </View>
+
+            {shiftSummary && (
+              <View style={{ gap: 16 }}>
+                <View style={{ padding: 16, borderRadius: 16, backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default }}>
+                  <Text style={{ color: C.text.secondary, fontSize: 11, fontWeight: "700", textTransform: "uppercase", marginBottom: 8 }}>Total Sales</Text>
+                  <Text style={{ color: C.status.success, fontSize: 24, fontWeight: "900" }}>{shiftSummary.currency} {shiftSummary.totalSales}</Text>
+                </View>
+
+                <View style={{ padding: 16, borderRadius: 16, backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default }}>
+                  <Text style={{ color: C.text.secondary, fontSize: 11, fontWeight: "700", textTransform: "uppercase", marginBottom: 8 }}>Total Expenses / Payouts</Text>
+                  <Text style={{ color: C.status.error, fontSize: 24, fontWeight: "900" }}>{shiftSummary.currency} {shiftSummary.totalPayouts}</Text>
+                </View>
+
+                <View style={{ padding: 20, borderRadius: 20, backgroundColor: C.bg.hover, borderWidth: 2, borderColor: C.amber.primary }}>
+                  <Text style={{ color: C.text.secondary, fontSize: 11, fontWeight: "800", textTransform: "uppercase", marginBottom: 8 }}>Expected Cash in Till</Text>
+                  <Text style={{ color: C.amber.primary, fontSize: 32, fontWeight: "900" }}>{shiftSummary.currency} {shiftSummary.expectedCash}</Text>
+                  <Text style={{ color: C.text.secondary, fontSize: 10, marginTop: 4 }}>Incl. opening float of {shiftSummary.openingBalance}</Text>
+                </View>
+              </View>
+            )}
+
+            <TouchableOpacity onPress={() => setShowSummaryModal(false)}
+              style={{ marginTop: 24, paddingVertical: 14, borderRadius: 16, backgroundColor: C.amber.primary, alignItems: "center" }}>
+              <Text style={{ color: "#000", fontWeight: "800", textTransform: "uppercase" }}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

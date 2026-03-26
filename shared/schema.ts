@@ -298,6 +298,7 @@ export const invoices = pgTable("invoices", {
   status: text("status").default("draft"), // draft, issued, paid, cancelled
   taxInclusive: boolean("tax_inclusive").default(false),
   isPos: boolean("is_pos").default(false),
+  shiftId: integer("shift_id").references(() => posShifts.id), // Link to POS shift
   discountAmount: decimal("discount_amount", { precision: 10, scale: 2 }).default("0.00"),
 
   // Locking
@@ -320,7 +321,8 @@ export const invoices = pgTable("invoices", {
   lastValidationAttempt: timestamp("last_validation_attempt"),
 
   currency: text("currency").default("USD"),
-  paymentMethod: text("payment_method").default("CASH"),
+  paymentMethod: text("payment_method").default("CASH"), // Legacy/Primary method
+  splitPayments: jsonb("split_payments"), // Array of { method: string, amount: number }
   exchangeRate: decimal("exchange_rate", { precision: 10, scale: 6 }).default("1.000000"),
 
   transactionType: text("transaction_type").default("FiscalInvoice"), // FiscalInvoice, CreditNote, DebitNote

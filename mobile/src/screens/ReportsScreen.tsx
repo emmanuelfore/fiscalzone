@@ -20,8 +20,99 @@ import { NoteModal } from "../components/NoteModal";
 
 import { PremiumColors as C } from "../ui/PremiumColors";
 
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: C.bg.base },
+  header: { paddingHorizontal: 16, paddingVertical: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderBottomWidth: 1, borderBottomColor: C.border.default },
+  iconBtn: { width: 34, height: 34, borderRadius: 10, backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default, alignItems: "center", justifyContent: "center" },
+  title: { color: C.text.primary, fontSize: 18, fontWeight: "800" },
+  tabRow: { flexDirection: "row", paddingHorizontal: 16, paddingTop: 12, gap: 8 },
+  tab: { flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: C.bg.hover, alignItems: "center", borderWidth: 1, borderColor: C.border.default },
+  tabActive: { backgroundColor: `${C.amber.primary}20`, borderColor: C.amber.primary },
+  tabText: { color: C.text.secondary, fontSize: 13, fontWeight: "700" },
+  tabTextActive: { color: C.amber.primary },
+  filterRow: { flexDirection: "row", justifyContent: "space-between", gap: 8 },
+  periodBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10, backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default, flex: 1 },
+  periodText: { color: C.text.primary, fontSize: 12, fontWeight: "600", flex: 1 },
+  customDateRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10 },
+  dateInput: { flex: 1, backgroundColor: C.bg.hover, color: C.text.primary, borderRadius: 8, paddingHorizontal: 10, height: 36, borderWidth: 1, borderColor: C.border.default, fontSize: 12 },
+  dropdown: { backgroundColor: C.bg.card, borderRadius: 12, borderWidth: 1, borderColor: C.border.default, marginTop: 8, overflow: "hidden" },
+  dropdownItem: { paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border.default },
+  dropdownItemActive: { backgroundColor: `${C.amber.primary}10` },
+  dropdownText: { color: C.text.primary, fontSize: 13, fontWeight: "600" },
+  statsGrid: { flexDirection: "row", gap: 10, marginVertical: 20 },
+  statCard: { flex: 1, backgroundColor: C.bg.hover, padding: 12, borderRadius: 16, borderWidth: 1, borderColor: C.border.default },
+  statIconContainer: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center", marginBottom: 8 },
+  statLabel: { color: C.text.secondary, fontSize: 9, fontWeight: "600", marginBottom: 3 },
+  statValue: { color: C.text.primary, fontSize: 12, fontWeight: "800" },
+  sectionTitle: { color: C.text.primary, fontSize: 15, fontWeight: "800", marginBottom: 14 },
+  dayHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 10, paddingHorizontal: 4, marginTop: 4 },
+  dayTitle: { color: C.amber.primary, fontSize: 13, fontWeight: "700" },
+  dayTotal: { color: C.text.secondary, fontSize: 11, fontWeight: "600" },
+  saleCard: { backgroundColor: C.bg.hover, borderRadius: 14, borderWidth: 1, borderColor: C.border.default, overflow: "hidden", marginBottom: 6 },
+  saleCardExpanded: { borderColor: `${C.amber.primary}40` },
+  saleHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 12 },
+  saleMainInfo: { flexDirection: "row", alignItems: "center", gap: 10 },
+  saleIcon: { width: 32, height: 32, borderRadius: 8, backgroundColor: "rgba(240,165,0,0.1)", alignItems: "center", justifyContent: "center" },
+  saleNumber: { color: C.text.primary, fontSize: 12, fontWeight: "700" },
+  saleMeta: { flexDirection: "row", alignItems: "center", marginTop: 2 },
+  saleMetaText: { color: C.text.secondary, fontSize: 10, marginLeft: 4 },
+  saleRight: { alignItems: "flex-end", gap: 4 },
+  saleTotal: { color: C.text.primary, fontSize: 14, fontWeight: "800" },
+  saleDetails: { paddingHorizontal: 12, paddingBottom: 12 },
+  detailsDivider: { height: 1, backgroundColor: C.border.default, marginBottom: 10 },
+  itemsList: { marginBottom: 10 },
+  itemRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 6, gap: 6 },
+  itemInfo: { flexDirection: "row", alignItems: "flex-start", gap: 6, flex: 1 },
+  itemName: { color: C.text.primary, fontSize: 12, fontWeight: "600" },
+  itemUnitPrice: { color: C.text.secondary, fontSize: 10, marginTop: 1 },
+  itemQty: { color: C.text.secondary, fontSize: 11, minWidth: 28, textAlign: "right", flexShrink: 0 },
+  itemPrice: { color: C.text.primary, fontSize: 12, fontWeight: "700", textAlign: "right" },
+  itemDiscount: { color: C.status.error, fontSize: 10, fontWeight: "600", textAlign: "right" },
+  saleFooter: { flexDirection: "row", justifyContent: "space-between", paddingTop: 8, borderTopWidth: 1, borderTopColor: C.border.default },
+  paymentMethod: { color: C.text.secondary, fontSize: 10, fontStyle: "italic" },
+  customerName: { color: C.text.secondary, fontSize: 10 },
+  emptyContainer: { alignItems: "center", justifyContent: "center", paddingVertical: 40, backgroundColor: C.bg.card, borderRadius: 20, borderWidth: 1, borderColor: C.border.default, borderStyle: "dashed" },
+  emptyText: { color: C.text.secondary, fontSize: 13, marginTop: 10 },
+  pnlCard: { backgroundColor: C.bg.hover, borderRadius: 20, padding: 20, borderWidth: 1, borderColor: C.border.default, marginBottom: 20, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 2 },
+  pnlTitle: { color: C.text.primary, fontSize: 18, fontWeight: "900", letterSpacing: -0.5 },
+  pnlPeriod: { color: C.text.secondary, fontSize: 13, marginTop: 4, fontWeight: "600" },
+  pnlRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: C.bg.card, paddingHorizontal: 16, paddingVertical: 18, borderRadius: 16, borderWidth: 1, borderColor: C.border.default, marginBottom: 10 },
+  pnlRowLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
+  pnlLabel: { color: C.text.primary, fontSize: 15, fontWeight: "700" },
+  pnlValue: { fontSize: 16, fontWeight: "800" },
+  pnlDivider: { height: 1, backgroundColor: C.border.default, marginVertical: 12, opacity: 0.5 },
+  expenseCard: { backgroundColor: C.bg.hover, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: C.border.default, marginBottom: 8, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  expenseDesc: { color: C.text.primary, fontSize: 14, fontWeight: "600" },
+  expenseAmount: { color: C.status.error, fontSize: 14, fontWeight: "800" },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" },
+  modalContent: { backgroundColor: C.bg.base, borderTopLeftRadius: 32, borderTopRightRadius: 32, height: "85%", padding: 24 },
+  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 24 },
+  modalTitle: { color: C.text.primary, fontSize: 22, fontWeight: "900", letterSpacing: -0.5 },
+  closeBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: C.bg.hover, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: C.border.default },
+  modalScroll: { flex: 1 },
+  drillRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: C.border.default, gap: 10 },
+  drillInfo: { flex: 1, flexShrink: 1 },
+  drillMainText: { color: C.text.primary, fontSize: 15, fontWeight: "700" },
+  drillSubText: { color: C.text.secondary, fontSize: 12, marginTop: 3 },
+  drillAmount: { fontSize: 16, fontWeight: "900", flexShrink: 0 },
+  subTabRow: { flexDirection: "row", gap: 10, marginBottom: 20 },
+  subTab: { flex: 1, paddingVertical: 10, borderRadius: 12, backgroundColor: C.bg.hover, alignItems: "center", borderWidth: 1, borderColor: C.border.default },
+  subTabActive: { backgroundColor: `${C.amber.primary}20`, borderColor: C.amber.primary },
+  subTabText: { color: C.text.secondary, fontSize: 13, fontWeight: "700" },
+  subTabTextActive: { color: C.amber.primary },
+  inventoryRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: C.border.default, gap: 12 },
+  itemSku: { color: C.text.secondary, fontSize: 11, marginTop: 4, fontWeight: "500" },
+  itemValue: { color: C.text.secondary, fontSize: 12, marginTop: 4, fontWeight: "600" },
+  itemDate: { color: C.text.secondary, fontSize: 11, marginTop: 4 },
+  typeBadge: { alignSelf: "flex-start", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, marginTop: 6 },
+  typeBadgeText: { fontSize: 10, fontWeight: "900", textTransform: "uppercase" },
+  itemRef: { color: C.text.secondary, fontSize: 11, marginTop: 4, fontStyle: "italic" },
+  netProfitCard: { padding: 20, borderRadius: 20, borderWidth: 1.5, marginBottom: 20, shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 15, shadowOffset: { width: 0, height: 6 }, elevation: 4 },
+});
+
 type Period = "Today" | "This Week" | "This Month" | "All Time" | "Custom";
-type Tab = "sales" | "pnl";
+type Tab = "sales" | "pnl" | "inventory";
+type InventorySubTab = "stock" | "movements" | "purchases";
 
 function getDateRange(period: Period, customStart?: string, customEnd?: string): { start: Date; end: Date } {
   const end = new Date(); end.setHours(23, 59, 59, 999);
@@ -156,6 +247,117 @@ function InvoiceItemRow({ invoiceId, currencyCode, exchangeRate, symbols }: {
   );
 }
 
+function InventoryContent({ tab, companyId, start, end, symbol }: { tab: InventorySubTab; companyId: number; start: Date; end: Date; symbol: string }) {
+  const [data, setData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    let endpoint = "";
+    if (tab === "stock") endpoint = `/api/reports/inventory/stock-on-hand/${companyId}`;
+    else if (tab === "movements") endpoint = `/api/reports/inventory/movements/${companyId}?startDate=${start.toISOString()}&endDate=${end.toISOString()}`;
+    else if (tab === "purchases") endpoint = `/api/reports/inventory/purchases/${companyId}?startDate=${start.toISOString()}&endDate=${end.toISOString()}`;
+
+    apiJson<any[]>(endpoint)
+      .then(res => { setData(res); setLoading(false); })
+      .catch(() => { setData([]); setLoading(false); });
+  }, [tab, companyId, start, end]);
+
+  if (loading) return <ActivityIndicator color={C.amber.primary} style={{ marginTop: 40 }} />;
+
+  if (data.length === 0) {
+    return (
+      <View style={styles.emptyContainer}>
+        <Package size={40} color={C.text.secondary} strokeWidth={1} />
+        <Text style={styles.emptyText}>No inventory records found.</Text>
+      </View>
+    );
+  }
+
+  if (tab === "stock") {
+    return (
+      <View style={{ marginTop: 10, paddingBottom: 20 }}>
+        {data.map((item, idx) => {
+          const isLowStock = Number(item.stockLevel) <= 10;
+          const isOutOfStock = Number(item.stockLevel) <= 0;
+          return (
+            <View key={idx} style={styles.inventoryRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.itemName}>{item.name}</Text>
+                <Text style={styles.itemSku}>{item.sku || "No SKU"} • {item.category || "General"}</Text>
+              </View>
+              <View style={{ alignItems: "flex-end" }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  {isLowStock && (
+                    <View style={{ 
+                      width: 8, height: 8, borderRadius: 4, 
+                      backgroundColor: isOutOfStock ? C.status.error : C.status.warning 
+                    }} />
+                  )}
+                  <Text style={[styles.itemPrice, { color: isOutOfStock ? C.status.error : isLowStock ? "#fbbf24" : C.text.primary }]}>
+                    {Number(item.stockLevel).toFixed(0)} units
+                  </Text>
+                </View>
+                <Text style={styles.itemValue}>{symbol}{Number(item.totalValue).toFixed(2)}</Text>
+              </View>
+            </View>
+          );
+        })}
+      </View>
+    );
+  }
+
+  if (tab === "movements") {
+    return (
+      <View style={{ marginTop: 10, paddingBottom: 20 }}>
+        {data.map((item, idx) => (
+          <View key={idx} style={styles.inventoryRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.itemName}>{item.productName}</Text>
+              <Text style={styles.itemDate}>
+                {new Date(item.date).toLocaleDateString()} {new Date(item.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </Text>
+              <View style={[styles.typeBadge, { backgroundColor: item.type === "STOCK_IN" ? `${C.status.success}15` : item.type === "ADJUSTMENT" ? `${C.amber.primary}15` : `${C.status.error}15` }]}>
+                 <Text style={[styles.typeBadgeText, { color: item.type === "STOCK_IN" ? C.status.success : item.type === "ADJUSTMENT" ? C.amber.primary : C.status.error }]}>
+                   {item.type === "STOCK_IN" ? "PURCHASE" : item.type === "STOCK_OUT" ? "SALE" : "ADJUST"}
+                 </Text>
+              </View>
+            </View>
+            <View style={{ alignItems: "flex-end" }}>
+              <Text style={[styles.itemQty, { color: item.type === "STOCK_IN" ? C.status.success : item.type === "STOCK_OUT" ? C.status.error : C.amber.primary, fontSize: 16, fontWeight: "900" }]}>
+                {item.type === "STOCK_OUT" ? "−" : "+"}{Number(item.quantity).toFixed(0)}
+              </Text>
+              <Text style={styles.itemRef} numberOfLines={1}>{item.reference || (item.notes || "System")}</Text>
+            </View>
+          </View>
+        ))}
+      </View>
+    );
+  }
+
+  if (tab === "purchases") {
+    return (
+      <View style={{ marginTop: 10, paddingBottom: 20 }}>
+        {data.map((item, idx) => (
+          <View key={idx} style={styles.inventoryRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.itemName} numberOfLines={1}>{item.supplierName || "Direct Vendor"}</Text>
+              <Text style={styles.itemSku}>{item.productName}</Text>
+              <Text style={styles.itemDate}>{new Date(item.date).toLocaleDateString()}</Text>
+            </View>
+            <View style={{ alignItems: "flex-end" }}>
+              <Text style={[styles.itemPrice, { color: C.status.success, fontSize: 16, fontWeight: "900" }]}>{symbol}{Number(item.totalCost).toFixed(2)}</Text>
+              <Text style={styles.itemQty}>{Number(item.quantity).toFixed(0)} units</Text>
+            </View>
+          </View>
+        ))}
+      </View>
+    );
+  }
+
+  return null;
+}
+
 export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", userId, userName }: ReportsScreenProps) {
   const insets = useSafeAreaInsets();
   const isCashier = userRole.toLowerCase() === "cashier" || userRole.toLowerCase() === "member";
@@ -222,7 +424,8 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
   const [customEnd, setCustomEnd] = useState("");
   const [showPeriodPicker, setShowPeriodPicker] = useState(false);
   const [expandedSaleId, setExpandedSaleId] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<Tab>(isCashier ? "sales" : "sales"); // Default to sales
+  const [activeTab, setActiveTab] = useState<Tab>("sales");
+  const [activeInvTab, setActiveInvTab] = useState<InventorySubTab>("stock");
   const [cashierFilter, setCashierFilter] = useState<string>(isCashier ? (userName || "me") : "all");
   const [showCashierPicker, setShowCashierPicker] = useState(false);
 
@@ -314,16 +517,19 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
   const renderHeader = () => (
     <View>
       {/* Tabs */}
-      {!isCashier && (
         <View style={styles.tabRow}>
           <TouchableOpacity style={[styles.tab, activeTab === "sales" && styles.tabActive]} onPress={() => setActiveTab("sales")}>
             <Text style={[styles.tabText, activeTab === "sales" && styles.tabTextActive]}>Sales</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.tab, activeTab === "pnl" && styles.tabActive]} onPress={() => setActiveTab("pnl")}>
-            <Text style={[styles.tabText, activeTab === "pnl" && styles.tabTextActive]}>Profit & Loss</Text>
+          {!isCashier && (
+            <TouchableOpacity style={[styles.tab, activeTab === "pnl" && styles.tabActive]} onPress={() => setActiveTab("pnl")}>
+              <Text style={[styles.tabText, activeTab === "pnl" && styles.tabTextActive]}>PnL</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity style={[styles.tab, activeTab === "inventory" && styles.tabActive]} onPress={() => setActiveTab("inventory")}>
+            <Text style={[styles.tabText, activeTab === "inventory" && styles.tabTextActive]}>Stock</Text>
           </TouchableOpacity>
         </View>
-      )}
 
       <View style={{ padding: 16 }}>
         {/* Filters Row */}
@@ -404,6 +610,25 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
           </>
         )}
 
+        {activeTab === "inventory" && (
+          <View>
+            <View style={styles.subTabRow}>
+              {(["stock", "movements", "purchases"] as const).map((itab) => (
+                <TouchableOpacity 
+                  key={itab} 
+                  style={[styles.subTab, activeInvTab === itab && styles.subTabActive]} 
+                  onPress={() => setActiveInvTab(itab)}
+                >
+                  <Text style={[styles.subTabText, activeInvTab === itab && styles.subTabTextActive]}>
+                    {itab.charAt(0).toUpperCase() + itab.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <InventoryContent tab={activeInvTab} companyId={companyId} start={start} end={end} symbol={baseSymbol} />
+          </View>
+        )}
+
         {activeTab === "pnl" && (
           <View>
             {loadingFinancial ? (
@@ -415,51 +640,73 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
               </View>
             ) : (
               <>
-                <View style={styles.pnlCard}>
-                  <Text style={styles.pnlTitle}>Profit & Loss Statement</Text>
-                  <Text style={styles.pnlPeriod}>{period === 'Custom' ? `${start.toLocaleDateString()} - ${end.toLocaleDateString()}` : period}</Text>
-                </View>
-                {[
-                  { label: "Revenue", value: financialData.revenue, color: C.status.success, icon: DollarSign, prefix: "", type: "Revenue" },
-                  { label: "Cost of Goods", value: financialData.cogs, color: C.status.error, icon: Package, prefix: "-", type: "COGS" },
-                  { label: "Gross Profit", value: financialData.grossProfit, color: C.status.success, icon: TrendingUp, prefix: "", type: null },
-                  { label: "Expenses", value: financialData.expenses, color: C.status.error, icon: Receipt, prefix: "-", type: "Expenses" },
-                ].map((row, i) => (
-                  <TouchableOpacity 
-                    key={i} 
-                    style={styles.pnlRow} 
-                    onPress={() => {
-                        if (row.type) {
-                            setDrillDownType(row.type as any);
-                            setShowDrillDown(true);
-                        }
-                    }}
-                    disabled={!row.type}
-                  >
-                    <View style={styles.pnlRowLeft}>
-                      <row.icon size={16} color={row.color} />
-                      <Text style={[styles.pnlLabel, row.type && { textDecorationLine: "underline" }]}>{row.label}</Text>
+                <View style={[styles.netProfitCard, { 
+                  backgroundColor: financialData.netProfit >= 0 ? `${C.status.success}12` : `${C.status.error}12`,
+                  borderColor: financialData.netProfit >= 0 ? C.status.success : C.status.error
+                }]}>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <View>
+                      <Text style={{ color: C.text.secondary, fontSize: 12, fontWeight: "700", textTransform: "uppercase", marginBottom: 6 }}>Net Profit</Text>
+                      <Text style={{ 
+                        color: financialData.netProfit >= 0 ? C.status.success : C.status.error, 
+                        fontSize: 32, fontWeight: "900", letterSpacing: -1
+                      }}>
+                        {baseSymbol}{Number(financialData.netProfit || 0).toFixed(2)}
+                      </Text>
                     </View>
-                    <Text style={[styles.pnlValue, { color: row.color }]}>{row.prefix}{baseSymbol}{Number(row.value || 0).toFixed(2)}</Text>
-                  </TouchableOpacity>
-                ))}
-                <View style={styles.pnlDivider} />
-                <View style={[styles.pnlRow, { backgroundColor: financialData.netProfit >= 0 ? `${C.status.success}10` : `${C.status.error}10` }]}>
-                  <View style={styles.pnlRowLeft}>
-                    <TrendingUp size={16} color={financialData.netProfit >= 0 ? C.status.success : C.status.error} />
-                    <Text style={[styles.pnlLabel, { fontWeight: "800" }]}>Net Profit</Text>
+                    <View style={{ 
+                      width: 54, height: 54, borderRadius: 18, 
+                      backgroundColor: financialData.netProfit >= 0 ? `${C.status.success}20` : `${C.status.error}20`,
+                      alignItems: "center", justifyContent: "center"
+                    }}>
+                      <TrendingUp size={28} color={financialData.netProfit >= 0 ? C.status.success : C.status.error} />
+                    </View>
                   </View>
-                  <Text style={[styles.pnlValue, { fontWeight: "900", fontSize: 18, color: financialData.netProfit >= 0 ? C.status.success : C.status.error }]}>
-                    {baseSymbol}{Number(financialData.netProfit || 0).toFixed(2)}
-                  </Text>
                 </View>
+
+                <View style={{ gap: 10 }}>
+                  {[
+                    { label: "Total Revenue", value: financialData.revenue, color: C.text.primary, icon: DollarSign, type: "Revenue" },
+                    { label: "Cost of Goods", value: financialData.cogs, color: C.status.error, icon: Package, type: "COGS" },
+                    { label: "Total Expenses", value: financialData.expenses, color: C.status.error, icon: Receipt, type: "Expenses" },
+                  ].map((row, i) => (
+                    <TouchableOpacity 
+                      key={i} 
+                      style={styles.pnlRow} 
+                      onPress={() => {
+                          if (row.type) {
+                              setDrillDownType(row.type as any);
+                              setShowDrillDown(true);
+                          }
+                      }}
+                    >
+                      <View style={styles.pnlRowLeft}>
+                        <View style={{ 
+                          width: 36, height: 36, borderRadius: 10, 
+                          backgroundColor: `${row.color === C.text.primary ? C.amber.primary : row.color}15`,
+                          alignItems: "center", justifyContent: "center"
+                        }}>
+                          <row.icon size={18} color={row.color === C.text.primary ? C.amber.primary : row.color} />
+                        </View>
+                        <Text style={styles.pnlLabel}>{row.label}</Text>
+                      </View>
+                      <Text style={[styles.pnlValue, { color: row.color }]}>
+                        {baseSymbol}{Number(row.value || 0).toFixed(2)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
                 {financialData.expenseBreakdown && financialData.expenseBreakdown.length > 0 && (
-                  <View style={{ marginTop: 20 }}>
-                    <Text style={styles.sectionTitle}>Expense Breakdown</Text>
+                  <View style={{ marginTop: 24, paddingBottom: 20 }}>
+                    <Text style={[styles.sectionTitle, { marginBottom: 16 }]}>Expense Categories</Text>
                     {financialData.expenseBreakdown.map((exp: any, idx: number) => (
-                      <View key={idx} style={styles.expenseRow}>
-                        <Text style={styles.expenseDesc}>{exp.category || "Other"}</Text>
-                        <Text style={styles.expenseAmount}>-{baseSymbol}{Number(exp.amount || 0).toFixed(2)}</Text>
+                      <View key={idx} style={styles.expenseCard}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: C.status.error }} />
+                          <Text style={styles.expenseDesc}>{exp.category || "Other"}</Text>
+                        </View>
+                        <Text style={styles.expenseAmount}>{baseSymbol}{Number(exp.amount || 0).toFixed(2)}</Text>
                       </View>
                     ))}
                   </View>
@@ -589,43 +836,52 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
               
               <ScrollView style={styles.modalScroll}>
                 {drillDownType === "Revenue" && (
-                  <View>
+                  <View style={{ gap: 4 }}>
                     {financialData?.drillDown?.revenueItems?.map((item: any, idx: number) => (
                       <View key={idx} style={styles.drillRow}>
+                        <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: `${C.status.success}10`, alignItems: "center", justifyContent: "center" }}>
+                          <Receipt size={18} color={C.status.success} />
+                        </View>
                         <View style={styles.drillInfo}>
                           <Text style={styles.drillMainText}>{item.invoiceNumber}</Text>
-                          <Text style={styles.drillSubText}>{new Date(item.issueDate).toLocaleDateString()}</Text>
+                          <Text style={styles.drillSubText}>{new Date(item.issueDate).toLocaleDateString()} • {item.paymentMethod || "CASH"}</Text>
                         </View>
-                        <Text style={[styles.drillAmount, { color: C.status.success }]} numberOfLines={1}>+{baseSymbol}{Number(item.total).toFixed(2)}</Text>
+                        <Text style={[styles.drillAmount, { color: C.status.success }]}>+{baseSymbol}{Number(item.total).toFixed(2)}</Text>
                       </View>
                     ))}
                   </View>
                 )}
 
                 {drillDownType === "COGS" && (
-                  <View>
+                  <View style={{ gap: 4 }}>
                     {financialData?.drillDown?.cogsItems?.map((item: any, idx: number) => (
                       <View key={idx} style={styles.drillRow}>
+                        <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: `${C.status.error}10`, alignItems: "center", justifyContent: "center" }}>
+                          <Package size={18} color={C.status.error} />
+                        </View>
                         <View style={styles.drillInfo}>
                           <Text style={styles.drillMainText}>{item.productName}</Text>
-                          <Text style={styles.drillSubText}>{item.transactionCount} transactions</Text>
+                          <Text style={styles.drillSubText}>{item.transactionCount} transactions sold</Text>
                         </View>
-                        <Text style={[styles.drillAmount, { color: C.status.error }]} numberOfLines={1}>-{baseSymbol}{Number(item.totalCost).toFixed(2)}</Text>
+                        <Text style={[styles.drillAmount, { color: C.status.error }]}>-{baseSymbol}{Number(item.totalCost).toFixed(2)}</Text>
                       </View>
                     ))}
                   </View>
                 )}
 
                 {drillDownType === "Expenses" && (
-                  <View>
+                  <View style={{ gap: 4 }}>
                     {financialData?.drillDown?.expenseItems?.map((item: any, idx: number) => (
                       <View key={idx} style={styles.drillRow}>
+                        <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: `${C.status.error}10`, alignItems: "center", justifyContent: "center" }}>
+                          <DollarSign size={18} color={C.status.error} />
+                        </View>
                         <View style={styles.drillInfo}>
-                          <Text style={styles.drillMainText}>{item.category || "Other"}</Text>
-                          <Text style={styles.drillSubText}>{item.description || "No description"}</Text>
+                          <Text style={styles.drillMainText}>{item.category || "Other Expense"}</Text>
+                          <Text style={styles.drillSubText} numberOfLines={1}>{item.description || "No details"}</Text>
                           <Text style={styles.drillSubText}>{new Date(item.createdAt).toLocaleDateString()}</Text>
                         </View>
-                        <Text style={[styles.drillAmount, { color: C.status.error }]} numberOfLines={1}>-{baseSymbol}{Number(item.amount).toFixed(2)}</Text>
+                        <Text style={[styles.drillAmount, { color: C.status.error }]}>-{baseSymbol}{Number(item.amount).toFixed(2)}</Text>
                       </View>
                     ))}
                   </View>
@@ -666,79 +922,4 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: C.bg.base },
-  header: { paddingHorizontal: 16, paddingVertical: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderBottomWidth: 1, borderBottomColor: C.border.default },
-  iconBtn: { width: 34, height: 34, borderRadius: 10, backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default, alignItems: "center", justifyContent: "center" },
-  title: { color: C.text.primary, fontSize: 18, fontWeight: "800" },
-  tabRow: { flexDirection: "row", paddingHorizontal: 16, paddingTop: 12, gap: 8 },
-  tab: { flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: C.bg.hover, alignItems: "center", borderWidth: 1, borderColor: C.border.default },
-  tabActive: { backgroundColor: `${C.amber.primary}20`, borderColor: C.amber.primary },
-  tabText: { color: C.text.secondary, fontSize: 13, fontWeight: "700" },
-  tabTextActive: { color: C.amber.primary },
-  filterRow: { flexDirection: "row", justifyContent: "space-between", gap: 8 },
-  periodBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10, backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default, flex: 1 },
-  periodText: { color: C.text.primary, fontSize: 12, fontWeight: "600", flex: 1 },
-  customDateRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10 },
-  dateInput: { flex: 1, backgroundColor: C.bg.hover, color: C.text.primary, borderRadius: 8, paddingHorizontal: 10, height: 36, borderWidth: 1, borderColor: C.border.default, fontSize: 12 },
-  dropdown: { backgroundColor: C.bg.card, borderRadius: 12, borderWidth: 1, borderColor: C.border.default, marginTop: 8, overflow: "hidden" },
-  dropdownItem: { paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border.default },
-  dropdownItemActive: { backgroundColor: `${C.amber.primary}10` },
-  dropdownText: { color: C.text.primary, fontSize: 13, fontWeight: "600" },
-  statsGrid: { flexDirection: "row", gap: 10, marginVertical: 20 },
-  statCard: { flex: 1, backgroundColor: C.bg.hover, padding: 12, borderRadius: 16, borderWidth: 1, borderColor: C.border.default },
-  statIconContainer: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center", marginBottom: 8 },
-  statLabel: { color: C.text.secondary, fontSize: 9, fontWeight: "600", marginBottom: 3 },
-  statValue: { color: C.text.primary, fontSize: 12, fontWeight: "800" },
-  sectionTitle: { color: C.text.primary, fontSize: 15, fontWeight: "800", marginBottom: 14 },
-  dayHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 10, paddingHorizontal: 4, marginTop: 4 },
-  dayTitle: { color: C.amber.primary, fontSize: 13, fontWeight: "700" },
-  dayTotal: { color: C.text.secondary, fontSize: 11, fontWeight: "600" },
-  saleCard: { backgroundColor: C.bg.hover, borderRadius: 14, borderWidth: 1, borderColor: C.border.default, overflow: "hidden", marginBottom: 6 },
-  saleCardExpanded: { borderColor: `${C.amber.primary}40` },
-  saleHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 12 },
-  saleMainInfo: { flexDirection: "row", alignItems: "center", gap: 10 },
-  saleIcon: { width: 32, height: 32, borderRadius: 8, backgroundColor: "rgba(240,165,0,0.1)", alignItems: "center", justifyContent: "center" },
-  saleNumber: { color: C.text.primary, fontSize: 12, fontWeight: "700" },
-  saleMeta: { flexDirection: "row", alignItems: "center", marginTop: 2 },
-  saleMetaText: { color: C.text.secondary, fontSize: 10, marginLeft: 4 },
-  saleRight: { alignItems: "flex-end", gap: 4 },
-  saleTotal: { color: C.text.primary, fontSize: 14, fontWeight: "800" },
-  saleDetails: { paddingHorizontal: 12, paddingBottom: 12 },
-  detailsDivider: { height: 1, backgroundColor: C.border.default, marginBottom: 10 },
-  itemsList: { marginBottom: 10 },
-  itemRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 6, gap: 6 },
-  itemInfo: { flexDirection: "row", alignItems: "flex-start", gap: 6, flex: 1 },
-  itemName: { color: C.text.primary, fontSize: 12, fontWeight: "600" },
-  itemUnitPrice: { color: C.text.secondary, fontSize: 10, marginTop: 1 },
-  itemQty: { color: C.text.secondary, fontSize: 11, minWidth: 28, textAlign: "right", flexShrink: 0 },
-  itemPrice: { color: C.text.primary, fontSize: 12, fontWeight: "700", textAlign: "right" },
-  itemDiscount: { color: C.status.error, fontSize: 10, fontWeight: "600", textAlign: "right" },
-  saleFooter: { flexDirection: "row", justifyContent: "space-between", paddingTop: 8, borderTopWidth: 1, borderTopColor: C.border.default },
-  paymentMethod: { color: C.text.secondary, fontSize: 10, fontStyle: "italic" },
-  customerName: { color: C.text.secondary, fontSize: 10 },
-  emptyContainer: { alignItems: "center", justifyContent: "center", paddingVertical: 40, backgroundColor: C.bg.card, borderRadius: 20, borderWidth: 1, borderColor: C.border.default, borderStyle: "dashed" },
-  emptyText: { color: C.text.secondary, fontSize: 13, marginTop: 10 },
-  pnlCard: { backgroundColor: C.bg.hover, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: C.border.default, marginBottom: 16 },
-  pnlTitle: { color: C.text.primary, fontSize: 16, fontWeight: "800" },
-  pnlPeriod: { color: C.text.secondary, fontSize: 12, marginTop: 4 },
-  pnlRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: C.bg.hover, paddingHorizontal: 14, paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: C.border.default, marginBottom: 8 },
-  pnlRowLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
-  pnlLabel: { color: C.text.primary, fontSize: 14, fontWeight: "600" },
-  pnlValue: { fontSize: 15, fontWeight: "700" },
-  pnlDivider: { height: 1, backgroundColor: C.border.default, marginVertical: 8 },
-  expenseRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 10, paddingHorizontal: 14, backgroundColor: C.bg.hover, borderRadius: 10, borderWidth: 1, borderColor: C.border.default, marginBottom: 6 },
-  expenseDesc: { color: C.text.primary, fontSize: 13, fontWeight: "500" },
-  expenseAmount: { color: C.status.error, fontSize: 13, fontWeight: "700" },
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
-  modalContent: { backgroundColor: C.bg.base, borderTopLeftRadius: 30, borderTopRightRadius: 30, height: "80%", padding: 20 },
-  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 },
-  modalTitle: { color: C.text.primary, fontSize: 20, fontWeight: "900" },
-  closeBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.bg.hover, alignItems: "center", justifyContent: "center" },
-  modalScroll: { flex: 1 },
-  drillRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: C.border.default, gap: 8 },
-  drillInfo: { flex: 1, flexShrink: 1 },
-  drillMainText: { color: C.text.primary, fontSize: 15, fontWeight: "700" },
-  drillSubText: { color: C.text.secondary, fontSize: 12, marginTop: 2 },
-  drillAmount: { fontSize: 16, fontWeight: "800", flexShrink: 0 },
-});
+

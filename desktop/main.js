@@ -6,7 +6,7 @@ const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
 const { SerialPort } = require('serialport');
 
-const PROD_URL = 'https://fisczim.fiscalstack.co.zw/pos-login';
+const PROD_URL = 'https://fiscalstack.co.zw/pos-login';
 const DEV_URL = 'http://localhost:5001/pos-login';
 
 // Manager PIN cache helpers (Task 8.1)
@@ -214,10 +214,6 @@ function registerIpcHandlers(mainWindow) {
     return printHtmlToWindow(testHtml, printerName);
   });
 
-  // Task 7.2: install-update — quit and install the downloaded update
-  ipcMain.handle('install-update', async () => {
-    autoUpdater.quitAndInstall();
-  });
 
   // Task 6.1: open-cash-drawer — send ESC/POS kick bytes [0x1B, 0x70, 0x00, 0x19, 0xFA] to the printer
   ipcMain.handle('open-cash-drawer', async (_event, printerName) => {
@@ -348,28 +344,6 @@ function registerIpcHandlers(mainWindow) {
   });
 }
 
-/**
- * Initialises electron-updater. Checks for updates on startup, forwards
- * `update-available` to the renderer, and logs all errors without interrupting
- * the POS session.
- *
- * @param {import('electron').BrowserWindow} mainWindow
- */
-function initAutoUpdater(mainWindow) {
-  autoUpdater.logger = log;
-  autoUpdater.on('update-available', (info) => {
-    mainWindow.webContents.send('update-available', info);
-  });
-  autoUpdater.on('error', (err) => {
-    log.error('[autoUpdater] Error:', err.message);
-  });
-  // Only check for updates when a publish config is present (packaged builds)
-  if (app.isPackaged) {
-    autoUpdater.checkForUpdatesAndNotify().catch((err) => {
-      log.error('[autoUpdater] checkForUpdatesAndNotify failed:', err.message);
-    });
-  }
-}
 
 /**
  * Opens the configured serial port and forwards trimmed barcode strings to the renderer.
@@ -440,14 +414,22 @@ function createWindow() {
     }
   });
 
-  initAutoUpdater(mainWindow);
 
   registerIpcHandlers(mainWindow);
 
   initBarcodeScanner(mainWindow, config.scannerPort);
 
   const posUrl = resolveStartUrl();
-  mainWindow.loadURL(posUrl);
+  mainWindow.loadURL(posUrl).catch(err => {
+    mainWindow.loadURL(`data:text/html;charset=utf-8,<html>
+      <body style="font-family: sans-serif; padding: 2rem; background: #fff;">
+        <h2 style="color: #e53e3e;">POS Application Failed to Load</h2>
+        <p><strong>Attempted to start at:</strong> ${posUrl}</p>
+        <p><strong>Error:</strong> ${err.message}</p>
+        <p>If you are testing the packaged application locally, please create a <code>config.json</code> file in <code>%APPDATA%\\fisczim-pos\\</code> with <code>{"startUrl": "http://localhost:5001/pos-login"}</code>, or ensure your production domain is reachable.</p>
+      </body>
+    </html>`);
+  });
 
   // Requirement 3.4: intercept will-navigate and block external URLs (same-origin check).
   // Same-origin navigation (e.g., /pos → /reports/pos) is allowed; only cross-origin is blocked.

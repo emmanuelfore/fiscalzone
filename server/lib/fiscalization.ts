@@ -365,19 +365,34 @@ export const processInvoiceFiscalization = async (invoiceId: number, companyId: 
             return receiptLine;
         });
 
-        let moneyTypeCode: 'Cash' | 'Card' | 'Other' | 'BankTransfer' | 'MobileWallet' = 'Cash';
-        const method = invoice.paymentMethod?.toUpperCase() || 'CASH';
-        if (['CASH'].includes(method)) moneyTypeCode = 'Cash';
-        else if (['CARD', 'SWIPE', 'POS'].includes(method)) moneyTypeCode = 'Card';
-        else if (['MOBILE', 'ECOCASH', 'ONE_MONEY', 'TELE_CASH', 'MOBILEWALLET'].includes(method)) moneyTypeCode = 'MobileWallet';
-        else if (['EFT', 'RTGS', 'TRANSFER', 'ZIPIT', 'BANKTRANSFER'].includes(method)) moneyTypeCode = 'BankTransfer';
-        else moneyTypeCode = 'Other';
+        const getZimraPaymentMethodCode = (methodName: string): 'Cash' | 'Card' | 'Other' | 'BankTransfer' | 'MobileWallet' => {
+            const m = methodName.toUpperCase();
+            if (['CASH'].includes(m)) return 'Cash';
+            if (['CARD', 'SWIPE', 'POS'].includes(m)) return 'Card';
+            if (['MOBILE', 'ECOCASH', 'ONE_MONEY', 'TELE_CASH', 'MOBILEWALLET'].includes(m)) return 'MobileWallet';
+            if (['EFT', 'RTGS', 'TRANSFER', 'ZIPIT', 'BANKTRANSFER'].includes(m)) return 'BankTransfer';
+            return 'Other';
+        };
 
         const totalAmount = parseFloat(Number(invoice.total).toFixed(2));
-        const payments = [{
-            moneyTypeCode,
-            paymentAmount: totalAmount
-        }];
+        let payments: Array<{ moneyTypeCode: string, paymentAmount: number }> = [];
+
+        if (invoice.splitPayments && Array.isArray(invoice.splitPayments) && invoice.splitPayments.length > 0) {
+            payments = invoice.splitPayments.map((p: any) => ({
+                moneyTypeCode: getZimraPaymentMethodCode(p.method),
+                paymentAmount: parseFloat(Number(p.amount).toFixed(2))
+            }));
+            
+            const sum = payments.reduce((acc, p) => acc + p.paymentAmount, 0);
+            if (Math.abs(sum - totalAmount) > 0.05) {
+                console.warn(`[Fiscalize] Split payments sum (${sum}) doesn't roughly match total (${totalAmount}).`);
+            }
+        } else {
+            payments = [{
+                moneyTypeCode: getZimraPaymentMethodCode(invoice.paymentMethod || 'CASH'),
+                paymentAmount: totalAmount
+            }];
+        }
 
         let buyerData: any = undefined;
         let creditDebitNote = undefined;

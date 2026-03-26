@@ -247,6 +247,12 @@ export interface IStorage {
   getReportExpensesByProject(companyId: number, start: Date, end: Date): Promise<{ project: string; total: string; count: number }[]>;
   getReportBillableExpenseDetails(companyId: number, start: Date, end: Date): Promise<{ expenseId: number; expenseDate: string; category: string; description: string; amount: string; status: string }[]>;
   getReportTaxSummary(companyId: number, start: Date, end: Date): Promise<{ taxCode: string; taxName: string; taxRate: string; taxableAmount: string; outputTax: string; inputTax: string; netVat: string }[]>;
+  getHourlySalesDistribution(companyId: number, startDate: Date, endDate: Date): Promise<{ hour: number; count: number; total: number }[]>;
+  getOperationalMetrics(companyId: number, startDate: Date, endDate: Date): Promise<{ atv: number; profitMargin: number; itemsPerReceipt: number; totalRevenue: number; totalCogs: number }>;
+  getLowStockItems(companyId: number): Promise<(Product & { categoryName?: string })[]>;
+  getReportStockOnHand(companyId: number): Promise<{ productId: number; name: string; sku: string | null; category: string | null; stockLevel: string; unitCost: string; totalValue: string }[]>;
+  getReportInventoryMovements(companyId: number, start: Date, end: Date): Promise<{ transactionId: number; date: string; productName: string; type: string; quantity: string; unitCost: string | null; reference: string | null; notes: string | null }[]>;
+  getReportPurchaseHistory(companyId: number, start: Date, end: Date): Promise<{ transactionId: number; date: string; productName: string; supplierName: string | null; quantity: string; unitCost: string; totalCost: string; reference: string | null }[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3567,7 +3573,178 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
+  async getHourlySalesDistribution(companyId: number, startDate: Date, endDate: Date): Promise<{ hour: number; count: number; total: number }[]> {
+    const periodInvoices = await db.select()
+      .from(invoices)
+      .where(and(
+        eq(invoices.companyId, companyId),
+        gte(invoices.issueDate, startDate),
+        lte(invoices.issueDate, endDate),
+        ne(invoices.status, "draft"),
+        ne(invoices.status, "cancelled")
+      ));
 
+    const distribution: Record<number, { count: number; total: number }> = {};
+    for (let i = 0; i < 24; i++) {
+        distribution[i] = { count: 0, total: 0 };
+    }
+
+    periodInvoices.forEach(inv => {
+      const date = inv.issueDate ? new Date(inv.issueDate) : new Date();
+      const hour = date.getHours();
+      const amount = Number(inv.total);
+      
+      distribution[hour].count++;
+      distribution[hour].total += amount;
+    });
+
+    return Object.entries(distribution).map(([hour, data]) => ({
+      hour: parseInt(hour),
+      count: data.count,
+      total: data.total
+    }));
+  }
+
+  async getOperationalMetrics(companyId: number, startDate: Date, endDate: Date): Promise<{ atv: number; profitMargin: number; itemsPerReceipt: number; totalRevenue: number; totalCogs: number }> {
+    const periodInvoices = await db.select()
+      .from(invoices)
+      .where(and(
+        eq(invoices.companyId, companyId),
+        gte(invoices.issueDate, startDate),
+        lte(invoices.issueDate, endDate),
+        ne(invoices.status, "draft"),
+        ne(invoices.status, "cancelled")
+      ));
+
+    if (periodInvoices.length === 0) {
+      return { atv: 0, profitMargin: 0, itemsPerReceipt: 0, totalRevenue: 0, totalCogs: 0 };
+    }
+
+    const invoiceIds = periodInvoices.map(inv => inv.id);
+    const items = await db.select()
+      .from(invoiceItems)
+      .where(inArray(invoiceItems.invoiceId, invoiceIds));
+
+    const totalRevenue = periodInvoices.reduce((sum, inv) => sum + Number(inv.total), 0);
+    const totalCogs = items.reduce((sum, item) => sum + Number(item.cogsAmount || 0), 0);
+    const totalItems = items.reduce((sum, item) => sum + Number(item.quantity), 0);
+    
+    const atv = totalRevenue / periodInvoices.length;
+    const itemsPerReceipt = totalItems / periodInvoices.length;
+    const profitMargin = totalRevenue > 0 ? ((totalRevenue - totalCogs) / totalRevenue) * 100 : 0;
+
+    return {
+      atv,
+      profitMargin,
+      itemsPerReceipt,
+      totalRevenue,
+      totalCogs
+    };
+  }
+
+  async getLowStockItems(companyId: number): Promise<(Product & { categoryName?: string })[]> {
+    const results = await db
+      .select({
+        product: products,
+        categoryName: productCategories.name
+      })
+      .from(products)
+      .leftJoin(productCategories, eq(products.category, productCategories.name))
+      .where(and(
+        eq(products.companyId, companyId),
+        eq(products.isTracked, true),
+        sql`${products.stockLevel} <= ${products.lowStockThreshold}`
+      ))
+      .orderBy(products.stockLevel);
+
+    return results.map(r => ({
+      ...r.product,
+      categoryName: r.categoryName || undefined
+    }));
+  }
+
+  async getReportStockOnHand(companyId: number): Promise<{ productId: number; name: string; sku: string | null; category: string | null; stockLevel: string; unitCost: string; totalValue: string }[]> {
+    const results = await db.select({
+      productId: products.id,
+      name: products.name,
+      sku: products.sku,
+      category: products.category,
+      stockLevel: products.stockLevel,
+      unitCost: products.costPrice,
+      totalValue: sql<string>`(${products.stockLevel} * ${products.costPrice})`
+    })
+      .from(products)
+      .where(and(
+        eq(products.companyId, companyId),
+        eq(products.isTracked, true)
+      ))
+      .orderBy(products.name);
+    return results.map(r => ({
+      ...r,
+      stockLevel: String(r.stockLevel),
+      unitCost: String(r.unitCost || "0"),
+      totalValue: String(r.totalValue || "0")
+    }));
+  }
+
+  async getReportInventoryMovements(companyId: number, start: Date, end: Date): Promise<{ transactionId: number; date: string; productName: string; type: string; quantity: string; unitCost: string | null; reference: string | null; notes: string | null }[]> {
+    const results = await db.select({
+      transactionId: inventoryTransactions.id,
+      date: inventoryTransactions.createdAt,
+      productName: products.name,
+      type: inventoryTransactions.type,
+      quantity: inventoryTransactions.quantity,
+      unitCost: inventoryTransactions.unitCost,
+      reference: inventoryTransactions.referenceId,
+      notes: inventoryTransactions.notes
+    })
+      .from(inventoryTransactions)
+      .innerJoin(products, eq(inventoryTransactions.productId, products.id))
+      .where(and(
+        eq(inventoryTransactions.companyId, companyId),
+        gte(inventoryTransactions.createdAt, start),
+        lte(inventoryTransactions.createdAt, end)
+      ))
+      .orderBy(desc(inventoryTransactions.createdAt));
+
+    return results.map(r => ({
+      ...r,
+      date: r.date?.toISOString() || "",
+      quantity: String(r.quantity),
+      unitCost: r.unitCost ? String(r.unitCost) : null
+    }));
+  }
+
+  async getReportPurchaseHistory(companyId: number, start: Date, end: Date): Promise<{ transactionId: number; date: string; productName: string; supplierName: string | null; quantity: string; unitCost: string; totalCost: string; reference: string | null }[]> {
+    const results = await db.select({
+      transactionId: inventoryTransactions.id,
+      date: inventoryTransactions.createdAt,
+      productName: products.name,
+      supplierName: suppliers.name,
+      quantity: inventoryTransactions.quantity,
+      unitCost: inventoryTransactions.unitCost,
+      totalCost: inventoryTransactions.totalCost,
+      reference: inventoryTransactions.referenceId
+    })
+      .from(inventoryTransactions)
+      .innerJoin(products, eq(inventoryTransactions.productId, products.id))
+      .leftJoin(suppliers, eq(inventoryTransactions.supplierId, suppliers.id))
+      .where(and(
+        eq(inventoryTransactions.companyId, companyId),
+        eq(inventoryTransactions.type, 'STOCK_IN'),
+        gte(inventoryTransactions.createdAt, start),
+        lte(inventoryTransactions.createdAt, end)
+      ))
+      .orderBy(desc(inventoryTransactions.createdAt));
+
+    return results.map(r => ({
+      ...r,
+      date: r.date?.toISOString() || "",
+      quantity: String(r.quantity),
+      unitCost: String(r.unitCost || "0"),
+      totalCost: String(r.totalCost || "0")
+    }));
+  }
 }
 
 export const storage = new DatabaseStorage();

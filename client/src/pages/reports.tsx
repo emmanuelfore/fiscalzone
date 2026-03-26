@@ -2,6 +2,7 @@ import { Layout } from "@/components/layout";
 import { useActiveCompany } from "@/hooks/use-active-company";
 import { useAuth } from "@/hooks/use-auth";
 import { SalesReport, SalesByCustomerReport, SalesByItemReport, SalesBySalespersonReport } from "@/components/reports/sales-reports";
+import { OperationalMetricsReport, HourlySalesAnalysisReport, InventoryHealthReport, StockOnHandReport, InventoryMovementsReport, PurchaseHistoryReport } from "@/components/reports/retail-reports";
 import { ArAgingSummaryReport, ArAgingDetailsReport, InvoiceDetailsReport, QuoteDetailsReport, CustomerBalanceSummaryReport, ReceivableSummaryReport, ReceivableDetailsReport, BadDebtsReport, BankChargesReport } from "@/components/reports/receivables-reports";
 import { TimeToGetPaidReport, RefundHistoryReport, WithholdingTaxReport } from "@/components/reports/payments-reports";
 import { ExpenseDetailsReport, ExpensesByCategoryReport, ExpensesByCustomerReport, ExpensesByProjectReport, BillableExpenseDetailsReport } from "@/components/reports/expenses-reports";
@@ -14,7 +15,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronDown, BarChart3, FileText, CreditCard, ShoppingCart, Receipt, Search, Download, Loader2, RefreshCw, Calendar as CalendarIcon } from "lucide-react";
+import { ChevronDown, BarChart3, FileText, CreditCard, ShoppingCart, ShoppingBag, Receipt, Search, Download, Loader2, RefreshCw, Calendar as CalendarIcon } from "lucide-react";
 import { startOfMonth, endOfMonth, subMonths, startOfQuarter, endOfQuarter, format, isValid } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -95,6 +96,19 @@ const REPORT_CATEGORIES: {
     icon: Receipt,
     reports: [
       { key: "tax-summary", label: "Tax Summary", category: "taxes", endpoint: "tax-summary" },
+    ],
+  },
+  {
+    key: "retail",
+    label: "Retail & Operations",
+    icon: ShoppingBag,
+    reports: [
+      { key: "operational-metrics", label: "Operational Metrics (ATV/Margin)", category: "retail", endpoint: "operational-metrics" },
+      { key: "hourly-sales", label: "Hourly Sales Analysis", category: "retail", endpoint: "hourly-sales" },
+      { key: "stock-alerts", label: "Inventory Health (Low Stock)", category: "retail", endpoint: "stock-alerts" },
+      { key: "stock-on-hand", label: "Stock on Hand (Valuation)", category: "retail", endpoint: "stock-on-hand" },
+      { key: "inventory-movements", label: "Inventory Movement Logs", category: "retail", endpoint: "inventory-movements" },
+      { key: "purchase-history", label: "Purchase History (GRN)", category: "retail", endpoint: "purchase-history" },
     ],
   },
 ];
@@ -435,6 +449,12 @@ function ActiveReportComponent({ reportKey, companyId, dateRange, search }: {
     case "expenses-by-project": return <ExpensesByProjectReport {...props} />;
     case "billable-expense-details": return <BillableExpenseDetailsReport {...props} />;
     case "tax-summary": return <TaxSummaryReport {...props} />;
+    case "operational-metrics": return <OperationalMetricsReport {...props} />;
+    case "hourly-sales": return <HourlySalesAnalysisReport {...props} />;
+    case "stock-alerts": return <InventoryHealthReport {...props} />;
+    case "stock-on-hand": return <StockOnHandReport {...props} />;
+    case "inventory-movements": return <InventoryMovementsReport {...props} />;
+    case "purchase-history": return <PurchaseHistoryReport {...props} />;
     default: return (
       <div className="flex items-center justify-center h-64 text-slate-400">
         <p className="text-sm">Select a report from the sidebar</p>
@@ -451,7 +471,7 @@ export default function ReportsPage() {
 
   const [activeReport, setActiveReport] = useState<string>("");
   const [openCategories, setOpenCategories] = useState<Set<string>>(
-    new Set(["sales", "receivables"])
+    new Set(["sales", "receivables", "retail"])
   );
   const [dateRange, setDateRange] = useState<DateRangeState>({
     from: startOfMonth(new Date()),

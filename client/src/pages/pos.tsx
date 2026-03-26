@@ -22,7 +22,7 @@ import {
     addPendingSale,
 } from "@/lib/offline-db";
 import { useState, useMemo, useEffect, useRef } from "react";
-import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, UserPlus, Loader2, Package, Tag, Pause, Play, History, Calculator, Printer, CheckCircle2, XCircle, ChevronRight, Fullscreen, HelpCircle, User, Settings as SettingsIcon, LogOut, FileText, Receipt, Clock, LayoutGrid, ShoppingBag, Filter, WifiOff, Wifi, CloudUpload, AlertTriangle } from "lucide-react";
+import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, UserPlus, Loader2, Package, Tag, Pause, Play, History, Calculator, Printer, CheckCircle2, XCircle, ChevronRight, Fullscreen, HelpCircle, User, Settings as SettingsIcon, LogOut, FileText, Receipt, Clock, LayoutGrid, ShoppingBag, Filter, WifiOff, Wifi, CloudUpload, AlertTriangle, Pin } from "lucide-react";
 import { RefreshCw } from "lucide-react";
 import { POSReceipt } from "@/components/pos-receipt";
 import { Receipt48 } from "@/components/pos/receipt-48";
@@ -154,7 +154,32 @@ export default function POSPage() {
     const [lastSuccessfulInvoice, setLastSuccessfulInvoice] = useState<any>(null);
     const [activeView, setActiveView] = useState<"products" | "cart">("products");
     const [paidAmount, setPaidAmount] = useState<string>("");
+    const [splitPayments, setSplitPayments] = useState<Array<{ method: string, amount: number }>>([]);
     const [selectedCurrencyCode, setSelectedCurrencyCode] = useState<string>("USD");
+
+    // UX: Pinned Products
+    const [pinnedProducts, setPinnedProducts] = useState<number[]>(() => {
+        try { return JSON.parse(localStorage.getItem("pos_pinned_products") || "[]"); }
+        catch { return []; }
+    });
+    const togglePinProduct = (e: React.MouseEvent, productId: number) => {
+        e.stopPropagation();
+        setPinnedProducts(prev => {
+            const next = prev.includes(productId) ? prev.filter(id => id !== productId) : [...prev, productId];
+            localStorage.setItem("pos_pinned_products", JSON.stringify(next));
+            return next;
+        });
+    };
+
+    // UX: Auto-focus the paidAmount input when Checkout opens
+    useEffect(() => {
+        if (isCheckoutOpen) {
+            setTimeout(() => {
+                const input = document.getElementById("checkout-paid-amount");
+                if (input) input.focus();
+            }, 100);
+        }
+    }, [isCheckoutOpen]);
 
     // Barcode scanner — use refs to avoid stale closure issues
     const barcodeBufferRef = useRef("");
@@ -178,6 +203,8 @@ export default function POSPage() {
     const [cnSearching, setCnSearching] = useState(false);
     const [cnProcessing, setCnProcessing] = useState(false);
     const [cnType, setCnType] = useState<"credit" | "debit">("credit");
+    const [cnActiveInvoice, setCnActiveInvoice] = useState<any>(null);
+    const [cnSelectedItems, setCnSelectedItems] = useState<{ productId: number, quantity: number, originalItem: any }[]>([]);
 
     // X/Z Report modal
     const [isReportOpen, setIsReportOpen] = useState(false);
@@ -193,12 +220,13 @@ export default function POSPage() {
     const [availablePrinters, setAvailablePrinters] = useState<any[]>([]);
     const [posSettings, setPosSettings] = useState({
         printingEnabled: true,
-        autoPrint: true,
-        terminalId: "POS-T01",
-        silentPrinting: false,
+        autoPrint: localStorage.getItem("pos_auto_print") !== "false",
+        terminalId: localStorage.getItem("pos_terminal_id") || "POS-T01",
+        silentPrinting: localStorage.getItem("pos_silent_printing") === "true",
         printerName: localStorage.getItem("pos_printer_name") || "",
-        printServerUrl: "http://localhost:12312",
-        cashDrawerEnabled: false
+        paperSize: localStorage.getItem("pos_paper_size") || "",
+        printServerUrl: localStorage.getItem("pos_print_server") || "http://localhost:3001",
+        cashDrawerEnabled: localStorage.getItem("pos_cash_drawer") === "true"
     });
 
     // Default to "Walk-in Customer"
@@ -285,8 +313,15 @@ export default function POSPage() {
                 (p.sku && p.sku.toLowerCase().includes(searchQuery.toLowerCase()));
             const matchesCategory = selectedCategory === "All" || p.category === selectedCategory;
             return matchesSearch && matchesCategory;
-        }).sort(() => Math.random() - 0.5);
-    }, [resolvedProducts, searchQuery, selectedCategory]);
+        }).sort((a: any, b: any) => {
+            const aPinned = pinnedProducts.includes(a.id);
+            const bPinned = pinnedProducts.includes(b.id);
+            if (aPinned && !bPinned) return -1;
+            if (!aPinned && bPinned) return 1;
+            // Optionally, sort alphabetically if neither pinned or both pinned
+            return a.name.localeCompare(b.name);
+        });
+    }, [resolvedProducts, searchQuery, selectedCategory, pinnedProducts]);
 
     // ── Display limit: show first 40 items; show all when searching/filtering ──
     const INITIAL_LIMIT = 40;
@@ -757,10 +792,15 @@ export default function POSPage() {
 
         if (!finalCustomerId) return;
         setIsProcessing(true);
-        if (parseFloat(paidAmount || "0") < total) {
+
+        const sumTenders = splitPayments.length > 0
+            ? splitPayments.reduce((acc, p) => acc + p.amount, 0)
+            : parseFloat(paidAmount || "0");
+
+        if (sumTenders < total - 0.05) {
             toast({
                 title: "Insufficient Payment",
-                description: `Received amount (${currencyInfo.symbol}${paidAmount}) is less than total payable (${fmt(total)})`,
+                description: `Received amount is less than total payable (${fmt(total)})`,
                 variant: "destructive"
             });
             setIsProcessing(false);
@@ -777,7 +817,8 @@ export default function POSPage() {
                 notes: "POS Transaction",
                 currency: currency.code,
                 exchangeRate: currency.exchangeRate,
-                paymentMethod,
+                paymentMethod: splitPayments.length > 0 ? "SPLIT" : paymentMethod,
+                splitPayments: splitPayments.length > 0 ? splitPayments : undefined,
                 status: "issued",
                 isPos: true,
                 createdBy: user?.id,
@@ -818,6 +859,7 @@ export default function POSPage() {
                 setOrderDiscount(0);
                 resetToDefaultCustomer();
                 setPaidAmount("");
+                setSplitPayments([]);
                 setIsCheckoutOpen(false);
                 clearPersistedSession();
 
@@ -848,6 +890,7 @@ export default function POSPage() {
             setOrderDiscount(0);
             resetToDefaultCustomer();
             setPaidAmount("");
+            setSplitPayments([]);
             setIsCheckoutOpen(false);
             clearPersistedSession();
         } catch (error: any) {
@@ -863,7 +906,8 @@ export default function POSPage() {
                         notes: "POS Transaction",
                         currency: currency.code,
                         exchangeRate: currency.exchangeRate,
-                        paymentMethod,
+                        paymentMethod: splitPayments.length > 0 ? "SPLIT" : paymentMethod,
+                        splitPayments: splitPayments.length > 0 ? splitPayments : undefined,
                         status: "issued",
                         isPos: true,
                         createdBy: user?.id,
@@ -901,6 +945,7 @@ export default function POSPage() {
                     setOrderDiscount(0);
                     resetToDefaultCustomer();
                     setPaidAmount("");
+                    setSplitPayments([]);
                     setIsCheckoutOpen(false);
                     clearPersistedSession();
 
@@ -1079,14 +1124,29 @@ export default function POSPage() {
         fetchPrinters();
     }, [isSettingsOpen, posSettings.printServerUrl]);
 
-    // Persist local printer selection
+    // Persist local printer selection & paper size override
     useEffect(() => {
         if (posSettings.printerName) {
             localStorage.setItem("pos_printer_name", posSettings.printerName);
         } else {
             localStorage.removeItem("pos_printer_name");
         }
-    }, [posSettings.printerName]);
+        
+        if (posSettings.paperSize) {
+            localStorage.setItem("pos_paper_size", posSettings.paperSize);
+        } else {
+            localStorage.removeItem("pos_paper_size");
+        }
+    }, [posSettings.printerName, posSettings.paperSize]);
+
+    // Persist local toggles
+    useEffect(() => {
+        localStorage.setItem("pos_auto_print", posSettings.autoPrint ? "true" : "false");
+        localStorage.setItem("pos_terminal_id", posSettings.terminalId);
+        localStorage.setItem("pos_silent_printing", posSettings.silentPrinting ? "true" : "false");
+        localStorage.setItem("pos_print_server", posSettings.printServerUrl);
+        localStorage.setItem("pos_cash_drawer", posSettings.cashDrawerEnabled ? "true" : "false");
+    }, [posSettings.autoPrint, posSettings.terminalId, posSettings.silentPrinting, posSettings.printServerUrl, posSettings.cashDrawerEnabled]);
 
     const handleSilentPrint = async () => {
         let receiptElement = document.getElementById('silent-receipt-48');
@@ -1111,7 +1171,15 @@ export default function POSPage() {
         }
 
         try {
-            const html = receiptElement.outerHTML;
+            // Grab all styles from current page so Tailwind classes work in hidden window
+            const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+                .map(s => {
+                    if (s.tagName === 'LINK') return `<link rel="stylesheet" href="${(s as HTMLLinkElement).href}">`;
+                    return s.outerHTML;
+                })
+                .join('');
+            const receiptHtml = receiptElement.outerHTML;
+            const html = `<!DOCTYPE html><html><head><meta charset="utf-8">${styles}</head><body class="bg-white p-0 m-0" style="margin:0;padding:0;">${receiptHtml}</body></html>`;
             
             if (window.electronAPI) {
                 await window.electronAPI.printReceipt(html, posSettings.printerName || undefined);
@@ -1233,16 +1301,59 @@ export default function POSPage() {
         setCnSearching(false);
     };
 
-    const handleIssueCreditDebitNote = async (originalInvoice: any) => {
+    const handleSelectInvoiceForReturn = async (inv: any) => {
         setCnProcessing(true);
         try {
+            const res = await apiFetch(`/api/invoices/${inv.id}`);
+            if (res.ok) {
+                const fullInv = await res.json();
+                setCnActiveInvoice(fullInv);
+                setCnSelectedItems(fullInv.items.map((it: any) => ({
+                    productId: it.productId,
+                    quantity: Number(it.quantity),
+                    originalItem: it
+                })));
+            }
+        } catch {
+            toast({ title: "Error", description: "Could not fetch invoice details", variant: "destructive" });
+        }
+        setCnProcessing(false);
+    };
+
+    const handleIssueItemizedReturn = async () => {
+        setCnProcessing(true);
+        try {
+            const itemsToReturn = cnSelectedItems
+                .filter(s => s.quantity > 0)
+                .map(s => {
+                    const originalLineTotal = Number(s.originalItem.unitPrice) * s.quantity;
+                    return {
+                        ...s.originalItem,
+                        quantity: s.quantity.toString(),
+                        lineTotal: originalLineTotal.toString()
+                    };
+                });
+            
+            if (itemsToReturn.length === 0) {
+                toast({ title: "Empty Return", description: "Select at least one item to return", variant: "destructive" });
+                setCnProcessing(false);
+                return;
+            }
+
             const endpoint = cnType === "credit"
-                ? `/api/invoices/${originalInvoice.id}/credit-note`
-                : `/api/invoices/${originalInvoice.id}/debit-note`;
-            const res = await apiFetch(endpoint, { method: "POST" });
+                ? `/api/invoices/${cnActiveInvoice.id}/credit-note`
+                : `/api/invoices/${cnActiveInvoice.id}/debit-note`;
+
+            const res = await apiFetch(endpoint, { 
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ items: itemsToReturn })
+            });
+
             if (!res.ok) {
                 const err = await res.json();
                 toast({ title: "Failed", description: err.message, variant: "destructive" });
+                setCnProcessing(false);
                 return;
             }
             const note = await res.json();
@@ -1250,8 +1361,9 @@ export default function POSPage() {
             setIsCreditNoteOpen(false);
             setCnSearchQuery("");
             setCnSearchResults([]);
+            setCnActiveInvoice(null);
             // Show receipt for the note
-            setReprintInvoice({ ...note, originalInvoice });
+            setReprintInvoice({ ...note, originalInvoice: cnActiveInvoice });
         } catch {
             toast({ title: "Error", description: "Could not create note", variant: "destructive" });
         }
@@ -2207,7 +2319,7 @@ export default function POSPage() {
                                     </div>
 
                                     {/* Desktop View */}
-                                    <div className="hidden md:grid gap-2 pb-8" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(160px, 160px))" }}>
+                                    <div className="hidden md:grid gap-2 pb-8" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))" }}>
                                         {(pagedProducts as any[]).map(product => {
                                             const hash = product.name.split("").reduce((acc: number, char: string) => char.charCodeAt(0) + ((acc << 5) - acc), 0);
                                             const hue = Math.abs(hash % 360);
@@ -2236,8 +2348,17 @@ export default function POSPage() {
                                                             {product.isTracked && Number(product.stockLevel) <= Number(product.lowStockThreshold) && (
                                                                 <Badge className="absolute top-2 right-2 bg-red-500 text-[8px] font-black h-4 px-1 border-none">OUT</Badge>
                                                             )}
+                                                            <button
+                                                                onClick={(e) => togglePinProduct(e, product.id)}
+                                                                className={cn(
+                                                                    "absolute top-2 left-2 w-6 h-6 rounded-full flex items-center justify-center transition-all bg-white/80 backdrop-blur-sm",
+                                                                    pinnedProducts.includes(product.id) ? "text-primary opacity-100 shadow-sm" : "text-slate-400 opacity-0 group-hover:opacity-100 hover:text-primary hover:bg-white"
+                                                                )}
+                                                            >
+                                                                <Pin className="h-3 w-3" fill={pinnedProducts.includes(product.id) ? "currentColor" : "none"} />
+                                                            </button>
                                                         </div>
-                                                        <div className="p-2 flex flex-col flex-1 bg-white">
+                                                        <div className="p-2 flex flex-col flex-1 bg-white relative">
                                                             <h4 className="text-[10px] md:text-[11px] font-black text-slate-800 line-clamp-2 mb-1 group-hover:text-primary transition-colors leading-tight min-h-[1.5rem] md:min-h-[1.75rem]">{product.name}</h4>
                                                             <div className="flex justify-between items-center mt-auto">
                                                                 <p className="text-xs md:text-sm font-black text-slate-900">
@@ -2310,6 +2431,15 @@ export default function POSPage() {
                     </button>
                 </div>
 
+                {/* Keyboard Shortcuts Cheatsheet (Desktop Only) */}
+                <div className="hidden md:flex absolute bottom-0 right-0 left-0 h-6 bg-slate-900/5 backdrop-blur-sm border-t border-slate-200/50 justify-center items-center gap-6 z-50 pointer-events-none">
+                    <span className="text-[10px] font-bold text-slate-500"><kbd className="bg-white border shadow-sm rounded px-1 min-w-[1.2rem] inline-block text-center mr-1 text-slate-700">F1</kbd> Search</span>
+                    <span className="text-[10px] font-bold text-slate-500"><kbd className="bg-white border shadow-sm rounded px-1 min-w-[1.2rem] inline-block text-center mr-1 text-slate-700">F2</kbd> Checkout</span>
+                    <span className="text-[10px] font-bold text-slate-500"><kbd className="bg-white border shadow-sm rounded px-1 min-w-[1.2rem] inline-block text-center mr-1 text-slate-700">F3</kbd> Hold</span>
+                    <span className="text-[10px] font-bold text-slate-500"><kbd className="bg-white border shadow-sm rounded px-1 min-w-[1.2rem] inline-block text-center mr-1 text-slate-700">Esc</kbd> Close</span>
+                    <span className="text-[10px] font-bold text-slate-500"><kbd className="bg-white border shadow-sm rounded px-1 min-w-[1.2rem] inline-block text-center mr-1 text-slate-700">+</kbd> <kbd className="bg-white border shadow-sm rounded px-1 min-w-[1.2rem] inline-block text-center mr-1">-</kbd> Qty</span>
+                </div>
+
             </div>
 
             {/* Modals & Dialogs */}
@@ -2367,9 +2497,31 @@ export default function POSPage() {
                                 </div>
 
                                 <div className="space-y-1.5 flex-1 flex flex-col">
-                                    <div className="relative group shrink-0">
+                                    {splitPayments.length > 0 && (
+                                        <div className="bg-slate-50 p-2 rounded-xl mb-1 md:mb-2 flex flex-col gap-1 border border-slate-100 shrink-0">
+                                            {splitPayments.map((p, i) => (
+                                                <div key={i} className="flex justify-between items-center text-xs">
+                                                    <span className="font-bold flex items-center gap-1"><CreditCard className="w-3 h-3"/> {p.method}</span>
+                                                    <span className="font-mono">${p.amount.toFixed(2)}</span>
+                                                    <Button variant="ghost" size="icon" className="h-5 w-5 p-0" onClick={() => setSplitPayments(prev => prev.filter((_, idx) => idx !== i))}>
+                                                        <Trash2 className="w-3 h-3 text-red-500" />
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                            <div className="flex justify-between items-center text-xs pt-1 border-t border-slate-200 mt-1">
+                                                <span className="font-black text-slate-500 uppercase">Remaining</span>
+                                                <span className="font-mono font-black text-red-500">
+                                                    ${Math.max(0, total - splitPayments.reduce((a,b)=>a+b.amount, 0)).toFixed(2)}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="flex gap-2 shrink-0">
+                                        <div className="relative group flex-1">
                                         <span className="absolute left-2.5 md:left-4 top-1/2 -translate-y-1/2 text-sm md:text-xl font-black text-slate-300 group-focus-within:text-primary transition-colors">$</span>
                                         <Input
+                                            id="checkout-paid-amount"
                                             type="number"
                                             placeholder="0.00"
                                             value={paidAmount}
@@ -2377,6 +2529,43 @@ export default function POSPage() {
                                             className="h-7 md:h-12 pl-5 md:pl-8 text-sm md:text-xl font-black bg-slate-50 border-none rounded-md md:rounded-xl focus:ring-4 md:focus:ring-8 focus:ring-primary/5 transition-all text-slate-800"
                                         />
                                         <div className="absolute right-2.5 md:right-4 top-1/2 -translate-y-1/2 text-[6px] md:text-[8px] font-black text-slate-400 uppercase tracking-widest">Rec.</div>
+                                    </div>
+                                    <Button
+                                        variant="outline"
+                                        className="h-7 md:h-12 w-1/3 rounded-md md:rounded-xl border-dashed border-2 border-primary/30 text-primary font-black uppercase text-[8px] md:text-xs tracking-widest hover:bg-primary hover:text-white transition-all shrink-0"
+                                        onClick={() => {
+                                            const amt = parseFloat(paidAmount);
+                                            if (amt > 0) {
+                                                setSplitPayments(prev => [...prev, { method: paymentMethod, amount: amt }]);
+                                                setPaidAmount("");
+                                            }
+                                        }}
+                                    >
+                                        Add Tender
+                                    </Button>
+                                </div>
+
+                                    {/* Fast Cash Buttons */}
+                                    <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide shrink-0">
+                                        {Array.from(new Set([
+                                            total * currencyInfo.rate, // Exact
+                                            Math.ceil((total * currencyInfo.rate) / 5) * 5,
+                                            Math.ceil((total * currencyInfo.rate) / 10) * 10,
+                                            Math.ceil((total * currencyInfo.rate) / 20) * 20,
+                                            20, 50, 100
+                                        ])).filter(amt => amt >= total * currencyInfo.rate && amt > 0)
+                                            .sort((a, b) => a - b)
+                                            .slice(0, 4)
+                                            .map((amt, idx) => (
+                                                <Button
+                                                    key={idx}
+                                                    variant="outline"
+                                                    className="h-8 px-3 rounded-lg border-slate-200 text-xs font-black text-slate-600 hover:border-primary hover:text-primary hover:bg-primary/5 transition-all shrink-0"
+                                                    onClick={() => setPaidAmount(amt.toFixed(2))}
+                                                >
+                                                    {idx === 0 && amt === total * currencyInfo.rate ? "Exact" : `$${amt.toFixed(0)}`}
+                                                </Button>
+                                            ))}
                                     </div>
 
                                     <div className="flex-1 md:flex-none">
@@ -2413,12 +2602,16 @@ export default function POSPage() {
                                         ))}
                                     </div>
 
-                                    {paidAmount && (
-                                        <div className="bg-emerald-50 p-1 md:p-3 rounded-md md:rounded-xl border border-emerald-100 flex items-center justify-between shrink-0">
+                                    {(paidAmount || splitPayments.length > 0) && (
+                                        <div className="bg-emerald-50 p-1 md:p-3 rounded-md md:rounded-xl border border-emerald-100 flex items-center justify-between shrink-0 mb-2">
                                             <div className="flex flex-col">
                                                 <span className="text-[6px] uppercase font-black tracking-widest text-emerald-600">Change</span>
                                                 <h3 className="text-sm md:text-xl font-black text-emerald-700">
-                                                    {selectedCurrencyCode} {(parseFloat(paidAmount) - (total * Number(currencies?.find(c => c.code === selectedCurrencyCode)?.exchangeRate || 1))).toFixed(2)}
+                                                    {selectedCurrencyCode} {(() => {
+                                                        const sumParams = splitPayments.reduce((a,b)=>a+b.amount,0) + parseFloat(paidAmount || "0");
+                                                        const req = total * Number(currencies?.find(c => c.code === selectedCurrencyCode)?.exchangeRate || 1);
+                                                        return Math.max(0, sumParams - req).toFixed(2);
+                                                    })()}
                                                 </h3>
                                             </div>
                                             <div className="w-5 h-5 md:w-8 md:h-8 bg-white rounded-md flex items-center justify-center shadow-sm">
@@ -2602,6 +2795,26 @@ export default function POSPage() {
                                         className="h-10 text-xs font-black bg-white border-slate-200 rounded-lg outline-none"
                                     />
                                 </div>
+                                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">Paper Size Override</label>
+                                    <div className="flex gap-2">
+                                        {['', '80mm', '58mm', 'A4'].map(size => (
+                                            <button
+                                                key={size}
+                                                onClick={() => setPosSettings(prev => ({ ...prev, paperSize: size }))}
+                                                className={cn(
+                                                    "flex-1 h-9 rounded-lg text-[10px] font-black uppercase tracking-tight border transition-all",
+                                                    posSettings.paperSize === size
+                                                        ? "bg-slate-900 text-white border-slate-900"
+                                                        : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                                                )}
+                                            >
+                                                {size === '' ? 'Default' : size}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <p className="text-[9px] text-slate-400 mt-2 italic px-1">Leaves default size configured in global settings if set to Default.</p>
+                                </div>
                                 <div className="p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100 animate-in fade-in slide-in-from-top-2 duration-300">
                                     <div className="flex items-center justify-between mb-2">
                                         <label className="text-[10px] font-black uppercase tracking-widest text-emerald-600 block">Target Printer</label>
@@ -2685,6 +2898,7 @@ export default function POSPage() {
                                     customer={resolvedCustomers?.find((c: any) => c.id === lastSuccessfulInvoice?.customerId)}
                                     items={lastSuccessfulInvoice?.items}
                                     user={user}
+                                    paperSize={posSettings.paperSize || (resolvedCompany?.posSettings as any)?.receiptPaperSize || '80mm'}
                                 />
                             </div>
 
@@ -2706,7 +2920,7 @@ export default function POSPage() {
             </div>
 
             {/* Hidden Receipt for Silent Printing */}
-            <div className="fixed -left-[9999px] top-0 pointer-events-none overflow-hidden" style={{ width: resolvedCompany?.posSettings?.paperSize === 'A4' ? '210mm' : (resolvedCompany?.posSettings?.paperSize || '80mm') }}>
+            <div className="fixed -left-[9999px] top-0 pointer-events-none overflow-hidden" style={{ width: (posSettings.paperSize || (resolvedCompany?.posSettings as any)?.receiptPaperSize) === 'A4' ? '210mm' : (posSettings.paperSize || (resolvedCompany?.posSettings as any)?.receiptPaperSize || '80mm') }}>
                 {lastSuccessfulInvoice && (
                     <Receipt48
                         id="silent-receipt-48"
@@ -2715,12 +2929,13 @@ export default function POSPage() {
                         customer={resolvedCustomers?.find((c: any) => c.id === lastSuccessfulInvoice?.customerId)}
                         items={lastSuccessfulInvoice?.items}
                         user={user}
+                        paperSize={posSettings.paperSize || (resolvedCompany?.posSettings as any)?.receiptPaperSize || '80mm'}
                     />
                 )}
             </div>
 
             {/* Hidden Reprint Receipt */}
-            <div className="fixed -left-[9999px] top-0 pointer-events-none overflow-hidden" style={{ width: resolvedCompany?.posSettings?.paperSize === 'A4' ? '210mm' : (resolvedCompany?.posSettings?.paperSize || '80mm') }}>
+            <div className="fixed -left-[9999px] top-0 pointer-events-none overflow-hidden" style={{ width: (posSettings.paperSize || (resolvedCompany?.posSettings as any)?.receiptPaperSize) === 'A4' ? '210mm' : (posSettings.paperSize || (resolvedCompany?.posSettings as any)?.receiptPaperSize || '80mm') }}>
                 {reprintInvoice && (
                     <Receipt48
                         id="reprint-receipt-48"
@@ -2730,6 +2945,7 @@ export default function POSPage() {
                         items={reprintInvoice?.items}
                         originalInvoice={reprintInvoice?.originalInvoice}
                         user={user}
+                        paperSize={posSettings.paperSize || (resolvedCompany?.posSettings as any)?.receiptPaperSize || '80mm'}
                     />
                 )}
             </div>
@@ -2760,7 +2976,14 @@ export default function POSPage() {
                             onClick={() => {
                                 if (posSettings.silentPrinting) {
                                     const el = document.getElementById('reprint-receipt-48');
-                                    if (el && window.electronAPI) window.electronAPI.printReceipt(el.outerHTML, posSettings.printerName || undefined);
+                                    if (el && window.electronAPI) {
+                                        const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]')).map(s => {
+                                            if (s.tagName === 'LINK') return `<link rel="stylesheet" href="${(s as HTMLLinkElement).href}">`;
+                                            return s.outerHTML;
+                                        }).join('');
+                                        const html = `<!DOCTYPE html><html><head><meta charset="utf-8">${styles}</head><body class="bg-white p-0 m-0" style="margin:0;padding:0;">${el.outerHTML}</body></html>`;
+                                        window.electronAPI.printReceipt(html, posSettings.printerName || undefined);
+                                    }
                                     else window.print();
                                 } else { window.print(); }
                             }}>
@@ -2823,14 +3046,14 @@ export default function POSPage() {
             </Dialog>
 
             {/* Credit / Debit Note Modal */}
-            <Dialog open={isCreditNoteOpen} onOpenChange={setIsCreditNoteOpen}>
+            <Dialog open={isCreditNoteOpen} onOpenChange={(v) => { setIsCreditNoteOpen(v); if(!v) setCnActiveInvoice(null); }}>
                 <DialogContent className="sm:max-w-[520px] rounded-3xl p-0 overflow-hidden border-none max-h-[85vh] flex flex-col">
                     <DialogHeader className="sr-only">
                         <DialogTitle>Issue Credit or Debit Note</DialogTitle>
                         <DialogDescription>Search for an existing invoice to issue a credit or debit adjustment.</DialogDescription>
                     </DialogHeader>
                     <div className="bg-amber-500 p-6 text-white relative shrink-0">
-                        <button onClick={() => { setIsCreditNoteOpen(false); setCnSearchResults([]); setCnSearchQuery(""); }} className="absolute top-4 right-4 h-8 w-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-all">
+                        <button onClick={() => { setIsCreditNoteOpen(false); setCnSearchResults([]); setCnSearchQuery(""); setCnActiveInvoice(null); }} className="absolute top-4 right-4 h-8 w-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-all">
                             <XCircle className="h-4 w-4 text-white" />
                         </button>
                         <FileText className="h-8 w-8 mb-2 text-white/80" />
@@ -2861,31 +3084,71 @@ export default function POSPage() {
                                 {cnSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : "Search"}
                             </Button>
                         </div>
-                        {/* Results */}
-                        {cnSearchResults.length > 0 && (
-                            <div className="space-y-2 max-h-[280px] overflow-y-auto">
-                                {cnSearchResults.map((inv: any) => (
-                                    <div key={inv.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:border-amber-200 hover:bg-amber-50 transition-all">
-                                        <div>
-                                            <p className="text-sm font-black text-slate-800">{inv.invoiceNumber}</p>
-                                            <p className="text-xs text-slate-400 font-bold">{inv.customerName || resolvedCustomers?.find((c: any) => c.id === inv.customerId)?.name || "Customer"} · {fmt(Number(inv.total))}</p>
-                                            <p className="text-[10px] text-slate-300 font-bold">{inv.paymentMethod} · {new Date(inv.issueDate || inv.createdAt).toLocaleDateString()}</p>
-                                        </div>
-                                        <Button size="sm" disabled={cnProcessing}
-                                            className="h-8 px-3 rounded-lg font-black text-xs bg-amber-500 hover:bg-amber-600 text-white"
-                                            onClick={() => handleIssueCreditDebitNote(inv)}>
-                                            {cnProcessing ? <Loader2 className="h-3 w-3 animate-spin" /> : `Issue ${cnType === "credit" ? "CN" : "DN"}`}
-                                        </Button>
+                        {/* Results / Selected Invoice */}
+                        {!cnActiveInvoice ? (
+                            <>
+                                {cnSearchResults.length > 0 && (
+                                    <div className="space-y-2 max-h-[280px] overflow-y-auto">
+                                        {cnSearchResults.map((inv: any) => (
+                                            <div key={inv.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:border-amber-200 hover:bg-amber-50 transition-all cursor-pointer"
+                                                onClick={() => handleSelectInvoiceForReturn(inv)}>
+                                                <div>
+                                                    <p className="text-sm font-black text-slate-800">{inv.invoiceNumber}</p>
+                                                    <p className="text-xs text-slate-400 font-bold">{inv.customerName || resolvedCustomers?.find((c: any) => c.id === inv.customerId)?.name || "Customer"} · {fmt(Number(inv.total))}</p>
+                                                    <p className="text-[10px] text-slate-300 font-bold">{inv.paymentMethod} · {new Date(inv.issueDate || inv.createdAt).toLocaleDateString()}</p>
+                                                </div>
+                                                <Button size="sm" disabled={cnProcessing}
+                                                    className="h-8 px-3 rounded-lg font-black text-xs bg-amber-50 hover:bg-amber-100 text-amber-600"
+                                                    onClick={(e) => { e.stopPropagation(); handleSelectInvoiceForReturn(inv); }}>
+                                                    {cnProcessing ? <Loader2 className="h-3 w-3 animate-spin" /> : "Select"}
+                                                </Button>
+                                            </div>
+                                        ))}
                                     </div>
-                                ))}
+                                )}
+                                {cnSearchResults.length === 0 && cnSearchQuery && !cnSearching && (
+                                    <p className="text-center text-slate-400 text-sm font-bold py-4">No invoices found</p>
+                                )}
+                            </>
+                        ) : (
+                            <div className="space-y-3">
+                                <div className="p-3 bg-amber-50 rounded-xl border border-amber-100 flex justify-between items-center">
+                                    <div>
+                                        <p className="text-xs font-black text-amber-800 uppercase tracking-widest">Selected Invoice</p>
+                                        <p className="text-sm font-bold text-amber-900">{cnActiveInvoice.invoiceNumber}</p>
+                                    </div>
+                                    <Button variant="ghost" size="sm" className="text-amber-700 h-8" onClick={() => setCnActiveInvoice(null)}>Change</Button>
+                                </div>
+                                <div className="space-y-2 max-h-[250px] overflow-y-auto">
+                                    {cnSelectedItems.map((sel, idx) => (
+                                        <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl border border-slate-100 bg-slate-50 gap-2">
+                                            <div className="flex-1">
+                                                <p className="text-sm font-black text-slate-800">{sel.originalItem.description}</p>
+                                                <p className="text-xs text-slate-400 font-bold">${Number(sel.originalItem.unitPrice).toFixed(2)} each (Max: {Number(sel.originalItem.quantity)})</p>
+                                            </div>
+                                            <div className="flex items-center gap-3 bg-white p-1 rounded-lg border border-slate-200">
+                                                <Button variant="ghost" className="h-6 w-6 p-0 hover:bg-red-50 hover:text-red-500" onClick={() => {
+                                                    setCnSelectedItems(prev => prev.map((p, i) => i === idx ? { ...p, quantity: Math.max(0, p.quantity - 1) } : p));
+                                                }}><Minus className="h-3 w-3"/></Button>
+                                                <span className="font-black text-sm w-4 text-center">{sel.quantity}</span>
+                                                <Button variant="ghost" className="h-6 w-6 p-0 hover:bg-emerald-50 hover:text-emerald-500" onClick={() => {
+                                                    setCnSelectedItems(prev => prev.map((p, i) => i === idx ? { ...p, quantity: Math.min(Number(p.originalItem.quantity), p.quantity + 1) } : p));
+                                                }}><Plus className="h-3 w-3"/></Button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         )}
-                        {cnSearchResults.length === 0 && cnSearchQuery && !cnSearching && (
-                            <p className="text-center text-slate-400 text-sm font-bold py-4">No invoices found</p>
-                        )}
                     </div>
-                    <div className="p-4 border-t border-slate-100 bg-slate-50 shrink-0">
-                        <Button variant="ghost" className="w-full h-10 rounded-xl font-black text-xs text-slate-400" onClick={() => { setIsCreditNoteOpen(false); setCnSearchResults([]); setCnSearchQuery(""); }}>Cancel</Button>
+                    <div className="p-4 border-t border-slate-100 bg-slate-50 shrink-0 flex gap-2">
+                        <Button variant="ghost" className="flex-1 h-10 rounded-xl font-black text-xs text-slate-400" onClick={() => { setIsCreditNoteOpen(false); setCnSearchResults([]); setCnSearchQuery(""); setCnActiveInvoice(null); }}>Cancel</Button>
+                        {cnActiveInvoice && (
+                            <Button disabled={cnProcessing || cnSelectedItems.every(s => s.quantity === 0)} className="flex-1 h-10 rounded-xl font-black text-xs bg-amber-500 hover:bg-amber-600 text-white" onClick={handleIssueItemizedReturn}>
+                                {cnProcessing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                                Issue {cnType === "credit" ? "CN" : "DN"}
+                            </Button>
+                        )}
                     </div>
                 </DialogContent>
             </Dialog>

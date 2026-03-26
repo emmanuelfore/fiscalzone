@@ -1381,6 +1381,98 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/pos/shifts/:id/transactions", requireAuth, async (req, res) => {
+    try {
+      const shiftId = parseInt(req.params.id);
+      const { type, amount, reason, items } = req.body;
+      const userId = (req.user as any).id;
+
+      const transaction = await addPosTransaction(shiftId, userId, type, amount, reason, items || []);
+      res.status(201).json(transaction);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/pos/shifts/:id/summary", requireAuth, async (req, res) => {
+    try {
+      const shiftId = parseInt(req.params.id);
+      const shift = await db.query.posShifts.findFirst({
+        where: eq(posShifts.id, shiftId)
+      });
+
+      if (!shift) return res.status(404).json({ message: "Shift not found" });
+
+      // Calculate totals
+      const shiftInvoices = await db.select().from(invoices).where(eq(invoices.shiftId, shiftId));
+      const transactions = await getShiftTransactions(shiftId);
+
+      const totalSales = shiftInvoices.reduce((sum, inv) => sum + Number(inv.total), 0);
+      const totalPayouts = transactions.filter(t => t.type === 'PAYOUT').reduce((sum, t) => sum + Number(t.amount), 0);
+      const totalDrops = transactions.filter(t => t.type === 'DROP').reduce((sum, t) => sum + Number(t.amount), 0);
+      
+      const expectedCash = Number(shift.openingBalance) + totalSales - totalPayouts + totalDrops;
+
+      const company = await storage.getCompany(shift.companyId);
+      const companyBaseCurrency = await db.query.currencies.findFirst({
+        where: and(eq(currencies.companyId, shift.companyId), eq(currencies.isBase, true))
+      });
+
+      res.json({
+        totalSales: totalSales.toFixed(2),
+        totalPayouts: totalPayouts.toFixed(2),
+        totalDrops: totalDrops.toFixed(2),
+        expectedCash: expectedCash.toFixed(2),
+        openingBalance: Number(shift.openingBalance).toFixed(2),
+        currency: shiftInvoices[0]?.currency || companyBaseCurrency?.code || "USD" 
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/pos/all-sales", requireAuth, async (req, res) => {
+    try {
+      const companyId = parseInt(req.query.companyId as string);
+      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date(new Date().setDate(new Date().getDate() - 30));
+      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+      
+      const sales = await storage.getPosSales(
+        companyId, 
+        startDate, 
+        endDate, 
+        req.query.cashierId as string,
+        req.query.paymentMethod as string,
+        req.query.status as string,
+        req.query.search as string
+      );
+      res.json(sales);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/pos/inventory/adjust", requireAuth, async (req, res) => {
+    try {
+      const { productId, companyId, quantity, notes } = req.body;
+      const product = await storage.updateProduct(productId, {
+        stockLevel: quantity.toString()
+      });
+
+      await storage.createInventoryTransaction({
+        companyId,
+        productId,
+        type: "ADJUSTMENT",
+        quantity: quantity.toString(),
+        notes: notes || "Manual stocktake adjustment from POS"
+      });
+
+      res.json(product);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // ============================================================================
   // API KEY MANAGEMENT ENDPOINTS
   // ============================================================================
@@ -3929,7 +4021,8 @@ export async function registerRoutes(
         ...input,
         status: initialStatus,
         items: input.items as any,
-        companyId
+        companyId,
+        shiftId: activeShift?.id || undefined
       });
 
       // 2. POS Payment Recording
@@ -4173,7 +4266,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Credit notes can only be created for issued invoices." });
       }
 
-      const { items: bodyItems, reason, cashierName } = req.body || {};
+      const { items: bodyItems, reason, cashierName, isPos } = req.body || {};
       const useCustomItems = Array.isArray(bodyItems) && bodyItems.length > 0;
       const noteItems = useCustomItems
         ? bodyItems
@@ -4205,7 +4298,9 @@ export async function registerRoutes(
         transactionType: "CreditNote",
         relatedInvoiceId: originalInvoice.id,
         notes: reason || undefined,
-        items: noteItems
+        items: noteItems,
+        isPos: !!isPos,
+        createdBy: (req.user as any)?.id // Tie to the current user's shift if POS
       });
 
       res.status(201).json(cn);
@@ -4226,7 +4321,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Debit notes can only be created for issued invoices." });
       }
 
-      const { items: bodyItems, reason, cashierName } = req.body || {};
+      const { items: bodyItems, reason, cashierName, isPos } = req.body || {};
       const useCustomItems = Array.isArray(bodyItems) && bodyItems.length > 0;
       const noteItems = useCustomItems
         ? bodyItems
@@ -4258,7 +4353,9 @@ export async function registerRoutes(
         transactionType: "DebitNote",
         relatedInvoiceId: originalInvoice.id,
         notes: reason || undefined,
-        items: noteItems
+        items: noteItems,
+        isPos: !!isPos,
+        createdBy: (req.user as any)?.id
       });
 
       res.status(201).json(dn);
@@ -5207,6 +5304,88 @@ export async function registerRoutes(
     }
   });
 
+  // Operational Metrics
+  app.get("/api/reports/operational-metrics/:id", requireAuth, async (req, res) => {
+    try {
+      const companyId = parseInt(req.params.id);
+      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date(0);
+      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+      endDate.setHours(23, 59, 59, 999);
+
+      const data = await storage.getOperationalMetrics(companyId, startDate, endDate);
+      res.json(data);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Hourly Sales Distribution
+  app.get("/api/reports/charts/hourly-sales/:id", requireAuth, async (req, res) => {
+    try {
+      const companyId = parseInt(req.params.id);
+      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date(0);
+      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+      endDate.setHours(23, 59, 59, 999);
+
+      const data = await storage.getHourlySalesDistribution(companyId, startDate, endDate);
+      res.json(data);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Stock Alerts
+  app.get("/api/reports/stock-alerts/:id", requireAuth, async (req, res) => {
+    try {
+      const companyId = parseInt(req.params.id);
+      const data = await storage.getLowStockItems(companyId);
+      res.json(data);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Stock on Hand
+  app.get("/api/reports/inventory/stock-on-hand/:id", requireAuth, async (req, res) => {
+    try {
+      const companyId = parseInt(req.params.id);
+      const data = await storage.getReportStockOnHand(companyId);
+      res.json(data);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Inventory Movements
+  app.get("/api/reports/inventory/movements/:id", requireAuth, async (req, res) => {
+    try {
+      const companyId = parseInt(req.params.id);
+      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date(0);
+      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+      endDate.setHours(23, 59, 59, 999);
+
+      const data = await storage.getReportInventoryMovements(companyId, startDate, endDate);
+      res.json(data);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Purchase History
+  app.get("/api/reports/inventory/purchases/:id", requireAuth, async (req, res) => {
+    try {
+      const companyId = parseInt(req.params.id);
+      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date(0);
+      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+      endDate.setHours(23, 59, 59, 999);
+
+      const data = await storage.getReportPurchaseHistory(companyId, startDate, endDate);
+      res.json(data);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
 
 
   // POS Transaction Routes
@@ -5433,16 +5612,31 @@ export async function registerRoutes(
           where: eq(posShiftTransactions.shiftId, shift.id)
         });
 
-        const totalSales = shiftInvoices.reduce((sum, inv) => sum + Number(inv.total), 0);
+        const totalSales = shiftInvoices.reduce((sum, inv) => {
+          const mult = inv.transactionType === "CreditNote" ? -1 : 1;
+          return sum + (Number(inv.total) * mult);
+        }, 0);
+        
         const transactionCount = shiftInvoices.length;
 
-        // Calculate CASH-ONLY sales
-        const cashSales = shiftInvoices
-          .filter(inv => inv.paymentMethod?.toUpperCase() === 'CASH')
-          .reduce((sum, inv) => sum + Number(inv.total), 0);
+        // Calculate CASH-ONLY sales (including Split Payments cash portions and CreditNotes)
+        const cashSales = shiftInvoices.reduce((sum, inv) => {
+          const mult = inv.transactionType === "CreditNote" ? -1 : 1;
+          if (inv.paymentMethod?.toUpperCase() === 'CASH') {
+            return sum + (Number(inv.total) * mult);
+          } else if (inv.paymentMethod?.toUpperCase() === 'SPLIT' && Array.isArray(inv.splitPayments)) {
+            const cashPart = inv.splitPayments
+              .filter((p: any) => p.method.toUpperCase() === 'CASH')
+              .reduce((s: number, p: any) => s + Number(p.amount), 0);
+            return sum + (cashPart * mult);
+          }
+          return sum;
+        }, 0);
 
-        const cashTransactionCount = shiftInvoices
-          .filter(inv => inv.paymentMethod?.toUpperCase() === 'CASH').length;
+        const cashTransactionCount = shiftInvoices.filter(inv => {
+            return inv.paymentMethod?.toUpperCase() === 'CASH' || 
+                   (inv.paymentMethod?.toUpperCase() === 'SPLIT' && Array.isArray(inv.splitPayments) && inv.splitPayments.some((p: any) => p.method.toUpperCase() === 'CASH'));
+        }).length;
 
         // Calculate cash drops and payouts
         const cashDrops = shiftTransactions

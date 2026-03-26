@@ -2,6 +2,7 @@
   "name": "fisczim-pos",
   "version": "1.0.0",
   "description": "Standalone POS for Fiscal Stack",
+  "author": "Fiscal Stack",
   "main": "main.js",
   "license": "MIT",
   "scripts": {
@@ -15,10 +16,6 @@
     "productName": "Fiscal Stack POS",
     "directories": {
       "output": "dist"
-    },
-    "publish": {
-      "provider": "generic",
-      "url": "https://updates.fiscalstack.com/pos/"
     },
     "win": {
       "target": "nsis"

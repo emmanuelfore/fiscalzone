@@ -1,5 +1,11 @@
-import React, { createContext, useContext } from "react";
+// PremiumColors.ts — single source of truth for all theme tokens and hooks.
+// Previously split between .ts and .tsx; now fully consolidated here.
+
+import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { useColorScheme } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+// ── Palettes ──────────────────────────────────────────────────────────────────
 
 export const DarkTheme = {
   amber: {
@@ -27,11 +33,11 @@ export const DarkTheme = {
     warning: "#ff9500",
     info: "#3b9eff",
   },
-} as const;
+};
 
 export const LightTheme = {
   amber: {
-    primary: "#E67E00", // Slightly darker amber for better contrast on light bg
+    primary: "#E67E00",
     light: "#FF9500",
     glow: "rgba(230, 126, 0, 0.08)",
     glowMd: "rgba(230, 126, 0, 0.15)",
@@ -50,32 +56,72 @@ export const LightTheme = {
     default: "#E5E7EB",
   },
   status: {
-    success: "#059669", // Darker green
-    error: "#DC2626", // Darker red
-    warning: "#D97706", // Darker yellow/orange
-    info: "#2563EB", // Darker blue
+    success: "#059669",
+    error: "#DC2626",
+    warning: "#D97706",
+    info: "#2563EB",
   },
-} as const;
+};
 
-type Theme = typeof DarkTheme;
+// ── Types ─────────────────────────────────────────────────────────────────────
 
-const ThemeContext = createContext<Theme>(DarkTheme);
+export type ThemeMode = "light" | "dark" | "system";
+export type Theme = typeof DarkTheme;
+
+const THEME_PREF_KEY = "@fiscalstack_theme_pref";
+
+// ── Context ───────────────────────────────────────────────────────────────────
+
+interface ThemeContextValue {
+  theme: Theme;
+  mode: ThemeMode;
+  setMode: (mode: ThemeMode) => void;
+  isDark: boolean;
+}
+
+const ThemeContext = createContext<ThemeContextValue>({
+  theme: DarkTheme,
+  mode: "system",
+  setMode: () => {},
+  isDark: true,
+});
+
+// ── Provider ──────────────────────────────────────────────────────────────────
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const colorScheme = useColorScheme();
-  const theme = colorScheme === "light" ? LightTheme : DarkTheme;
-  
+  const systemScheme = useColorScheme();
+  const [mode, setModeState] = useState<ThemeMode>("system");
+
+  useEffect(() => {
+    AsyncStorage.getItem(THEME_PREF_KEY).then((val) => {
+      if (val === "light" || val === "dark" || val === "system") {
+        setModeState(val);
+      }
+    });
+  }, []);
+
+  const setMode = useCallback(async (newMode: ThemeMode) => {
+    setModeState(newMode);
+    await AsyncStorage.setItem(THEME_PREF_KEY, newMode);
+  }, []);
+
+  const isDark =
+    mode === "dark" || (mode === "system" && systemScheme !== "light");
+  const theme: Theme = isDark ? DarkTheme : LightTheme;
+
   return (
-    <ThemeContext.Provider value={theme}>
+    <ThemeContext.Provider value={{ theme, mode, setMode, isDark }}>
       {children}
     </ThemeContext.Provider>
   );
 }
 
+// ── Hooks ─────────────────────────────────────────────────────────────────────
+
 export function useTheme() {
   return useContext(ThemeContext);
 }
 
-// For backward compatibility during migration
+// Backward-compat static export — screens not yet migrated to useTheme() use this.
+// It always returns the dark palette, which is still the default.
 export const PremiumColors = DarkTheme;
-

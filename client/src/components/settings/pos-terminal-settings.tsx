@@ -80,6 +80,7 @@ export function PosTerminalSettings({ formData, setFormData, isLoading, companyI
     { id: "receipt", label: "Receipt Design", icon: FileText },
     { id: "printing", label: "Hardware & Printing", icon: Printer },
     { id: "sales", label: "Sales & Rules", icon: ShieldCheck },
+    { id: "barcodes", label: "Barcode Rules", icon: Wrench },
     { id: "cashiers", label: "Cashiers", icon: Users },
     { id: "downloads", label: "Apps & Client", icon: Download },
     { id: "maintenance", label: "Maintenance", icon: Wrench },
@@ -97,13 +98,28 @@ export function PosTerminalSettings({ formData, setFormData, isLoading, companyI
     requireOverrideForOpenDrawer: false,
     usePrinterClient: false,
     printingEnabled: true,
-    autoPrintReceipt: true,
+    autoPrint: true,
     allowSellOutOfStock: false,
     allowedPaymentMethods: ["CASH", "CARD", "ECOCASH", "usd", "zig"],
     defaultCustomerId: "",
-    silentPrinting: false,
+    silentPrinting: true,
     printServerUrl: "http://localhost:12312",
-    printerName: ""
+    printerName: "",
+    quantityDecimalPlaces: 2,
+    variableWeightBarcodeRules: [
+      {
+        id: "rule-1",
+        name: "Scale Items (Prefix 20)",
+        enabled: true,
+        prefix: "20",
+        totalLength: 13,
+        skuStart: 2,
+        skuLength: 4,
+        quantityStart: 6,
+        quantityLength: 6,
+        quantityDivisor: 1000,
+      }
+    ],
   };
 
   const updatePosSetting = (key: string, value: any) => {
@@ -372,8 +388,8 @@ export function PosTerminalSettings({ formData, setFormData, isLoading, companyI
                     <p className="text-xs text-slate-500">Print immediately after sale completion.</p>
                   </div>
                   <Switch 
-                    checked={posSettings.autoPrintReceipt} 
-                    onCheckedChange={checked => updatePosSetting('autoPrintReceipt', checked)} 
+                    checked={posSettings.autoPrint} 
+                    onCheckedChange={checked => updatePosSetting('autoPrint', checked)} 
                   />
                 </div>
 
@@ -488,6 +504,23 @@ export function PosTerminalSettings({ formData, setFormData, isLoading, companyI
                    <Switch checked={posSettings.allowSellOutOfStock} onCheckedChange={v => updatePosSetting('allowSellOutOfStock', v)} />
                 </div>
 
+                <div className="flex items-center justify-between p-4 bg-slate-50/50 rounded-2xl border border-slate-100">
+                   <div className="space-y-0.5">
+                      <Label className="text-sm font-bold text-slate-700">Quantity Decimal Places</Label>
+                      <p className="text-xs text-slate-500">Number of decimal places allowed for item quantities (e.g. 2 for meat/weight).</p>
+                   </div>
+                   <div className="w-24">
+                      <Input 
+                        type="number" 
+                        min={0} 
+                        max={4} 
+                        value={posSettings.quantityDecimalPlaces ?? 2} 
+                        onChange={e => updatePosSetting('quantityDecimalPlaces', parseInt(e.target.value) || 0)}
+                        className="text-right font-bold"
+                      />
+                   </div>
+                </div>
+
                 <div className="space-y-3">
                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Accepted Payment Methods</Label>
                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -536,6 +569,174 @@ export function PosTerminalSettings({ formData, setFormData, isLoading, companyI
                 </div>
               </CardContent>
             </Card>
+          </div>
+        )}
+
+        {activeSection === 'barcodes' && (
+          <div className="animate-in fade-in slide-in-from-right-4 duration-300 space-y-6">
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <Wrench className="w-5 h-5 text-violet-600" />
+                Variable Weight Barcode Rules
+              </h3>
+              <Button
+                size="sm"
+                className="btn-gradient rounded-xl font-bold"
+                onClick={() => {
+                  const rules = posSettings.variableWeightBarcodeRules || [];
+                  updatePosSetting('variableWeightBarcodeRules', [
+                    ...rules,
+                    {
+                      id: `rule-${Date.now()}`,
+                      name: 'New Rule',
+                      enabled: true,
+                      prefix: '20',
+                      totalLength: 13,
+                      skuStart: 2,
+                      skuLength: 4,
+                      quantityStart: 6,
+                      quantityLength: 6,
+                      quantityDivisor: 1000,
+                    }
+                  ]);
+                }}
+              >
+                + Add Rule
+              </Button>
+            </div>
+
+            <p className="text-xs text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-100">
+              Define how to parse barcodes from weighing scales. When a barcode matches a rule's prefix and length, the system extracts the product SKU and quantity automatically without any manual input.
+            </p>
+
+            {(posSettings.variableWeightBarcodeRules || []).length === 0 && (
+              <div className="p-10 text-center text-slate-400 font-medium border-2 border-dashed border-slate-100 rounded-2xl">
+                No barcode rules configured. Add one to get started.
+              </div>
+            )}
+
+            {(posSettings.variableWeightBarcodeRules || []).map((rule: any, idx: number) => {
+              const updateRule = (key: string, value: any) => {
+                const rules = [...(posSettings.variableWeightBarcodeRules || [])];
+                rules[idx] = { ...rules[idx], [key]: value };
+                updatePosSetting('variableWeightBarcodeRules', rules);
+              };
+              const deleteRule = () => {
+                const rules = (posSettings.variableWeightBarcodeRules || []).filter((_: any, i: number) => i !== idx);
+                updatePosSetting('variableWeightBarcodeRules', rules);
+              };
+
+              // Live barcode preview
+              const previewBarcode = `${rule.prefix || ''}${'0'.repeat(Math.max(0, (rule.skuLength || 0)))}-${'0'.repeat(Math.max(0, (rule.quantityLength || 0)))}X`;
+              const previewLen = (Number(rule.prefix?.length || 0) + Number(rule.skuLength || 0) + Number(rule.quantityLength || 0) + 1);
+
+              return (
+                <Card key={rule.id} className={`card-depth border-none transition-all ${rule.enabled ? 'ring-1 ring-violet-200' : 'opacity-60'}`}>
+                  <CardContent className="pt-5 space-y-4">
+                    {/* Header row */}
+                    <div className="flex items-center gap-3">
+                      <Switch checked={rule.enabled} onCheckedChange={v => updateRule('enabled', v)} />
+                      <Input
+                        value={rule.name}
+                        onChange={e => updateRule('name', e.target.value)}
+                        className="h-8 text-sm font-bold border-none bg-slate-50 rounded-xl flex-1"
+                        placeholder="Rule Name"
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-red-400 hover:text-red-600 hover:bg-red-50 shrink-0"
+                        onClick={deleteRule}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+
+                    {/* Rule fields grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-black uppercase text-slate-400">Prefix</Label>
+                        <Input value={rule.prefix} onChange={e => updateRule('prefix', e.target.value)} className="h-9 text-sm font-mono font-bold" placeholder="20" />
+                        <p className="text-[9px] text-slate-400">Identifies this barcode type</p>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-black uppercase text-slate-400">Total Length</Label>
+                        <Input type="number" value={rule.totalLength} onChange={e => updateRule('totalLength', parseInt(e.target.value) || 0)} className="h-9 text-sm font-bold" />
+                        <p className="text-[9px] text-slate-400">Total barcode digits</p>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-black uppercase text-slate-400">Qty Divisor</Label>
+                        <Input type="number" value={rule.quantityDivisor} onChange={e => updateRule('quantityDivisor', parseInt(e.target.value) || 1)} className="h-9 text-sm font-bold" />
+                        <p className="text-[9px] text-slate-400">e.g. 1000 → grams to kg</p>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-black uppercase text-slate-400">SKU Start</Label>
+                        <Input type="number" value={rule.skuStart} onChange={e => updateRule('skuStart', parseInt(e.target.value) || 0)} className="h-9 text-sm font-bold" />
+                        <p className="text-[9px] text-slate-400">Character index (0-based)</p>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-black uppercase text-slate-400">SKU Length</Label>
+                        <Input type="number" value={rule.skuLength} onChange={e => updateRule('skuLength', parseInt(e.target.value) || 0)} className="h-9 text-sm font-bold" />
+                        <p className="text-[9px] text-slate-400">Number of digits for SKU</p>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-black uppercase text-slate-400">Qty Start</Label>
+                        <Input type="number" value={rule.quantityStart} onChange={e => updateRule('quantityStart', parseInt(e.target.value) || 0)} className="h-9 text-sm font-bold" />
+                        <p className="text-[9px] text-slate-400">Character index (0-based)</p>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-black uppercase text-slate-400">Qty Length</Label>
+                        <Input type="number" value={rule.quantityLength} onChange={e => updateRule('quantityLength', parseInt(e.target.value) || 0)} className="h-9 text-sm font-bold" />
+                        <p className="text-[9px] text-slate-400">Number of digits for quantity</p>
+                      </div>
+                    </div>
+
+                    {/* Live preview + interactive test */}
+                    <div className="bg-violet-50/50 rounded-xl p-3 border border-violet-100 space-y-2">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-violet-500">Barcode Structure</p>
+                      <div className="flex items-center gap-1 flex-wrap font-mono text-xs">
+                        <span className="px-1.5 py-0.5 bg-violet-200 text-violet-800 rounded font-black">{rule.prefix || '??'}</span>
+                        <span className="text-slate-300 text-[10px]">prefix</span>
+                        <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded font-black">{'X'.repeat(rule.skuLength || 0)}</span>
+                        <span className="text-slate-300 text-[10px]">sku</span>
+                        <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-black">{'Y'.repeat(rule.quantityLength || 0)}</span>
+                        <span className="text-slate-300 text-[10px]">qty</span>
+                        <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded font-black">Z</span>
+                        <span className="text-slate-300 text-[10px]">check</span>
+                        <span className="ml-auto text-[10px] text-slate-400 font-sans">{previewLen} digits total</span>
+                      </div>
+
+                      {/* Decoder Test */}
+                      <div className="pt-1 border-t border-violet-100 space-y-1.5">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-violet-400">Test a Barcode</p>
+                        <Input
+                          placeholder={`e.g. ${rule.prefix || '20'}${'1234'.slice(0, rule.skuLength || 4)}${'001382'.slice(0, rule.quantityLength || 6)}4`}
+                          className="h-8 text-xs font-mono bg-white border-violet-200 rounded-lg"
+                          onChange={e => {
+                            const testBarcode = e.target.value.trim();
+                            const resultEl = document.getElementById(`barcode-test-result-${rule.id}`);
+                            if (!resultEl) return;
+                            if (!testBarcode) { resultEl.innerHTML = ''; return; }
+
+                            const matchesPrefix = testBarcode.startsWith(rule.prefix || '');
+                            const matchesLen = testBarcode.length === (rule.totalLength || 0);
+                            if (!matchesPrefix || !matchesLen) {
+                              resultEl.innerHTML = `<span style="color:#ef4444">✗ No match — prefix: ${matchesPrefix ? '✓' : '✗'}, length ${testBarcode.length} vs ${rule.totalLength}: ${matchesLen ? '✓' : '✗'}</span>`;
+                              return;
+                            }
+                            const sku = testBarcode.substring(rule.skuStart || 0, (rule.skuStart || 0) + (rule.skuLength || 0));
+                            const qtyRaw = parseInt(testBarcode.substring(rule.quantityStart || 0, (rule.quantityStart || 0) + (rule.quantityLength || 0)));
+                            const qty = qtyRaw / (rule.quantityDivisor || 1000);
+                            resultEl.innerHTML = `<span style="color:#16a34a">✓ </span><b>SKU: <code style="background:#f0fdf4;padding:1px 4px;border-radius:4px">${sku}</code></b>&nbsp;&nbsp;<b>Qty: <code style="background:#eff6ff;padding:1px 4px;border-radius:4px">${qty.toFixed(3)}</code></b> — your product must have SKU <strong>${sku}</strong>`;
+                          }}
+                        />
+                        <p id={`barcode-test-result-${rule.id}`} className="text-[10px] font-medium leading-relaxed" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
 

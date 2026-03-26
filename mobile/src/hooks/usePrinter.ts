@@ -17,9 +17,9 @@ export interface PrinterConfig {
 
 const DEFAULT_CONFIG: PrinterConfig = {
   macAddress: "",
-  autoPrint: false,
+  autoPrint: true,
   autoShowModal: true,
-  silentPrint: false,
+  silentPrint: true,
   terminalId: "POS-01",
   targetPrinter: "",
   paperWidth: 58

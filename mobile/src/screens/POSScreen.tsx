@@ -159,6 +159,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isParking, setIsParking] = useState(false);
+  const [isAmountFocused, setIsAmountFocused] = useState(false);
 
   const [currentShift, setCurrentShift] = useState<any | null>(null);
   const [showShiftModal, setShowShiftModal] = useState(false);
@@ -1617,7 +1618,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
           }}>
             <View style={{
               flexDirection: "row", justifyContent: "space-between", alignItems: "center",
-              padding: 18, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: C.border.default
+              padding: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: C.border.default
             }}>
               <View>
                 <Text style={{ color: C.text.primary, fontSize: 22, fontWeight: "800" }}>Checkout</Text>
@@ -1636,12 +1637,12 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
 
             <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}
               contentContainerStyle={{ padding: 18, paddingTop: 12, paddingBottom: 8 }}>
-              <Text style={{ color: C.text.secondary, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
+              <Text style={{ color: C.text.secondary, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10, marginTop: 6 }}>
                 Order Summary
               </Text>
               <View style={{
                 backgroundColor: C.bg.hover, borderRadius: 16, borderWidth: 1,
-                borderColor: C.border.default, overflow: "hidden", marginBottom: 14
+                borderColor: C.border.default, overflow: "hidden", marginBottom: 16
               }}>
                 {cart.map((item: CartItem, idx: number) => {
                   const lineTotal = item.price * item.quantity - item.discountAmount;
@@ -1649,7 +1650,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
                   return (
                     <View key={item.productId} style={{
                       flexDirection: "row", alignItems: "center",
-                      paddingHorizontal: 12, paddingVertical: 8,
+                      paddingHorizontal: 12, paddingVertical: 12,
                       borderBottomWidth: isLast ? 0 : 1, borderBottomColor: C.border.default
                     }}>
                       <View style={{
@@ -1773,8 +1774,15 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
                   </Text>
                   <View style={{
                     flexDirection: "row", alignItems: "center",
-                    backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default,
-                    borderRadius: 16, paddingHorizontal: 16, paddingVertical: 4
+                    backgroundColor: C.bg.hover, 
+                    borderWidth: 1, 
+                    borderColor: isAmountFocused ? C.status.info : C.border.default,
+                    borderRadius: 16, paddingHorizontal: 16, paddingVertical: 6,
+                    shadowColor: isAmountFocused ? C.status.info : "transparent",
+                    shadowOffset: { width: 0, height: 0 },
+                    shadowOpacity: 0.2,
+                    shadowRadius: 4,
+                    elevation: isAmountFocused ? 2 : 0
                   }}>
                     <Text style={{ color: C.text.secondary, fontSize: 20, marginRight: 6, fontWeight: "300" }}>{currencyInfo.symbol}</Text>
                     <TextInput
@@ -1784,6 +1792,8 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
                       value={paidAmount}
                       onChangeText={setPaidAmount}
                       keyboardType="decimal-pad"
+                      onFocus={() => setIsAmountFocused(true)}
+                      onBlur={() => setIsAmountFocused(false)}
                       returnKeyType="done"
                       onSubmitEditing={Keyboard.dismiss}
                     />
@@ -1800,7 +1810,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
               )}
             </ScrollView>
 
-            <View style={{ paddingHorizontal: 18, paddingTop: 8 }}>
+            <View style={{ paddingHorizontal: 18, paddingTop: 14, borderTopWidth: 1, borderTopColor: C.border.default }}>
               <TouchableOpacity activeOpacity={0.85} disabled={isSubmitting} onPress={processOrder}>
                 <LinearGradient colors={[C.amber.primary, C.amber.light]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                   style={{

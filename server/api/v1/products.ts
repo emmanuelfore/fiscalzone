@@ -21,6 +21,7 @@ export const productSchema = z.object({
   isTracked: z.boolean().optional(),
   isActive: z.boolean().optional(),
   barcode: z.string().optional().or(z.literal("")),
+  unitOfMeasure: z.string().optional().or(z.literal("")),
   costPrice: z.number().min(0).optional().or(z.string().regex(/^\d+(\.\d{1,2})?$/).transform(Number)),
 });
 

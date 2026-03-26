@@ -186,6 +186,13 @@ export default function POSPage() {
     const lastCharTimeRef = useRef(0);
     const lastScannedProductRef = useRef<{ productId: number; time: number } | null>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
+    // posSettingsRef: always holds latest posSettings so barcode useEffect closure is NEVER stale
+    const posSettingsRef = useRef({
+        variableWeightBarcodeRules: [] as any[],
+        quantityDecimalPlaces: 2
+    });
+    // resolvedProductsRef: always holds latest products so barcode closure is NEVER stale
+    const resolvedProductsRef = useRef<any[]>([]);
 
     const [heldSales, setHeldSales] = useState<any[]>([]);
     const [isHoldsModalOpen, setIsHoldsModalOpen] = useState(false);
@@ -196,7 +203,10 @@ export default function POSPage() {
     const [shiftBalance, setShiftBalance] = useState("");
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-    // Credit/Debit Note modal
+    // Custom quantity/reverse-price dialog state (replaces browser prompt())
+    const [qtyDialog, setQtyDialog] = useState<{ open: boolean; productId: number; productName: string; currentQty: number; mode: 'qty' | 'total'; unitPrice: number; discountAmount: number } | null>(null);
+    const [qtyDialogInput, setQtyDialogInput] = useState("");
+
     const [isCreditNoteOpen, setIsCreditNoteOpen] = useState(false);
     const [cnSearchQuery, setCnSearchQuery] = useState("");
     const [cnSearchResults, setCnSearchResults] = useState<any[]>([]);
@@ -222,12 +232,30 @@ export default function POSPage() {
         printingEnabled: true,
         autoPrint: localStorage.getItem("pos_auto_print") !== "false",
         terminalId: localStorage.getItem("pos_terminal_id") || "POS-T01",
-        silentPrinting: localStorage.getItem("pos_silent_printing") === "true",
+        silentPrinting: localStorage.getItem("pos_silent_printing") !== "false",
         printerName: localStorage.getItem("pos_printer_name") || "",
         paperSize: localStorage.getItem("pos_paper_size") || "",
         printServerUrl: localStorage.getItem("pos_print_server") || "http://localhost:3001",
-        cashDrawerEnabled: localStorage.getItem("pos_cash_drawer") === "true"
+        cashDrawerEnabled: localStorage.getItem("pos_cash_drawer") === "true",
+        quantityDecimalPlaces: parseInt(localStorage.getItem("pos_quantity_decimals") || "2"),
+        variableWeightBarcodeRules: [
+            {
+                id: "rule-1",
+                name: "Scale Items (Prefix 20)",
+                enabled: true,
+                prefix: "20",
+                totalLength: 13,
+                skuStart: 2,
+                skuLength: 4,
+                quantityStart: 6,
+                quantityLength: 6,
+                quantityDivisor: 1000,
+            }
+        ]
     });
+    // Sync ref every render — barcode scanner closure reads this instead of posSettings directly
+    posSettingsRef.current = { variableWeightBarcodeRules: posSettings.variableWeightBarcodeRules, quantityDecimalPlaces: posSettings.quantityDecimalPlaces };
+    resolvedProductsRef.current = resolvedProducts || [];
 
     // Default to "Walk-in Customer"
     const resetToDefaultCustomer = () => {
@@ -249,9 +277,9 @@ export default function POSPage() {
     }, [resolvedCustomers, selectedCustomerId]);
 
     // Manager Override State
-    const [pendingOverride, setPendingOverride] = useState<{ 
-        type: "DISCOUNT" | "VOID_CART" | "REMOVE_ITEM" | "PRICE_CHANGE" | "OPEN_DRAWER", 
-        data: any 
+    const [pendingOverride, setPendingOverride] = useState<{
+        type: "DISCOUNT" | "VOID_CART" | "REMOVE_ITEM" | "PRICE_CHANGE" | "OPEN_DRAWER",
+        data: any
     } | null>(null);
 
     // ─── POS Session Persistence ──────────────────────────────────────────
@@ -409,7 +437,49 @@ export default function POSPage() {
                 productId: product.id,
                 name: product.name,
                 price: Number(product.price),
-                quantity: 1,
+                quantity: product.initialQuantity || 1,
+                discountAmount: 0,
+                taxRate: taxRate,
+                taxTypeId: product.taxTypeId,
+                hsCode: product.hsCode
+            }];
+        });
+    };
+
+    const addWeightedToCart = (product: any, quantity: number) => {
+        // Strict Stock Check
+        if (product && product.isTracked) {
+            const inCart = cart.find(item => item.productId === product.id)?.quantity || 0;
+            const newTotal = inCart + quantity;
+            if (newTotal > Number(product.stockLevel || 0)) {
+                toast({
+                    title: "Insufficient Stock",
+                    description: `Cannot add ${quantity.toFixed(3)} units. Only ${product.stockLevel || 0} available.`,
+                    variant: "destructive"
+                });
+                return;
+            }
+        }
+
+        setCart(prev => {
+            const existing = prev.find(item => item.productId === product.id);
+            if (existing) {
+                return prev.map(item =>
+                    item.productId === product.id ? { ...item, quantity: item.quantity + quantity } : item
+                );
+            }
+
+            let taxRate = company?.vatRegistered ? Number(product.taxRate ?? 15) : 0;
+            if (company?.vatRegistered && product.taxCategoryId && taxTypes.data) {
+                const category = taxTypes.data.find((t: any) => t.id === product.taxCategoryId);
+                if (category) taxRate = Number(category.rate);
+            }
+
+            return [...prev, {
+                productId: product.id,
+                name: product.name,
+                price: Number(product.price),
+                quantity: quantity,
                 discountAmount: 0,
                 taxRate: taxRate,
                 taxTypeId: product.taxTypeId,
@@ -479,7 +549,7 @@ export default function POSPage() {
             // ── Barcode accumulation — chars arriving < 100ms apart are from a scanner ──
             if (gap > 100) {
                 barcodeBufferRef.current = e.key === 'Enter' ? '' : e.key;
-                
+
                 // Allow Enter key to quickly complete POS checkout (human press, not scanner)
                 if (e.key === 'Enter' && isCheckoutOpen && !isProcessing && paidAmount) {
                     e.preventDefault();
@@ -491,6 +561,28 @@ export default function POSPage() {
                     const barcode = barcodeBufferRef.current.trim();
                     barcodeBufferRef.current = '';
                     if (barcode.length < 2) return;
+
+                    // ── Configurable Variable Weight Barcode Handling ──
+                    const weightRules: any[] = posSettingsRef.current.variableWeightBarcodeRules || [];
+                    const matchedRule = weightRules.find(
+                        (r: any) => r.enabled && barcode.startsWith(r.prefix) && barcode.length === r.totalLength
+                    );
+                    if (matchedRule) {
+                        const productSku = barcode.substring(matchedRule.skuStart, matchedRule.skuStart + matchedRule.skuLength);
+                        const qtyRaw = parseInt(barcode.substring(matchedRule.quantityStart, matchedRule.quantityStart + matchedRule.quantityLength));
+                        const quantity = qtyRaw / (matchedRule.quantityDivisor || 1000);
+
+                        const weightedFound = resolvedProductsRef.current?.find(
+                            (p: any) => p.sku === productSku || p.barcode === barcode
+                        );
+                        if (weightedFound) {
+                            addWeightedToCart(weightedFound, quantity);
+                            const uom = (weightedFound as any).unitOfMeasure || (matchedRule.quantityDivisor === 1000 ? 'kg' : 'units');
+                            toast({ title: "✓ Weighted Item", description: `${weightedFound.name} (${quantity.toFixed(posSettingsRef.current.quantityDecimalPlaces ?? 3)} ${uom})` });
+                            if (searchQuery) setSearchQuery("");
+                            return;
+                        }
+                    }
 
                     const found = resolvedProducts?.find(
                         (p: any) => p.barcode === barcode || p.sku === barcode
@@ -528,6 +620,26 @@ export default function POSPage() {
             const trimmed = barcode.trim();
             if (!trimmed) return;
             const found = resolvedProducts?.find((p: any) => p.barcode === trimmed || p.sku === trimmed);
+            
+            // ── Configurable Variable Weight Barcode Handling ──
+            const weightRulesE: any[] = posSettingsRef.current.variableWeightBarcodeRules || [];
+            const matchedRuleE = weightRulesE.find(
+                (r: any) => r.enabled && trimmed.startsWith(r.prefix) && trimmed.length === r.totalLength
+            );
+            if (matchedRuleE) {
+                const productSku = trimmed.substring(matchedRuleE.skuStart, matchedRuleE.skuStart + matchedRuleE.skuLength);
+                const qtyRaw = parseInt(trimmed.substring(matchedRuleE.quantityStart, matchedRuleE.quantityStart + matchedRuleE.quantityLength));
+                const quantity = qtyRaw / (matchedRuleE.quantityDivisor || 1000);
+
+                const weightedFound = resolvedProductsRef.current?.find((p: any) => p.sku === productSku || p.barcode === trimmed);
+                if (weightedFound) {
+                    addWeightedToCart(weightedFound, quantity);
+                    const uomE = (weightedFound as any).unitOfMeasure || (matchedRuleE.quantityDivisor === 1000 ? 'kg' : 'units');
+                    toast({ title: "✓ Weighted Item", description: `${weightedFound.name} (${quantity.toFixed(posSettingsRef.current.quantityDecimalPlaces ?? 3)} ${uomE})` });
+                    return;
+                }
+            }
+
             if (found) {
                 const now = Date.now();
                 const prev = lastScannedProductRef.current;
@@ -974,10 +1086,10 @@ export default function POSPage() {
                 setShiftModalType("OPEN");
                 setIsShiftModalOpen(true);
             } else if (error.name === 'AbortError' || error.message?.includes('aborted')) {
-                toast({ 
-                    title: "Request Timed Out", 
-                    description: "The request took too long or was interrupted. Please check your connection and try again.", 
-                    variant: "destructive" 
+                toast({
+                    title: "Request Timed Out",
+                    description: "The request took too long or was interrupted. Please check your connection and try again.",
+                    variant: "destructive"
                 });
             } else {
                 toast({ title: "Error", description: error.message || "Could not process transaction", variant: "destructive" });
@@ -1075,10 +1187,12 @@ export default function POSPage() {
                 ...prev,
                 printingEnabled: settings.printingEnabled ?? true,
                 autoPrint: settings.autoPrint ?? true,
-                silentPrinting: settings.silentPrinting ?? false,
+                silentPrinting: settings.silentPrinting ?? true,
                 printServerUrl: settings.printServerUrl || "http://localhost:12312",
                 printerName: prev.printerName || settings.printerName || "",
-                cashDrawerEnabled: settings.cashDrawerEnabled ?? false
+                cashDrawerEnabled: settings.cashDrawerEnabled ?? false,
+                quantityDecimalPlaces: settings.quantityDecimalPlaces ?? 2,
+                variableWeightBarcodeRules: settings.variableWeightBarcodeRules ?? prev.variableWeightBarcodeRules
             }));
         }
     }, [company]);
@@ -1131,7 +1245,7 @@ export default function POSPage() {
         } else {
             localStorage.removeItem("pos_printer_name");
         }
-        
+
         if (posSettings.paperSize) {
             localStorage.setItem("pos_paper_size", posSettings.paperSize);
         } else {
@@ -1146,7 +1260,8 @@ export default function POSPage() {
         localStorage.setItem("pos_silent_printing", posSettings.silentPrinting ? "true" : "false");
         localStorage.setItem("pos_print_server", posSettings.printServerUrl);
         localStorage.setItem("pos_cash_drawer", posSettings.cashDrawerEnabled ? "true" : "false");
-    }, [posSettings.autoPrint, posSettings.terminalId, posSettings.silentPrinting, posSettings.printServerUrl, posSettings.cashDrawerEnabled]);
+        localStorage.setItem("pos_quantity_decimals", posSettings.quantityDecimalPlaces.toString());
+    }, [posSettings.autoPrint, posSettings.terminalId, posSettings.silentPrinting, posSettings.printServerUrl, posSettings.cashDrawerEnabled, posSettings.quantityDecimalPlaces]);
 
     const handleSilentPrint = async () => {
         let receiptElement = document.getElementById('silent-receipt-48');
@@ -1180,7 +1295,7 @@ export default function POSPage() {
                 .join('');
             const receiptHtml = receiptElement.outerHTML;
             const html = `<!DOCTYPE html><html><head><meta charset="utf-8">${styles}</head><body class="bg-white p-0 m-0" style="margin:0;padding:0;">${receiptHtml}</body></html>`;
-            
+
             if (window.electronAPI) {
                 await window.electronAPI.printReceipt(html, posSettings.printerName || undefined);
             } else {
@@ -1265,7 +1380,7 @@ export default function POSPage() {
     const handleClearCart = () => {
         if (cart.length === 0) return;
         const settings = company?.posSettings as any;
-        
+
         if (settings?.requireOverrideForDelete) {
             setPendingOverride({ type: "VOID_CART", data: null });
         } else {
@@ -1333,7 +1448,7 @@ export default function POSPage() {
                         lineTotal: originalLineTotal.toString()
                     };
                 });
-            
+
             if (itemsToReturn.length === 0) {
                 toast({ title: "Empty Return", description: "Select at least one item to return", variant: "destructive" });
                 setCnProcessing(false);
@@ -1344,7 +1459,7 @@ export default function POSPage() {
                 ? `/api/invoices/${cnActiveInvoice.id}/credit-note`
                 : `/api/invoices/${cnActiveInvoice.id}/debit-note`;
 
-            const res = await apiFetch(endpoint, { 
+            const res = await apiFetch(endpoint, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ items: itemsToReturn })
@@ -1462,7 +1577,7 @@ export default function POSPage() {
                         <p className="text-[11px] uppercase tracking-widest text-slate-400 font-black">ID: #POS-{new Date().getTime().toString().slice(-6)}</p>
                     </div>
                     <Badge variant="secondary" className="bg-primary/5 text-primary font-black border-none px-3 py-1 text-xs rounded-lg">
-                        {cart.reduce((a, b) => a + b.quantity, 0)} Items
+                        {cart.reduce((a, b) => a + b.quantity, 0).toFixed(posSettings.quantityDecimalPlaces)} Items
                     </Badge>
                 </div>
 
@@ -1479,12 +1594,19 @@ export default function POSPage() {
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center justify-between gap-2">
                                             <h4 className="text-[11px] font-black text-slate-800 truncate leading-none">{item.name}</h4>
-                                            <p className="text-[11px] font-black text-slate-900 shrink-0">
+                                            <button 
+                                                className="text-[11px] font-black text-slate-900 shrink-0 hover:text-primary transition-colors hover:underline"
+                                                title="Click to set target total"
+                                                onClick={() => {
+                                                    setQtyDialog({ open: true, productId: item.productId, productName: item.name, currentQty: item.quantity, mode: 'total', unitPrice: item.price, discountAmount: item.discountAmount });
+                                                    setQtyDialogInput(((item.price * item.quantity) - item.discountAmount).toFixed(2));
+                                                }}
+                                            >
                                                 ${((item.price * item.quantity) - item.discountAmount).toFixed(2)}
-                                            </p>
+                                            </button>
                                         </div>
                                         <div className="flex items-center gap-2 mt-1">
-                                            <button 
+                                            <button
                                                 className="text-[11px] font-bold text-slate-400 hover:text-primary transition-colors hover:underline"
                                                 onClick={() => {
                                                     const newPriceStr = prompt("Enter new price:", item.price.toString());
@@ -1517,7 +1639,16 @@ export default function POSPage() {
                                             >
                                                 <Minus className="h-3.5 w-3.5 text-slate-600" />
                                             </Button>
-                                            <span className="text-xs font-black w-5 text-center text-slate-700">{item.quantity}</span>
+                                            <button 
+                                                className="text-xs font-black w-10 text-center text-slate-700 hover:text-primary transition-colors hover:underline px-1"
+                                                title="Click to set exact quantity"
+                                                onClick={() => {
+                                                    setQtyDialog({ open: true, productId: item.productId, productName: item.name, currentQty: item.quantity, mode: 'qty', unitPrice: item.price, discountAmount: item.discountAmount });
+                                                    setQtyDialogInput(item.quantity.toString());
+                                                }}
+                                            >
+                                                {item.quantity % 1 === 0 ? item.quantity : item.quantity.toFixed(posSettings.quantityDecimalPlaces)}
+                                            </button>
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
@@ -1626,18 +1757,18 @@ export default function POSPage() {
                     onClose={() => setPendingOverride(null)}
                     onAuthorized={handleOverrideSuccess}
                     title={
-                        pendingOverride?.type === "DISCOUNT" ? "Authorize Discount" : 
-                        pendingOverride?.type === "VOID_CART" ? "Authorize Void" :
-                        pendingOverride?.type === "REMOVE_ITEM" ? "Authorize Delete" :
-                        pendingOverride?.type === "PRICE_CHANGE" ? "Authorize Price Change" :
-                        "Manager Authorization"
+                        pendingOverride?.type === "DISCOUNT" ? "Authorize Discount" :
+                            pendingOverride?.type === "VOID_CART" ? "Authorize Void" :
+                                pendingOverride?.type === "REMOVE_ITEM" ? "Authorize Delete" :
+                                    pendingOverride?.type === "PRICE_CHANGE" ? "Authorize Price Change" :
+                                        "Manager Authorization"
                     }
                     description={
-                        pendingOverride?.type === "DISCOUNT" ? "Manager PIN required for discount" : 
-                        pendingOverride?.type === "VOID_CART" ? "Manager PIN required to void cart" :
-                        pendingOverride?.type === "REMOVE_ITEM" ? "Manager PIN required to remove item" :
-                        pendingOverride?.type === "PRICE_CHANGE" ? "Manager PIN required to change price" :
-                        "Manager PIN required to proceed"
+                        pendingOverride?.type === "DISCOUNT" ? "Manager PIN required for discount" :
+                            pendingOverride?.type === "VOID_CART" ? "Manager PIN required to void cart" :
+                                pendingOverride?.type === "REMOVE_ITEM" ? "Manager PIN required to remove item" :
+                                    pendingOverride?.type === "PRICE_CHANGE" ? "Manager PIN required to change price" :
+                                        "Manager PIN required to proceed"
                     }
                 />
 
@@ -1787,9 +1918,9 @@ export default function POSPage() {
                             </div>
 
                             {/* Open Drawer Button (Visible next to logo) */}
-                            <Button 
-                                variant="outline" 
-                                size="sm" 
+                            <Button
+                                variant="outline"
+                                size="sm"
                                 className="h-8 md:h-10 px-2 md:px-4 rounded-lg md:rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50 transition-all font-bold text-[10px] md:text-xs gap-1.5"
                                 onClick={handleOpenDrawer}
                             >
@@ -1922,31 +2053,51 @@ export default function POSPage() {
                                     className="pl-10 md:pl-12 h-10 md:h-14 w-full bg-slate-50 border-none rounded-xl md:rounded-2xl text-xs md:text-sm font-bold text-slate-800 focus:bg-white focus:ring-4 focus:ring-primary/5 transition-all shadow-inner"
                                     value={searchQuery}
                                     onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                            const query = searchQuery.trim().toLowerCase();
-                                            if (!query) return;
+                                        if (e.key !== 'Enter') return;
+                                        const query = searchQuery.trim();
+                                        if (!query) return;
+                                        e.preventDefault();
 
-                                            // 1. Check for exact SKU or Barcode match
-                                            const directMatch = resolvedProducts.find((p: any) => 
-                                                p.sku?.toLowerCase() === query || 
-                                                p.barcode?.toLowerCase() === query
-                                            );
-
-                                            if (directMatch) {
-                                                addToCart(directMatch);
+                                        // Read rules from both posSettings state and ref (covers all sources)
+                                        const weightRules: any[] = (posSettings as any).variableWeightBarcodeRules || posSettingsRef.current.variableWeightBarcodeRules || [];
+                                        const matchedRule = weightRules.find(
+                                            (r: any) => r.enabled && query.startsWith(r.prefix) && query.length === r.totalLength
+                                        );
+                                        if (matchedRule) {
+                                            const productSku = query.substring(matchedRule.skuStart, matchedRule.skuStart + matchedRule.skuLength);
+                                            const qtyRaw = parseInt(query.substring(matchedRule.quantityStart, matchedRule.quantityStart + matchedRule.quantityLength));
+                                            const quantity = qtyRaw / (matchedRule.quantityDivisor || 1000);
+                                            const allProducts: any[] = resolvedProductsRef.current.length > 0 ? resolvedProductsRef.current : (resolvedProducts || []);
+                                            const weightedFound = allProducts.find((p: any) => p.sku === productSku || p.barcode === query);
+                                            if (weightedFound) {
+                                                addWeightedToCart(weightedFound, quantity);
                                                 setSearchQuery("");
-                                                toast({ title: "✓ Added to cart", description: directMatch.name });
-                                                e.preventDefault();
-                                                return;
+                                                const uomS = (weightedFound as any).unitOfMeasure || (matchedRule.quantityDivisor === 1000 ? 'kg' : 'units');
+                                                toast({ title: "✓ Weighted Item", description: `${weightedFound.name} — ${quantity.toFixed(posSettingsRef.current.quantityDecimalPlaces ?? 3)} ${uomS}` });
+                                            } else {
+                                                toast({ title: "Product Not Found", description: `Rule "${matchedRule.name}" matched. SKU decoded: "${productSku}". Ensure a product has exactly this SKU.`, variant: "destructive" });
                                             }
+                                            return;
+                                        }
 
-                                            // 2. If no direct match, check if there is only one filtered result
-                                            if (filteredProducts.length === 1) {
-                                                addToCart(filteredProducts[0]);
-                                                setSearchQuery("");
-                                                toast({ title: "✓ Added to cart", description: filteredProducts[0].name });
-                                                e.preventDefault();
-                                            }
+                                        // Exact SKU or barcode match
+                                        const queryLower = query.toLowerCase();
+                                        const directMatch = (resolvedProducts as any[]).find((p: any) =>
+                                            p.sku?.toLowerCase() === queryLower ||
+                                            p.barcode?.toLowerCase() === queryLower
+                                        );
+                                        if (directMatch) {
+                                            addToCart(directMatch);
+                                            setSearchQuery("");
+                                            toast({ title: "✓ Added to cart", description: directMatch.name });
+                                            return;
+                                        }
+
+                                        // Single visible match
+                                        if (filteredProducts.length === 1) {
+                                            addToCart(filteredProducts[0]);
+                                            setSearchQuery("");
+                                            toast({ title: "✓ Added to cart", description: filteredProducts[0].name });
                                         }
                                     }}
                                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -1961,8 +2112,8 @@ export default function POSPage() {
                                         onClick={() => setSelectedCurrencyCode(cc)}
                                         className={cn(
                                             "px-3 py-1.5 rounded-lg text-[10px] font-black transition-all",
-                                            selectedCurrencyCode === cc 
-                                                ? "bg-white text-primary shadow-sm" 
+                                            selectedCurrencyCode === cc
+                                                ? "bg-white text-primary shadow-sm"
                                                 : "text-slate-400 hover:text-slate-600"
                                         )}
                                     >
@@ -2432,13 +2583,13 @@ export default function POSPage() {
                 </div>
 
                 {/* Keyboard Shortcuts Cheatsheet (Desktop Only) */}
-                <div className="hidden md:flex absolute bottom-0 right-0 left-0 h-6 bg-slate-900/5 backdrop-blur-sm border-t border-slate-200/50 justify-center items-center gap-6 z-50 pointer-events-none">
-                    <span className="text-[10px] font-bold text-slate-500"><kbd className="bg-white border shadow-sm rounded px-1 min-w-[1.2rem] inline-block text-center mr-1 text-slate-700">F1</kbd> Search</span>
-                    <span className="text-[10px] font-bold text-slate-500"><kbd className="bg-white border shadow-sm rounded px-1 min-w-[1.2rem] inline-block text-center mr-1 text-slate-700">F2</kbd> Checkout</span>
-                    <span className="text-[10px] font-bold text-slate-500"><kbd className="bg-white border shadow-sm rounded px-1 min-w-[1.2rem] inline-block text-center mr-1 text-slate-700">F3</kbd> Hold</span>
-                    <span className="text-[10px] font-bold text-slate-500"><kbd className="bg-white border shadow-sm rounded px-1 min-w-[1.2rem] inline-block text-center mr-1 text-slate-700">Esc</kbd> Close</span>
-                    <span className="text-[10px] font-bold text-slate-500"><kbd className="bg-white border shadow-sm rounded px-1 min-w-[1.2rem] inline-block text-center mr-1 text-slate-700">+</kbd> <kbd className="bg-white border shadow-sm rounded px-1 min-w-[1.2rem] inline-block text-center mr-1">-</kbd> Qty</span>
-                </div>
+                {/* <div className="hidden md:flex absolute bottom-0 right-0 left-0 h-6 bg-slate-900/5 backdrop-blur-sm border-t border-slate-200/50 justify-center items-center gap-6 z-20 pointer-events-none">
+                <span className="text-[10px] font-bold text-slate-500"><kbd className="bg-white border shadow-sm rounded px-1 min-w-[1.2rem] inline-block text-center mr-1 text-slate-700">F1</kbd> Search</span>
+                <span className="text-[10px] font-bold text-slate-500"><kbd className="bg-white border shadow-sm rounded px-1 min-w-[1.2rem] inline-block text-center mr-1 text-slate-700">F2</kbd> Checkout</span>
+                <span className="text-[10px] font-bold text-slate-500"><kbd className="bg-white border shadow-sm rounded px-1 min-w-[1.2rem] inline-block text-center mr-1 text-slate-700">F3</kbd> Hold</span>
+                <span className="text-[10px] font-bold text-slate-500"><kbd className="bg-white border shadow-sm rounded px-1 min-w-[1.2rem] inline-block text-center mr-1 text-slate-700">Esc</kbd> Close</span>
+                <span className="text-[10px] font-bold text-slate-500"><kbd className="bg-white border shadow-sm rounded px-1 min-w-[1.2rem] inline-block text-center mr-1 text-slate-700">+</kbd> <kbd className="bg-white border shadow-sm rounded px-1 min-w-[1.2rem] inline-block text-center mr-1">-</kbd> Qty</span>
+            </div> */}
 
             </div>
 
@@ -2501,7 +2652,7 @@ export default function POSPage() {
                                         <div className="bg-slate-50 p-2 rounded-xl mb-1 md:mb-2 flex flex-col gap-1 border border-slate-100 shrink-0">
                                             {splitPayments.map((p, i) => (
                                                 <div key={i} className="flex justify-between items-center text-xs">
-                                                    <span className="font-bold flex items-center gap-1"><CreditCard className="w-3 h-3"/> {p.method}</span>
+                                                    <span className="font-bold flex items-center gap-1"><CreditCard className="w-3 h-3" /> {p.method}</span>
                                                     <span className="font-mono">${p.amount.toFixed(2)}</span>
                                                     <Button variant="ghost" size="icon" className="h-5 w-5 p-0" onClick={() => setSplitPayments(prev => prev.filter((_, idx) => idx !== i))}>
                                                         <Trash2 className="w-3 h-3 text-red-500" />
@@ -2511,7 +2662,7 @@ export default function POSPage() {
                                             <div className="flex justify-between items-center text-xs pt-1 border-t border-slate-200 mt-1">
                                                 <span className="font-black text-slate-500 uppercase">Remaining</span>
                                                 <span className="font-mono font-black text-red-500">
-                                                    ${Math.max(0, total - splitPayments.reduce((a,b)=>a+b.amount, 0)).toFixed(2)}
+                                                    ${Math.max(0, total - splitPayments.reduce((a, b) => a + b.amount, 0)).toFixed(2)}
                                                 </span>
                                             </div>
                                         </div>
@@ -2519,31 +2670,31 @@ export default function POSPage() {
 
                                     <div className="flex gap-2 shrink-0">
                                         <div className="relative group flex-1">
-                                        <span className="absolute left-2.5 md:left-4 top-1/2 -translate-y-1/2 text-sm md:text-xl font-black text-slate-300 group-focus-within:text-primary transition-colors">$</span>
-                                        <Input
-                                            id="checkout-paid-amount"
-                                            type="number"
-                                            placeholder="0.00"
-                                            value={paidAmount}
-                                            onChange={(e) => setPaidAmount(e.target.value)}
-                                            className="h-7 md:h-12 pl-5 md:pl-8 text-sm md:text-xl font-black bg-slate-50 border-none rounded-md md:rounded-xl focus:ring-4 md:focus:ring-8 focus:ring-primary/5 transition-all text-slate-800"
-                                        />
-                                        <div className="absolute right-2.5 md:right-4 top-1/2 -translate-y-1/2 text-[6px] md:text-[8px] font-black text-slate-400 uppercase tracking-widest">Rec.</div>
+                                            <span className="absolute left-2.5 md:left-4 top-1/2 -translate-y-1/2 text-sm md:text-xl font-black text-slate-300 group-focus-within:text-primary transition-colors">$</span>
+                                            <Input
+                                                id="checkout-paid-amount"
+                                                type="number"
+                                                placeholder="0.00"
+                                                value={paidAmount}
+                                                onChange={(e) => setPaidAmount(e.target.value)}
+                                                className="h-7 md:h-12 pl-5 md:pl-8 text-sm md:text-xl font-black bg-slate-50 border border-slate-200 rounded-md md:rounded-xl focus:ring-1 md:focus:ring-2 focus:ring-primary/5 transition-all text-slate-800"
+                                            />
+                                            <div className="absolute right-2.5 md:right-4 top-1/2 -translate-y-1/2 text-[6px] md:text-[8px] font-black text-slate-400 uppercase tracking-widest">Rec.</div>
+                                        </div>
+                                        <Button
+                                            variant="outline"
+                                            className="h-7 md:h-12 w-1/3 rounded-md md:rounded-xl border-dashed border-2 border-primary/30 text-primary font-black uppercase text-[8px] md:text-xs tracking-widest hover:bg-primary hover:text-white transition-all shrink-0"
+                                            onClick={() => {
+                                                const amt = parseFloat(paidAmount);
+                                                if (amt > 0) {
+                                                    setSplitPayments(prev => [...prev, { method: paymentMethod, amount: amt }]);
+                                                    setPaidAmount("");
+                                                }
+                                            }}
+                                        >
+                                            Tender
+                                        </Button>
                                     </div>
-                                    <Button
-                                        variant="outline"
-                                        className="h-7 md:h-12 w-1/3 rounded-md md:rounded-xl border-dashed border-2 border-primary/30 text-primary font-black uppercase text-[8px] md:text-xs tracking-widest hover:bg-primary hover:text-white transition-all shrink-0"
-                                        onClick={() => {
-                                            const amt = parseFloat(paidAmount);
-                                            if (amt > 0) {
-                                                setSplitPayments(prev => [...prev, { method: paymentMethod, amount: amt }]);
-                                                setPaidAmount("");
-                                            }
-                                        }}
-                                    >
-                                        Add Tender
-                                    </Button>
-                                </div>
 
                                     {/* Fast Cash Buttons */}
                                     <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide shrink-0">
@@ -2608,7 +2759,7 @@ export default function POSPage() {
                                                 <span className="text-[6px] uppercase font-black tracking-widest text-emerald-600">Change</span>
                                                 <h3 className="text-sm md:text-xl font-black text-emerald-700">
                                                     {selectedCurrencyCode} {(() => {
-                                                        const sumParams = splitPayments.reduce((a,b)=>a+b.amount,0) + parseFloat(paidAmount || "0");
+                                                        const sumParams = splitPayments.reduce((a, b) => a + b.amount, 0) + parseFloat(paidAmount || "0");
                                                         const req = total * Number(currencies?.find(c => c.code === selectedCurrencyCode)?.exchangeRate || 1);
                                                         return Math.max(0, sumParams - req).toFixed(2);
                                                     })()}
@@ -2739,6 +2890,87 @@ export default function POSPage() {
                     </DialogContent>
                 </Dialog>
 
+                {/* ── Custom Quantity / Reverse Price Dialog ── */}
+                <Dialog open={!!qtyDialog?.open} onOpenChange={open => { if (!open) setQtyDialog(null); }}>
+                    <DialogContent className="sm:max-w-[340px] rounded-[2rem] border-none shadow-2xl p-0 overflow-hidden">
+                        <DialogHeader className="sr-only">
+                            <DialogTitle>{qtyDialog?.mode === 'qty' ? 'Set Quantity' : 'Set Target Total'}</DialogTitle>
+                            <DialogDescription>Enter a value to update this cart item.</DialogDescription>
+                        </DialogHeader>
+                        <div className={`p-6 text-white ${qtyDialog?.mode === 'qty' ? 'bg-slate-900' : 'bg-indigo-600'}`}>
+                            <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-1">
+                                {qtyDialog?.mode === 'qty' ? 'Set Quantity' : 'Reverse Pricing — Set Total'}
+                            </p>
+                            <h3 className="text-lg font-black leading-tight truncate">{qtyDialog?.productName}</h3>
+                            {qtyDialog?.mode === 'total' && (
+                                <p className="text-xs opacity-70 mt-1">@ ${qtyDialog.unitPrice.toFixed(2)} / unit</p>
+                            )}
+                        </div>
+                        <div className="p-6 bg-white space-y-4">
+                            <div className="relative">
+                                {qtyDialog?.mode === 'total' && (
+                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-black text-lg">$</span>
+                                )}
+                                <input
+                                    type="number"
+                                    autoFocus
+                                    step="any"
+                                    min="0"
+                                    value={qtyDialogInput}
+                                    onChange={e => setQtyDialogInput(e.target.value)}
+                                    onKeyDown={e => {
+                                        if (e.key === 'Enter') {
+                                            document.getElementById('qty-dialog-confirm')?.click();
+                                        }
+                                    }}
+                                    className={`w-full h-16 rounded-2xl border border-slate-200 text-2xl font-black text-center bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all ${qtyDialog?.mode === 'total' ? 'pl-8' : ''}`}
+                                    placeholder={qtyDialog?.mode === 'qty' ? '0.000' : '0.00'}
+                                />
+                            </div>
+                            {qtyDialog && qtyDialogInput && !isNaN(parseFloat(qtyDialogInput)) && (
+                                <div className="bg-slate-50 rounded-xl p-3 text-center">
+                                    {qtyDialog.mode === 'qty' ? (
+                                        <p className="text-sm font-bold text-slate-600">
+                                            Line Total = <span className="text-slate-900 font-black">${((parseFloat(qtyDialogInput) * qtyDialog.unitPrice) - qtyDialog.discountAmount).toFixed(2)}</span>
+                                        </p>
+                                    ) : (
+                                        <p className="text-sm font-bold text-slate-600">
+                                            Qty = <span className="text-slate-900 font-black">{((parseFloat(qtyDialogInput) + qtyDialog.discountAmount) / qtyDialog.unitPrice).toFixed(posSettings.quantityDecimalPlaces)}</span>
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+                            <div className="flex gap-3">
+                                <Button variant="outline" className="flex-1 h-12 rounded-xl font-black border-slate-200" onClick={() => setQtyDialog(null)}>Cancel</Button>
+                                <Button
+                                    id="qty-dialog-confirm"
+                                    className="flex-[2] h-12 rounded-xl font-black btn-gradient"
+                                    onClick={() => {
+                                        if (!qtyDialog) return;
+                                        const val = parseFloat(qtyDialogInput);
+                                        if (isNaN(val) || val < 0) return;
+                                        if (qtyDialog.mode === 'qty') {
+                                            setCart(prev => prev.map(it =>
+                                                it.productId === qtyDialog.productId ? { ...it, quantity: val } : it
+                                            ));
+                                        } else {
+                                            if (qtyDialog.unitPrice > 0) {
+                                                const newQty = (val + qtyDialog.discountAmount) / qtyDialog.unitPrice;
+                                                setCart(prev => prev.map(it =>
+                                                    it.productId === qtyDialog.productId ? { ...it, quantity: Number(newQty.toFixed(posSettings.quantityDecimalPlaces + 1)) } : it
+                                                ));
+                                            }
+                                        }
+                                        setQtyDialog(null);
+                                    }}
+                                >
+                                    {qtyDialog?.mode === 'qty' ? 'Set Quantity' : 'Apply'}
+                                </Button>
+                            </div>
+                        </div>
+                    </DialogContent>
+                </Dialog>
+
                 {/* Terminal Settings Modal */}
                 <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
                     <DialogContent className="sm:max-w-[450px] rounded-[2rem] border-none shadow-2xl p-0 overflow-hidden">
@@ -2746,74 +2978,77 @@ export default function POSPage() {
                             <DialogTitle>Terminal Settings</DialogTitle>
                             <DialogDescription>Configure local POS settings like printing preferences and terminal ID.</DialogDescription>
                         </DialogHeader>
-                        <div className="p-8 bg-slate-900 text-white">
+                        <div className="p-6 bg-slate-900 text-white">
                             <h3 className="text-xl font-black flex items-center gap-3">
                                 <SettingsIcon className="h-6 w-6 text-primary" />
                                 Terminal Settings
                             </h3>
                             <p className="text-xs text-slate-500 mt-2 font-bold uppercase tracking-widest">Local POS Configuration</p>
                         </div>
-                        <div className="p-8 space-y-6 bg-white">
-                            <div className="space-y-4">
-                                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                                    <div className="space-y-0.5">
-                                        <Label className="text-sm font-black text-slate-700">Auto-Print</Label>
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Instant Receipt</p>
+                        <div className="p-6 space-y-4 bg-white">
+                            <div className="space-y-3">
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                                        <div className="space-y-0.5">
+                                            <Label className="text-[11px] font-black text-slate-700">Auto-Print</Label>
+                                            <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest">Instant</p>
+                                        </div>
+                                        <Button
+                                            variant="ghost"
+                                            className={cn(
+                                                "h-8 px-3 rounded-lg font-black text-[10px] transition-all",
+                                                posSettings.autoPrint ? "bg-primary text-white" : "text-slate-400"
+                                            )}
+                                            onClick={() => setPosSettings(prev => ({ ...prev, autoPrint: !prev.autoPrint }))}
+                                        >
+                                            {posSettings.autoPrint ? "ON" : "OFF"}
+                                        </Button>
                                     </div>
-                                    <Button
-                                        variant="ghost"
-                                        className={cn(
-                                            "h-10 px-4 rounded-xl font-black text-xs transition-all",
-                                            posSettings.autoPrint ? "bg-primary text-white" : "text-slate-400"
-                                        )}
-                                        onClick={() => setPosSettings(prev => ({ ...prev, autoPrint: !prev.autoPrint }))}
-                                    >
-                                        {posSettings.autoPrint ? "ON" : "OFF"}
-                                    </Button>
-                                </div>
-                                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                                    <div className="space-y-0.5">
-                                        <Label className="text-sm font-black text-slate-700">Silent (Proxy)</Label>
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">No Dialog</p>
+                                    <div className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                                        <div className="space-y-0.5">
+                                            <Label className="text-[11px] font-black text-slate-700">Silent (Proxy)</Label>
+                                            <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest">No Dialog</p>
+                                        </div>
+                                        <Button
+                                            variant="ghost"
+                                            className={cn(
+                                                "h-8 px-3 rounded-lg font-black text-[10px] transition-all",
+                                                posSettings.silentPrinting ? "bg-emerald-500 text-white" : "text-slate-400"
+                                            )}
+                                            onClick={() => setPosSettings(prev => ({ ...prev, silentPrinting: !prev.silentPrinting }))}
+                                        >
+                                            {posSettings.silentPrinting ? "ON" : "OFF"}
+                                        </Button>
                                     </div>
-                                    <Button
-                                        variant="ghost"
-                                        className={cn(
-                                            "h-10 px-4 rounded-xl font-black text-xs transition-all",
-                                            posSettings.silentPrinting ? "bg-emerald-500 text-white" : "text-slate-400"
-                                        )}
-                                        onClick={() => setPosSettings(prev => ({ ...prev, silentPrinting: !prev.silentPrinting }))}
-                                    >
-                                        {posSettings.silentPrinting ? "ON" : "OFF"}
-                                    </Button>
                                 </div>
-                                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">Terminal ID</label>
-                                    <Input
-                                        value={posSettings.terminalId}
-                                        onChange={(e) => setPosSettings(prev => ({ ...prev, terminalId: e.target.value }))}
-                                        className="h-10 text-xs font-black bg-white border-slate-200 rounded-lg outline-none"
-                                    />
-                                </div>
-                                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">Paper Size Override</label>
-                                    <div className="flex gap-2">
-                                        {['', '80mm', '58mm', 'A4'].map(size => (
-                                            <button
-                                                key={size}
-                                                onClick={() => setPosSettings(prev => ({ ...prev, paperSize: size }))}
-                                                className={cn(
-                                                    "flex-1 h-9 rounded-lg text-[10px] font-black uppercase tracking-tight border transition-all",
-                                                    posSettings.paperSize === size
-                                                        ? "bg-slate-900 text-white border-slate-900"
-                                                        : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
-                                                )}
-                                            >
-                                                {size === '' ? 'Default' : size}
-                                            </button>
-                                        ))}
+                                <div className="grid grid-cols-[1fr_2fr] gap-3">
+                                    <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                                        <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-1">Terminal ID</label>
+                                        <Input
+                                            value={posSettings.terminalId}
+                                            onChange={(e) => setPosSettings(prev => ({ ...prev, terminalId: e.target.value }))}
+                                            className="h-8 text-xs font-black bg-white border-slate-200 rounded-lg outline-none"
+                                        />
                                     </div>
-                                    <p className="text-[9px] text-slate-400 mt-2 italic px-1">Leaves default size configured in global settings if set to Default.</p>
+                                    <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                                        <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-1">Paper Override</label>
+                                        <div className="flex gap-1">
+                                            {['', '80mm', '58mm'].map(size => (
+                                                <button
+                                                    key={size}
+                                                    onClick={() => setPosSettings(prev => ({ ...prev, paperSize: size }))}
+                                                    className={cn(
+                                                        "flex-1 h-8 rounded-lg text-[9px] font-black uppercase tracking-tight border transition-all",
+                                                        posSettings.paperSize === size
+                                                            ? "bg-slate-900 text-white border-slate-900"
+                                                            : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                                                    )}
+                                                >
+                                                    {size === '' ? 'Def' : size}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
                                 </div>
                                 <div className="p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100 animate-in fade-in slide-in-from-top-2 duration-300">
                                     <div className="flex items-center justify-between mb-2">
@@ -2853,9 +3088,6 @@ export default function POSPage() {
                                             ))}
                                         </SelectContent>
                                     </Select>
-                                    <p className="text-[9px] text-emerald-600/60 font-bold uppercase tracking-tight mt-2 italic px-1">
-                                        Tip: Select your physical POS printer if "Default" fails.
-                                    </p>
                                 </div>
                             </div>
                             <Button className="w-full h-12 rounded-xl bg-slate-900 hover:bg-black text-white font-black uppercase tracking-widest transition-all active:scale-95" onClick={() => setIsSettingsOpen(false)}>
@@ -3046,7 +3278,7 @@ export default function POSPage() {
             </Dialog>
 
             {/* Credit / Debit Note Modal */}
-            <Dialog open={isCreditNoteOpen} onOpenChange={(v) => { setIsCreditNoteOpen(v); if(!v) setCnActiveInvoice(null); }}>
+            <Dialog open={isCreditNoteOpen} onOpenChange={(v) => { setIsCreditNoteOpen(v); if (!v) setCnActiveInvoice(null); }}>
                 <DialogContent className="sm:max-w-[520px] rounded-3xl p-0 overflow-hidden border-none max-h-[85vh] flex flex-col">
                     <DialogHeader className="sr-only">
                         <DialogTitle>Issue Credit or Debit Note</DialogTitle>
@@ -3129,11 +3361,11 @@ export default function POSPage() {
                                             <div className="flex items-center gap-3 bg-white p-1 rounded-lg border border-slate-200">
                                                 <Button variant="ghost" className="h-6 w-6 p-0 hover:bg-red-50 hover:text-red-500" onClick={() => {
                                                     setCnSelectedItems(prev => prev.map((p, i) => i === idx ? { ...p, quantity: Math.max(0, p.quantity - 1) } : p));
-                                                }}><Minus className="h-3 w-3"/></Button>
+                                                }}><Minus className="h-3 w-3" /></Button>
                                                 <span className="font-black text-sm w-4 text-center">{sel.quantity}</span>
                                                 <Button variant="ghost" className="h-6 w-6 p-0 hover:bg-emerald-50 hover:text-emerald-500" onClick={() => {
                                                     setCnSelectedItems(prev => prev.map((p, i) => i === idx ? { ...p, quantity: Math.min(Number(p.originalItem.quantity), p.quantity + 1) } : p));
-                                                }}><Plus className="h-3 w-3"/></Button>
+                                                }}><Plus className="h-3 w-3" /></Button>
                                             </div>
                                         </div>
                                     ))}

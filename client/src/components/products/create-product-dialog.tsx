@@ -108,7 +108,7 @@ export function CreateProductDialog({ companyId, defaultType = "good", triggerLa
     // Sync with default value or tax types load
     useEffect(() => {
         if (taxTypes.data && !selectedTaxTypeId && open) {
-            const defaultType = taxTypes.data?.find(t => t.rate === form.getValues("taxRate"));
+            const defaultType = taxTypes.data?.find((t: any) => t.rate === form.getValues("taxRate"));
             if (defaultType) setSelectedTaxTypeId(defaultType.id.toString());
         }
     }, [taxTypes.data, open]);
@@ -292,6 +292,29 @@ export function CreateProductDialog({ companyId, defaultType = "good", triggerLa
                                 />
                             )}
                         </div>
+
+                        <FormField
+                            control={form.control}
+                            name={"unitOfMeasure" as any}
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel className="text-slate-700 font-semibold">Unit of Measure</FormLabel>
+                                    <Select onValueChange={field.onChange} value={field.value || ""}>
+                                        <FormControl>
+                                            <SelectTrigger className="rounded-xl bg-slate-50 border-slate-200 focus:ring-primary/20">
+                                                <SelectValue placeholder="Select unit (optional)" />
+                                            </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent className="rounded-xl shadow-xl">
+                                            {["pcs", "kg", "g", "mg", "L", "mL", "m", "cm", "mm", "box", "pack", "pair", "set", "dozen", "bag", "roll", "sheet", "tin", "bottle", "each"].map(u => (
+                                                <SelectItem key={u} value={u}>{u}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
 
                         {!isService && (
                             <div className="border border-slate-200 rounded-2xl p-5 space-y-4 bg-slate-50/50">

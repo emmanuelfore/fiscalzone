@@ -218,6 +218,7 @@ export const products = pgTable("products", {
   description: text("description"),
   sku: text("sku"),
   barcode: text("barcode"),
+  unitOfMeasure: text("unit_of_measure"),
   hsCode: text("hs_code").default("0000.00.00"),
   category: text("category"),
   price: decimal("price", { precision: 10, scale: 2 }).notNull(),

@@ -84,13 +84,13 @@ export default function SettingsPage() {
           requireOverrideForPriceChange: false,
           requireOverrideForDelete: false,
           requireOverrideForOpenDrawer: false,
-          autoPrintReceipt: true,
+          autoPrint: true,
           usePrinterClient: false,
           printingEnabled: true,
           allowSellOutOfStock: false,
           allowedPaymentMethods: ["CASH", "CARD", "ECOCASH", "usd", "zig"],
           defaultCustomerId: "",
-          silentPrinting: false,
+          silentPrinting: true,
           printServerUrl: "http://localhost:12312",
           printerName: ""
         }

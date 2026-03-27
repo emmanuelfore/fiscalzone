@@ -34,6 +34,7 @@ import {
   posShiftTransactions,
   companies,
   customers,
+  currencies,
   products,
   inventoryTransactions,
   suppliers,
@@ -5381,6 +5382,119 @@ export async function registerRoutes(
 
       const data = await storage.getReportPurchaseHistory(companyId, startDate, endDate);
       res.json(data);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Stock Takes
+  app.get("/api/companies/:companyId/stock-takes", requireAuth, async (req, res) => {
+    try {
+      const companyId = parseInt(req.params.companyId);
+      const data = await storage.getStockTakes(companyId);
+      res.json(data);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/stock-takes/:id", requireAuth, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const data = await storage.getStockTake(id);
+      if (!data) return res.status(404).json({ message: "Stock take not found" });
+      res.json(data);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/stock-takes/:id/variance", requireAuth, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const data = await storage.getStockTake(id);
+      if (!data) return res.status(404).json({ message: "Stock take not found" });
+
+      const varianceReport = data.items.map(item => {
+        const physical = parseFloat(item.physicalCount?.toString() || "0");
+        const system = parseFloat(item.systemCount?.toString() || "0");
+        const variance = physical - system;
+        const unitCost = parseFloat(item.unitCost?.toString() || "0");
+        return {
+          productId: item.productId,
+          productName: item.product?.name,
+          sku: item.product?.sku,
+          systemCount: system,
+          physicalCount: physical,
+          variance,
+          varianceValue: variance * unitCost,
+        };
+      });
+
+      res.json(varianceReport);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/companies/:companyId/stock-takes", requireAuth, async (req, res) => {
+    try {
+      const companyId = parseInt(req.params.companyId);
+      const { items, notes } = req.body; // items: { productId, physicalCount, systemCount, unitCost }[]
+
+      const stockTake = await storage.createStockTake({
+        companyId,
+        userId: req.user!.id,
+        status: "draft",
+        notes,
+      });
+
+      if (items && items.length > 0) {
+        await storage.createStockTakeItems(items.map((it: any) => ({
+          ...it,
+          stockTakeId: stockTake.id,
+        })));
+      }
+
+      res.status(201).json(stockTake);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/stock-takes/:id", requireAuth, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { items, notes, status } = req.body;
+
+      const updated = await storage.updateStockTake(id, { notes, status });
+
+      if (items) {
+        // Simple strategy: replace all items for now, or update individually
+        // For simplicity in mobile, we might just send the whole list
+        // But let's support adding/updating
+        for (const it of items) {
+          if (it.id) {
+            await storage.updateStockTakeItem(it.id, it);
+          } else {
+            await storage.createStockTakeItems([{ ...it, stockTakeId: id }]);
+          }
+        }
+      }
+
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/stock-takes/:id/complete", requireAuth, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { companyId } = req.body;
+      const { processStockTake } = await import("./lib/inventory.js");
+      await processStockTake(id, companyId);
+      res.json({ message: "Stock take completed and inventory adjusted" });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

@@ -20,7 +20,10 @@ import {
   suppliers, inventoryTransactions, expenses,
   type Supplier, type InsertSupplier,
   type InventoryTransaction, type InsertInventoryTransaction,
-  type Expense, type InsertExpense
+  type Expense, type InsertExpense,
+  stockTakes, stockTakeItems,
+  type StockTake, type InsertStockTake,
+  type StockTakeItem, type InsertStockTakeItem
 } from "../shared/schema.js";
 import { db } from "./db.js";
 import { eq, and, desc, lte, gte, lt, ne, or, isNull, sql, ilike, count, inArray } from "drizzle-orm";
@@ -253,6 +256,15 @@ export interface IStorage {
   getReportStockOnHand(companyId: number): Promise<{ productId: number; name: string; sku: string | null; category: string | null; stockLevel: string; unitCost: string; totalValue: string }[]>;
   getReportInventoryMovements(companyId: number, start: Date, end: Date): Promise<{ transactionId: number; date: string; productName: string; type: string; quantity: string; unitCost: string | null; reference: string | null; notes: string | null }[]>;
   getReportPurchaseHistory(companyId: number, start: Date, end: Date): Promise<{ transactionId: number; date: string; productName: string; supplierName: string | null; quantity: string; unitCost: string; totalCost: string; reference: string | null }[]>;
+
+  // Stock Takes
+  getStockTakes(companyId: number): Promise<StockTake[]>;
+  getStockTake(id: number): Promise<(StockTake & { items: (StockTakeItem & { product: Product })[] }) | undefined>;
+  createStockTake(data: InsertStockTake): Promise<StockTake>;
+  updateStockTake(id: number, data: Partial<StockTake>): Promise<StockTake>;
+  createStockTakeItems(items: InsertStockTakeItem[]): Promise<void>;
+  updateStockTakeItem(id: number, data: Partial<StockTakeItem>): Promise<void>;
+  deleteStockTakeItem(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3744,6 +3756,57 @@ export class DatabaseStorage implements IStorage {
       unitCost: String(r.unitCost || "0"),
       totalCost: String(r.totalCost || "0")
     }));
+  }
+
+  // Stock Takes Implementation
+  async getStockTakes(companyId: number): Promise<StockTake[]> {
+    return await db.select().from(stockTakes).where(eq(stockTakes.companyId, companyId)).orderBy(desc(stockTakes.createdAt));
+  }
+
+  async getStockTake(id: number): Promise<(StockTake & { items: (StockTakeItem & { product: Product })[] }) | undefined> {
+    const [stockTake] = await db.select().from(stockTakes).where(eq(stockTakes.id, id));
+    if (!stockTake) return undefined;
+
+    const itemsWithProducts = await db
+      .select({
+        item: stockTakeItems,
+        product: products
+      })
+      .from(stockTakeItems)
+      .innerJoin(products, eq(stockTakeItems.productId, products.id))
+      .where(eq(stockTakeItems.stockTakeId, id));
+
+    return {
+      ...stockTake,
+      items: itemsWithProducts.map(r => ({
+        ...r.item,
+        product: r.product
+      }))
+    };
+  }
+
+  async createStockTake(data: InsertStockTake): Promise<StockTake> {
+    const [stockTake] = await db.insert(stockTakes).values(data).returning();
+    return stockTake;
+  }
+
+  async updateStockTake(id: number, data: Partial<StockTake>): Promise<StockTake> {
+    const [updated] = await db.update(stockTakes).set(data).where(eq(stockTakes.id, id)).returning();
+    if (!updated) throw new Error("Stock take not found");
+    return updated;
+  }
+
+  async createStockTakeItems(items: InsertStockTakeItem[]): Promise<void> {
+    if (items.length === 0) return;
+    await db.insert(stockTakeItems).values(items);
+  }
+
+  async updateStockTakeItem(id: number, data: Partial<StockTakeItem>): Promise<void> {
+    await db.update(stockTakeItems).set(data).where(eq(stockTakeItems.id, id));
+  }
+
+  async deleteStockTakeItem(id: number): Promise<void> {
+    await db.delete(stockTakeItems).where(eq(stockTakeItems.id, id));
   }
 }
 

@@ -7,8 +7,9 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Menu, Search, Package, ChevronDown, Plus, X } from "lucide-react-native";
 import { StatusBar } from "expo-status-bar";
-import { useProducts } from "../hooks/usePosData";
+import { useProducts, useSuppliers } from "../hooks/usePosData";
 import { apiFetch } from "../lib/api";
+import { Users } from "lucide-react-native";
 
 import { PremiumColors as C } from "../ui/PremiumColors";
 
@@ -17,13 +18,23 @@ interface Props { onOpenDrawer: () => void; onClose?: () => void; companyId: num
 export function StockInScreen({ onOpenDrawer, onClose, companyId }: Props) {
   const insets = useSafeAreaInsets();
   const { data: products, isLoading } = useProducts(companyId);
+  const { data: suppliers, isLoading: loadingSuppliers } = useSuppliers(companyId);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  const [selectedSupplier, setSelectedSupplier] = useState<any>(null);
   const [showPicker, setShowPicker] = useState(false);
+  const [showSupplierPicker, setShowSupplierPicker] = useState(false);
   const [productSearch, setProductSearch] = useState("");
+  const [supplierSearch, setSupplierSearch] = useState("");
   const [quantity, setQuantity] = useState("");
   const [unitCost, setUnitCost] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
+
+  const filteredSuppliers = (suppliers || []).filter((s: any) => {
+    if (!supplierSearch) return true;
+    const searchLower = supplierSearch.toLowerCase();
+    return s.name?.toLowerCase().includes(searchLower) || s.email?.toLowerCase().includes(searchLower);
+  });
 
   const filteredProducts = (products || []).filter((p: any) => {
     // Only show products that track stock
@@ -51,6 +62,7 @@ export function StockInScreen({ onOpenDrawer, onClose, companyId }: Props) {
           productId: selectedProduct.id,
           quantity: qty,
           unitCost: cost,
+          supplierId: selectedSupplier?.id,
           notes: notes.trim() || undefined,
         }),
       });
@@ -60,6 +72,7 @@ export function StockInScreen({ onOpenDrawer, onClose, companyId }: Props) {
       }
       // Feedback handled by clearing form or modal close
       setSelectedProduct(null);
+      setSelectedSupplier(null);
       setQuantity("");
       setUnitCost("");
       setNotes("");
@@ -100,6 +113,19 @@ export function StockInScreen({ onOpenDrawer, onClose, companyId }: Props) {
               <ChevronDown size={16} color={C.text.secondary} />
             </TouchableOpacity>
 
+            <Text style={styles.label}>Select Supplier</Text>
+            <TouchableOpacity style={styles.selector} onPress={() => setShowSupplierPicker(true)}>
+              {selectedSupplier ? (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Users size={16} color={C.amber.primary} />
+                  <Text style={styles.selectorText} numberOfLines={1}>{selectedSupplier.name}</Text>
+                </View>
+              ) : (
+                <Text style={[styles.selectorText, { color: C.text.secondary }]}>Tap to select supplier (optional)...</Text>
+              )}
+              <ChevronDown size={16} color={C.text.secondary} />
+            </TouchableOpacity>
+
             <Text style={styles.label}>Quantity *</Text>
             <TextInput style={styles.input} keyboardType="numeric" placeholder="0" placeholderTextColor={C.text.secondary} value={quantity} onChangeText={setQuantity} />
             
@@ -113,6 +139,7 @@ export function StockInScreen({ onOpenDrawer, onClose, companyId }: Props) {
               <View style={styles.summary}>
                 <Text style={styles.summaryTitle}>Summary</Text>
                 <View style={styles.summaryRow}><Text style={styles.summaryLabel}>Product</Text><Text style={styles.summaryValue}>{selectedProduct.name}</Text></View>
+                {selectedSupplier && <View style={styles.summaryRow}><Text style={styles.summaryLabel}>Supplier</Text><Text style={styles.summaryValue}>{selectedSupplier.name}</Text></View>}
                 <View style={styles.summaryRow}><Text style={styles.summaryLabel}>Current Stock</Text><Text style={styles.summaryValue}>{currentStock}</Text></View>
                 <View style={styles.summaryRow}><Text style={styles.summaryLabel}>Adding</Text><Text style={[styles.summaryValue, { color: C.status.success }]}>+{quantity}</Text></View>
                 <View style={[styles.summaryRow, { borderTopWidth: 1, borderTopColor: C.border.default, paddingTop: 8 }]}>
@@ -172,6 +199,47 @@ export function StockInScreen({ onOpenDrawer, onClose, companyId }: Props) {
                   ))}
                   {filteredProducts.length === 0 && (
                     <Text style={styles.emptyText}>No products found.</Text>
+                  )}
+                  <View style={{ height: 40 }} />
+                </ScrollView>
+              )}
+            </View>
+          </View>
+        </Modal>
+
+        {/* Supplier Picker Modal */}
+        <Modal visible={showSupplierPicker} transparent animationType="slide">
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Select Supplier</Text>
+                <TouchableOpacity onPress={() => setShowSupplierPicker(false)}><X size={20} color={C.text.primary} /></TouchableOpacity>
+              </View>
+              <View style={styles.pickerSearch}>
+                <Search size={16} color={C.text.secondary} />
+                <TextInput style={styles.pickerSearchInput} placeholder="Search suppliers..." placeholderTextColor={C.text.secondary} value={supplierSearch} onChangeText={setSupplierSearch} />
+              </View>
+              {loadingSuppliers ? (
+                <ActivityIndicator color={C.amber.primary} style={{ padding: 40 }} />
+              ) : (
+                <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                  {filteredSuppliers.map((item: any) => (
+                    <TouchableOpacity 
+                      key={item.id} 
+                      style={[styles.pickerItem, selectedSupplier?.id === item.id && styles.pickerItemActive]}
+                      onPress={() => { setSelectedSupplier(item); setShowSupplierPicker(false); setSupplierSearch(""); }}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.pickerItemText}>{item.name}</Text>
+                        <Text style={styles.pickerItemSub}>{item.email || "No email"}</Text>
+                      </View>
+                      <View style={{ alignItems: "flex-end" }}>
+                        <Text style={styles.pickerItemSub}>{item.phone || ""}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                  {filteredSuppliers.length === 0 && (
+                    <Text style={styles.emptyText}>No suppliers found.</Text>
                   )}
                   <View style={{ height: 40 }} />
                 </ScrollView>

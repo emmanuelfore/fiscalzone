@@ -987,6 +987,9 @@ export default function POSPage() {
             }
 
             const result = await createInvoice.mutateAsync(invoiceData as any);
+            // Refresh products to reflect new stock levels
+            queryClient.invalidateQueries({ queryKey: ['/api/companies/:companyId/products', companyId] });
+
             // Cash drawer: open after successful sale when running in Electron and enabled
             if (window.electronAPI && posSettings.cashDrawerEnabled) {
                 const printerName = localStorage.getItem('pos_printer_name') || undefined;

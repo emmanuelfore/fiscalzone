@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { posShifts, posShiftTransactions, users } from "@shared/schema";
+import { posShifts, posShiftTransactions, users, expenses } from "@shared/schema";
 import { eq, and, desc } from "drizzle-orm";
 
 export async function startPosShift(companyId: number, userId: string, openingBalance: number, notes?: string) {
@@ -50,16 +50,41 @@ export async function addPosTransaction(
     reason: string,
     items: any[] = []
 ) {
-    const [transaction] = await db.insert(posShiftTransactions).values({
-        shiftId,
-        userId,
-        type,
-        amount: amount.toString(),
-        reason,
-        items
-    }).returning();
+    return await db.transaction(async (tx) => {
+        // Fetch shift to get companyId
+        const shift = await tx.query.posShifts.findFirst({
+            where: eq(posShifts.id, shiftId)
+        });
 
-    return transaction;
+        if (!shift) throw new Error("Shift not found");
+
+        const [transaction] = await tx.insert(posShiftTransactions).values({
+            shiftId,
+            userId,
+            type,
+            amount: amount.toString(),
+            reason,
+            items
+        }).returning();
+
+        // If it's a payout, also record it as an expense
+        if (type === 'PAYOUT') {
+            await tx.insert(expenses).values({
+                companyId: shift.companyId,
+                category: "POS Payout",
+                description: reason || "POS Payout",
+                amount: amount.toString(),
+                currency: "USD", // Default to USD for now, or fetch from company/shift
+                expenseDate: new Date(),
+                paymentMethod: "Cash",
+                reference: `POS-PAYOUT-${transaction.id}`,
+                status: "paid",
+                notes: `Automatically created from POS Payout in shift #${shiftId}`
+            });
+        }
+
+        return transaction;
+    });
 }
 
 export async function getOpenShift(companyId: number, userId: string) {

@@ -124,7 +124,8 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
   const {
     data: productsData,
     isLoading: loadingProducts,
-    fromCache: productsFromCache
+    fromCache: productsFromCache,
+    refresh: refreshProducts
   } = useProducts(companyId);
   const { data: customersData, fromCache: customersFromCache } = useCustomers(companyId);
   const { data: company } = useCompany(companyId);
@@ -746,11 +747,13 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
     if (!isOnline) {
       addPendingSale(companyId, invoiceData).then((offlineId) => {
         setLastInvoice((prev: any) => ({ ...prev, id: offlineId, _offline: true }));
+        refreshProducts();
       });
     } else {
       createInvoice(invoiceData)
         .then((created: any) => {
           setLastInvoice(created); // update so receipt printing uses the real invoice
+          refreshProducts();
         })
         .catch(async () => {
           // Network failed after optimistic update — queue it offline silently
@@ -824,14 +827,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
                 {isOnline ? "Online" : "Offline"}
               </Text>
             </View>
-            {(productsFromCache || customersFromCache) && (
-              <View style={{
-                paddingHorizontal: 7, paddingVertical: 3, borderRadius: 20,
-                backgroundColor: "rgba(251,191,36,0.1)", borderWidth: 1, borderColor: "rgba(251,191,36,0.3)"
-              }}>
-                <Clock size={10} color="#facc15" />
-              </View>
-            )}
+
           </View>
 
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -954,23 +950,6 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
           </View>
 
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <TouchableOpacity onPress={() => setShowPayoutModal(true)}
-              style={{
-                width: 32, height: 32, borderRadius: 10, backgroundColor: C.bg.hover,
-                borderWidth: 1, borderColor: C.border.default, alignItems: "center", justifyContent: "center"
-              }}>
-              <Banknote size={16} color={C.amber.primary} />
-            </TouchableOpacity>
-
-            <TouchableOpacity onPress={fetchShiftSummary} disabled={isFetchingSummary}
-              style={{
-                paddingHorizontal: 10, height: 32, borderRadius: 10, backgroundColor: C.bg.hover,
-                borderWidth: 1, borderColor: C.border.default, alignItems: "center", justifyContent: "center"
-              }}>
-              {isFetchingSummary ? <ActivityIndicator size="small" color={C.amber.primary} /> : (
-                <Text style={{ color: C.text.primary, fontSize: 10, fontWeight: "800" }}>Summary</Text>
-              )}
-            </TouchableOpacity>
 
             <View style={{
               flexDirection: "row", alignItems: "center", gap: 5,
@@ -1112,9 +1091,9 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
                 <TouchableOpacity
                   activeOpacity={0.82}
                   onPress={() => !outOfStock && addToCart(item)}
-                  style={{ 
-                    width: "49%", 
-                    marginBottom: 8, 
+                  style={{
+                    width: "49%",
+                    marginBottom: 8,
                     opacity: outOfStock ? 0.35 : 1,
                   }}
                 >
@@ -1140,7 +1119,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
                     {/* Low Stock Badge */}
                     {stockLow && !outOfStock && (
                       <View style={{
-                        position: "absolute", top: 0, left: 0, 
+                        position: "absolute", top: 0, left: 0,
                         backgroundColor: "#fbbf24", paddingHorizontal: 6, paddingVertical: 2,
                         borderBottomRightRadius: 8, zIndex: 1
                       }}>
@@ -1774,8 +1753,8 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
                   </Text>
                   <View style={{
                     flexDirection: "row", alignItems: "center",
-                    backgroundColor: C.bg.hover, 
-                    borderWidth: 1, 
+                    backgroundColor: C.bg.hover,
+                    borderWidth: 1,
                     borderColor: isAmountFocused ? C.status.info : C.border.default,
                     borderRadius: 16, paddingHorizontal: 16, paddingVertical: 6,
                     shadowColor: isAmountFocused ? C.status.info : "transparent",
@@ -2087,7 +2066,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
 
       {/* ── PAYOUT MODAL ─────────────────────────────────────────────────── */}
       <Modal visible={showPayoutModal} transparent animationType="slide" onRequestClose={() => setShowPayoutModal(false)}>
-        <KeyboardAvoidingView 
+        <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "flex-end" }}
         >
@@ -2107,7 +2086,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
                     <X size={16} color={C.text.primary} />
                   </TouchableOpacity>
                 </View>
-                
+
                 <Text style={{ color: C.text.secondary, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Amount (Out of Till)</Text>
                 <TextInput
                   style={{

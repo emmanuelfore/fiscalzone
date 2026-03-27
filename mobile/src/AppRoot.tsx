@@ -19,6 +19,7 @@ import { CustomersScreen } from "./screens/CustomersScreen";
 import { SuppliersScreen } from "./screens/SuppliersScreen";
 import { ExpensesScreen } from "./screens/ExpensesScreen";
 import { OnboardingScreen } from "./screens/OnboardingScreen";
+import { StockTakeScreen } from "./screens/StockTakeScreen";
 import { AppDrawer } from "./ui/AppDrawer";
 import { BottomTabs } from "./ui/BottomTabs";
 import { Button } from "./ui/Button";
@@ -26,7 +27,7 @@ import { getSelectedCompanyId, setSelectedCompanyId } from "./lib/storage";
 
 type Stage = "boot" | "login" | "forgot-password" | "onboarding" | "company" | "main";
 
-type ScreenName = "pos" | "reports" | "profile" | "inventory" | "stockin" | "customers" | "suppliers" | "expenses";
+type ScreenName = "pos" | "reports" | "profile" | "inventory" | "stockin" | "customers" | "suppliers" | "expenses" | "stocktake";
 
 export function AppRoot() {
   const [stage, setStage] = useState<Stage>("boot");
@@ -281,6 +282,7 @@ export function AppRoot() {
             userRole={userRole}
             userId={userId || undefined}
             userName={userName}
+            onNavigate={(screen) => setCurrentScreen(screen)}
           />
         )}
         {currentScreen === "profile" && (
@@ -319,6 +321,12 @@ export function AppRoot() {
           <ExpensesScreen 
             onOpenDrawer={() => setShowDrawer(true)} 
             companyId={companyId}
+          />
+        )}
+        {currentScreen === "stocktake" && (
+          <StockTakeScreen 
+            companyId={companyId}
+            onClose={() => setCurrentScreen("reports")}
           />
         )}
 

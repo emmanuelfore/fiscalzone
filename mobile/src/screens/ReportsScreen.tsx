@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
   drillMainText: { color: C.text.primary, fontSize: 15, fontWeight: "700" },
   drillSubText: { color: C.text.secondary, fontSize: 12, marginTop: 3 },
   drillAmount: { fontSize: 16, fontWeight: "900", flexShrink: 0 },
-  subTabRow: { flexDirection: "row", gap: 10, marginBottom: 20 },
+  subTabRow: { flexDirection: "row", gap: 10, marginVertical: 20 },
   subTab: { flex: 1, paddingVertical: 10, borderRadius: 12, backgroundColor: C.bg.hover, alignItems: "center", borderWidth: 1, borderColor: C.border.default },
   subTabActive: { backgroundColor: `${C.amber.primary}20`, borderColor: C.amber.primary },
   subTabText: { color: C.text.secondary, fontSize: 13, fontWeight: "700" },
@@ -112,7 +112,7 @@ const styles = StyleSheet.create({
 
 type Period = "Today" | "This Week" | "This Month" | "All Time" | "Custom";
 type Tab = "sales" | "pnl" | "inventory";
-type InventorySubTab = "stock" | "movements" | "purchases";
+type InventorySubTab = "valuation" | "movements" | "purchases";
 
 function getDateRange(period: Period, customStart?: string, customEnd?: string): { start: Date; end: Date } {
   const end = new Date(); end.setHours(23, 59, 59, 999);
@@ -129,12 +129,13 @@ function getDateRange(period: Period, customStart?: string, customEnd?: string):
   return { start, end };
 }
 
-interface ReportsScreenProps { 
-  onOpenDrawer: () => void; 
-  companyId: number; 
+interface ReportsScreenProps {
+  onOpenDrawer: () => void;
+  companyId: number;
   userRole?: string;
   userId?: string;
   userName?: string;
+  onNavigate?: (screen: any) => void;
 }
 
 function ExpandedSaleContent({ sale, currencySymbols, onReprint, isPrinting, onCreditNote, onDebitNote }: {
@@ -247,14 +248,14 @@ function InvoiceItemRow({ invoiceId, currencyCode, exchangeRate, symbols }: {
   );
 }
 
-function InventoryContent({ tab, companyId, start, end, symbol }: { tab: InventorySubTab; companyId: number; start: Date; end: Date; symbol: string }) {
+function InventoryContent({ tab, companyId, start, end, symbol, onNavigate }: { tab: InventorySubTab; companyId: number; start: Date; end: Date; symbol: string; onNavigate?: (screen: any) => void }) {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     setLoading(true);
     let endpoint = "";
-    if (tab === "stock") endpoint = `/api/reports/inventory/stock-on-hand/${companyId}`;
+    if (tab === "valuation") endpoint = `/api/reports/inventory/stock-on-hand/${companyId}`;
     else if (tab === "movements") endpoint = `/api/reports/inventory/movements/${companyId}?startDate=${start.toISOString()}&endDate=${end.toISOString()}`;
     else if (tab === "purchases") endpoint = `/api/reports/inventory/purchases/${companyId}?startDate=${start.toISOString()}&endDate=${end.toISOString()}`;
 
@@ -274,9 +275,37 @@ function InventoryContent({ tab, companyId, start, end, symbol }: { tab: Invento
     );
   }
 
-  if (tab === "stock") {
+  if (tab === "valuation") {
+    const totalValuation = data.reduce((sum, item) => sum + Number(item.totalValue || 0), 0);
     return (
       <View style={{ marginTop: 10, paddingBottom: 20 }}>
+        {/* Total Valuation Card with Stock Take Button */}
+        <View style={[styles.netProfitCard, { backgroundColor: `${C.amber.primary}12`, borderColor: C.amber.primary, marginBottom: 20 }]}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <View>
+              <Text style={{ color: C.text.secondary, fontSize: 12, fontWeight: "700", textTransform: "uppercase", marginBottom: 6 }}>Total Inventory Value</Text>
+              <Text style={{ color: C.text.primary, fontSize: 28, fontWeight: "900" }}>
+                {symbol}{totalValuation.toFixed(2)}
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => onNavigate?.("stocktake")}
+              style={{
+                backgroundColor: C.amber.primary,
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+                borderRadius: 10,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6
+              }}
+            >
+              <Package size={16} color="#000" />
+              <Text style={{ color: "#000", fontWeight: "800", fontSize: 12 }}>Stock Take</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
         {data.map((item, idx) => {
           const isLowStock = Number(item.stockLevel) <= 10;
           const isOutOfStock = Number(item.stockLevel) <= 0;
@@ -285,13 +314,14 @@ function InventoryContent({ tab, companyId, start, end, symbol }: { tab: Invento
               <View style={{ flex: 1 }}>
                 <Text style={styles.itemName}>{item.name}</Text>
                 <Text style={styles.itemSku}>{item.sku || "No SKU"} • {item.category || "General"}</Text>
+                <Text style={{ color: C.text.secondary, fontSize: 10, marginTop: 2 }}>Cost: {symbol}{Number(item.unitCost).toFixed(2)}</Text>
               </View>
               <View style={{ alignItems: "flex-end" }}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                   {isLowStock && (
-                    <View style={{ 
-                      width: 8, height: 8, borderRadius: 4, 
-                      backgroundColor: isOutOfStock ? C.status.error : C.status.warning 
+                    <View style={{
+                      width: 8, height: 8, borderRadius: 4,
+                      backgroundColor: isOutOfStock ? C.status.error : C.status.warning
                     }} />
                   )}
                   <Text style={[styles.itemPrice, { color: isOutOfStock ? C.status.error : isLowStock ? "#fbbf24" : C.text.primary }]}>
@@ -318,9 +348,9 @@ function InventoryContent({ tab, companyId, start, end, symbol }: { tab: Invento
                 {new Date(item.date).toLocaleDateString()} {new Date(item.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </Text>
               <View style={[styles.typeBadge, { backgroundColor: item.type === "STOCK_IN" ? `${C.status.success}15` : item.type === "ADJUSTMENT" ? `${C.amber.primary}15` : `${C.status.error}15` }]}>
-                 <Text style={[styles.typeBadgeText, { color: item.type === "STOCK_IN" ? C.status.success : item.type === "ADJUSTMENT" ? C.amber.primary : C.status.error }]}>
-                   {item.type === "STOCK_IN" ? "PURCHASE" : item.type === "STOCK_OUT" ? "SALE" : "ADJUST"}
-                 </Text>
+                <Text style={[styles.typeBadgeText, { color: item.type === "STOCK_IN" ? C.status.success : item.type === "ADJUSTMENT" ? C.amber.primary : C.status.error }]}>
+                  {item.type === "STOCK_IN" ? "PURCHASE" : item.type === "STOCK_OUT" ? "SALE" : "ADJUST"}
+                </Text>
               </View>
             </View>
             <View style={{ alignItems: "flex-end" }}>
@@ -358,7 +388,7 @@ function InventoryContent({ tab, companyId, start, end, symbol }: { tab: Invento
   return null;
 }
 
-export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", userId, userName }: ReportsScreenProps) {
+export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", userId, userName, onNavigate }: ReportsScreenProps) {
   const insets = useSafeAreaInsets();
   const isCashier = userRole.toLowerCase() === "cashier" || userRole.toLowerCase() === "member";
   const { data: company } = useCompany(companyId);
@@ -388,7 +418,7 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
 
   useEffect(() => {
     AsyncStorage.getItem(`printer_config_${userId}`).then(val => {
-      if (val) { try { setPrinterConfig(JSON.parse(val)); } catch (_) {} }
+      if (val) { try { setPrinterConfig(JSON.parse(val)); } catch (_) { } }
     });
   }, [userId]);
 
@@ -420,18 +450,30 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
     }
   };
 
-  const [period, setPeriod] = useState<Period>("Today");  const [customStart, setCustomStart] = useState("");
+  const [period, setPeriod] = useState<Period>("Today");
+  const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
   const [showPeriodPicker, setShowPeriodPicker] = useState(false);
   const [expandedSaleId, setExpandedSaleId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("sales");
-  const [activeInvTab, setActiveInvTab] = useState<InventorySubTab>("stock");
+  const [activeInvTab, setActiveInvTab] = useState<InventorySubTab>("valuation");
   const [cashierFilter, setCashierFilter] = useState<string>(isCashier ? (userName || "me") : "all");
   const [showCashierPicker, setShowCashierPicker] = useState(false);
 
   // Drill-down State
   const [drillDownType, setDrillDownType] = useState<"Revenue" | "COGS" | "Expenses" | null>(null);
   const [showDrillDown, setShowDrillDown] = useState(false);
+
+  // Date filter: hidden on valuation sub-tab and pnl (pnl is always all-time)
+  const showDateFilter = activeTab === "sales" || (activeTab === "inventory" && activeInvTab !== "valuation");
+  // Cashier filter only applies to sales
+  const showCashierFilter = !isCashier && activeTab === "sales";
+
+  // Close pickers when switching to a tab/subtab where they don't apply
+  useEffect(() => {
+    if (!showDateFilter) setShowPeriodPicker(false);
+    if (!showCashierFilter) setShowCashierPicker(false);
+  }, [showDateFilter, showCashierFilter]);
 
   const { start, end } = useMemo(() => getDateRange(period, customStart, customEnd), [period, customStart, customEnd]);
   const { data: sales, isLoading: loadingSales } = usePosSales(companyId, start, end);
@@ -465,15 +507,17 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
 
   useEffect(() => {
     setLoadingFinancial(true);
-    const startStr = start.toISOString();
-    const endStr = end.toISOString();
+    // PnL always shows all-time — ignore the period picker
+    const allTimeStart = new Date(2020, 0, 1);
+    const allTimeEnd = new Date(); allTimeEnd.setHours(23, 59, 59, 999);
+    const startStr = allTimeStart.toISOString();
+    const endStr = allTimeEnd.toISOString();
     let url = `/api/companies/${companyId}/reports/financial-summary?from=${startStr}&to=${endStr}&drillDown=true`;
-    if (selectedCashierId) url += `&cashierId=${selectedCashierId}`;
 
     apiJson<any>(url)
       .then((data) => { setFinancialData(data); setLoadingFinancial(false); })
       .catch(() => { setFinancialData(null); setLoadingFinancial(false); });
-  }, [companyId, start, end, selectedCashierId]);
+  }, [companyId]);
 
   const cashiers = useMemo(() => {
     if (!sales) return [];
@@ -517,38 +561,50 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
   const renderHeader = () => (
     <View>
       {/* Tabs */}
-        <View style={styles.tabRow}>
-          <TouchableOpacity style={[styles.tab, activeTab === "sales" && styles.tabActive]} onPress={() => setActiveTab("sales")}>
-            <Text style={[styles.tabText, activeTab === "sales" && styles.tabTextActive]}>Sales</Text>
+      <View style={styles.tabRow}>
+        <TouchableOpacity style={[styles.tab, activeTab === "sales" && styles.tabActive]} onPress={() => setActiveTab("sales")}>
+          <Text style={[styles.tabText, activeTab === "sales" && styles.tabTextActive]}>Sales</Text>
+        </TouchableOpacity>
+        {!isCashier && (
+          <TouchableOpacity style={[styles.tab, activeTab === "pnl" && styles.tabActive]} onPress={() => setActiveTab("pnl")}>
+            <Text style={[styles.tabText, activeTab === "pnl" && styles.tabTextActive]}>PnL</Text>
           </TouchableOpacity>
-          {!isCashier && (
-            <TouchableOpacity style={[styles.tab, activeTab === "pnl" && styles.tabActive]} onPress={() => setActiveTab("pnl")}>
-              <Text style={[styles.tabText, activeTab === "pnl" && styles.tabTextActive]}>PnL</Text>
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity style={[styles.tab, activeTab === "inventory" && styles.tabActive]} onPress={() => setActiveTab("inventory")}>
-            <Text style={[styles.tabText, activeTab === "inventory" && styles.tabTextActive]}>Stock</Text>
-          </TouchableOpacity>
-        </View>
+        )}
+        <TouchableOpacity style={[styles.tab, activeTab === "inventory" && styles.tabActive]} onPress={() => setActiveTab("inventory")}>
+          <Text style={[styles.tabText, activeTab === "inventory" && styles.tabTextActive]}>Stock</Text>
+        </TouchableOpacity>
+      </View>
 
       <View style={{ padding: 16 }}>
-        {/* Filters Row */}
-        <View style={styles.filterRow}>
-          <TouchableOpacity style={styles.periodBtn} onPress={() => { setShowPeriodPicker(!showPeriodPicker); setShowCashierPicker(false); }}>
-            <Calendar size={14} color={C.text.secondary} />
-            <Text style={styles.periodText}>{period}</Text>
-            <ChevronDown size={14} color={C.text.secondary} />
-          </TouchableOpacity>
-          {!isCashier && (
-            <TouchableOpacity style={styles.periodBtn} onPress={() => { setShowCashierPicker(!showCashierPicker); setShowPeriodPicker(false); }}>
-              <Filter size={14} color={C.text.secondary} />
-              <Text style={styles.periodText} numberOfLines={1}>{cashierFilter === "all" ? "All Cashiers" : cashierFilter}</Text>
-              <ChevronDown size={14} color={C.text.secondary} />
-            </TouchableOpacity>
-          )}
-        </View>
+        {/* Filters Row — date hidden on stock sub-tab, cashier only on sales/pnl */}
+        {(showDateFilter || showCashierFilter) && (
+          <View style={styles.filterRow}>
+            {showDateFilter && (
+              <TouchableOpacity
+                style={styles.periodBtn}
+                onPress={() => { setShowPeriodPicker(!showPeriodPicker); setShowCashierPicker(false); }}
+              >
+                <Calendar size={14} color={C.text.secondary} />
+                <Text style={styles.periodText}>{period}</Text>
+                <ChevronDown size={14} color={C.text.secondary} />
+              </TouchableOpacity>
+            )}
+            {showCashierFilter && (
+              <TouchableOpacity
+                style={styles.periodBtn}
+                onPress={() => { setShowCashierPicker(!showCashierPicker); setShowPeriodPicker(false); }}
+              >
+                <Filter size={14} color={C.text.secondary} />
+                <Text style={styles.periodText} numberOfLines={1}>
+                  {cashierFilter === "all" ? "All Cashiers" : cashierFilter}
+                </Text>
+                <ChevronDown size={14} color={C.text.secondary} />
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
 
-        {showPeriodPicker && (
+        {showPeriodPicker && showDateFilter && (
           <View style={styles.dropdown}>
             {periods.map((p) => (
               <TouchableOpacity key={p} style={[styles.dropdownItem, period === p && styles.dropdownItemActive]} onPress={() => { setPeriod(p); setShowPeriodPicker(false); }}>
@@ -558,7 +614,7 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
           </View>
         )}
 
-        {period === "Custom" && (
+        {period === "Custom" && showDateFilter && (
           <View style={styles.customDateRow}>
             <TextInput style={styles.dateInput} placeholder="YYYY-MM-DD" placeholderTextColor={C.text.secondary} value={customStart} onChangeText={setCustomStart} />
             <Text style={{ color: C.text.secondary }}>to</Text>
@@ -566,7 +622,7 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
           </View>
         )}
 
-        {showCashierPicker && (
+        {showCashierPicker && showCashierFilter && (
           <View style={styles.dropdown}>
             <TouchableOpacity style={[styles.dropdownItem, cashierFilter === "all" && styles.dropdownItemActive]} onPress={() => { setCashierFilter("all"); setShowCashierPicker(false); }}>
               <Text style={[styles.dropdownText, cashierFilter === "all" && { color: C.amber.primary }]}>All Cashiers</Text>
@@ -613,10 +669,10 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
         {activeTab === "inventory" && (
           <View>
             <View style={styles.subTabRow}>
-              {(["stock", "movements", "purchases"] as const).map((itab) => (
-                <TouchableOpacity 
-                  key={itab} 
-                  style={[styles.subTab, activeInvTab === itab && styles.subTabActive]} 
+              {(["valuation", "movements", "purchases"] as const).map((itab) => (
+                <TouchableOpacity
+                  key={itab}
+                  style={[styles.subTab, activeInvTab === itab && styles.subTabActive]}
                   onPress={() => setActiveInvTab(itab)}
                 >
                   <Text style={[styles.subTabText, activeInvTab === itab && styles.subTabTextActive]}>
@@ -625,7 +681,7 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
                 </TouchableOpacity>
               ))}
             </View>
-            <InventoryContent tab={activeInvTab} companyId={companyId} start={start} end={end} symbol={baseSymbol} />
+            <InventoryContent tab={activeInvTab} companyId={companyId} start={start} end={end} symbol={baseSymbol} onNavigate={onNavigate} />
           </View>
         )}
 
@@ -640,22 +696,22 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
               </View>
             ) : (
               <>
-                <View style={[styles.netProfitCard, { 
+                <View style={[styles.netProfitCard, {
                   backgroundColor: financialData.netProfit >= 0 ? `${C.status.success}12` : `${C.status.error}12`,
                   borderColor: financialData.netProfit >= 0 ? C.status.success : C.status.error
                 }]}>
                   <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                     <View>
                       <Text style={{ color: C.text.secondary, fontSize: 12, fontWeight: "700", textTransform: "uppercase", marginBottom: 6 }}>Net Profit</Text>
-                      <Text style={{ 
-                        color: financialData.netProfit >= 0 ? C.status.success : C.status.error, 
+                      <Text style={{
+                        color: financialData.netProfit >= 0 ? C.status.success : C.status.error,
                         fontSize: 32, fontWeight: "900", letterSpacing: -1
                       }}>
                         {baseSymbol}{Number(financialData.netProfit || 0).toFixed(2)}
                       </Text>
                     </View>
-                    <View style={{ 
-                      width: 54, height: 54, borderRadius: 18, 
+                    <View style={{
+                      width: 54, height: 54, borderRadius: 18,
                       backgroundColor: financialData.netProfit >= 0 ? `${C.status.success}20` : `${C.status.error}20`,
                       alignItems: "center", justifyContent: "center"
                     }}>
@@ -670,19 +726,19 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
                     { label: "Cost of Goods", value: financialData.cogs, color: C.status.error, icon: Package, type: "COGS" },
                     { label: "Total Expenses", value: financialData.expenses, color: C.status.error, icon: Receipt, type: "Expenses" },
                   ].map((row, i) => (
-                    <TouchableOpacity 
-                      key={i} 
-                      style={styles.pnlRow} 
+                    <TouchableOpacity
+                      key={i}
+                      style={styles.pnlRow}
                       onPress={() => {
-                          if (row.type) {
-                              setDrillDownType(row.type as any);
-                              setShowDrillDown(true);
-                          }
+                        if (row.type) {
+                          setDrillDownType(row.type as any);
+                          setShowDrillDown(true);
+                        }
                       }}
                     >
                       <View style={styles.pnlRowLeft}>
-                        <View style={{ 
-                          width: 36, height: 36, borderRadius: 10, 
+                        <View style={{
+                          width: 36, height: 36, borderRadius: 10,
                           backgroundColor: `${row.color === C.text.primary ? C.amber.primary : row.color}15`,
                           alignItems: "center", justifyContent: "center"
                         }}>
@@ -833,7 +889,7 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
                   <X size={20} color={C.text.primary} />
                 </TouchableOpacity>
               </View>
-              
+
               <ScrollView style={styles.modalScroll}>
                 {drillDownType === "Revenue" && (
                   <View style={{ gap: 4 }}>
@@ -887,15 +943,15 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
                   </View>
                 )}
 
-                {(!drillDownType || !financialData?.drillDown || 
+                {(!drillDownType || !financialData?.drillDown ||
                   (drillDownType === "Revenue" && !financialData.drillDown.revenueItems?.length) ||
                   (drillDownType === "COGS" && !financialData.drillDown.cogsItems?.length) ||
                   (drillDownType === "Expenses" && !financialData.drillDown.expenseItems?.length)
                 ) && (
-                  <View style={{ padding: 40, alignItems: "center" }}>
-                    <Text style={{ color: C.text.secondary }}>No details found for this period.</Text>
-                  </View>
-                )}
+                    <View style={{ padding: 40, alignItems: "center" }}>
+                      <Text style={{ color: C.text.secondary }}>No details found for this period.</Text>
+                    </View>
+                  )}
               </ScrollView>
             </View>
           </View>
@@ -921,5 +977,3 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
     </View>
   );
 }
-
-

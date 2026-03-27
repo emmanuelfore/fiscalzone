@@ -28,7 +28,7 @@ import { apiFetch } from "../lib/api";
 
 import { PremiumColors as C } from "./PremiumColors";
 
-type ScreenName = "pos" | "reports" | "profile" | "inventory" | "stockin" | "customers" | "suppliers" | "expenses";
+type ScreenName = "pos" | "reports" | "profile" | "inventory" | "stockin" | "customers" | "suppliers" | "expenses" | "stocktake";
 
 interface AppDrawerProps {
   visible: boolean;

@@ -821,6 +821,46 @@ export const expensesRelations = relations(expenses, ({ one }) => ({
   supplier: one(suppliers, { fields: [expenses.supplierId], references: [suppliers.id] }),
 }));
 
+export const stockTakes = pgTable("stock_takes", {
+  id: serial("id").primaryKey(),
+  companyId: integer("company_id").notNull(),
+  userId: uuid("user_id").notNull(),
+  status: text("status").default("draft").notNull(), // draft, completed, cancelled
+  startDate: timestamp("start_date").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => {
+  return {
+    companyIdIdx: index("stock_takes_company_id_idx").on(table.companyId),
+  };
+});
+
+export const stockTakeItems = pgTable("stock_take_items", {
+  id: serial("id").primaryKey(),
+  stockTakeId: integer("stock_take_id").notNull(),
+  productId: integer("product_id").notNull(),
+  systemCount: decimal("system_count", { precision: 10, scale: 2 }).notNull(),
+  physicalCount: decimal("physical_count", { precision: 10, scale: 2 }),
+  unitCost: decimal("unit_cost", { precision: 10, scale: 2 }),
+  notes: text("notes"),
+}, (table) => {
+  return {
+    stockTakeIdIdx: index("stock_take_items_stock_take_id_idx").on(table.stockTakeId),
+  };
+});
+
+export const stockTakesRelations = relations(stockTakes, ({ one, many }) => ({
+  company: one(companies, { fields: [stockTakes.companyId], references: [companies.id] }),
+  user: one(users, { fields: [stockTakes.userId], references: [users.id] }),
+  items: many(stockTakeItems),
+}));
+
+export const stockTakeItemsRelations = relations(stockTakeItems, ({ one }) => ({
+  stockTake: one(stockTakes, { fields: [stockTakeItems.stockTakeId], references: [stockTakes.id] }),
+  product: one(products, { fields: [stockTakeItems.productId], references: [products.id] }),
+}));
+
 // Zod schemas for new tables
 export const insertSupplierSchema = createInsertSchema(suppliers).omit({ id: true, createdAt: true });
 export type Supplier = typeof suppliers.$inferSelect;
@@ -833,4 +873,12 @@ export type InsertInventoryTransaction = z.infer<typeof insertInventoryTransacti
 export const insertExpenseSchema = createInsertSchema(expenses).omit({ id: true, createdAt: true });
 export type Expense = typeof expenses.$inferSelect;
 export type InsertExpense = z.infer<typeof insertExpenseSchema>;
+
+export const insertStockTakeSchema = createInsertSchema(stockTakes).omit({ id: true, createdAt: true });
+export type StockTake = typeof stockTakes.$inferSelect;
+export type InsertStockTake = z.infer<typeof insertStockTakeSchema>;
+
+export const insertStockTakeItemSchema = createInsertSchema(stockTakeItems).omit({ id: true });
+export type StockTakeItem = typeof stockTakeItems.$inferSelect;
+export type InsertStockTakeItem = z.infer<typeof insertStockTakeItemSchema>;
 

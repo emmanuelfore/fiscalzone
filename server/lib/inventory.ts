@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { inventoryTransactions, products, companies } from "@shared/schema";
+import { inventoryTransactions, products, companies, stockTakes, stockTakeItems } from "@shared/schema";
 import { eq, and, asc, desc, sql } from "drizzle-orm";
 
 export async function calculateCOGS(
@@ -241,4 +241,86 @@ export async function recordBatchStockIn(
                 .where(eq(products.id, item.productId));
         }
     });
+}
+
+export async function processStockTake(stockTakeId: number, companyId: number) {
+    await db.transaction(async (tx) => {
+        // 1. Get stock take and items
+        const [stockTake] = await tx.select().from(stockTakes).where(eq(stockTakes.id, stockTakeId));
+        if (!stockTake) throw new Error("Stock take not found");
+        if (stockTake.status !== "draft") throw new Error("Stock take is not in draft status");
+
+        const items = await tx.select().from(stockTakeItems).where(eq(stockTakeItems.stockTakeId, stockTakeId));
+
+        for (const item of items) {
+            const physical = parseFloat(item.physicalCount?.toString() || "0");
+            const system = parseFloat(item.systemCount?.toString() || "0");
+            const variance = physical - system;
+
+            if (variance === 0) continue;
+
+            const unitCost = parseFloat(item.unitCost?.toString() || "0");
+
+            // 2. Record adjustment transaction
+            await tx.insert(inventoryTransactions).values({
+                companyId,
+                productId: item.productId,
+                type: "ADJUSTMENT",
+                quantity: variance.toString(),
+                unitCost: unitCost.toString(),
+                totalCost: (variance * unitCost).toString(),
+                referenceType: "STOCK_TAKE",
+                referenceId: stockTakeId.toString(),
+                notes: `Stock Take #${stockTakeId} Adjustment`,
+                remainingQuantity: variance > 0 ? variance.toString() : "0", // Gains add to remaining stock
+            });
+
+            // 3. Update product stock level directly to physical count
+            await tx.update(products)
+                .set({ stockLevel: physical.toString() })
+                .where(eq(products.id, item.productId));
+            
+            if (variance < 0) {
+                await reduceStockTx(tx, item.productId, Math.abs(variance), companyId, "FIFO");
+            }
+        }
+
+        // 4. Mark as completed
+        await tx.update(stockTakes)
+            .set({ status: "completed", completedAt: new Date() })
+            .where(eq(stockTakes.id, stockTakeId));
+    });
+}
+
+async function reduceStockTx(
+    tx: any,
+    productId: number,
+    quantity: number,
+    companyId: number,
+    orderMethod: "FIFO" | "LIFO"
+) {
+    const order = orderMethod === "FIFO" ? asc : desc;
+    const batches = await tx
+        .select()
+        .from(inventoryTransactions)
+        .where(
+            and(
+                eq(inventoryTransactions.productId, productId),
+                eq(inventoryTransactions.companyId, companyId),
+                sql`remaining_quantity > 0`
+            )
+        )
+        .orderBy(order(inventoryTransactions.createdAt));
+
+    let remainingToReduce = quantity;
+    for (const batch of batches) {
+        if (remainingToReduce <= 0) break;
+        const available = Number(batch.remainingQuantity);
+        const take = Math.min(available, remainingToReduce);
+        await tx
+            .update(inventoryTransactions)
+            .set({ remainingQuantity: (available - take).toString() })
+            .where(eq(inventoryTransactions.id, batch.id));
+        remainingToReduce -= take;
+    }
 }

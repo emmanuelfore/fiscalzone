@@ -8,6 +8,7 @@ import {
   SafeAreaView,
   ScrollView,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   LayoutDashboard,
   PieChart,
@@ -49,6 +50,7 @@ export function AppDrawer({
   userName,
   userRole,
 }: AppDrawerProps) {
+  const insets = useSafeAreaInsets();
   const [isOnline, setIsOnline] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -150,7 +152,7 @@ export function AppDrawer({
                 })}
               </ScrollView>
 
-              <View style={styles.footer}>
+              <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 24) }]}>
                 <View style={styles.userInfo}>
                   <View style={styles.avatar}>
                     <Text style={styles.avatarText}>

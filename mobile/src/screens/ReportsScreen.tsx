@@ -1078,7 +1078,7 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
           onRequestClose={() => setShowDrillDown(false)}
         >
           <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
+            <View style={[styles.modalContent, { paddingBottom: Math.max(insets.bottom, 24) }]}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>{drillDownType} Details</Text>
                 <TouchableOpacity onPress={() => setShowDrillDown(false)} style={styles.closeBtn}>

@@ -153,7 +153,7 @@ export function StockInScreen({ onOpenDrawer, onClose, companyId }: Props) {
             ) : null}
 
           </ScrollView>
-          <View style={{ paddingHorizontal: 16, paddingBottom: 20, paddingTop: 10, borderTopWidth: 1, borderTopColor: C.border.default }}>
+          <View style={{ paddingHorizontal: 16, paddingBottom: Math.max(insets.bottom, 20), paddingTop: 10, borderTopWidth: 1, borderTopColor: C.border.default }}>
             <TouchableOpacity style={[styles.submitBtn, { marginTop: 0, marginBottom: 0 }]} onPress={handleSubmit} disabled={saving}>
               {saving ? <ActivityIndicator color="#000" /> : (
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -168,7 +168,7 @@ export function StockInScreen({ onOpenDrawer, onClose, companyId }: Props) {
         {/* Product Picker Modal */}
         <Modal visible={showPicker} transparent animationType="slide">
           <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
+            <View style={[styles.modalContent, { paddingBottom: Math.max(insets.bottom, 24) }]}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Select Product</Text>
                 <TouchableOpacity onPress={() => setShowPicker(false)}><X size={20} color={C.text.primary} /></TouchableOpacity>
@@ -210,7 +210,7 @@ export function StockInScreen({ onOpenDrawer, onClose, companyId }: Props) {
         {/* Supplier Picker Modal */}
         <Modal visible={showSupplierPicker} transparent animationType="slide">
           <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
+            <View style={[styles.modalContent, { paddingBottom: Math.max(insets.bottom, 24) }]}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Select Supplier</Text>
                 <TouchableOpacity onPress={() => setShowSupplierPicker(false)}><X size={20} color={C.text.primary} /></TouchableOpacity>

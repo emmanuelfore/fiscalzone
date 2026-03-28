@@ -822,7 +822,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
   });
 
   return (
-    <View style={{ flex: 1, backgroundColor: C.bg.base }}>
+    <View style={{ flex: 1, backgroundColor: C.bg.base, paddingBottom: insets.bottom }}>
       <StatusBar style={isDark ? "light" : "dark"} />
 
       {/* ── HEADER ─────────────────────────────────────────────────────────── */}
@@ -1257,7 +1257,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
       </View>
 
       {/* ── FLOATING CART BAR ──────────────────────────────────────────────── */}
-      <View style={{ paddingHorizontal: 16, paddingBottom: 18, paddingTop: 6 }}>
+      <View style={{ paddingHorizontal: 16, paddingBottom: Math.max(insets.bottom, 18), paddingTop: 6 }}>
 
         {/* Holds pill removed as requested */}
 
@@ -1330,7 +1330,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
           style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "flex-end" }}>
           <View style={{
             backgroundColor: C.bg.card, borderTopLeftRadius: 32, borderTopRightRadius: 32,
-            borderTopWidth: 1, borderColor: C.border.default, padding: 16, paddingBottom: 16, maxHeight: "88%", flex: 1
+            borderTopWidth: 1, borderColor: C.border.default, padding: 16, paddingBottom: Math.max(insets.bottom, 16), maxHeight: "88%", flex: 1
           }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
               <View>
@@ -1563,7 +1563,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
         <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "flex-end" }}>
           <View style={{
             backgroundColor: C.bg.card, borderTopLeftRadius: 32, borderTopRightRadius: 32,
-            borderTopWidth: 1, borderColor: C.border.default, padding: 24, maxHeight: "75%"
+            borderTopWidth: 1, borderColor: C.border.default, padding: 24, paddingBottom: Math.max(insets.bottom, 24), maxHeight: "75%"
           }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <View>
@@ -1639,7 +1639,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
           style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "flex-end" }}>
           <View style={{
             backgroundColor: C.bg.card, borderTopLeftRadius: 32, borderTopRightRadius: 32,
-            borderTopWidth: 1, borderColor: C.border.default, maxHeight: "92%", paddingBottom: 36, flex: 1
+            borderTopWidth: 1, borderColor: C.border.default, maxHeight: "92%", paddingBottom: Math.max(insets.bottom, 36), flex: 1
           }}>
             <View style={{
               flexDirection: "row", justifyContent: "space-between", alignItems: "center",
@@ -1877,7 +1877,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
         <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "flex-end" }}>
           <View style={{
             backgroundColor: C.bg.card, borderTopLeftRadius: 32, borderTopRightRadius: 32,
-            borderTopWidth: 1, borderColor: C.border.default, padding: 24, maxHeight: "70%"
+            borderTopWidth: 1, borderColor: C.border.default, padding: 24, paddingBottom: Math.max(insets.bottom, 24), maxHeight: "70%"
           }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
               <Text style={{ color: C.text.primary, fontSize: 22, fontWeight: "800" }}>Select Customer</Text>
@@ -2012,7 +2012,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
         <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "flex-end" }}>
           <View style={{
             backgroundColor: C.bg.card, borderTopLeftRadius: 32, borderTopRightRadius: 32,
-            borderTopWidth: 1, borderColor: C.border.default, padding: 24, paddingBottom: 36
+            borderTopWidth: 1, borderColor: C.border.default, padding: 24, paddingBottom: Math.max(insets.bottom, 36)
           }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
               <Text style={{ color: C.text.primary, fontSize: 22, fontWeight: "800" }}>
@@ -2170,7 +2170,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
             <View style={{ flex: 1, justifyContent: "flex-end" }}>
               <View style={{
                 backgroundColor: C.bg.card, borderTopLeftRadius: 32, borderTopRightRadius: 32,
-                borderTopWidth: 1, borderColor: C.border.default, padding: 24, paddingBottom: 40
+                borderTopWidth: 1, borderColor: C.border.default, padding: 24, paddingBottom: Math.max(insets.bottom, 40)
               }}>
                 <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
                   <Text style={{ color: C.text.primary, fontSize: 22, fontWeight: "800" }}>

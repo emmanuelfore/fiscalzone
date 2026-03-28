@@ -197,9 +197,9 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
     }
   }, [selectedCurrency]);
 
-  const resolvedProducts: any[] = productsData || [];
-  const resolvedCustomers: any[] = customersData || [];
-  const resolvedCurrencies: any[] = currencies || [];
+  const resolvedProducts: any[] = (productsData || []).filter((p: any) => p && p.isActive !== false);
+  const resolvedCustomers: any[] = (customersData || []).filter((c: any) => c && c.isActive !== false);
+  const resolvedCurrencies: any[] = (currencies || []).filter((c: any) => c && c.isActive !== false);
   const taxInclusive = company?.vatEnabled ?? false;
 
   useEffect(() => {
@@ -822,7 +822,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
   });
 
   return (
-    <View style={{ flex: 1, backgroundColor: C.bg.base, paddingBottom: insets.bottom }}>
+    <View style={{ flex: 1, backgroundColor: C.bg.base }}>
       <StatusBar style={isDark ? "light" : "dark"} />
 
       {/* ── HEADER ─────────────────────────────────────────────────────────── */}
@@ -1257,7 +1257,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
       </View>
 
       {/* ── FLOATING CART BAR ──────────────────────────────────────────────── */}
-      <View style={{ paddingHorizontal: 16, paddingBottom: Math.max(insets.bottom, 18), paddingTop: 6 }}>
+      <View style={{ paddingHorizontal: 16, paddingBottom: 16, paddingTop: 6 }}>
 
         {/* Holds pill removed as requested */}
 
@@ -1396,7 +1396,12 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
                             {fmt(item.price)} each
                           </Text>
                         </View>
-                        {/* We hide the inline trash icon since they can now swipe */}
+                        <TouchableOpacity onPress={() => removeFromCart(item.productId)} style={{
+                          width: 32, height: 32, borderRadius: 10, backgroundColor: "rgba(255,71,87,0.1)",
+                          alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(255,71,87,0.15)"
+                        }}>
+                          <Trash2 size={14} color={C.status.error} />
+                        </TouchableOpacity>
                       </View>
                       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
                         <View style={{
@@ -2318,6 +2323,10 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
           </View>
         </View>
       </Modal>
+      <PrinterSettingsModal
+        visible={showPrinterSettings}
+        onClose={() => setShowPrinterSettings(false)}
+      />
     </View>
   );
 }

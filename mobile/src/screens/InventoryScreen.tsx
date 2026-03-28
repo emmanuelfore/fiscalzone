@@ -42,7 +42,11 @@ export function InventoryScreen({ onOpenDrawer, companyId }: Props) {
     if (!products) return [];
     const q = search.toLowerCase();
     return products.filter((p: any) =>
-      p.name?.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q) || p.category?.toLowerCase().includes(q)
+      (p.isActive !== false) && (
+        p.name?.toLowerCase().includes(q) || 
+        p.sku?.toLowerCase().includes(q) || 
+        p.category?.toLowerCase().includes(q)
+      )
     );
   }, [products, search]);
 

@@ -41,6 +41,7 @@ export function StockTakeScreen({ companyId, onClose }: StockTakeScreenProps) {
     if (!products || !search) return [];
     const s = search.toLowerCase();
     return products.filter(p => 
+      p.isActive !== false && 
       p.isTracked && (
         p.name.toLowerCase().includes(s) || 
         (p.sku && p.sku.toLowerCase().includes(s))

@@ -31,12 +31,14 @@ export function StockInScreen({ onOpenDrawer, onClose, companyId }: Props) {
   const [saving, setSaving] = useState(false);
 
   const filteredSuppliers = (suppliers || []).filter((s: any) => {
+    if (s.isActive === false) return false;
     if (!supplierSearch) return true;
     const searchLower = supplierSearch.toLowerCase();
     return s.name?.toLowerCase().includes(searchLower) || s.email?.toLowerCase().includes(searchLower);
   });
 
   const filteredProducts = (products || []).filter((p: any) => {
+    if (p.isActive === false) return false;
     // Only show products that track stock
     if (!p.isTracked) return false;
     

@@ -31,7 +31,7 @@ export function SuppliersScreen({ onOpenDrawer, companyId }: Props) {
     if (!suppliers) return [];
     const q = search.toLowerCase();
     return suppliers.filter((s: any) =>
-      s.name?.toLowerCase().includes(q) || s.contactPerson?.toLowerCase().includes(q) || s.email?.toLowerCase().includes(q)
+      (s.isActive !== false) && (s.name?.toLowerCase().includes(q) || s.contactPerson?.toLowerCase().includes(q) || s.email?.toLowerCase().includes(q))
     );
   }, [suppliers, search]);
 

@@ -39,7 +39,7 @@ export function CustomersScreen({ onOpenDrawer, companyId }: Props) {
     if (!customers) return [];
     const q = search.toLowerCase();
     return customers.filter((c: any) =>
-      c.name?.toLowerCase().includes(q) || c.email?.toLowerCase().includes(q) || c.phone?.includes(q)
+      (c.isActive !== false) && (c.name?.toLowerCase().includes(q) || c.email?.toLowerCase().includes(q) || c.phone?.includes(q))
     );
   }, [customers, search]);
 

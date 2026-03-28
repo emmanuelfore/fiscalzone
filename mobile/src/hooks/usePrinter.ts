@@ -6,6 +6,7 @@ import { addPrintToQueue, getPrintQueue, removePrintFromQueue, QueuedPrint } fro
 import { Alert } from "react-native";
 
 export interface PrinterConfig {
+  enabled: boolean;
   macAddress: string;
   autoPrint: boolean;
   autoShowModal: boolean;
@@ -16,6 +17,7 @@ export interface PrinterConfig {
 }
 
 const DEFAULT_CONFIG: PrinterConfig = {
+  enabled: true,
   macAddress: "",
   autoPrint: true,
   autoShowModal: true,

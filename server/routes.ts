@@ -19,7 +19,7 @@ import { parse } from "csv-parse/sync";
 import { parseStringPromise } from "xml2js";
 import crypto from "crypto";
 import { logAction } from "./audit.js";
-import { startPosShift, endPosShift, addPosTransaction, getOpenShift, getShiftTransactions } from "./lib/pos.js";
+import { startPosShift, endPosShift, addPosTransaction, getOpenShift, getShiftTransactions, getCompanyPosTransactions } from "./lib/pos.js";
 import { seedCompanyDefaults } from "./lib/seeding.js";
 import { processInvoiceFiscalization, getZimraLogger } from "./lib/fiscalization.js";
 import sageWebhookRouter from "./lib/sage-webhook.js";
@@ -30,8 +30,12 @@ import { eq, and, gte, lte, ne, desc, asc, sql, or, ilike } from "drizzle-orm";
 import { format } from "date-fns";
 import {
   invoices,
+  invoiceItems,
+  validationErrors,
+  payments,
   posShifts,
   posShiftTransactions,
+  posHolds,
   companies,
   customers,
   currencies,
@@ -39,6 +43,8 @@ import {
   inventoryTransactions,
   suppliers,
   expenses,
+  zimraLogs,
+  auditLogs,
   insertQuotationSchema,
   insertQuotationItemSchema,
   insertRecurringInvoiceSchema,
@@ -84,7 +90,8 @@ export async function registerRoutes(
 
   const requireAuth = async (req: any, res: any, next: any) => {
     if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "Unauthorized: Authenticaton required" });
+      console.log(`[AUTH] 401 Unauthorized at ${req.method} ${req.path} - No user in session`);
+      return res.status(401).json({ message: "Unauthorized: Authentication required" });
     }
     next();
   };
@@ -763,6 +770,77 @@ export async function registerRoutes(
     }
   });
 
+  // --- Maintenance / Data Clearing ---
+  app.post("/api/companies/:companyId/maintenance/clear-data", requireOwner, async (req, res) => {
+    const companyId = parseInt(req.params.companyId);
+    if (isNaN(companyId)) return res.status(400).json({ message: "Invalid company ID" });
+
+    try {
+      console.log(`[MAINTENANCE] Clearing all sales and transactions for company ${companyId}...`);
+
+      // ── Step 1: Gather dependent IDs ──
+      const companyInvoices = await db.select({ id: invoices.id }).from(invoices).where(eq(invoices.companyId, companyId));
+      const invoiceIds = companyInvoices.map(inv => inv.id);
+
+      const companyShifts = await db.select({ id: posShifts.id }).from(posShifts).where(eq(posShifts.companyId, companyId));
+      const shiftIds = companyShifts.map(s => s.id);
+
+      // ── Step 2: Delete child/dependent records first (Foreign Key Safety) ──
+      
+      // Delete ZIMRA logs (references invoices)
+      await db.delete(zimraLogs).where(eq(zimraLogs.companyId, companyId));
+      
+      // Delete invoice-linked records
+      if (invoiceIds.length > 0) {
+        await db.delete(validationErrors).where(sql`${validationErrors.invoiceId} IN ${invoiceIds}`);
+        await db.delete(payments).where(sql`${payments.invoiceId} IN ${invoiceIds}`);
+        await db.delete(invoiceItems).where(sql`${invoiceItems.invoiceId} IN ${invoiceIds}`);
+      }
+
+      // Delete POS Shift Transactions
+      if (shiftIds.length > 0) {
+        await db.delete(posShiftTransactions).where(sql`${posShiftTransactions.shiftId} IN ${shiftIds}`);
+      }
+
+      // ── Step 3: Delete parent records ──
+      await db.delete(invoices).where(eq(invoices.companyId, companyId));
+      await db.delete(posShifts).where(eq(posShifts.companyId, companyId));
+      await db.delete(posHolds).where(eq(posHolds.companyId, companyId));
+      await db.delete(inventoryTransactions).where(eq(inventoryTransactions.companyId, companyId));
+      await db.delete(expenses).where(eq(expenses.companyId, companyId));
+      await db.delete(auditLogs).where(eq(auditLogs.companyId, companyId));
+
+      // ── Step 4: Reset stateful fields ──
+      await db.update(products).set({ stockLevel: "0.00" }).where(eq(products.companyId, companyId));
+
+      await db.update(companies).set({
+        lastReceiptGlobalNo: 0,
+        dailyReceiptCount: 0,
+        fiscalDayOpen: false,
+        currentFiscalDayNo: 0,
+        fiscalDayOpenedAt: null,
+        lastReceiptAt: null,
+        lastFiscalHash: null
+      }).where(eq(companies.id, companyId));
+
+      console.log(`[MAINTENANCE] Data cleared successfully for company ${companyId}`);
+      
+      await logAction({
+        companyId,
+        userId: (req.user as any).id,
+        action: "DATA_CLEAR",
+        details: { message: "Owner cleared all sales and transaction data" },
+        ipAddress: req.ip
+      });
+
+      res.json({ message: "All sales and transaction data have been cleared successfully." });
+    } catch (error: any) {
+      console.error("[MAINTENANCE] Error clearing data:", error);
+      res.status(500).json({ message: "Failed to clear data: " + error.message });
+    }
+  });
+
+
   // Export Customers
   app.get("/api/export/customers", requireAuth, async (req, res) => {
     try {
@@ -1412,7 +1490,14 @@ export async function registerRoutes(
       const totalPayouts = transactions.filter(t => t.type === 'PAYOUT').reduce((sum, t) => sum + Number(t.amount), 0);
       const totalDrops = transactions.filter(t => t.type === 'DROP').reduce((sum, t) => sum + Number(t.amount), 0);
       
-      const expectedCash = Number(shift.openingBalance) + totalSales - totalPayouts + totalDrops;
+      const expectedCash = Number(shift.openingBalance) + totalSales - totalPayouts - totalDrops;
+
+      // Find cash since last transaction (Collection or Payout)
+      const lastTx = transactions[0];
+      const lastTxTime = lastTx ? new Date(lastTx.createdAt!) : new Date(shift.startTime!);
+      const cashSinceLastTx = shiftInvoices
+        .filter(inv => new Date(inv.issueDate) > lastTxTime)
+        .reduce((sum, inv) => sum + Number(inv.total), 0);
 
       const company = await storage.getCompany(shift.companyId);
       const companyBaseCurrency = await db.query.currencies.findFirst({
@@ -1424,6 +1509,8 @@ export async function registerRoutes(
         totalPayouts: totalPayouts.toFixed(2),
         totalDrops: totalDrops.toFixed(2),
         expectedCash: expectedCash.toFixed(2),
+        cashSinceLastTx: cashSinceLastTx.toFixed(2),
+        lastTxTime: lastTx ? lastTx.createdAt : null,
         openingBalance: Number(shift.openingBalance).toFixed(2),
         currency: shiftInvoices[0]?.currency || companyBaseCurrency?.code || "USD" 
       });
@@ -2637,6 +2724,8 @@ export async function registerRoutes(
         grandTotal += Number(s.total || 0);
       }
 
+      const todayPosTransactions = await getCompanyPosTransactions(companyId, todayStart, todayEnd);
+
       const posSummary = {
         totalTransactions: todaySales.length,
         grandTotal: Math.round(grandTotal * 100) / 100,
@@ -2644,7 +2733,8 @@ export async function registerRoutes(
           method,
           count: v.count,
           total: Math.round(v.total * 100) / 100
-        }))
+        })),
+        posTransactions: todayPosTransactions
       };
 
       // If fiscal day is open, also include fiscal counters / doc stats
@@ -4748,22 +4838,145 @@ export async function registerRoutes(
         .from(products)
         .where(and(
           eq(products.companyId, companyId),
-          eq(products.isTracked, true),
+          ne(products.isActive, false)
         ));
 
-      const result = rows.map(p => ({
-        productId: p.productId,
-        name: p.name,
-        sku: p.sku,
-        stockLevel: p.stockLevel || "0",
-        unitCost: p.unitCost || "0",
-        totalValuation: Number(p.stockLevel || 0) * Number(p.unitCost || 0),
-        category: (p as any).category || null,
-      }));
-
-      res.json(result);
+      res.json(rows);
     } catch (err: any) {
       console.error("Stock Valuation Error:", err);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Sales ABC Analysis Report
+  app.get("/api/companies/:companyId/reports/abc-analysis", requireAuth, async (req, res) => {
+    try {
+      const companyId = Number(req.params.companyId);
+      const { from, to } = req.query;
+
+      const startDate = from ? new Date(from as string) : new Date(new Date().setDate(new Date().getDate() - 30)); // Default 30 days
+      const endDate = to ? new Date(to as string) : new Date();
+      endDate.setHours(23, 59, 59, 999);
+
+      const { invoiceItems: invoiceItemsTable } = await import("@shared/schema");
+
+      // 1. Get revenue grouped by product
+      const productRevenue = await db
+        .select({
+          productId: invoiceItemsTable.productId,
+          name: sql<string>`max(${invoiceItemsTable.description})`,
+          sku: sql<string>`max(${products.sku})`,
+          revenue: sql<number>`coalesce(sum(${invoiceItemsTable.lineTotal}), 0)`
+        })
+        .from(invoiceItemsTable)
+        .innerJoin(invoices, eq(invoiceItemsTable.invoiceId, invoices.id))
+        .leftJoin(products, eq(invoiceItemsTable.productId, products.id))
+        .where(and(
+          eq(invoices.companyId, companyId),
+          gte(invoices.issueDate, startDate),
+          lte(invoices.issueDate, endDate),
+          ne(invoices.status, 'draft'),
+          ne(invoices.status, 'cancelled'),
+          ne(invoices.status, 'quote'),
+        ))
+        .groupBy(invoiceItemsTable.productId)
+        .orderBy(sql`revenue desc`);
+
+      const totalRevenue = productRevenue.reduce((sum, p) => sum + Number(p.revenue), 0);
+      
+      console.log(`ABC Debug [${companyId}]: Found ${productRevenue.length} products with revenue in range ${startDate.toISOString()} to ${endDate.toISOString()}. Total Rev: ${totalRevenue}`);
+
+      if (totalRevenue === 0) {
+        return res.json([]);
+      }
+
+      // 2. Calculate categories
+      let cumulativeRevenue = 0;
+      const results = productRevenue.map((p) => {
+        const revenue = Number(p.revenue);
+        cumulativeRevenue += revenue;
+        const cumulativeShare = (cumulativeRevenue / totalRevenue) * 100;
+        const share = (revenue / totalRevenue) * 100;
+
+        let category: "A" | "B" | "C" = "C";
+        if (cumulativeShare <= 80) {
+          category = "A";
+        } else if (cumulativeShare <= 95) {
+          category = "B";
+        }
+
+        return {
+          productId: p.productId,
+          name: p.name || "Unknown Product",
+          sku: p.sku || "N/A",
+          revenue,
+          share,
+          cumulativeShare,
+          category,
+        };
+      });
+
+      res.json(results);
+    } catch (err: any) {
+      console.error("ABC Analysis Error:", err);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Cash Collections Report
+  app.get("/api/companies/:companyId/reports/cash-collections", requireAuth, async (req, res) => {
+    try {
+      const companyId = Number(req.params.companyId);
+      const { from, to } = req.query;
+
+      const startDate = from ? new Date(from as string) : new Date(0);
+      const endDate = to ? new Date(to as string) : new Date();
+      endDate.setHours(23, 59, 59, 999);
+
+      // Check role
+      const role = await storage.getCompanyUserRole(req.user.id, companyId);
+      const isOwner = role === 'owner' || role === 'admin';
+
+      const conditions = [
+        eq(posShiftTransactions.type, 'DROP'),
+        eq(posShifts.companyId, companyId),
+        gte(posShiftTransactions.createdAt, startDate),
+        lte(posShiftTransactions.createdAt, endDate)
+      ];
+
+      if (!isOwner) {
+        conditions.push(eq(posShiftTransactions.createdBy, req.user.id));
+      }
+
+      const rows = await db
+        .select({
+          id: posShiftTransactions.id,
+          amount: posShiftTransactions.amount,
+          reason: posShiftTransactions.reason,
+          createdAt: posShiftTransactions.createdAt,
+          cashierName: users.name,
+          shiftId: posShiftTransactions.shiftId
+        })
+        .from(posShiftTransactions)
+        .innerJoin(posShifts, eq(posShiftTransactions.shiftId, posShifts.id))
+        .innerJoin(users, eq(posShiftTransactions.createdBy, users.id))
+        .where(and(...conditions))
+        .orderBy(desc(posShiftTransactions.createdAt));
+
+      res.json(rows);
+    } catch (err: any) {
+      console.error("Cash Collections Report Error:", err);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Role check route
+  app.get("/api/companies/:companyId/my-role", requireAuth, async (req, res) => {
+    try {
+      const companyId = Number(req.params.companyId);
+      const role = await storage.getCompanyUserRole(req.user.id, companyId);
+      res.json({ role: role || 'member' });
+    } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
   });
@@ -5502,14 +5715,26 @@ export async function registerRoutes(
 
 
 
-  // POS Transaction Routes
+  // Reconcile / Close POS Shift
+  app.post("/api/pos/shifts/:id/close", requireAuth, async (req, res) => {
+    try {
+      const shiftId = Number(req.params.id);
+      const { actualCash, notes, reconciledBy } = req.body;
+      const shift = await endPosShift(shiftId, Number(actualCash), notes, reconciledBy);
+      res.json(shift);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Reconcile POS Shift
   app.post("/api/pos/shifts/:id/transaction", requireAuth, async (req, res) => {
     try {
       const shiftId = Number(req.params.id);
-      const { type, amount, reason, items } = req.body;
+      const { type, amount, reason, items, authorizedBy } = req.body;
       const userId = (req.user as any).id;
 
-      const transaction = await addPosTransaction(shiftId, userId, type, amount, reason, items);
+      const transaction = await addPosTransaction(shiftId, userId, type, amount, reason, items, authorizedBy);
       res.json(transaction);
     } catch (err: any) {
       console.error("POS Transaction Error:", err);

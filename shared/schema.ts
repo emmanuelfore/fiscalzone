@@ -448,7 +448,7 @@ export type CreateInvoiceRequest = InsertInvoice & {
   items: InsertInvoiceItem[];
 };
 
-export const insertCurrencySchema = createInsertSchema(currencies).omit({ id: true, companyId: true, lastUpdated: true });
+export const insertCurrencySchema = createInsertSchema(currencies).omit({ id: true });
 export type InsertCurrency = z.infer<typeof insertCurrencySchema>;
 export type Currency = typeof currencies.$inferSelect;
 
@@ -490,7 +490,7 @@ export const invoicesRelations = relations(invoices, ({ one, many }) => ({
 }));
 
 
-export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, companyId: true, createdAt: true });
+export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, companyId: true, createdAt: true, createdBy: true });
 export type InsertPayment = z.infer<typeof insertPaymentSchema>;
 export type Payment = typeof payments.$inferSelect;
 
@@ -722,12 +722,14 @@ export const posShiftTransactions = pgTable("pos_shift_transactions", {
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   reason: text("reason"),
   userId: uuid("user_id").references(() => users.id).notNull(),
+  authorizedBy: uuid("authorized_by").references(() => users.id), // Supervisor who verified
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const posShiftTransactionsRelations = relations(posShiftTransactions, ({ one }) => ({
   shift: one(posShifts, { fields: [posShiftTransactions.shiftId], references: [posShifts.id] }),
   user: one(users, { fields: [posShiftTransactions.userId], references: [users.id] }),
+  authorizer: one(users, { fields: [posShiftTransactions.authorizedBy], references: [users.id] }),
 }));
 
 export const insertPosShiftTransactionSchema = createInsertSchema(posShiftTransactions).omit({ id: true, createdAt: true });

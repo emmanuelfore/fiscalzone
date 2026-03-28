@@ -22,7 +22,7 @@ import {
     addPendingSale,
 } from "@/lib/offline-db";
 import { useState, useMemo, useEffect, useRef } from "react";
-import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, UserPlus, Loader2, Package, Tag, Pause, Play, History, Calculator, Printer, CheckCircle2, XCircle, ChevronRight, Fullscreen, HelpCircle, User, Settings as SettingsIcon, LogOut, FileText, Receipt, Clock, LayoutGrid, ShoppingBag, Filter, WifiOff, Wifi, CloudUpload, AlertTriangle, Pin } from "lucide-react";
+import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, UserPlus, Loader2, Package, Tag, Pause, Play, History, Calculator, Printer, CheckCircle2, XCircle, ChevronRight, Fullscreen, HelpCircle, User, Settings as SettingsIcon, LogOut, FileText, Receipt, Clock, LayoutGrid, ShoppingBag, Filter, WifiOff, Wifi, CloudUpload, AlertTriangle, Pin, Download } from "lucide-react";
 import { RefreshCw } from "lucide-react";
 import { POSReceipt } from "@/components/pos-receipt";
 import { Receipt48 } from "@/components/pos/receipt-48";
@@ -35,6 +35,8 @@ import { DialogDescription } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { MySalesModal } from "@/components/pos/my-sales-modal";
+import { PDFDownloadLink } from "@react-pdf/renderer";
+import { ZReportPDF } from "@/components/invoices/z-report-pdf";
 
 interface CartItem {
     productId: number;
@@ -143,6 +145,36 @@ export default function POSPage() {
     const resolvedCompany = company ?? cachedCompanyFallback;
     const { toast } = useToast();
 
+    // Customer Creation State
+    const createCustomer = useCreateCustomer(companyId);
+    const [isQuickAddCustomerOpen, setIsQuickAddCustomerOpen] = useState(false);
+    const [newCustomer, setNewCustomer] = useState({ name: "", phone: "", email: "", tin: "" });
+    const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
+
+    const handleQuickAddCustomer = async () => {
+        if (!newCustomer.name) return toast({ title: "Name required", variant: "destructive" });
+        setIsCreatingCustomer(true);
+        try {
+            const result = await createCustomer.mutateAsync({
+                name: newCustomer.name,
+                phone: newCustomer.phone,
+                email: newCustomer.email,
+                tin: newCustomer.tin,
+                isActive: true,
+                customerType: "individual",
+                currency: "USD"
+            });
+            setSelectedCustomerId(result.id.toString());
+            setIsQuickAddCustomerOpen(false);
+            setNewCustomer({ name: "", phone: "", email: "", tin: "" });
+            toast({ title: "Customer Added", description: `${result.name} is now selected.` });
+        } catch (err: any) {
+            toast({ title: "Error", description: err.message, variant: "destructive" });
+        } finally {
+            setIsCreatingCustomer(false);
+        }
+    };
+
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedCategory, setSelectedCategory] = useState<string>("All");
     const [cart, setCart] = useState<CartItem[]>([]);
@@ -234,6 +266,7 @@ export default function POSPage() {
         terminalId: localStorage.getItem("pos_terminal_id") || "POS-T01",
         silentPrinting: localStorage.getItem("pos_silent_printing") !== "false",
         printerName: localStorage.getItem("pos_printer_name") || "",
+        secondaryPrinterName: localStorage.getItem("pos_secondary_printer_name") || "",
         paperSize: localStorage.getItem("pos_paper_size") || "",
         printServerUrl: localStorage.getItem("pos_print_server") || "http://localhost:3001",
         cashDrawerEnabled: localStorage.getItem("pos_cash_drawer") === "true",
@@ -573,7 +606,7 @@ export default function POSPage() {
                         const quantity = qtyRaw / (matchedRule.quantityDivisor || 1000);
 
                         const weightedFound = resolvedProductsRef.current?.find(
-                            (p: any) => p.sku === productSku || p.barcode === barcode
+                            (p: any) => p.sku === productSku || p.barcode === productSku || p.barcode === barcode
                         );
                         if (weightedFound) {
                             addWeightedToCart(weightedFound, quantity);
@@ -611,7 +644,7 @@ export default function POSPage() {
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [resolvedProducts, cart, isCheckoutOpen, isShiftModalOpen, isHoldsModalOpen, isSettingsOpen, pendingOverride, searchQuery]);
+    }, [resolvedProducts, cart, isCheckoutOpen, isShiftModalOpen, isHoldsModalOpen, isSettingsOpen, pendingOverride, searchQuery, isQuickAddCustomerOpen]);
 
     // ─── Electron serial/USB barcode scanner ──────────────────────────────
     useEffect(() => {
@@ -631,7 +664,7 @@ export default function POSPage() {
                 const qtyRaw = parseInt(trimmed.substring(matchedRuleE.quantityStart, matchedRuleE.quantityStart + matchedRuleE.quantityLength));
                 const quantity = qtyRaw / (matchedRuleE.quantityDivisor || 1000);
 
-                const weightedFound = resolvedProductsRef.current?.find((p: any) => p.sku === productSku || p.barcode === trimmed);
+                const weightedFound = resolvedProductsRef.current?.find((p: any) => p.sku === productSku || p.barcode === productSku || p.barcode === trimmed);
                 if (weightedFound) {
                     addWeightedToCart(weightedFound, quantity);
                     const uomE = (weightedFound as any).unitOfMeasure || (matchedRuleE.quantityDivisor === 1000 ? 'kg' : 'units');
@@ -839,12 +872,16 @@ export default function POSPage() {
                     body: JSON.stringify({ closingBalance: shiftBalance || "0" })
                 });
                 if (res.ok) {
-                    toast({ title: "Shift Closed", description: "Z-Report generated successfully" });
+                    toast({ title: "Session Closed", description: "Z-Report generated successfully" });
+                    const shiftId = currentShift.id;
                     setCurrentShift(null);
                     await cacheShift(companyId, null);
                     setIsShiftModalOpen(false);
                     setShiftBalance("");
                     fetchShift();
+                    
+                    // Automatically show the Z-report
+                    handleLoadReport('z');
                     return;
                 }
             } else {
@@ -855,7 +892,7 @@ export default function POSPage() {
                 });
                 setCurrentShift(null);
                 await cacheShift(companyId, null);
-                toast({ title: "Shift Closed (Offline)", description: "Closing queued. Reconciliation will sync later." });
+                toast({ title: "Session Closed (Offline)", description: "Closing queued. Reconciliation will sync later." });
                 setIsShiftModalOpen(false);
                 setShiftBalance("");
                 return;
@@ -868,7 +905,7 @@ export default function POSPage() {
                 });
                 setCurrentShift(null);
                 await cacheShift(companyId, null);
-                toast({ title: "Shift Closed (Offline)", description: "Connection lost. Closing queued." });
+                toast({ title: "Session Closed (Offline)", description: "Connection lost. Closing queued." });
                 setIsShiftModalOpen(false);
                 setShiftBalance("");
                 return;
@@ -1229,10 +1266,15 @@ export default function POSPage() {
         const fetchPrinters = async () => {
             if (!isSettingsOpen) return;
             try {
-                const response = await fetch(`${posSettings.printServerUrl}/printers`);
-                if (response.ok) {
-                    const data = await response.json();
+                if (window.electronAPI) {
+                    const data = await window.electronAPI.getPrinters();
                     setAvailablePrinters(Array.isArray(data) ? data : []);
+                } else {
+                    const response = await fetch(`${posSettings.printServerUrl}/printers`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        setAvailablePrinters(Array.isArray(data) ? data : []);
+                    }
                 }
             } catch (error) {
                 console.error("Failed to fetch printers:", error);
@@ -1247,6 +1289,12 @@ export default function POSPage() {
             localStorage.setItem("pos_printer_name", posSettings.printerName);
         } else {
             localStorage.removeItem("pos_printer_name");
+        }
+
+        if (posSettings.secondaryPrinterName) {
+            localStorage.setItem("pos_secondary_printer_name", posSettings.secondaryPrinterName);
+        } else {
+            localStorage.removeItem("pos_secondary_printer_name");
         }
 
         if (posSettings.paperSize) {
@@ -1299,34 +1347,42 @@ export default function POSPage() {
             const receiptHtml = receiptElement.outerHTML;
             const html = `<!DOCTYPE html><html><head><meta charset="utf-8">${styles}</head><body class="bg-white p-0 m-0" style="margin:0;padding:0;">${receiptHtml}</body></html>`;
 
-            if (window.electronAPI) {
-                await window.electronAPI.printReceipt(html, posSettings.printerName || undefined);
-            } else {
-                // Wrap in a basic document with styling if needed, but receipt-48 already has <style>
-                const printController = new AbortController();
-                const printTimeout = setTimeout(() => printController.abort(), 60000);
+            const printersToPrint = [posSettings.printerName];
+            if (posSettings.secondaryPrinterName) {
+                printersToPrint.push(posSettings.secondaryPrinterName);
+            }
 
-                try {
-                    const response = await fetch(`${posSettings.printServerUrl}/print`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            html,
-                            printerName: posSettings.printerName || undefined
-                        }),
-                        signal: printController.signal
-                    });
+            for (const pName of printersToPrint) {
+                const targetPrinter = pName || undefined;
 
-                    if (!response.ok) {
-                        const err = await response.json();
-                        throw new Error(err.error || "Failed to send print job");
+                if (window.electronAPI) {
+                    await window.electronAPI.printReceipt(html, targetPrinter);
+                } else {
+                    const printController = new AbortController();
+                    const printTimeout = setTimeout(() => printController.abort(), 60000);
+
+                    try {
+                        const response = await fetch(`${posSettings.printServerUrl}/print`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                html,
+                                printerName: targetPrinter
+                            }),
+                            signal: printController.signal
+                        });
+
+                        if (!response.ok) {
+                            const err = await response.json();
+                            throw new Error(err.error || "Failed to send print job");
+                        }
+                    } finally {
+                        clearTimeout(printTimeout);
                     }
-                } finally {
-                    clearTimeout(printTimeout);
                 }
             }
 
-            toast({ title: "Sent to Printer", description: "Silent print job sent successfully." });
+            toast({ title: "Sent to Printer(s)", description: `Print job sent to ${printersToPrint.filter(Boolean).length || 1} printer(s).` });
         } catch (error: any) {
             console.error("Silent Print Error:", error);
             toast({
@@ -1539,7 +1595,6 @@ export default function POSPage() {
         }
         setPendingOverride(null);
     };
-
 
     // Tactile Numpad Component
     function Numpad({ value, onChange, onEnter }: { value: string, onChange: (val: string) => void, onEnter?: () => void }) {
@@ -1835,8 +1890,8 @@ export default function POSPage() {
                 )}
 
                 {/* High-End Command Center Header */}
-                <div className="bg-white border-b border-slate-200/60 px-3 md:px-6 py-4 md:py-4 pt-10 md:pt-4 shrink-0 backdrop-blur-md sticky top-0 z-30 shadow-sm">
-                    <div className="flex flex-col md:flex-row gap-2 md:gap-6 items-stretch md:items-center">
+                <div className="bg-white/80 border-b border-slate-200/40 px-3 md:px-6 py-1.5 md:py-2 pt-10 md:pt-2 shrink-0 backdrop-blur-xl sticky top-0 z-30 shadow-[0_1px_3px_0_rgba(0,0,0,0.02)] transition-all overflow-hidden">
+                    <div className="flex flex-col md:flex-row gap-1 md:gap-4 items-stretch md:items-center max-w-full overflow-hidden">
                         <div className="flex gap-2 items-center">
                             {/* Brand & Context - Hyper Compact on Mobile */}
                             <div className="flex items-center justify-between md:justify-start gap-2 md:gap-4 shrink-0 flex-1 md:flex-none">
@@ -1845,14 +1900,15 @@ export default function POSPage() {
                                         <Package className="h-4 w-4 md:h-5 md:w-5 text-white" />
                                     </div>
                                     <div className="flex flex-col">
-                                        <h1 className="text-xs md:text-sm font-black text-slate-900 leading-none truncate max-w-[80px] md:max-w-[120px] lg:max-w-[160px]">{resolvedCompany?.name || "Premium POS"}</h1>
+                                        <h1 className="text-xs md:text-sm font-black text-slate-900 leading-none truncate max-w-[80px] md:max-w-[120px] lg:max-w-[160px]">
+                                            {(resolvedCompany?.name || "Premium POS").split(' ').slice(0, 2).join(' ')}
+                                        </h1>
                                         <div className="flex items-center gap-1.5 mt-0.5 md:mt-1">
-                                            <p className="text-[8px] md:text-[10px] uppercase tracking-[0.2em] text-primary font-black hidden md:block">Elite Terminal</p>
                                             <div className={cn(
-                                                "flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[8px] md:text-[9px] font-black uppercase tracking-wider",
+                                                "flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[7px] md:text-[8px] font-black uppercase tracking-wider border transition-all",
                                                 isOnline
-                                                    ? "bg-emerald-100 text-emerald-700"
-                                                    : "bg-amber-100 text-amber-700"
+                                                    ? "bg-emerald-50 text-emerald-600 border-emerald-100/50 shadow-[0_0_10px_rgba(16,185,129,0.1)]"
+                                                    : "bg-amber-50 text-amber-600 border-amber-100/50"
                                             )}>
                                                 <div className={cn(
                                                     "w-1.5 h-1.5 rounded-full",
@@ -1893,7 +1949,16 @@ export default function POSPage() {
                                                     <span>Select Walk-in / Cash</span>
                                                 </Button>
                                                 <div className="space-y-2">
-                                                    <Label>Search Customer</Label>
+                                                    <div className="flex items-center justify-between">
+                                                        <Label>Search Customer</Label>
+                                                        <Button
+                                                            variant="link"
+                                                            className="h-auto p-0 text-primary text-[10px] font-black uppercase"
+                                                            onClick={() => setIsQuickAddCustomerOpen(true)}
+                                                        >
+                                                            + Quick Add
+                                                        </Button>
+                                                    </div>
                                                     <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId}>
                                                         <SelectTrigger className="h-12">
                                                             <SelectValue placeholder="Select Customer" />
@@ -1920,16 +1985,17 @@ export default function POSPage() {
                                 )}
                             </div>
 
-                            {/* Open Drawer Button (Visible next to logo) */}
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-8 md:h-10 px-2 md:px-4 rounded-lg md:rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50 transition-all font-bold text-[10px] md:text-xs gap-1.5"
-                                onClick={handleOpenDrawer}
-                            >
-                                <Banknote className="h-3.5 w-3.5 md:h-4 md:w-4" />
-                                <span className="hidden md:inline">Open Drawer</span>
-                            </Button>
+                            {/* Open Drawer Button (Visible next to logo) - Commented out for now
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 px-2 min-[1232px]:px-3 rounded-lg border border-slate-200/50 text-slate-600 hover:bg-white hover:shadow-sm hover:border-slate-300 transition-all font-black text-[10px] gap-1.5 bg-slate-50/30 group"
+                                    onClick={handleOpenDrawer}
+                                >
+                                    <Banknote className="h-3.5 w-3.5 text-emerald-500 group-hover:scale-110 transition-transform" />
+                                    <span className="hidden min-[1232px]:inline tracking-tight">Open Drawer</span>
+                                </Button>
+                            */}
                             {/* Mobile Holds Button (Visible next to logo) */}
                             <Button
                                 variant="outline"
@@ -2052,8 +2118,8 @@ export default function POSPage() {
                                 <Input
                                     autoFocus
                                     ref={searchInputRef}
-                                    placeholder="Search products... (F1)"
-                                    className="pl-10 md:pl-12 h-10 md:h-14 w-full bg-slate-50 border-none rounded-xl md:rounded-2xl text-xs md:text-sm font-bold text-slate-800 focus:bg-white focus:ring-4 focus:ring-primary/5 transition-all shadow-inner"
+                                    placeholder="Search... (F1)"
+                                    className="pl-9 md:pl-10 h-9 md:h-11 w-full bg-slate-100/40 border-none rounded-xl text-xs md:text-sm font-bold text-slate-800 focus:bg-white focus:ring-4 focus:ring-primary/10 transition-all shadow-inner placeholder:text-slate-400"
                                     value={searchQuery}
                                     onKeyDown={(e) => {
                                         if (e.key !== 'Enter') return;
@@ -2071,7 +2137,7 @@ export default function POSPage() {
                                             const qtyRaw = parseInt(query.substring(matchedRule.quantityStart, matchedRule.quantityStart + matchedRule.quantityLength));
                                             const quantity = qtyRaw / (matchedRule.quantityDivisor || 1000);
                                             const allProducts: any[] = resolvedProductsRef.current.length > 0 ? resolvedProductsRef.current : (resolvedProducts || []);
-                                            const weightedFound = allProducts.find((p: any) => p.sku === productSku || p.barcode === query);
+                                            const weightedFound = allProducts.find((p: any) => p.sku === productSku || p.barcode === productSku || p.barcode === query);
                                             if (weightedFound) {
                                                 addWeightedToCart(weightedFound, quantity);
                                                 setSearchQuery("");
@@ -2105,18 +2171,21 @@ export default function POSPage() {
                                     }}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                 />
+                                <div className="absolute right-3 hidden md:flex items-center gap-1 text-[10px] font-bold text-slate-300 pointer-events-none">
+                                    <kbd className="px-1.5 py-0.5 bg-white rounded border border-slate-100">enter</kbd>
+                                </div>
                             </div>
 
-                            {/* Global Currency Switcher */}
-                            <div className="flex bg-slate-100 p-1 rounded-xl shrink-0">
+                             {/* Global Currency Switcher - Hyper Compact */}
+                            <div className="flex bg-slate-100/60 p-0.5 rounded-lg shrink-0 border border-slate-200/30">
                                 {['USD', 'ZWG'].map(cc => (
                                     <button
                                         key={cc}
                                         onClick={() => setSelectedCurrencyCode(cc)}
                                         className={cn(
-                                            "px-3 py-1.5 rounded-lg text-[10px] font-black transition-all",
+                                            "px-2 py-1 rounded-md text-[9px] font-black transition-all",
                                             selectedCurrencyCode === cc
-                                                ? "bg-white text-primary shadow-sm"
+                                                ? "bg-white text-primary shadow-sm border border-slate-100"
                                                 : "text-slate-400 hover:text-slate-600"
                                         )}
                                     >
@@ -2175,9 +2244,9 @@ export default function POSPage() {
                         </div>
 
                         {/* Integrated Controls & Profile - Compacted to prevent scrolling */}
-                        <div className="hidden md:flex items-center gap-1 lg:gap-2 pb-1 md:pb-0 shrink-0">
+                        <div className="flex items-center gap-1 shrink-0">
                             {/* Customer Selector - Premium */}
-                            <div className="flex items-center gap-1 bg-slate-100/50 p-1 rounded-lg border border-slate-200/50 shrink-0">
+                            <div className="flex items-center gap-0.5 bg-slate-100/40 p-0.5 rounded-lg border border-slate-200/20 shrink-0">
                                 <Button
                                     variant="ghost"
                                     size="sm"
@@ -2187,14 +2256,23 @@ export default function POSPage() {
                                         if (walkIn) setSelectedCustomerId(walkIn.id.toString());
                                         else toast({ title: "No Walk-in Customer", description: "Create 'Walk-in' first." });
                                     }}
+                                    title="Select Walk-in"
                                 >
                                     <UserPlus className="h-4 w-4" />
                                 </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 w-8 rounded-md bg-white shadow-sm border border-slate-200 text-slate-600 hover:text-emerald-600 hover:bg-white p-0"
+                                    onClick={() => setIsQuickAddCustomerOpen(true)}
+                                    title="Add New Customer"
+                                >
+                                    <Plus className="h-4 w-4" />
+                                </Button>
                                 <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId}>
-                                    <SelectTrigger className="w-24 lg:w-32 h-8 border-none bg-transparent hover:bg-slate-200/30 transition-all font-bold text-slate-700 px-2">
-                                        <div className="flex items-center gap-1.5 truncate">
-                                            <User className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                                            <SelectValue placeholder="Customer" />
+                                    <SelectTrigger className="w-9 h-8 border-none bg-transparent hover:bg-slate-200/30 transition-all font-bold text-slate-700 px-1" title="Select Customer">
+                                        <div className="flex items-center justify-center shrink-0">
+                                            <User className="h-4 w-4 text-slate-500 md:text-slate-400 shrink-0" />
                                         </div>
                                     </SelectTrigger>
                                     <SelectContent className="rounded-xl border-slate-200 shadow-2xl">
@@ -2213,34 +2291,34 @@ export default function POSPage() {
                             <div className="flex items-center gap-1">
                                 <Button
                                     variant="outline"
-                                    className="h-9 px-2 lg:px-3 gap-1.5 border-slate-200 rounded-lg hover:bg-slate-50 transition-all font-bold group"
+                                    className="h-8 px-2 min-[1232px]:px-3 gap-1 min-[1232px]:gap-1.5 border-slate-200/40 rounded-lg hover:bg-slate-50 transition-all font-bold group bg-white/50"
                                     onClick={() => setIsHoldsModalOpen(true)}
                                 >
                                     <div className="relative">
-                                        <History className="h-4 w-4 text-slate-500 group-hover:rotate-[-45deg] transition-transform" />
+                                        <History className="h-3.5 w-3.5 text-slate-500 group-hover:rotate-[-45deg] transition-transform" />
                                         {heldSales.length > 0 && (
-                                            <span className="absolute -top-1 -right-1 h-2.5 w-2.5 bg-primary rounded-full ring-2 ring-white" />
+                                            <span className="absolute -top-1 -right-1 h-2 w-2 bg-primary rounded-full ring-2 ring-white" />
                                         )}
                                     </div>
-                                    <span className="text-slate-600 hidden lg:inline">Holds</span>
-                                    <Badge variant="secondary" className="lg:ml-1 h-4 bg-slate-100 text-slate-500 border-none px-1 font-black text-[9px]">
+                                    <span className="text-slate-600 text-[10px] hidden min-[1232px]:inline">Holds</span>
+                                    <Badge variant="secondary" className="h-4 bg-slate-100/80 text-slate-500 border-none px-1 font-black text-[9px]">
                                         {heldSales.length}
                                     </Badge>
                                 </Button>
 
                                 <div className={cn(
-                                    "flex items-center gap-1.5 px-2 h-9 rounded-lg border text-[10px] lg:text-xs font-black shrink-0 shadow-sm",
-                                    currentShift ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-red-50 text-red-700 border-red-100"
+                                    "flex items-center gap-1 px-1.5 h-8 rounded-lg border text-[9px] min-[1232px]:text-[10px] font-black shrink-0 transition-colors",
+                                    currentShift ? "bg-emerald-50/50 text-emerald-600 border-emerald-100/30" : "bg-red-50/50 text-red-600 border-red-100/30"
                                 )}>
                                     <div className="relative">
                                         <div className={cn("w-3 h-3 rounded-full", currentShift ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-red-500")} />
                                         {currentShift && <div className="absolute inset-0 rounded-full bg-emerald-500 animate-ping opacity-30" />}
                                     </div>
-                                    <div className="flex flex-col leading-tight">
+                                    <div className="flex flex-col leading-tight hidden min-[1232px]:flex">
                                         <span className="text-[9px] uppercase tracking-widest text-slate-400">
-                                            {user?.name || "Cashier"}
+                                            {(user?.name || "Cashier").split(' ').slice(0, 2).join(' ')}
                                         </span>
-                                        <span>{currentShift ? "SHIFT ACTIVE" : "NO SHIFT"}</span>
+                                        <span className="truncate max-w-[50px] md:max-w-none">{currentShift ? "ACTIVE" : "NO SHIFT"}</span>
                                     </div>
                                     {currentShift && (
                                         <Button
@@ -2264,12 +2342,12 @@ export default function POSPage() {
                                     )}
                                 </div>
 
-                                {/* Fullscreen Toggle */}
+                                {/* Fullscreen Toggle (Desktop Only) */}
                                 <Button
                                     variant="outline"
                                     size="icon"
                                     className={cn(
-                                        "h-9 w-9 rounded-md border-slate-200 transition-all shadow-sm shrink-0",
+                                        "h-9 w-9 rounded-md border-slate-200 transition-all shadow-sm shrink-0 hidden min-[1232px]:flex",
                                         isFullscreen ? "bg-primary text-white border-primary" : "bg-white text-slate-500 hover:text-primary"
                                     )}
                                     onClick={toggleFullscreen}
@@ -2319,19 +2397,27 @@ export default function POSPage() {
                                             <DropdownMenuItem className="p-3 rounded-xl focus:bg-red-50 cursor-pointer text-red-600" onClick={() => { setShiftModalType("CLOSE"); setShiftBalance(""); setIsShiftModalOpen(true); }}>
                                                 <XCircle className="h-4 w-4 mr-3" />
                                                 <div className="flex flex-col">
-                                                    <span className="text-sm font-bold">End Shift</span>
-                                                    <span className="text-[10px] opacity-70">Close register & Z-Report</span>
+                                                    <span className="text-sm font-bold">End Session</span>
+                                                    <span className="text-[10px] opacity-70">Close register & X-Report</span>
                                                 </div>
                                             </DropdownMenuItem>
                                         ) : (
                                             <DropdownMenuItem className="p-3 rounded-xl focus:bg-emerald-50 cursor-pointer text-emerald-600" onClick={() => { setShiftModalType("OPEN"); setShiftBalance(""); setIsShiftModalOpen(true); }}>
                                                 <Play className="h-4 w-4 mr-3" />
                                                 <div className="flex flex-col">
-                                                    <span className="text-sm font-bold">Open Shift</span>
+                                                    <span className="text-sm font-bold">Open Session</span>
                                                     <span className="text-[10px] opacity-70">Start new service period</span>
                                                 </div>
                                             </DropdownMenuItem>
                                         )}
+                                        <DropdownMenuSeparator className="bg-slate-50" />
+                                        <DropdownMenuItem className="p-3 rounded-xl focus:bg-slate-50 cursor-pointer min-[1232px]:hidden" onClick={toggleFullscreen}>
+                                            <Fullscreen className="h-4 w-4 mr-3 text-slate-500" />
+                                            <div className="flex flex-col">
+                                                <span className="text-sm font-bold text-slate-700">{isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}</span>
+                                                <span className="text-[10px] text-slate-400">Maximize POS workspace</span>
+                                            </div>
+                                        </DropdownMenuItem>
                                         <DropdownMenuSeparator className="bg-slate-50" />
                                         <DropdownMenuItem className="p-3 rounded-xl focus:bg-blue-50 cursor-pointer" onClick={handleReprintLast}>
                                             <Printer className="h-4 w-4 mr-3 text-blue-500" />
@@ -2371,7 +2457,7 @@ export default function POSPage() {
                                 <div className="h-11 px-5 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center gap-3 shadow-sm ml-2">
                                     <Calculator className="h-4 w-4 text-emerald-600" />
                                     <div className="flex flex-col">
-                                        <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600/60 leading-none">Total Payable</span>
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600/60 leading-none">Total</span>
                                         <span className="text-base font-black text-emerald-700 leading-none mt-1">{fmt(total)}</span>
                                     </div>
                                 </div>
@@ -2389,7 +2475,7 @@ export default function POSPage() {
                     )}>
                         {/* Product Filter/Tabs (High End Pills) - Hidden on Mobile now */}
                         <div className={cn(
-                            "flex gap-2 overflow-x-auto pb-4 scrollbar-hide shrink-0 px-1 mt-1 hidden md:flex",
+                            "flex gap-1 overflow-x-auto pb-2 shrink-0 px-1 mt-0.5 hidden md:flex custom-scrollbar items-center",
                             activeView === "cart" ? "hidden md:flex" : "hidden md:flex"
                         )}>
                             {categories.map(cat => (
@@ -2398,10 +2484,10 @@ export default function POSPage() {
                                     variant={selectedCategory === cat ? "default" : "outline"}
                                     onClick={() => setSelectedCategory(cat)}
                                     className={cn(
-                                        "rounded-xl whitespace-nowrap h-9 md:h-11 px-4 md:px-6 text-xs md:text-sm font-bold transition-all border-none shadow-sm",
+                                        "rounded-md whitespace-nowrap h-7 md:h-8 px-2 md:px-3 text-[9px] md:text-[10px] font-black transition-all border uppercase tracking-tighter",
                                         selectedCategory === cat
-                                            ? "bg-primary text-white shadow-lg shadow-primary/25 scale-105"
-                                            : "bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+                                            ? "bg-primary text-white shadow-sm border-primary"
+                                            : "bg-white text-slate-500 border-slate-100/40 hover:bg-slate-50 hover:text-slate-700 hover:border-slate-200"
                                     )}
                                     size="sm"
                                 >
@@ -2409,6 +2495,29 @@ export default function POSPage() {
                                 </Button>
                             ))}
                         </div>
+
+                        <style>{`
+                            /* Fine-tuned Premium Scrollbar */
+                            *::-webkit-scrollbar {
+                                height: 5px;
+                                width: 5px;
+                                transition: all 0.2s ease;
+                            }
+                            *::-webkit-scrollbar-track {
+                                background: transparent;
+                            }
+                            *::-webkit-scrollbar-thumb {
+                                background: rgba(148, 163, 184, 0.15);
+                                border-radius: 20px;
+                            }
+                            *::-webkit-scrollbar-thumb:hover {
+                                background: rgba(148, 163, 184, 0.35);
+                            }
+                            /* Category-specific adjustments */
+                            .custom-scrollbar {
+                                scrollbar-width: thin;
+                            }
+                        `}</style>
 
                         <ScrollArea className="flex-1 -mx-2 px-2">
                             {isLoadingProducts && resolvedProducts.length === 0 ? (
@@ -2585,209 +2694,124 @@ export default function POSPage() {
                     </button>
                 </div>
 
-                {/* Keyboard Shortcuts Cheatsheet (Desktop Only) */}
-                {/* <div className="hidden md:flex absolute bottom-0 right-0 left-0 h-6 bg-slate-900/5 backdrop-blur-sm border-t border-slate-200/50 justify-center items-center gap-6 z-20 pointer-events-none">
-                <span className="text-[10px] font-bold text-slate-500"><kbd className="bg-white border shadow-sm rounded px-1 min-w-[1.2rem] inline-block text-center mr-1 text-slate-700">F1</kbd> Search</span>
-                <span className="text-[10px] font-bold text-slate-500"><kbd className="bg-white border shadow-sm rounded px-1 min-w-[1.2rem] inline-block text-center mr-1 text-slate-700">F2</kbd> Checkout</span>
-                <span className="text-[10px] font-bold text-slate-500"><kbd className="bg-white border shadow-sm rounded px-1 min-w-[1.2rem] inline-block text-center mr-1 text-slate-700">F3</kbd> Hold</span>
-                <span className="text-[10px] font-bold text-slate-500"><kbd className="bg-white border shadow-sm rounded px-1 min-w-[1.2rem] inline-block text-center mr-1 text-slate-700">Esc</kbd> Close</span>
-                <span className="text-[10px] font-bold text-slate-500"><kbd className="bg-white border shadow-sm rounded px-1 min-w-[1.2rem] inline-block text-center mr-1 text-slate-700">+</kbd> <kbd className="bg-white border shadow-sm rounded px-1 min-w-[1.2rem] inline-block text-center mr-1">-</kbd> Qty</span>
-            </div> */}
-
-            </div>
-
             {/* Modals & Dialogs */}
             <div className="pos-modals">
-                {/* High-End Elite Checkout Modal */}
+                {/* Elite Single-Box Checkout - "Square" Inspired Design */}
                 <Dialog open={isCheckoutOpen} onOpenChange={setIsCheckoutOpen}>
-                    <DialogContent className="max-w-[95vw] h-auto my-auto md:max-w-[650px] p-0 overflow-hidden border-none rounded-[1.5rem] shadow-2xl flex flex-col">
+                    <DialogContent className="max-w-[95vw] md:max-w-[420px] max-h-[95vh] p-0 overflow-hidden border-none rounded-[2rem] md:rounded-[2.5rem] shadow-2xl bg-white flex flex-col">
                         <DialogHeader className="sr-only">
                             <DialogTitle>Checkout</DialogTitle>
-                            <DialogDescription>Complete your transaction by selecting a payment method.</DialogDescription>
+                            <DialogDescription>Complete payment</DialogDescription>
                         </DialogHeader>
-                        <div className="flex flex-col md:flex-row h-full md:min-h-[400px]">
-                            {/* Summary Side - Compact for all devices */}
-                            <div className="md:flex-[0.8] bg-slate-900 text-white p-2 md:p-5 flex flex-row md:flex-col justify-between items-center md:items-stretch relative overflow-hidden shrink-0">
-                                <div className="absolute top-0 right-0 w-64 h-64 bg-primary/20 rounded-full blur-[100px] -mr-32 -mt-32" />
 
-                                <div className="relative z-10 flex flex-col md:block">
-                                    <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 md:mb-3">Total Link</h3>
-                                    <div className="hidden md:block space-y-2">
-                                        <div className="flex justify-between items-center text-slate-300">
-                                            <span className="text-xs font-bold uppercase tracking-widest">Subtotal</span>
-                                            <span className="font-mono text-sm">{fmt(subtotal)}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center text-slate-300">
-                                            <span className="text-xs font-bold uppercase tracking-widest">Tax (VAT)</span>
-                                            <span className="font-mono text-sm">{fmt(taxAmount)}</span>
-                                        </div>
-                                        {orderDiscount > 0 && (
-                                            <div className="flex justify-between items-center text-emerald-400">
-                                                <span className="text-xs font-bold uppercase tracking-widest">Order Discount</span>
-                                                <span className="font-mono text-sm">-{fmt(orderDiscount)}</span>
-                                            </div>
+                        <div className="p-3 sm:p-4 md:p-6 flex flex-col gap-2 sm:gap-3 md:gap-4 overflow-y-auto no-scrollbar h-full">
+                            {/* Header: Amount Focus */}
+                            <div className="space-y-2 sm:space-y-4 text-center">
+                                <div className="space-y-0.5 sm:space-y-1">
+                                    <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Total Due</span>
+                                    <div className="flex items-center justify-center gap-2">
+                                        <h2 className="text-2xl sm:text-3xl font-black text-slate-900 leading-none tracking-tight">{fmt(total)}</h2>
+                                        <Badge variant="outline" className="text-[8px] bg-slate-50 border-slate-200 text-slate-500 font-black h-5 uppercase tracking-tighter">
+                                            {selectedCurrencyCode}
+                                        </Badge>
+                                    </div>
+                                </div>
+ 
+                                <div className="relative group max-w-[240px] sm:max-w-[280px] mx-auto py-0 sm:py-1">
+                                    <div className="absolute inset-0 bg-primary/5 rounded-2xl blur-xl opacity-0 group-focus-within:opacity-100 transition-opacity" />
+                                    <div className="relative">
+                                        <span className="absolute left-0 top-1/2 -translate-y-1/2 text-xl sm:text-2xl font-black text-slate-200 group-focus-within:text-primary transition-colors">$</span>
+                                        <Input
+                                            id="checkout-paid-amount"
+                                            type="number"
+                                            placeholder="Enter payment"
+                                            value={paidAmount}
+                                            onChange={(e) => setPaidAmount(e.target.value)}
+                                            className="h-10 sm:h-12 pl-8 pr-8 text-2xl sm:text-3xl font-black bg-transparent border-none text-slate-900 text-center shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-slate-100"
+                                        />
+                                        {paidAmount && (
+                                            <button onClick={() => setPaidAmount("")} className="absolute right-0 top-1/2 -translate-y-1/2 text-slate-200 hover:text-red-500 transition-colors">
+                                                <XCircle className="w-5 h-5 sm:w-6 h-6" />
+                                            </button>
                                         )}
                                     </div>
-                                </div>
-
-                                <div className="relative z-10">
-                                    <div className="hidden md:block h-px bg-slate-800 w-full mb-6 border-dashed" />
-                                    <div
-                                        className="flex flex-col gap-0 md:gap-1 cursor-pointer group/total"
-                                        onClick={() => setPaidAmount((total * currencyInfo.rate).toFixed(2))}
-                                        title="Click to pay exact amount"
-                                    >
-                                        <span className="hidden md:block text-[10px] font-black uppercase tracking-[0.4em] text-white group-hover/total:text-slate-200 transition-colors">Total Payable</span>
-                                        <h2 className="text-base md:text-3xl font-black tracking-tighter leading-none text-white group-hover/total:scale-105 transition-transform origin-left text-right md:text-left">{fmt(total)}</h2>
-                                        <p className="hidden md:block text-[10px] font-bold text-slate-500 mt-1 uppercase tracking-widest">ID: {companyId}</p>
-                                    </div>
+                                    <div className="h-0.5 w-full bg-slate-100 group-focus-within:bg-primary transition-colors duration-500 mt-0.5" />
                                 </div>
                             </div>
-
-                            {/* Payment Input Side */}
-                            <div className="flex-1 bg-white p-2 md:p-6 flex flex-col overflow-y-auto">
-                                <div className="flex items-center justify-between mb-1.5 md:mb-4 shrink-0">
-                                    <h3 className="text-[10px] md:text-base font-black text-slate-900 uppercase tracking-widest">Pay in {selectedCurrencyCode}</h3>
-                                </div>
-
-                                <div className="space-y-1.5 flex-1 flex flex-col">
-                                    {splitPayments.length > 0 && (
-                                        <div className="bg-slate-50 p-2 rounded-xl mb-1 md:mb-2 flex flex-col gap-1 border border-slate-100 shrink-0">
-                                            {splitPayments.map((p, i) => (
-                                                <div key={i} className="flex justify-between items-center text-xs">
-                                                    <span className="font-bold flex items-center gap-1"><CreditCard className="w-3 h-3" /> {p.method}</span>
-                                                    <span className="font-mono">${p.amount.toFixed(2)}</span>
-                                                    <Button variant="ghost" size="icon" className="h-5 w-5 p-0" onClick={() => setSplitPayments(prev => prev.filter((_, idx) => idx !== i))}>
-                                                        <Trash2 className="w-3 h-3 text-red-500" />
-                                                    </Button>
-                                                </div>
-                                            ))}
-                                            <div className="flex justify-between items-center text-xs pt-1 border-t border-slate-200 mt-1">
-                                                <span className="font-black text-slate-500 uppercase">Remaining</span>
-                                                <span className="font-mono font-black text-red-500">
-                                                    ${Math.max(0, total - splitPayments.reduce((a, b) => a + b.amount, 0)).toFixed(2)}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    <div className="flex gap-2 shrink-0">
-                                        <div className="relative group flex-1">
-                                            <span className="absolute left-2.5 md:left-4 top-1/2 -translate-y-1/2 text-sm md:text-xl font-black text-slate-300 group-focus-within:text-primary transition-colors">$</span>
-                                            <Input
-                                                id="checkout-paid-amount"
-                                                type="number"
-                                                placeholder="0.00"
-                                                value={paidAmount}
-                                                onChange={(e) => setPaidAmount(e.target.value)}
-                                                className="h-7 md:h-12 pl-5 md:pl-8 text-sm md:text-xl font-black bg-slate-50 border border-slate-200 rounded-md md:rounded-xl focus:ring-1 md:focus:ring-2 focus:ring-primary/5 transition-all text-slate-800"
-                                            />
-                                            <div className="absolute right-2.5 md:right-4 top-1/2 -translate-y-1/2 text-[6px] md:text-[8px] font-black text-slate-400 uppercase tracking-widest">Rec.</div>
-                                        </div>
+ 
+                            {/* Main Interactive: Large Pro Numpad */}
+                            <div className="flex flex-col items-center justify-center scale-90 sm:scale-95 py-0">
+                                <Numpad value={paidAmount} onChange={setPaidAmount} />
+                            </div>
+ 
+                            {/* Payment Method Strip */}
+                            <div className="space-y-3 sm:space-y-6">
+                                <div className="flex gap-2 items-center overflow-x-auto no-scrollbar py-1 px-1">
+                                    {[
+                                        { id: 'CASH', icon: Banknote, label: 'Cash' },
+                                        { id: 'CARD', icon: CreditCard, label: 'Card' },
+                                        { id: 'ECOCASH', icon: ShoppingBag, label: 'EcoCash' },
+                                        { id: 'usd', icon: Banknote, label: 'USD' },
+                                        { id: 'zig', icon: Banknote, label: 'ZiG' }
+                                    ].filter(m => {
+                                        const allowed = (company?.posSettings as any)?.allowedPaymentMethods;
+                                        return !allowed || allowed.length === 0 || allowed.includes(m.id);
+                                    }).map(method => (
                                         <Button
-                                            variant="outline"
-                                            className="h-7 md:h-12 w-1/3 rounded-md md:rounded-xl border-dashed border-2 border-primary/30 text-primary font-black uppercase text-[8px] md:text-xs tracking-widest hover:bg-primary hover:text-white transition-all shrink-0"
-                                            onClick={() => {
-                                                const amt = parseFloat(paidAmount);
-                                                if (amt > 0) {
-                                                    setSplitPayments(prev => [...prev, { method: paymentMethod, amount: amt }]);
-                                                    setPaidAmount("");
-                                                }
-                                            }}
+                                            key={method.id}
+                                            variant={paymentMethod === method.id ? 'default' : 'outline'}
+                                            className={cn(
+                                                "h-9 sm:h-10 px-4 sm:px-6 rounded-xl sm:rounded-2xl flex items-center gap-2 sm:gap-3 font-black uppercase text-[9px] sm:text-[10px] transition-all border-none shrink-0 shadow-sm",
+                                                paymentMethod === method.id
+                                                    ? "bg-slate-900 text-white shadow-lg scale-100"
+                                                    : "bg-slate-50 text-slate-400 hover:bg-slate-100"
+                                            )}
+                                            onClick={() => setPaymentMethod(method.id as any)}
                                         >
-                                            Tender
+                                            <method.icon className={cn("h-3.5 w-3.5 sm:h-4 w-4", paymentMethod === method.id ? "text-primary" : "text-slate-300")} />
+                                            {method.label}
                                         </Button>
-                                    </div>
-
-                                    {/* Fast Cash Buttons */}
-                                    <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide shrink-0">
-                                        {Array.from(new Set([
-                                            total * currencyInfo.rate, // Exact
-                                            Math.ceil((total * currencyInfo.rate) / 5) * 5,
-                                            Math.ceil((total * currencyInfo.rate) / 10) * 10,
-                                            Math.ceil((total * currencyInfo.rate) / 20) * 20,
-                                            20, 50, 100
-                                        ])).filter(amt => amt >= total * currencyInfo.rate && amt > 0)
-                                            .sort((a, b) => a - b)
-                                            .slice(0, 4)
-                                            .map((amt, idx) => (
-                                                <Button
-                                                    key={idx}
-                                                    variant="outline"
-                                                    className="h-8 px-3 rounded-lg border-slate-200 text-xs font-black text-slate-600 hover:border-primary hover:text-primary hover:bg-primary/5 transition-all shrink-0"
-                                                    onClick={() => setPaidAmount(amt.toFixed(2))}
-                                                >
-                                                    {idx === 0 && amt === total * currencyInfo.rate ? "Exact" : `$${amt.toFixed(0)}`}
-                                                </Button>
-                                            ))}
-                                    </div>
-
-                                    <div className="flex-1 md:flex-none">
-                                        <Numpad value={paidAmount} onChange={setPaidAmount} />
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-1 md:gap-2 mt-1 md:mt-2 overflow-y-auto max-h-[80px] md:max-h-none shrink-0 border-t border-slate-50 pt-1">
-                                        {[
-                                            { id: 'CASH', icon: Banknote, label: 'Cash' },
-                                            { id: 'CARD', icon: CreditCard, label: 'Card' },
-                                            { id: 'ECOCASH', icon: CreditCard, label: 'EcoCash' },
-                                            { id: 'usd', icon: Banknote, label: 'USD' },
-                                            { id: 'zig', icon: Banknote, label: 'ZiG' }
-                                        ].filter(m => {
-                                            const allowed = (company?.posSettings as any)?.allowedPaymentMethods;
-                                            // Show all if setting is missing (backward compatibility)
-                                            if (!allowed || allowed.length === 0) return true;
-                                            return allowed.includes(m.id);
-                                        }).map(method => (
-                                            <Button
-                                                key={method.id}
-                                                variant={paymentMethod === method.id ? 'default' : 'outline'}
-                                                className={cn(
-                                                    "h-6 md:h-10 rounded-md flex flex-col gap-0 md:gap-1 font-black uppercase tracking-widest text-[6px] md:text-[8px] transition-all",
-                                                    paymentMethod === method.id
-                                                        ? "bg-slate-900 text-white shadow-xl shadow-slate-900/10 scale-[1.02]"
-                                                        : "border-slate-100 text-slate-400 hover:bg-slate-50"
-                                                )}
-                                                onClick={() => setPaymentMethod(method.id as any)}
-                                            >
-                                                <method.icon className={cn("h-2 w-2 md:h-4 md:w-4", paymentMethod === method.id ? "text-primary" : "text-slate-200")} />
-                                                {method.label}
-                                            </Button>
-                                        ))}
-                                    </div>
-
-                                    {(paidAmount || splitPayments.length > 0) && (
-                                        <div className="bg-emerald-50 p-1 md:p-3 rounded-md md:rounded-xl border border-emerald-100 flex items-center justify-between shrink-0 mb-2">
-                                            <div className="flex flex-col">
-                                                <span className="text-[6px] uppercase font-black tracking-widest text-emerald-600">Change</span>
-                                                <h3 className="text-sm md:text-xl font-black text-emerald-700">
-                                                    {selectedCurrencyCode} {(() => {
+                                    ))}
+                                </div>
+ 
+                                {/* Results & Finish Block */}
+                                <div className="space-y-2 sm:space-y-4">
+                                    {((parseFloat(paidAmount || "0") > 0) || splitPayments.length > 0) && (
+                                        <div className="flex items-center justify-between px-4 sm:px-6 py-2 sm:py-3 bg-emerald-50 rounded-2xl sm:rounded-3xl border border-emerald-100 animate-in zoom-in-95">
+                                            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-emerald-600">Change Due</span>
+                                            <div className="flex items-center gap-2 sm:gap-3">
+                                                <h3 className="text-xl sm:text-2xl font-black text-emerald-700">
+                                                    {(() => {
                                                         const sumParams = splitPayments.reduce((a, b) => a + b.amount, 0) + parseFloat(paidAmount || "0");
                                                         const req = total * Number(currencies?.find(c => c.code === selectedCurrencyCode)?.exchangeRate || 1);
-                                                        return Math.max(0, sumParams - req).toFixed(2);
+                                                        const change = Math.max(0, sumParams - req);
+                                                        return `+ ${fmt(change)}`;
                                                     })()}
                                                 </h3>
-                                            </div>
-                                            <div className="w-5 h-5 md:w-8 md:h-8 bg-white rounded-md flex items-center justify-center shadow-sm">
-                                                <Banknote className="h-2.5 w-2.5 md:h-4 md:w-4 text-emerald-500" />
+                                                <Banknote className="h-5 w-5 sm:h-6 w-6 text-emerald-500 opacity-30" />
                                             </div>
                                         </div>
                                     )}
-
-                                    <div className="flex gap-2 md:gap-3 mt-auto shrink-0 pb-2 md:pb-0">
+ 
+                                    <div className="flex gap-2 sm:gap-4">
                                         <Button
                                             variant="ghost"
-                                            className="flex-1 h-7 md:h-10 rounded-lg font-black uppercase tracking-widest text-[8px] text-slate-400 hover:text-red-500 hover:bg-red-50"
+                                            className="h-10 sm:h-12 px-4 sm:px-8 rounded-xl sm:rounded-2xl font-black uppercase text-[9px] sm:text-[10px] text-slate-400 hover:text-red-500"
                                             onClick={() => setIsCheckoutOpen(false)}
                                         >
                                             Cancel
                                         </Button>
                                         <Button
-                                            disabled={isProcessing || !paidAmount}
-                                            className="flex-[2] h-7 md:h-10 rounded-lg bg-primary hover:bg-primary/90 text-white font-black uppercase tracking-widest text-[8px] shadow-xl shadow-primary/20 transition-all active:scale-95"
+                                            disabled={isProcessing || (!paidAmount && splitPayments.length === 0)}
+                                            className="flex-1 h-10 sm:h-12 rounded-2xl sm:rounded-3xl bg-slate-900 hover:bg-black text-white font-black uppercase tracking-[0.1em] sm:tracking-[0.2em] shadow-xl transition-all active:scale-[0.98] group"
                                             onClick={processOrder}
                                         >
-                                            {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Complete"}
+                                            {isProcessing ? <Loader2 className="h-5 w-5 animate-spin mx-auto" /> : (
+                                                <div className="flex items-center justify-center gap-3">
+                                                    <span>Complete Payment</span>
+                                                    <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                                                </div>
+                                            )}
                                         </Button>
                                     </div>
                                 </div>
@@ -2858,10 +2882,10 @@ export default function POSPage() {
                         )}>
                             <h3 className="text-xl font-black flex items-center gap-3">
                                 {shiftModalType === "OPEN" ? <Play className="h-6 w-6 text-white" /> : <XCircle className="h-6 w-6 text-white" />}
-                                {shiftModalType === "OPEN" ? "Open New Shift" : "Close Current Shift"}
+                                {shiftModalType === "OPEN" ? "Open New Session" : "Close Current Session"}
                             </h3>
                             <p className="text-xs opacity-80 mt-2 font-bold uppercase tracking-widest text-white/70">
-                                {shiftModalType === "OPEN" ? "Initialize register balance" : "Perform Z-Report & reconciliation"}
+                                {shiftModalType === "OPEN" ? "Initialize register balance" : "Perform X-Report & reconciliation"}
                             </p>
                         </div>
                         <div className="p-8 space-y-6 bg-white">
@@ -3062,10 +3086,15 @@ export default function POSPage() {
                                             className="h-6 px-2 text-[9px] font-black text-emerald-600 hover:bg-emerald-100"
                                             onClick={async () => {
                                                 try {
-                                                    const response = await fetch(`${posSettings.printServerUrl}/printers`);
-                                                    if (response.ok) {
-                                                        const data = await response.json();
+                                                    if (window.electronAPI) {
+                                                        const data = await window.electronAPI.getPrinters();
                                                         setAvailablePrinters(Array.isArray(data) ? data : []);
+                                                    } else {
+                                                        const response = await fetch(`${posSettings.printServerUrl}/printers`);
+                                                        if (response.ok) {
+                                                            const data = await response.json();
+                                                            setAvailablePrinters(Array.isArray(data) ? data : []);
+                                                        }
                                                     }
                                                 } catch (e) {
                                                     console.error(e);
@@ -3080,10 +3109,30 @@ export default function POSPage() {
                                         onValueChange={(val) => setPosSettings(prev => ({ ...prev, printerName: val === "default" ? "" : val }))}
                                     >
                                         <SelectTrigger className="h-10 text-xs font-black bg-white border-emerald-200 rounded-lg outline-none">
-                                            <SelectValue placeholder="Select Printer (or Default)" />
+                                            <SelectValue placeholder="Main Printer" />
                                         </SelectTrigger>
                                         <SelectContent className="rounded-xl border-emerald-200">
                                             <SelectItem value="default" className="text-xs font-bold">System Default</SelectItem>
+                                            {availablePrinters.map((p: any) => (
+                                                <SelectItem key={p.name} value={p.name} className="text-xs font-bold">
+                                                    {p.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100 animate-in fade-in slide-in-from-top-2 duration-300">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-blue-600 block mb-2">Secondary / Kitchen Printer</label>
+                                    <Select
+                                        value={posSettings.secondaryPrinterName || "none"}
+                                        onValueChange={(val) => setPosSettings(prev => ({ ...prev, secondaryPrinterName: val === "none" ? "" : val }))}
+                                    >
+                                        <SelectTrigger className="h-10 text-xs font-black bg-white border-blue-200 rounded-lg outline-none">
+                                            <SelectValue placeholder="Disabled" />
+                                        </SelectTrigger>
+                                        <SelectContent className="rounded-xl border-blue-200">
+                                            <SelectItem value="none" className="text-xs font-bold">Disabled</SelectItem>
                                             {availablePrinters.map((p: any) => (
                                                 <SelectItem key={p.name} value={p.name} className="text-xs font-bold">
                                                     {p.name}
@@ -3404,14 +3453,29 @@ export default function POSPage() {
                                 <h3 className="text-xl font-black">{reportType === "x" ? "X-Report" : "Z-Report"}</h3>
                                 <p className="text-purple-200 text-xs mt-1">{reportType === "x" ? "Current day summary" : "Closed day summary"}</p>
                             </div>
-                            <div className="flex bg-purple-700/50 p-1 rounded-xl">
-                                {(["x", "z"] as const).map(t => (
-                                    <button key={t} onClick={() => handleLoadReport(t)}
-                                        className={cn("px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all",
-                                            reportType === t ? "bg-white text-purple-600" : "text-purple-200")}>
-                                        {t.toUpperCase()}
-                                    </button>
-                                ))}
+                            <div className="flex items-center gap-3">
+                                 {reportData && !reportData.error && (
+                                     <PDFDownloadLink
+                                         document={<ZReportPDF data={{ ...reportData, company }} isZReport={reportType === 'z'} />}
+                                         fileName={`${reportType === 'z' ? 'Z' : 'X'}-Report-${new Date().toISOString().split('T')[0]}.pdf`}
+                                     >
+                                         {({ loading }) => (
+                                             <Button size="sm" variant="outline" className="h-8 px-3 text-xs gap-2 bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white rounded-xl" disabled={loading}>
+                                                 {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                                                 PDF
+                                             </Button>
+                                         )}
+                                     </PDFDownloadLink>
+                                 )}
+                                 <div className="flex bg-purple-700/50 p-1 rounded-xl">
+                                    {(["x", "z"] as const).map(t => (
+                                        <button key={t} onClick={() => handleLoadReport(t)}
+                                            className={cn("px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all",
+                                                reportType === t ? "bg-white text-purple-600" : "text-purple-200")}>
+                                            {t.toUpperCase()}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -3505,10 +3569,49 @@ export default function POSPage() {
                                         <div className="divide-y divide-slate-50">
                                             {reportData.counters.map((c: any, i: number) => (
                                                 <div key={i} className="flex items-center justify-between px-4 py-2">
-                                                    <span className="text-xs font-bold text-slate-500">{c.taxCode || c.taxPercent + "%"}</span>
-                                                    <span className="text-xs font-black text-slate-800">{c.currency} {Number(c.taxAmount || 0).toFixed(2)}</span>
+                                                    <span className="text-xs font-bold text-slate-500">
+                                                        {c.fiscalCounterTaxPercent !== undefined ? `${c.fiscalCounterTaxPercent}%` : (c.fiscalCounterMoneyType || c.fiscalCounterType)}
+                                                    </span>
+                                                    <span className="text-xs font-black text-slate-800">{c.fiscalCounterCurrency} {Number(c.fiscalCounterValue || 0).toFixed(2)}</span>
                                                 </div>
                                             ))}
+                                         </div>
+                                    </div>
+                                )}
+
+                                {/* POS Transactions (Drops/Payouts) */}
+                                {reportData.posSummary?.posTransactions && reportData.posSummary.posTransactions.length > 0 && (
+                                    <div className="border border-slate-100 rounded-2xl overflow-hidden mt-4 shadow-sm">
+                                        <div className="bg-slate-100/80 px-4 py-2 flex items-center justify-between">
+                                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.15em]">Cash Movements</span>
+                                            <span className="text-[9px] font-black text-slate-400 bg-white px-2 py-0.5 rounded-full border border-slate-200/50">TRACKING</span>
+                                        </div>
+                                        <div className="divide-y divide-slate-50">
+                                            {reportData.posSummary.posTransactions.map((t: any, i: number) => (
+                                                <div key={i} className="flex items-center justify-between px-4 py-3 hover:bg-slate-50/50 transition-colors">
+                                                    <div className="flex flex-col">
+                                                        <span className={cn("text-[10px] font-black tracking-tight", t.type === 'DROP' ? "text-emerald-600" : "text-rose-600")}>
+                                                            {t.type === 'DROP' ? 'REMITTANCE' : 'PAYOUT'}
+                                                        </span>
+                                                        <span className="text-[11px] font-bold text-slate-600 truncate max-w-[180px] leading-tight mt-0.5">{t.reason || 'Manual Adjustment'}</span>
+                                                        <span className="text-[9px] text-slate-300 font-black uppercase tracking-widest mt-1">Cashier: {t.userName}</span>
+                                                    </div>
+                                                    <div className="text-right flex flex-col items-end">
+                                                        <span className={cn("text-xs font-black", t.type === 'DROP' ? "text-emerald-700" : "text-rose-700")}>
+                                                            {t.type === 'DROP' ? '+' : '-'}${Number(t.amount).toFixed(2)}
+                                                        </span>
+                                                        <span className="text-[9px] text-slate-400 font-black opacity-60 mt-0.5">{new Date(t.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            <div className="bg-slate-50/80 px-4 py-3 flex items-center justify-between border-t border-slate-100">
+                                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Net Cash Movement</span>
+                                                <span className="text-sm font-black text-slate-900">
+                                                    ${reportData.posSummary.posTransactions
+                                                        .reduce((acc: number, t: any) => acc + (t.type === 'DROP' ? Number(t.amount) : -Number(t.amount)), 0)
+                                                        .toFixed(2)}
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
                                 )}
@@ -3520,8 +3623,71 @@ export default function POSPage() {
                     </div>
                 </DialogContent>
             </Dialog>
-
-        </PosLayout >
+ 
+             {/* Quick Add Customer Dialog */}
+             <Dialog open={isQuickAddCustomerOpen} onOpenChange={setIsQuickAddCustomerOpen}>
+                 <DialogContent className="sm:max-w-[420px] rounded-[2.5rem] p-0 overflow-hidden border-none shadow-2xl bg-white">
+                     <div className="bg-slate-900 p-8 text-white relative">
+                         <button onClick={() => setIsQuickAddCustomerOpen(false)} className="absolute top-6 right-6 h-8 w-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all">
+                             <XCircle className="h-4 w-4 text-white" />
+                         </button>
+                         <UserPlus className="h-8 w-8 mb-4 text-primary" />
+                         <h3 className="text-2xl font-black">Quick Add Customer</h3>
+                         <p className="text-slate-400 text-xs mt-1 font-bold uppercase tracking-widest">Enroll new customer instantly</p>
+                     </div>
+                     <div className="p-8 space-y-5">
+                         <div className="space-y-2">
+                             <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest pl-1">Full Name</Label>
+                             <Input 
+                                 placeholder="e.g. John Doe" 
+                                 className="h-12 rounded-2xl bg-slate-50 border-none font-bold"
+                                 value={newCustomer.name}
+                                 onChange={e => setNewCustomer(prev => ({ ...prev, name: e.target.value }))}
+                             />
+                         </div>
+                         <div className="grid grid-cols-2 gap-4">
+                             <div className="space-y-2">
+                                 <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest pl-1">Phone</Label>
+                                 <Input 
+                                     placeholder="07..." 
+                                     className="h-12 rounded-2xl bg-slate-50 border-none font-bold"
+                                     value={newCustomer.phone}
+                                     onChange={e => setNewCustomer(prev => ({ ...prev, phone: e.target.value }))}
+                                 />
+                             </div>
+                             <div className="space-y-2">
+                                 <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest pl-1">TIN (Optional)</Label>
+                                 <Input 
+                                     placeholder="10 digits" 
+                                     className="h-12 rounded-2xl bg-slate-50 border-none font-bold"
+                                     value={newCustomer.tin}
+                                     onChange={e => setNewCustomer(prev => ({ ...prev, tin: e.target.value }))}
+                                 />
+                             </div>
+                         </div>
+                         <div className="space-y-2">
+                             <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest pl-1">Email</Label>
+                             <Input 
+                                 type="email" 
+                                 placeholder="customer@example.com" 
+                                 className="h-12 rounded-2xl bg-slate-50 border-none font-bold"
+                                 value={newCustomer.email}
+                                 onChange={e => setNewCustomer(prev => ({ ...prev, email: e.target.value }))}
+                             />
+                         </div>
+                         
+                         <Button 
+                             className="w-full h-14 rounded-2xl bg-slate-900 hover:bg-black text-white font-black uppercase tracking-widest mt-4 shadow-xl"
+                             disabled={isCreatingCustomer || !newCustomer.name}
+                             onClick={handleQuickAddCustomer}
+                         >
+                             {isCreatingCustomer ? <Loader2 className="h-5 w-5 animate-spin" /> : "Create & Select"}
+                         </Button>
+                     </div>
+                 </DialogContent>
+             </Dialog>
+         </div>
+</PosLayout>
     );
 
 }

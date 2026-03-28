@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { posShifts, posShiftTransactions, users, expenses } from "@shared/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, gte, lte } from "drizzle-orm";
 
 export async function startPosShift(companyId: number, userId: string, openingBalance: number, notes?: string) {
     // Check if user already has an open shift
@@ -28,12 +28,15 @@ export async function startPosShift(companyId: number, userId: string, openingBa
     return shift;
 }
 
-export async function endPosShift(shiftId: number, actualCash: number, notes?: string) {
+export async function endPosShift(shiftId: number, actualCash: number, notes?: string, reconciledBy?: string) {
     const [shift] = await db.update(posShifts)
         .set({
             status: "closed",
             endTime: new Date(),
             actualCash: actualCash.toString(),
+            reconciledAt: new Date(),
+            reconciledBy: reconciledBy || null,
+            reconciliationStatus: "reconciled",
             notes
         })
         .where(eq(posShifts.id, shiftId))
@@ -48,7 +51,8 @@ export async function addPosTransaction(
     type: 'DROP' | 'PAYOUT',
     amount: number,
     reason: string,
-    items: any[] = []
+    items: any[] = [],
+    authorizedBy?: string
 ) {
     return await db.transaction(async (tx) => {
         // Fetch shift to get companyId
@@ -64,7 +68,8 @@ export async function addPosTransaction(
             type,
             amount: amount.toString(),
             reason,
-            items
+            items,
+            authorizedBy: authorizedBy || null
         }).returning();
 
         // If it's a payout, also record it as an expense
@@ -105,4 +110,25 @@ export async function getShiftTransactions(shiftId: number) {
         where: eq(posShiftTransactions.shiftId, shiftId),
         orderBy: [desc(posShiftTransactions.createdAt)]
     });
+}
+
+export async function getCompanyPosTransactions(companyId: number, startDate: Date, endDate: Date) {
+    return await db.select({
+        id: posShiftTransactions.id,
+        type: posShiftTransactions.type,
+        amount: posShiftTransactions.amount,
+        reason: posShiftTransactions.reason,
+        createdAt: posShiftTransactions.createdAt,
+        authorizedBy: posShiftTransactions.authorizedBy,
+        userName: users.name
+    })
+    .from(posShiftTransactions)
+    .innerJoin(posShifts, eq(posShiftTransactions.shiftId, posShifts.id))
+    .innerJoin(users, eq(posShiftTransactions.userId, users.id))
+    .where(and(
+        eq(posShifts.companyId, companyId),
+        gte(posShiftTransactions.createdAt, startDate),
+        lte(posShiftTransactions.createdAt, endDate)
+    ))
+    .orderBy(desc(posShiftTransactions.createdAt));
 }

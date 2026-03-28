@@ -59,7 +59,7 @@ export function Receipt48({ id = "receipt-48", invoice, company, customer, items
         : "TAX INVOICE";
 
     return (
-        <div id={id} style={{ width: receiptWidth }} className={`bg-white p-2 text-black font-mono text-[10px] leading-tight ${isA4 ? 'mx-auto' : ''}`}>
+        <div id={id} style={{ width: receiptWidth }} className={`bg-white p-2 text-black font-mono text-[10px] leading-tight receipt-content ${isA4 ? 'mx-auto' : ''}`}>
             {/* [1] Logo (Placeholder if URL exists) */}
             {company.logoUrl && (
                 <div className="flex justify-center mb-2">
@@ -157,7 +157,7 @@ export function Receipt48({ id = "receipt-48", invoice, company, customer, items
                         </div>
                         {/* Qty line */}
                         <div className="text-[9px] pl-2">
-                            {Number(item.quantity)} x {Number(item.unitPrice || item.price).toFixed(2)}
+                            {Number(item.quantity).toFixed(2)} x {Number(item.unitPrice || item.price).toFixed(2)}
                         </div>
                     </div>
                 ))}
@@ -182,7 +182,12 @@ export function Receipt48({ id = "receipt-48", invoice, company, customer, items
 
             {/* Item Count */}
             <div className="mb-2 pb-2 border-b border-dashed border-black text-center">
-                <p>Number of Items: {receiptItems.length}</p>
+                <p>Number of Items: {receiptItems.length.toFixed(0)}</p>
+                {invoice.exchangeRate && invoice.currency !== 'USD' && (
+                    <p className="font-bold mt-1 text-[11px]">
+                        USD Total: ${(Number(invoice.total) / Number(invoice.exchangeRate)).toFixed(2)}
+                    </p>
+                )}
             </div>
 
             {/* Tax Table */}
@@ -235,21 +240,40 @@ export function Receipt48({ id = "receipt-48", invoice, company, customer, items
                         padding: 0 !important; 
                         width: ${isA4 ? '210mm' : receiptWidth} !important;
                         background: white;
+                        -webkit-print-color-adjust: exact;
+                        print-color-adjust: exact;
                     }
                     #${id} {
                         width: ${receiptWidth} !important;
                         max-width: ${receiptWidth} !important;
                         margin: ${isA4 ? '0 auto' : '0'} !important;
-                        padding: 2mm !important;
+                        padding: 4mm 4mm 1mm 4mm !important;
                         box-sizing: border-box;
                         background: white;
                         overflow: visible !important;
                         position: relative !important;
                         height: auto !important;
+                        /* Force crisp rendering for thermal printers */
+                        -webkit-font-smoothing: none;
+                        -moz-osx-font-smoothing: grayscale;
+                        color: #000000 !important;
                     }
                     * {
                         box-sizing: border-box;
+                        color: #000000 !important;
+                        border-color: #000000 !important;
                     }
+                    img, svg {
+                        image-rendering: pixelated;
+                        image-rendering: crisp-edges;
+                    }
+                }
+                /* Also apply to the preview if needed */
+                .receipt-content {
+                    color: #000000;
+                }
+                .receipt-content * {
+                    border-color: #000000;
                 }
             `}</style>
         </div>

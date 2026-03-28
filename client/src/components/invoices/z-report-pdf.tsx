@@ -91,13 +91,13 @@ export const ZReportPDF = ({ data, isZReport }: ZReportPDFProps) => {
 
     // Helper to filter and sort counters
     const getCountersByType = (curr: string, type: string) => {
-        return counters
+        return (counters || [])
             .filter((c: any) => c.fiscalCounterCurrency === curr && c.fiscalCounterType === type)
             .sort((a: any, b: any) => (b.fiscalCounterTaxPercent || 0) - (a.fiscalCounterTaxPercent || 0));
     };
 
     return (
-        <Document title={`${isZReport ? 'Z' : 'X'} Report - Day ${fiscalDayNo}`}>
+        <Document title={`${isZReport ? 'Z' : 'X'} Report - Day ${fiscalDayNo || 'Current'}`}>
             <Page size="A4" style={styles.page}>
                 {/* Header Section */}
                 <View style={styles.header}>
@@ -121,7 +121,7 @@ export const ZReportPDF = ({ data, isZReport }: ZReportPDFProps) => {
                 <View style={styles.section}>
                     <View style={styles.row}>
                         <Text style={styles.label}>Fiscal day No:</Text>
-                        <Text style={styles.value}>{fiscalDayNo}</Text>
+                        <Text style={styles.value}>{fiscalDayNo || "N/A"}</Text>
                     </View>
                     <View style={styles.row}>
                         <Text style={styles.label}>Fiscal day opened:</Text>
@@ -293,6 +293,73 @@ export const ZReportPDF = ({ data, isZReport }: ZReportPDFProps) => {
                     );
                 })}
 
+                {/* POS Sales Summary Section */}
+                {data.posSummary && (
+                    <View style={styles.section}>
+                        <Text style={[styles.subTitle, { textAlign: 'center', textDecoration: 'none' }]}>--- POS SALES SUMMARY ---</Text>
+                        <View style={[styles.row, styles.bold, { marginTop: 10 }]}>
+                            <Text style={styles.label}>Total Transactions:</Text>
+                            <Text style={styles.value}>{data.posSummary.totalTransactions}</Text>
+                        </View>
+                        <View style={styles.divider} />
+                        
+                        {data.posSummary.byPaymentMethod && data.posSummary.byPaymentMethod.map((pm: any, i: number) => (
+                            <View key={i} style={styles.row}>
+                                <Text style={styles.label}>{pm.method} ({pm.count} sales):</Text>
+                                <Text style={styles.value}>{Number(pm.total).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
+                            </View>
+                        ))}
+                        
+                        <View style={[styles.row, styles.bold, { marginTop: 5, borderTopWidth: 1, paddingTop: 5 }]}>
+                            <Text style={styles.label}>GRAND TOTAL SALES:</Text>
+                            <Text style={styles.value}>{Number(data.posSummary.grandTotal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
+                        </View>
+                    </View>
+                )}
+
+                <View style={styles.divider} />
+
+                {/* Cash Movements Section */}
+                {data.posSummary?.posTransactions && data.posSummary.posTransactions.length > 0 && (
+                    <View style={styles.section} break>
+                        <Text style={[styles.subTitle, { textAlign: 'center', textDecoration: 'none' }]}>--- CASH MOVEMENTS (AUDIT TRAIL) ---</Text>
+                        <View style={[styles.row, styles.bold, { marginTop: 10, borderBottomWidth: 1, paddingBottom: 4 }]}>
+                            <Text style={{ width: '20%' }}>Time</Text>
+                            <Text style={{ width: '40%' }}>Type/Reason</Text>
+                            <Text style={{ width: '20%', textAlign: 'center' }}>User</Text>
+                            <Text style={{ width: '20%', textAlign: 'right' }}>Amount</Text>
+                        </View>
+                        {data.posSummary.posTransactions.map((t: any, i: number) => (
+                            <View key={i} style={[styles.row, { paddingVertical: 4, borderBottomWidth: 0.5, borderBottomColor: '#EEEEEE' }]}>
+                                <Text style={{ width: '20%' }}>{format(new Date(t.createdAt), "HH:mm")}</Text>
+                                <View style={{ width: '40%' }}>
+                                    <Text style={styles.bold}>{t.type === 'DROP' ? 'REMITTANCE' : 'PAYOUT'}</Text>
+                                    <Text style={{ fontSize: 8 }}>{t.reason || 'Manual'}</Text>
+                                </View>
+                                <Text style={{ width: '20%', textAlign: 'center', fontSize: 8 }}>{t.userName}</Text>
+                                <Text style={{ width: '20%', textAlign: 'right' }}>
+                                    {t.type === 'DROP' ? '+' : '-'}{Number(t.amount).toFixed(2)}
+                                </Text>
+                            </View>
+                        ))}
+                        <View style={[styles.row, styles.bold, { marginTop: 10, paddingTop: 5, borderTopWidth: 1 }]}>
+                            <Text style={{ width: '80%' }}>NET CASH MOVEMENT:</Text>
+                            <Text style={{ width: '20%', textAlign: 'right' }}>
+                                {data.posSummary.posTransactions
+                                    .reduce((acc: number, t: any) => acc + (t.type === 'DROP' ? Number(t.amount) : -Number(t.amount)), 0)
+                                    .toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </Text>
+                        </View>
+                    </View>
+                )}
+
+                <View style={styles.divider} />
+                <Text style={{ textAlign: 'center', marginTop: 20, fontSize: 8 }}>
+                    *** End of Report ***
+                </Text>
+                <Text style={{ textAlign: 'center', fontSize: 8 }}>
+                    Generated on {format(new Date(), "dd/MM/yyyy HH:mm:ss")}
+                </Text>
             </Page>
         </Document>
     );

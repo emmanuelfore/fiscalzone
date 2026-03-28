@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Menu, PieChart, TrendingUp, DollarSign, Calendar,
   ChevronDown, ChevronUp, Receipt, Package, Clock,
-  User as UserIcon, Filter, Search, X, Printer
+  User as UserIcon, Filter, Search, X, Printer, Download
 } from "lucide-react-native";
 import { StatusBar } from "expo-status-bar";
 import { Modal, ScrollView } from "react-native";
@@ -108,10 +108,29 @@ const styles = StyleSheet.create({
   typeBadgeText: { fontSize: 10, fontWeight: "900", textTransform: "uppercase" },
   itemRef: { color: C.text.secondary, fontSize: 11, marginTop: 4, fontStyle: "italic" },
   netProfitCard: { padding: 20, borderRadius: 20, borderWidth: 1.5, marginBottom: 20, shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 15, shadowOffset: { width: 0, height: 6 }, elevation: 4 },
+  abcHeaderCard: { backgroundColor: C.bg.card, borderRadius: 16, padding: 20, marginBottom: 20, borderWidth: 1, borderColor: C.border.default },
+  abcHeaderTitle: { fontSize: 20, fontWeight: '900', color: C.text.primary, marginBottom: 5 },
+  abcHeaderSubtitle: { fontSize: 13, color: C.text.secondary, marginBottom: 15 },
+  abcLegend: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 15 },
+  abcLegendItem: { alignItems: 'center' },
+  abcLegendText: { fontSize: 11, color: C.text.secondary, marginTop: 5 },
+  abcBadge: { width: 24, height: 24, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+  abcBadgeText: { color: '#fff', fontSize: 12, fontWeight: '800' },
+  abcSection: { marginBottom: 25 },
+  abcSectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 15, gap: 10 },
+  abcBadgeLarge: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  abcBadgeTextLarge: { color: '#fff', fontSize: 16, fontWeight: '900' },
+  abcSectionTitle: { fontSize: 16, fontWeight: '800', color: C.text.primary },
+  abcItemRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border.default, marginHorizontal: 5 },
+  abcItemName: { fontSize: 14, fontWeight: '600', color: C.text.primary },
+  abcItemSku: { fontSize: 11, color: C.text.secondary, marginTop: 2 },
+  abcItemRevenue: { fontSize: 15, fontWeight: '800', color: C.text.primary },
+  abcItemShare: { fontSize: 10, color: C.text.secondary, marginTop: 2 },
+  abcEmptyText: { fontSize: 13, color: C.text.secondary, textAlign: 'center', paddingVertical: 15 },
 });
 
 type Period = "Today" | "This Week" | "This Month" | "All Time" | "Custom";
-type Tab = "sales" | "pnl" | "inventory";
+type ActiveTab = "sales" | "pnl" | "inventory" | "abc" | "collections";
 type InventorySubTab = "valuation" | "movements" | "purchases";
 
 function getDateRange(period: Period, customStart?: string, customEnd?: string): { start: Date; end: Date } {
@@ -138,25 +157,33 @@ interface ReportsScreenProps {
   onNavigate?: (screen: any) => void;
 }
 
-function ExpandedSaleContent({ sale, currencySymbols, onReprint, isPrinting, onCreditNote, onDebitNote }: {
+interface ExpandedSaleContentProps {
   sale: any;
   currencySymbols: Record<string, string>;
   onReprint: (sale: any, items: any[]) => void;
   isPrinting: boolean;
   onCreditNote?: (sale: any, items: any[]) => void;
   onDebitNote?: (sale: any, items: any[]) => void;
-}) {
+  isPrintingEnabled?: boolean;
+}
+
+function ExpandedSaleContent({ sale, currencySymbols, onReprint, isPrinting, onCreditNote, onDebitNote, isPrintingEnabled }: ExpandedSaleContentProps) {
   const { data: items, isLoading } = useInvoiceItems(sale.id);
   const canIssueNote = sale.status === "issued" || sale.status === "paid";
   return (
     <View style={styles.saleDetails}>
       <View style={styles.detailsDivider} />
-      <InvoiceItemRow
-        invoiceId={sale.id}
-        currencyCode={sale.currency}
-        exchangeRate={sale.exchangeRate}
-        symbols={currencySymbols}
-      />
+      {isLoading ? (
+        <ActivityIndicator size="small" color={C.amber.primary} style={{ marginVertical: 10 }} />
+      ) : (
+        <InvoiceItemRow
+          invoiceId={sale.id}
+          currencyCode={sale.currency}
+          exchangeRate={sale.exchangeRate}
+          symbols={currencySymbols}
+          items={items || []}
+        />
+      )}
       <View style={[styles.saleFooter, { justifyContent: "space-between", flexWrap: "wrap", gap: 6 }]}>
         <View>
           <Text style={styles.paymentMethod}>Paid via {sale.paymentMethod || "CASH"}</Text>
@@ -185,34 +212,35 @@ function ExpandedSaleContent({ sale, currencySymbols, onReprint, isPrinting, onC
               <Text style={{ color: "#a78bfa", fontSize: 10, fontWeight: "700" }}>DN</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity
-            onPress={() => onReprint(sale, items || [])}
-            disabled={isPrinting || isLoading}
-            style={{
-              flexDirection: "row", alignItems: "center", gap: 5,
-              paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8,
-              backgroundColor: "rgba(240,165,0,0.1)", borderWidth: 1, borderColor: "rgba(240,165,0,0.3)"
-            }}>
-            <Printer size={13} color="#f0a500" />
-            <Text style={{ color: "#f0a500", fontSize: 11, fontWeight: "700" }}>Reprint</Text>
-          </TouchableOpacity>
+          {isPrintingEnabled && (
+            <TouchableOpacity
+              onPress={() => onReprint(sale, items || [])}
+              disabled={isPrinting || isLoading}
+              style={{
+                flexDirection: "row", alignItems: "center", gap: 5,
+                paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8,
+                backgroundColor: "rgba(240,165,0,0.1)", borderWidth: 1, borderColor: "rgba(240,165,0,0.3)"
+              }}>
+              <Printer size={13} color="#f0a500" />
+              <Text style={{ color: "#f0a500", fontSize: 11, fontWeight: "700" }}>Reprint</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </View>
   );
 }
 
-function InvoiceItemRow({ invoiceId, currencyCode, exchangeRate, symbols }: {
+function InvoiceItemRow({ invoiceId, currencyCode, exchangeRate, symbols, items }: {
   invoiceId: number;
   currencyCode?: string;
   exchangeRate?: string;
   symbols?: Record<string, string>;
+  items: any[];
 }) {
-  const { data: items, isLoading } = useInvoiceItems(invoiceId);
   const rate = Number(exchangeRate || 1);
   const symbol = symbols?.[currencyCode || "USD"] || (currencyCode === "USD" ? "$" : currencyCode || "$");
 
-  if (isLoading) return <ActivityIndicator size="small" color={C.amber.primary} style={{ marginVertical: 10 }} />;
   if (!items || items.length === 0) return <Text style={{ color: C.text.secondary, fontSize: 12, paddingVertical: 8 }}>No items found.</Text>;
 
   return (
@@ -355,7 +383,7 @@ function InventoryContent({ tab, companyId, start, end, symbol, onNavigate }: { 
             </View>
             <View style={{ alignItems: "flex-end" }}>
               <Text style={[styles.itemQty, { color: item.type === "STOCK_IN" ? C.status.success : item.type === "STOCK_OUT" ? C.status.error : C.amber.primary, fontSize: 16, fontWeight: "900" }]}>
-                {item.type === "STOCK_OUT" ? "−" : "+"}{Number(item.quantity).toFixed(0)}
+                {item.type === "STOCK_OUT" ? "−" : "+"}{Math.abs(Number(item.quantity)).toFixed(0)}
               </Text>
               <Text style={styles.itemRef} numberOfLines={1}>{item.reference || (item.notes || "System")}</Text>
             </View>
@@ -393,7 +421,14 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
   const isCashier = userRole.toLowerCase() === "cashier" || userRole.toLowerCase() === "member";
   const { data: company } = useCompany(companyId);
   const [isPrinting, setIsPrinting] = useState(false);
-  const [printerConfig, setPrinterConfig] = useState({ macAddress: "", terminalId: "POS-01", targetPrinter: "", paperWidth: 58 });
+  const [printerConfig, setPrinterConfig] = useState<any>({
+    enabled: true,
+    macAddress: "",
+    targetPrinter: "",
+    paperWidth: 58,
+    terminalId: "POS-M01",
+    autoPrint: true,
+  });
   const [isOnline, setIsOnline] = useState(true);
   const [creditThreshold, setCreditThreshold] = useState(50);
   const [noteModal, setNoteModal] = useState<{
@@ -418,7 +453,12 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
 
   useEffect(() => {
     AsyncStorage.getItem(`printer_config_${userId}`).then(val => {
-      if (val) { try { setPrinterConfig(JSON.parse(val)); } catch (_) { } }
+      if (val) {
+        try {
+          const parsed = JSON.parse(val);
+          setPrinterConfig((prev: any) => ({ ...prev, ...parsed }));
+        } catch (_) { }
+      }
     });
   }, [userId]);
 
@@ -455,7 +495,7 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
   const [customEnd, setCustomEnd] = useState("");
   const [showPeriodPicker, setShowPeriodPicker] = useState(false);
   const [expandedSaleId, setExpandedSaleId] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<Tab>("sales");
+  const [activeTab, setActiveTab] = useState<ActiveTab>("sales");
   const [activeInvTab, setActiveInvTab] = useState<InventorySubTab>("valuation");
   const [cashierFilter, setCashierFilter] = useState<string>(isCashier ? (userName || "me") : "all");
   const [showCashierPicker, setShowCashierPicker] = useState(false);
@@ -465,7 +505,7 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
   const [showDrillDown, setShowDrillDown] = useState(false);
 
   // Date filter: hidden on valuation sub-tab and pnl (pnl is always all-time)
-  const showDateFilter = activeTab === "sales" || (activeTab === "inventory" && activeInvTab !== "valuation");
+  const showDateFilter = activeTab === "sales" || (activeTab === "inventory" && activeInvTab !== "valuation") || activeTab === "abc";
   // Cashier filter only applies to sales
   const showCashierFilter = !isCashier && activeTab === "sales";
 
@@ -473,11 +513,18 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
   useEffect(() => {
     if (!showDateFilter) setShowPeriodPicker(false);
     if (!showCashierFilter) setShowCashierPicker(false);
-  }, [showDateFilter, showCashierFilter]);
+    
+    // Default to "All Time" for ABC and Movements as per user request
+    if (activeTab === "abc" || (activeTab === "inventory" && activeInvTab === "movements")) {
+      setPeriod("All Time");
+    }
+  }, [showDateFilter, showCashierFilter, activeTab, activeInvTab]);
 
   const { start, end } = useMemo(() => getDateRange(period, customStart, customEnd), [period, customStart, customEnd]);
   const { data: sales, isLoading: loadingSales } = usePosSales(companyId, start, end);
   const { data: currencies } = useCurrencies(companyId);
+
+  const { data: expandedSaleItems, isLoading: loadingExpandedSaleItems } = useInvoiceItems(expandedSaleId);
 
   const currencySymbols = useMemo(() => {
     const map: Record<string, string> = { "USD": "$" };
@@ -492,6 +539,9 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
 
   const [financialData, setFinancialData] = useState<any>(null);
   const [loadingFinancial, setLoadingFinancial] = useState(false);
+
+  const [abcData, setAbcData] = useState<any[] | null>(null);
+  const [loadingAbc, setLoadingAbc] = useState(false);
 
   const cashierIdMap = useMemo(() => {
     const map: Record<string, string> = {};
@@ -518,6 +568,16 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
       .then((data) => { setFinancialData(data); setLoadingFinancial(false); })
       .catch(() => { setFinancialData(null); setLoadingFinancial(false); });
   }, [companyId]);
+
+  useEffect(() => {
+    if (activeTab !== "abc") return;
+    setLoadingAbc(true);
+    const startStr = start.toISOString();
+    const endStr = end.toISOString();
+    apiJson<any[]>(`/api/companies/${companyId}/reports/abc-analysis?from=${startStr}&to=${endStr}`)
+      .then(data => { setAbcData(data); setLoadingAbc(false); })
+      .catch(() => { setAbcData(null); setLoadingAbc(false); });
+  }, [companyId, activeTab, start, end]);
 
   const cashiers = useMemo(() => {
     if (!sales) return [];
@@ -558,6 +618,150 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
 
   const periods: Period[] = ["Today", "This Week", "This Month", "All Time", "Custom"];
 
+  const renderInventoryTab = () => (
+    <View style={{ flex: 1 }}>
+      <View style={styles.subTabRow}>
+        {(["valuation", "movements", "purchases"] as const).map((itab) => (
+          <TouchableOpacity
+            key={itab}
+            style={[styles.subTab, activeInvTab === itab && styles.subTabActive]}
+            onPress={() => setActiveInvTab(itab)}
+          >
+            <Text style={[styles.subTabText, activeInvTab === itab && styles.subTabTextActive]}>
+              {itab.charAt(0).toUpperCase() + itab.slice(1)}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <InventoryContent tab={activeInvTab} companyId={companyId} start={start} end={end} symbol={baseSymbol} onNavigate={onNavigate} />
+    </View>
+  );
+
+  const renderAbcTab = () => {
+    if (loadingAbc) return <ActivityIndicator style={{ marginTop: 50 }} color={C.amber.primary} />;
+    if (!abcData?.length) {
+      return (
+        <View style={{ alignItems: 'center', marginTop: 50 }}>
+          <Text style={{ color: C.text.secondary }}>No sales data for ABC analysis in this period.</Text>
+        </View>
+      );
+    }
+
+    const categories = {
+      A: abcData.filter(p => p.category === "A"),
+      B: abcData.filter(p => p.category === "B"),
+      C: abcData.filter(p => p.category === "C"),
+    };
+
+    return (
+      <View style={{ flex: 1, padding: 15 }}>
+        <View style={styles.abcHeaderCard}>
+          <Text style={styles.abcHeaderTitle}>Sales ABC Analysis</Text>
+          <Text style={styles.abcHeaderSubtitle}>Categorized by revenue contribution ({baseSymbol})</Text>
+          
+          <View style={styles.abcLegend}>
+            <View style={styles.abcLegendItem}>
+              <View style={[styles.abcBadge, { backgroundColor: '#4CAF50' }]}><Text style={styles.abcBadgeText}>A</Text></View>
+              <Text style={styles.abcLegendText}>Top 80%</Text>
+            </View>
+            <View style={styles.abcLegendItem}>
+              <View style={[styles.abcBadge, { backgroundColor: '#FF9800' }]}><Text style={styles.abcBadgeText}>B</Text></View>
+              <Text style={styles.abcLegendText}>Next 15%</Text>
+            </View>
+            <View style={styles.abcLegendItem}>
+              <View style={[styles.abcBadge, { backgroundColor: '#F44336' }]}><Text style={styles.abcBadgeText}>C</Text></View>
+              <Text style={styles.abcLegendText}>Bottom 5%</Text>
+            </View>
+          </View>
+        </View>
+
+        {(['A', 'B', 'C'] as const).map(cat => (
+          <View key={cat} style={styles.abcSection}>
+            <View style={styles.abcSectionHeader}>
+              <View style={[styles.abcBadgeLarge, { backgroundColor: cat === 'A' ? '#4CAF50' : cat === 'B' ? '#FF9800' : '#F44336' }]}>
+                <Text style={styles.abcBadgeTextLarge}>{cat}</Text>
+              </View>
+              <Text style={styles.abcSectionTitle}>Class {cat} Items ({categories[cat].length})</Text>
+            </View>
+            
+            {categories[cat].map((item, idx) => (
+              <View key={item.productId || idx} style={styles.abcItemRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.abcItemName} numberOfLines={1}>{item.name}</Text>
+                  <Text style={styles.abcItemSku}>{item.sku}</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={styles.abcItemRevenue}>{baseSymbol}{item.revenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
+                  <Text style={styles.abcItemShare}>{item.share.toFixed(1)}% of total</Text>
+                </View>
+              </View>
+            ))}
+            {categories[cat].length === 0 && (
+              <Text style={styles.abcEmptyText}>No items in this category</Text>
+            )}
+          </View>
+        ))}
+        <View style={{ height: 100 }} />
+      </View>
+    );
+  };
+
+  const renderCollectionsTab = () => {
+    const [collections, setCollections] = useState<any[]>([]);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+      setLoading(true);
+      const startStr = start.toISOString();
+      const endStr = end.toISOString();
+      apiJson<any[]>(`/api/companies/${companyId}/reports/cash-collections?from=${startStr}&to=${endStr}`)
+        .then(data => { setCollections(data); setLoading(false); })
+        .catch(() => { setCollections([]); setLoading(false); });
+    }, [companyId, start, end]);
+
+    if (loading) return <ActivityIndicator style={{ marginTop: 50 }} color={C.amber.primary} />;
+
+    return (
+      <View style={{ flex: 1, padding: 16 }}>
+        <View style={[styles.abcHeaderCard, { marginBottom: 16 }]}>
+          <Text style={styles.abcHeaderTitle}>Cash Collections</Text>
+          <Text style={styles.abcHeaderSubtitle}>Money removed from the till</Text>
+          <View style={{ marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: C.amber.primary }} />
+            <Text style={{ color: C.text.primary, fontSize: 13, fontWeight: '700' }}>
+              Total: {baseSymbol}{collections.reduce((sum, c) => sum + Number(c.amount), 0).toFixed(2)}
+            </Text>
+          </View>
+        </View>
+
+        {collections.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Download size={40} color={C.text.secondary} strokeWidth={1} />
+            <Text style={styles.emptyText}>No collections in this period.</Text>
+          </View>
+        ) : (
+          collections.map((item, idx) => (
+            <View key={item.id || idx} style={styles.inventoryRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.itemName}>{item.cashierName || "System"}</Text>
+                <Text style={styles.itemDate}>
+                  {new Date(item.createdAt).toLocaleDateString()} {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+                <Text style={[styles.itemRef, { marginTop: 4 }]} numberOfLines={1}>Reason: {item.reason || "N/A"}</Text>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={{ color: C.amber.primary, fontSize: 18, fontWeight: '900' }}>
+                  {baseSymbol}{Number(item.amount).toFixed(2)}
+                </Text>
+                <Text style={{ color: C.text.secondary, fontSize: 10, marginTop: 4 }}>Shift #{item.shiftId}</Text>
+              </View>
+            </View>
+          ))
+        )}
+      </View>
+    );
+  };
+
   const renderHeader = () => (
     <View>
       {/* Tabs */}
@@ -572,6 +776,12 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
         )}
         <TouchableOpacity style={[styles.tab, activeTab === "inventory" && styles.tabActive]} onPress={() => setActiveTab("inventory")}>
           <Text style={[styles.tabText, activeTab === "inventory" && styles.tabTextActive]}>Stock</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.tab, activeTab === "abc" && styles.tabActive]} onPress={() => setActiveTab("abc")}>
+          <Text style={[styles.tabText, activeTab === "abc" && styles.tabTextActive]}>ABC</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.tab, activeTab === "collections" && styles.tabActive]} onPress={() => setActiveTab("collections")}>
+          <Text style={[styles.tabText, activeTab === "collections" && styles.tabTextActive]}>Collect</Text>
         </TouchableOpacity>
       </View>
 
@@ -666,24 +876,9 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
           </>
         )}
 
-        {activeTab === "inventory" && (
-          <View>
-            <View style={styles.subTabRow}>
-              {(["valuation", "movements", "purchases"] as const).map((itab) => (
-                <TouchableOpacity
-                  key={itab}
-                  style={[styles.subTab, activeInvTab === itab && styles.subTabActive]}
-                  onPress={() => setActiveInvTab(itab)}
-                >
-                  <Text style={[styles.subTabText, activeInvTab === itab && styles.subTabTextActive]}>
-                    {itab.charAt(0).toUpperCase() + itab.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <InventoryContent tab={activeInvTab} companyId={companyId} start={start} end={end} symbol={baseSymbol} onNavigate={onNavigate} />
-          </View>
-        )}
+        {activeTab === "inventory" && renderInventoryTab()}
+        {activeTab === "abc" && renderAbcTab()}
+        {activeTab === "collections" && renderCollectionsTab()}
 
         {activeTab === "pnl" && (
           <View>
@@ -849,6 +1044,7 @@ export function ReportsScreen({ onOpenDrawer, companyId, userRole = "member", us
                   isPrinting={isPrinting}
                   onCreditNote={(s, items) => setNoteModal({ visible: true, noteType: "credit", sale: s, items })}
                   onDebitNote={(s, items) => setNoteModal({ visible: true, noteType: "debit", sale: s, items })}
+                  isPrintingEnabled={printerConfig.enabled}
                 />
               )}
             </View>

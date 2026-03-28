@@ -9,7 +9,7 @@ type PendingSale = {
 
 type PendingShiftAction =
   | { id: string; companyId: number; createdAt: string; type: "open"; payload: { openingBalance: string } }
-  | { id: string; companyId: number; createdAt: string; type: "close"; payload: { shiftId: number; closingBalance: string } };
+  | { id: string; companyId: number; createdAt: string; type: "close"; payload: { shiftId: number; closingBalance: string; reconciledBy?: string } };
 
 const KEYS = {
   pendingSales: "pendingSales",

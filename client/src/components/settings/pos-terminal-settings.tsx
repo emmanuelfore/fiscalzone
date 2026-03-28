@@ -83,7 +83,6 @@ export function PosTerminalSettings({ formData, setFormData, isLoading, companyI
     { id: "barcodes", label: "Barcode Rules", icon: Wrench },
     { id: "cashiers", label: "Cashiers", icon: Users },
     { id: "downloads", label: "Apps & Client", icon: Download },
-    { id: "maintenance", label: "Maintenance", icon: Wrench },
   ];
 
   const posSettings = formData.posSettings || {
@@ -217,22 +216,6 @@ export function PosTerminalSettings({ formData, setFormData, isLoading, companyI
     }
   });
 
-  // --- MAINTENANCE ---
-  const [isClearTestOpen, setIsClearTestOpen] = useState(false);
-  const clearTestInvoicesMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiFetch(`/api/companies/${companyId}/invoices/clear-test`, {
-        method: "POST"
-      });
-      if (!res.ok) throw new Error("Failed to clear test invoices");
-      return await res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["invoices", companyId] });
-      toast({ title: "Maintenance Complete", description: "Successfully cleared test invoices." });
-      setIsClearTestOpen(false);
-    }
-  });
 
   const fetchPrintersForGlobal = async () => {
     try {
@@ -885,42 +868,6 @@ export function PosTerminalSettings({ formData, setFormData, isLoading, companyI
                 </CardContent>
               </Card>
             </div>
-          </div>
-        )}
-
-        {activeSection === 'maintenance' && (
-          <div className="animate-in fade-in slide-in-from-right-4 duration-300 space-y-6">
-            <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-              <Wrench className="w-5 h-5 text-red-600" />
-              Maintenance & Cleanup
-            </h3>
-            
-            <Card className="border-red-100 bg-red-50/20">
-              <CardContent className="pt-6 space-y-4">
-                <div className="flex justify-between items-start gap-6">
-                   <div className="space-y-1">
-                      <p className="text-sm font-bold text-slate-900">Clear Test Fiscal Data</p>
-                      <p className="text-xs text-slate-500 leading-relaxed max-w-md">Permanently removes all invoices and logs created in ZIMRA test mode. Recommended before going live.</p>
-                   </div>
-                   <Button variant="destructive" size="sm" className="font-bold rounded-xl" onClick={() => setIsClearTestOpen(true)}>
-                      <Trash2 className="w-4 h-4 mr-2" /> Clear Test Data
-                   </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Dialog open={isClearTestOpen} onOpenChange={setIsClearTestOpen}>
-              <DialogContent className="rounded-[2rem]">
-                <DialogHeader>
-                   <DialogTitle className="text-red-600">Delete Test Invoices?</DialogTitle>
-                   <DialogDescription>This operation is irreversible. All test invoices, payments, and logs will be deleted.</DialogDescription>
-                </DialogHeader>
-                <DialogFooter className="gap-2">
-                   <Button variant="outline" onClick={() => setIsClearTestOpen(false)}>Cancel</Button>
-                   <Button variant="destructive" onClick={() => clearTestInvoicesMutation.mutate()} disabled={clearTestInvoicesMutation.isPending}>Confirm Deletion</Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
           </div>
         )}
       </div>

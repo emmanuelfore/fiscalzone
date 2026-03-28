@@ -184,17 +184,29 @@ export function POSReceipt({ invoice, company, customer, items, paperSize: paper
                         overflow: visible;
                     }
                     #pos-receipt {
-                        position: fixed;
-                        left: ${isA4 ? '50%' : '0'};
-                        top: 0;
-                        ${isA4 ? 'transform: translateX(-50%);' : ''}
-                        width: ${receiptWidth};
-                        padding: 2mm;
-                        margin: 0;
+                        position: relative !important;
+                        left: 0 !important;
+                        top: 0 !important;
+                        transform: none !important;
+                        width: ${receiptWidth} !important;
+                        padding: 4mm 4mm 1mm 4mm !important;
+                        margin: ${isA4 ? '0 auto' : '0'} !important;
                         box-sizing: border-box;
                         background: white;
+                        /* Force crisp rendering for thermal printers */
+                        -webkit-font-smoothing: none;
+                        -moz-osx-font-smoothing: grayscale;
+                        color: #000000 !important;
                     }
-                    * { box-sizing: border-box; }
+                    * { 
+                        box-sizing: border-box;
+                        color: #000000 !important;
+                        border-color: #000000 !important;
+                    }
+                    img, svg {
+                        image-rendering: pixelated;
+                        image-rendering: crisp-edges;
+                    }
                 }
             `}</style>
         </div>

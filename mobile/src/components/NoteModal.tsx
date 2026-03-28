@@ -24,6 +24,7 @@ interface AdjustedItem {
 }
 
 interface PrinterConfig {
+  enabled: boolean;
   macAddress: string;
   terminalId: string;
   targetPrinter: string;
@@ -180,7 +181,9 @@ export function NoteModal({
           currency: payload.currency,
           exchangeRate: payload.exchangeRate,
         };
-        offerPrint(offlineNote);
+        if (printerConfig.enabled) {
+          offerPrint(offlineNote);
+        }
         onSuccess(offlineNote);
         onClose();
         return;
@@ -217,7 +220,9 @@ export function NoteModal({
         }
       }
 
-      offerPrint(note);
+      if (printerConfig.enabled) {
+        offerPrint(note);
+      }
       onSuccess(note);
       onClose();
     } catch (e: any) {

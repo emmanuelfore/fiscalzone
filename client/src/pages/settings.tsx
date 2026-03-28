@@ -16,7 +16,8 @@ import {
   RefreshCw,
   ChevronRight,
   Settings as SettingsIcon,
-  LayoutDashboard
+  LayoutDashboard,
+  Trash2
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
@@ -32,6 +33,7 @@ import { TaxComplianceSettings } from "@/components/settings/tax-compliance-sett
 import { ZimraDeviceSettings } from "@/components/settings/zimra-device-settings";
 import { PosTerminalSettings } from "@/components/settings/pos-terminal-settings";
 import { CommunicationSettings } from "@/components/settings/communication-settings";
+import { MaintenanceSettings } from "@/components/settings/maintenance-settings";
 
 export default function SettingsPage() {
   const { toast } = useToast();
@@ -157,6 +159,7 @@ export default function SettingsPage() {
       title: "System",
       items: [
         { id: "communication", label: "Communication", icon: Mail, desc: "Email & notifications" },
+        ...(activeCompany?.role === 'owner' ? [{ id: "maintenance", label: "Maintenance", icon: Trash2, desc: "Clear data & reset" }] : [])
       ]
     }
   ];
@@ -172,6 +175,7 @@ export default function SettingsPage() {
       case 'zimra': return <ZimraDeviceSettings company={activeCompany} />;
       case 'pos': return <PosTerminalSettings companyId={activeCompany.id} formData={formData} setFormData={setFormData} />;
       case 'communication': return <CommunicationSettings formData={formData} setFormData={setFormData} />;
+      case 'maintenance': return <MaintenanceSettings company={activeCompany} />;
       default: return <OrganizationProfile company={activeCompany} formData={formData} setFormData={setFormData} />;
     }
   };

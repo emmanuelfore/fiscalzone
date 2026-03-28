@@ -556,6 +556,21 @@ export const api = {
           reference: z.string().nullable()
         }))
       }
+    },
+    abcAnalysis: {
+      method: "GET" as const,
+      path: "/api/companies/:companyId/reports/abc-analysis",
+      responses: {
+        200: z.array(z.object({
+          productId: z.number(),
+          name: z.string(),
+          sku: z.string().nullable(),
+          revenue: z.number(),
+          share: z.number(),
+          cumulativeShare: z.number(),
+          category: z.enum(["A", "B", "C"])
+        }))
+      }
     }
   }
 };

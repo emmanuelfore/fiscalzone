@@ -171,11 +171,15 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
 
   // Vendor Productivity States
   const [showPayoutModal, setShowPayoutModal] = useState(false);
+  const [transactionType, setTransactionType] = useState<"PAYOUT" | "DROP">("PAYOUT");
   const [payoutAmount, setPayoutAmount] = useState("");
   const [payoutReason, setPayoutReason] = useState("");
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [shiftSummary, setShiftSummary] = useState<any>(null);
   const [isFetchingSummary, setIsFetchingSummary] = useState(false);
+  const [userRole, setUserRole] = useState<string>("member");
+  const [isSupervisorAuthVisible, setIsSupervisorAuthVisible] = useState(false);
+  const [supervisorAction, setSupervisorAction] = useState<"DROP" | "CLOSE" | null>(null);
 
   // Sync input field when orderDiscount is changed from OUTSIDE (e.g. resuming hold, manager override)
   // Use a ref to avoid the loop: don't overwrite when the user is actively typing
@@ -220,7 +224,13 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
         );
       }
     });
-  }, []);
+
+    // Fetch role
+    apiFetch(`/api/companies/${companyId}/my-role`)
+      .then(res => res.json())
+      .then(data => setUserRole(data.role || "member"))
+      .catch(() => setUserRole("member"));
+  }, [companyId]);
 
   useEffect(() => {
     if (showSuccess) {
@@ -468,31 +478,54 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
     } catch { /* ignore */ }
   };
 
-  const closeShift = async () => {
+  const closeShift = async (supervisorId?: string) => {
     Keyboard.dismiss();
     if (!currentShift) return;
     const closingBalance = shiftBalance || "0";
+
+    // Require supervisor PIN to close/reconcile session
+    if (!supervisorId) {
+      setSupervisorAction("CLOSE");
+      setIsSupervisorAuthVisible(true);
+      return;
+    }
+
     try {
       if (isOnline && !currentShift._provisional) {
-        const res = await apiFetch(`/api/pos/shifts/${currentShift.id}/close`, { method: "POST", body: JSON.stringify({ closingBalance }) });
+        const res = await apiFetch(`/api/pos/shifts/${currentShift.id}/close`, {
+          method: "POST",
+          body: JSON.stringify({
+            closingBalance,
+            reconciledBy: supervisorId
+          })
+        });
         if (res.ok) { setCurrentShift(null); await setProvisionalShift(companyId, null); setShowShiftModal(false); setShiftBalance(""); return; }
-        else Alert.alert("Shift Error", await res.text().catch(() => "Unknown error"));
+        else Alert.alert("Session Error", await res.text().catch(() => "Unknown error"));
       }
-      await addPendingShiftAction({ companyId, type: "close", payload: { shiftId: Number(currentShift.id), closingBalance } });
+      await addPendingShiftAction({ companyId, type: "close", payload: { shiftId: Number(currentShift.id), closingBalance, reconciledBy: supervisorId } });
       setCurrentShift(null); await setProvisionalShift(companyId, null); setShowShiftModal(false); setShiftBalance("");
     } catch { /* ignore */ }
   };
 
-  const handlePayout = async () => {
-    if (!currentShift || !payoutAmount || !payoutReason) return;
+  const handlePayout = async (supervisorId?: string) => {
+    if (!currentShift || !payoutAmount) return;
+
+    // Require supervisor PIN for Drops (Collections)
+    if (transactionType === "DROP" && !supervisorId) {
+      setSupervisorAction("DROP");
+      setIsSupervisorAuthVisible(true);
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      const res = await apiFetch(`/api/pos/shifts/${currentShift.id}/transactions`, {
+      const res = await apiFetch(`/api/pos/shifts/${currentShift.id}/transaction`, {
         method: "POST",
         body: JSON.stringify({
-          type: "PAYOUT",
+          type: transactionType,
           amount: parseFloat(payoutAmount),
-          reason: payoutReason
+          reason: payoutReason || (transactionType === "DROP" ? "Supervisor Cash Collection" : "General Payout"),
+          authorizedBy: supervisorId
         })
       });
       if (res.ok) {
@@ -500,11 +533,14 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
         setPayoutAmount("");
         setPayoutReason("");
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        // Refresh summary if it was open or just as good practice
+        if (showSummaryModal) fetchShiftSummary();
       } else {
-        Alert.alert("Error", "Failed to log payout");
+        const err = await res.text();
+        Alert.alert("Error", `Failed to log ${transactionType.toLowerCase()}: ${err}`);
       }
     } catch (e) {
-      Alert.alert("Error", "Network error logging payout");
+      Alert.alert("Error", `Network error logging ${transactionType.toLowerCase()}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -914,7 +950,16 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
             <TouchableOpacity activeOpacity={0.7}
-              onPress={() => { setShiftModalType(currentShift ? "CLOSE" : "OPEN"); setShowShiftModal(true); }}
+              onPress={() => {
+                const type = currentShift ? "CLOSE" : "OPEN";
+                setShiftModalType(type);
+                if (type === "CLOSE") {
+                  fetchShiftSummary();
+                } else {
+                  setShiftSummary(null);
+                }
+                setShowShiftModal(true);
+              }}
               style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
               <View style={{
                 width: 7, height: 7, borderRadius: 4,
@@ -923,7 +968,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
                 shadowRadius: 4, shadowOffset: { width: 0, height: 0 }
               }} />
               <Text style={{ color: C.text.secondary, fontSize: 11, fontWeight: "600" }}>
-                {currentShift ? "Shift active" : "Shift closed"}
+                {currentShift ? "Session active" : "Session closed"}
               </Text>
             </TouchableOpacity>
 
@@ -931,11 +976,12 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
               <>
                 <View style={{ width: 1, height: 12, backgroundColor: C.border.default }} />
                 <TouchableOpacity
-                  onPress={() => setShowPayoutModal(true)}
+                  onPress={() => { setTransactionType("PAYOUT"); setShowPayoutModal(true); }}
                   style={{ flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 4 }}>
                   <Banknote size={14} color={C.amber.primary} />
                   <Text style={{ color: C.text.primary, fontSize: 11, fontWeight: "700" }}>Payout</Text>
                 </TouchableOpacity>
+
 
                 <View style={{ width: 1, height: 12, backgroundColor: C.border.default }} />
                 <TouchableOpacity
@@ -943,7 +989,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
                   style={{ flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 4 }}>
                   <ActivityIndicator size="small" color={C.amber.primary} animating={isFetchingSummary} style={{ display: isFetchingSummary ? 'flex' : 'none' }} />
                   {!isFetchingSummary && <History size={14} color={C.amber.primary} />}
-                  <Text style={{ color: C.text.primary, fontSize: 11, fontWeight: "700" }}>Summary</Text>
+                  <Text style={{ color: C.text.primary, fontSize: 11, fontWeight: "700" }}>X/Z-Report</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -1932,21 +1978,23 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
                 </View>
               </View>
 
-              <View style={{ width: "100%", gap: 10, marginBottom: 20 }}>
-                <TouchableOpacity activeOpacity={0.8}
-                  onPress={() => {
-                    handlePrint();
-                  }}
-                  disabled={isPrinting}
-                  style={{
-                    flexDirection: "row", alignItems: "center", justifyContent: "center",
-                    gap: 10, paddingVertical: 14, borderRadius: 16,
-                    backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default
-                  }}>
-                  <Printer size={18} color={C.amber.primary} />
-                  <Text style={{ color: C.text.primary, fontWeight: "700" }}>Print Receipt</Text>
-                </TouchableOpacity>
-              </View>
+              {printerConfig.enabled && (
+                <View style={{ width: "100%", gap: 10, marginBottom: 20 }}>
+                  <TouchableOpacity activeOpacity={0.8}
+                    onPress={() => {
+                      handlePrint();
+                    }}
+                    disabled={isPrinting}
+                    style={{
+                      flexDirection: "row", alignItems: "center", justifyContent: "center",
+                      gap: 10, paddingVertical: 14, borderRadius: 16,
+                      backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default
+                    }}>
+                    <Printer size={18} color={C.amber.primary} />
+                    <Text style={{ color: C.text.primary, fontWeight: "700" }}>Print Receipt</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
 
               <TouchableOpacity onPress={() => setShowSuccess(false)} style={{ width: "100%", borderRadius: 16, overflow: "hidden" }}>
                 <LinearGradient colors={[C.amber.primary, C.amber.light]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
@@ -1968,7 +2016,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
           }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
               <Text style={{ color: C.text.primary, fontSize: 22, fontWeight: "800" }}>
-                {shiftModalType === "OPEN" ? "Open Shift" : "Close Shift"}
+                {shiftModalType === "OPEN" ? "Open Session" : "End Session (Z-Report)"}
               </Text>
               <TouchableOpacity onPress={() => setShowShiftModal(false)}
                 style={{
@@ -1981,6 +2029,32 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
             <Text style={{ color: C.text.secondary, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>
               {shiftModalType === "OPEN" ? "Float / Opening Balance" : "Actual Counted Cash"}
             </Text>
+
+            {shiftModalType === "CLOSE" && shiftSummary && (
+              <View style={{ marginBottom: 16, padding: 14, borderRadius: 16, backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default }}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                  <Text style={{ color: C.text.secondary, fontSize: 10, fontWeight: "800", textTransform: "uppercase" }}>Expected in Till</Text>
+                  <Text style={{ color: C.text.primary, fontSize: 16, fontWeight: "900" }}>{shiftSummary.currency} {shiftSummary.expectedCash}</Text>
+                </View>
+                {parseFloat(shiftBalance) > 0 && (
+                  <View style={{ borderTopWidth: 1, borderTopColor: C.border.default, paddingTop: 8, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <Text style={{ color: C.text.secondary, fontSize: 10, fontWeight: "700" }}>VARIANCE</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                      <Text style={{
+                        color: (parseFloat(shiftBalance) - parseFloat(shiftSummary.expectedCash)) >= 0 ? C.status.success : C.status.error,
+                        fontSize: 16, fontWeight: "900"
+                      }}>
+                        {shiftSummary.currency} {(parseFloat(shiftBalance) - parseFloat(shiftSummary.expectedCash)) >= 0 ? "+" : ""}{(parseFloat(shiftBalance) - parseFloat(shiftSummary.expectedCash)).toFixed(2)}
+                      </Text>
+                      <View style={{
+                        width: 8, height: 8, borderRadius: 4,
+                        backgroundColor: (parseFloat(shiftBalance) - parseFloat(shiftSummary.expectedCash)) >= 0 ? C.status.success : C.status.error
+                      }} />
+                    </View>
+                  </View>
+                )}
+              </View>
+            )}
             <TextInput
               style={{
                 backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default,
@@ -1996,7 +2070,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
               onChangeText={setShiftBalance}
             />
             <View style={{ height: 16 }} />
-            <TouchableOpacity activeOpacity={0.88} onPress={shiftModalType === "OPEN" ? openShift : closeShift}>
+            <TouchableOpacity activeOpacity={0.88} onPress={() => shiftModalType === "OPEN" ? openShift() : closeShift()}>
               <LinearGradient
                 colors={shiftModalType === "OPEN" ? ["#34d399", "#10b981"] : [C.status.error, "#dc2626"]}
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
@@ -2010,7 +2084,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
                     color: shiftModalType === "OPEN" ? "#000" : "#fff",
                     fontSize: 14, fontWeight: "900", textTransform: "uppercase", letterSpacing: 1.2
                   }}>
-                    {shiftModalType === "OPEN" ? "Start Service" : "Close Shift"}
+                    {shiftModalType === "OPEN" ? "Start Session" : "End Session & Remit"}
                   </Text>
                 </View>
                 <Text style={{
@@ -2034,10 +2108,32 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
         </View>
       </Modal>
 
-      {/* ── PRINTER SETTINGS MODAL ─────────────────────────────────────────── */}
-      <PrinterSettingsModal visible={showPrinterSettings} onClose={() => setShowPrinterSettings(false)} />
+      {/* ── SUPERVISOR PIN MODAL ─────────────────────────────────────────── */}
+      <ManagerPinModal
+        visible={isSupervisorAuthVisible}
+        companyId={companyId}
+        title="Supervisor Authorization"
+        description={supervisorAction === "DROP"
+          ? "Admin/Owner PIN required to verify cash collection"
+          : "Admin/Owner PIN required to reconcile & end session"
+        }
+        onClose={() => {
+          setIsSupervisorAuthVisible(false);
+          setSupervisorAction(null);
+        }}
+        onAuthorized={(supervisor) => {
+          setIsSupervisorAuthVisible(false);
+          const action = supervisorAction;
+          setSupervisorAction(null);
+          if (action === "DROP") {
+            handlePayout(supervisor.id);
+          } else if (action === "CLOSE") {
+            closeShift(supervisor.id);
+          }
+        }}
+      />
 
-      {/* ── MANAGER PIN MODAL ──────────────────────────────────────────────── */}
+      {/* ── MANAGER PIN MODAL (For VOIDS/DISCOUNTS) ────────────────────────── */}
       {pendingOverride && (
         <ManagerPinModal
           visible={!!pendingOverride}
@@ -2077,7 +2173,9 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
                 borderTopWidth: 1, borderColor: C.border.default, padding: 24, paddingBottom: 40
               }}>
                 <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-                  <Text style={{ color: C.text.primary, fontSize: 22, fontWeight: "800" }}>Log Payout</Text>
+                  <Text style={{ color: C.text.primary, fontSize: 22, fontWeight: "800" }}>
+                    {transactionType === "PAYOUT" ? "Log Payout" : "Collect Cash (Drop)"}
+                  </Text>
                   <TouchableOpacity onPress={() => setShowPayoutModal(false)}
                     style={{
                       width: 38, height: 38, borderRadius: 12, backgroundColor: C.bg.hover,
@@ -2087,7 +2185,29 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
                   </TouchableOpacity>
                 </View>
 
-                <Text style={{ color: C.text.secondary, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Amount (Out of Till)</Text>
+                {/* Type Selector within modal */}
+                <View style={{ flexDirection: "row", gap: 8, marginBottom: 20 }}>
+                  {[
+                    { type: "PAYOUT", label: "Payout", Icon: Banknote, color: C.status.error },
+                    { type: "DROP", label: "Collection", Icon: Download, color: C.status.info }
+                  ].map((t) => (
+                    <TouchableOpacity key={t.type} onPress={() => setTransactionType(t.type as any)}
+                      style={{
+                        flex: 1, height: 48, borderRadius: 12, flexDirection: "row",
+                        alignItems: "center", justifyContent: "center", gap: 10,
+                        borderWidth: transactionType === t.type ? 2 : 1,
+                        borderColor: transactionType === t.type ? (t.type === "PAYOUT" ? C.status.error : C.amber.primary) : C.border.default,
+                        backgroundColor: transactionType === t.type ? (t.type === "PAYOUT" ? `${C.status.error}10` : `${C.amber.primary}10`) : C.bg.hover
+                      }}>
+                      <t.Icon size={16} color={transactionType === t.type ? (t.type === "PAYOUT" ? C.status.error : C.amber.primary) : C.text.secondary} />
+                      <Text style={{ color: transactionType === t.type ? C.text.primary : C.text.secondary, fontWeight: "700", fontSize: 13 }}>{t.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <Text style={{ color: C.text.secondary, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
+                  {transactionType === "PAYOUT" ? "Amount (Out of Till)" : "Amount to Collect"}
+                </Text>
                 <TextInput
                   style={{
                     backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default,
@@ -2103,26 +2223,30 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
                   onChangeText={setPayoutAmount}
                 />
 
-                <Text style={{ color: C.text.secondary, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Reason (e.g. Lunch, Transport)</Text>
+                <Text style={{ color: C.text.secondary, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Reason / Notes</Text>
                 <TextInput
                   style={{
                     backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default,
                     borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14,
                     color: C.text.primary, fontSize: 16, marginBottom: 24
                   }}
-                  placeholder="What was this for?"
+                  placeholder={transactionType === "PAYOUT" ? "What was this for?" : "Reference (optional)"}
                   placeholderTextColor={C.text.secondary}
                   returnKeyType="done"
-                  onSubmitEditing={handlePayout}
+                  onSubmitEditing={() => handlePayout()}
                   value={payoutReason}
                   onChangeText={setPayoutReason}
                 />
 
-                <TouchableOpacity activeOpacity={0.88} onPress={handlePayout} disabled={isSubmitting}>
-                  <LinearGradient colors={[C.status.error, "#dc2626"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                <TouchableOpacity activeOpacity={0.88} onPress={() => handlePayout()} disabled={isSubmitting}>
+                  <LinearGradient
+                    colors={transactionType === "PAYOUT" ? [C.status.error, "#dc2626"] : [C.amber.primary, C.amber.light]}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                     style={{ borderRadius: 22, height: 60, alignItems: "center", justifyContent: "center" }}>
-                    {isSubmitting ? <ActivityIndicator color="#fff" /> : (
-                      <Text style={{ color: "#fff", fontSize: 14, fontWeight: "900", textTransform: "uppercase", letterSpacing: 1.2 }}>Confirm Payout</Text>
+                    {isSubmitting ? <ActivityIndicator color={transactionType === "PAYOUT" ? "#fff" : "#000"} /> : (
+                      <Text style={{ color: transactionType === "PAYOUT" ? "#fff" : "#000", fontSize: 14, fontWeight: "900", textTransform: "uppercase", letterSpacing: 1.2 }}>
+                        {transactionType === "PAYOUT" ? "Confirm Payout" : "Record Collection"}
+                      </Text>
                     )}
                   </LinearGradient>
                 </TouchableOpacity>
@@ -2140,30 +2264,51 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
             borderWidth: 1, borderColor: C.border.default, padding: 24
           }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-              <Text style={{ color: C.text.primary, fontSize: 22, fontWeight: "800" }}>Cash-Up Summary</Text>
+              <Text style={{ color: C.text.primary, fontSize: 22, fontWeight: "800" }}>Session Z-Report</Text>
               <TouchableOpacity onPress={() => setShowSummaryModal(false)}>
                 <X size={20} color={C.text.secondary} />
               </TouchableOpacity>
             </View>
 
             {shiftSummary && (
-              <View style={{ gap: 16 }}>
-                <View style={{ padding: 16, borderRadius: 16, backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default }}>
-                  <Text style={{ color: C.text.secondary, fontSize: 11, fontWeight: "700", textTransform: "uppercase", marginBottom: 8 }}>Total Sales</Text>
-                  <Text style={{ color: C.status.success, fontSize: 24, fontWeight: "900" }}>{shiftSummary.currency} {shiftSummary.totalSales}</Text>
-                </View>
+              <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
+                <View style={{ gap: 12 }}>
+                  <View style={{ padding: 14, borderRadius: 16, backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default }}>
+                    <Text style={{ color: C.text.secondary, fontSize: 10, fontWeight: "700", textTransform: "uppercase", marginBottom: 6 }}>Total Sales</Text>
+                    <Text style={{ color: C.status.success, fontSize: 20, fontWeight: "900" }}>{shiftSummary.currency} {shiftSummary.totalSales}</Text>
+                  </View>
 
-                <View style={{ padding: 16, borderRadius: 16, backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default }}>
-                  <Text style={{ color: C.text.secondary, fontSize: 11, fontWeight: "700", textTransform: "uppercase", marginBottom: 8 }}>Total Expenses / Payouts</Text>
-                  <Text style={{ color: C.status.error, fontSize: 24, fontWeight: "900" }}>{shiftSummary.currency} {shiftSummary.totalPayouts}</Text>
-                </View>
+                  <View style={{ flexDirection: "row", gap: 10 }}>
+                    <View style={{ flex: 1, padding: 14, borderRadius: 16, backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default }}>
+                      <Text style={{ color: C.text.secondary, fontSize: 9, fontWeight: "700", textTransform: "uppercase", marginBottom: 4 }}>Payouts</Text>
+                      <Text style={{ color: C.status.error, fontSize: 18, fontWeight: "800" }}>{shiftSummary.totalPayouts}</Text>
+                    </View>
+                    <View style={{ flex: 1, padding: 14, borderRadius: 16, backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default }}>
+                      <Text style={{ color: C.text.secondary, fontSize: 9, fontWeight: "700", textTransform: "uppercase", marginBottom: 4 }}>Collections</Text>
+                      <Text style={{ color: C.amber.primary, fontSize: 18, fontWeight: "800" }}>{shiftSummary.totalDrops}</Text>
+                    </View>
+                  </View>
 
-                <View style={{ padding: 20, borderRadius: 20, backgroundColor: C.bg.hover, borderWidth: 2, borderColor: C.amber.primary }}>
-                  <Text style={{ color: C.text.secondary, fontSize: 11, fontWeight: "800", textTransform: "uppercase", marginBottom: 8 }}>Expected Cash in Till</Text>
-                  <Text style={{ color: C.amber.primary, fontSize: 32, fontWeight: "900" }}>{shiftSummary.currency} {shiftSummary.expectedCash}</Text>
-                  <Text style={{ color: C.text.secondary, fontSize: 10, marginTop: 4 }}>Incl. opening float of {shiftSummary.openingBalance}</Text>
+                  <View style={{ padding: 18, borderRadius: 18, backgroundColor: `${C.status.success}08`, borderWidth: 2, borderColor: C.status.success }}>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                      <Text style={{ color: C.text.secondary, fontSize: 10, fontWeight: "800", textTransform: "uppercase" }}>Cash to Remit</Text>
+                      {shiftSummary.lastTxTime && (
+                        <Text style={{ color: C.text.secondary, fontSize: 8 }}>
+                          Since {new Date(shiftSummary.lastTxTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </Text>
+                      )}
+                    </View>
+                    <Text style={{ color: C.status.success, fontSize: 28, fontWeight: "900" }}>{shiftSummary.currency} {shiftSummary.cashSinceLastTx}</Text>
+                    <Text style={{ color: C.text.secondary, fontSize: 9, marginTop: 4 }}>This is the cash accumulated since the last collection/payout.</Text>
+                  </View>
+
+                  <View style={{ padding: 16, borderRadius: 16, backgroundColor: C.bg.hover, borderWidth: 1, borderColor: C.border.default }}>
+                    <Text style={{ color: C.text.secondary, fontSize: 10, fontWeight: "800", textTransform: "uppercase", marginBottom: 6 }}>Total Expected in Drawer</Text>
+                    <Text style={{ color: C.text.primary, fontSize: 22, fontWeight: "900" }}>{shiftSummary.currency} {shiftSummary.expectedCash}</Text>
+                    <Text style={{ color: C.text.secondary, fontSize: 9, marginTop: 4 }}>Incl. float of {shiftSummary.openingBalance}</Text>
+                  </View>
                 </View>
-              </View>
+              </ScrollView>
             )}
 
             <TouchableOpacity onPress={() => setShowSummaryModal(false)}

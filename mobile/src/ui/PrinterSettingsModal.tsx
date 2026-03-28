@@ -76,6 +76,17 @@ export function PrinterSettingsModal({ visible, onClose }: Props) {
             {/* General Toggles */}
             <View style={{ marginBottom: 24, padding: 16, backgroundColor: PremiumColors.bg.hover, borderRadius: 16, borderWidth: 1, borderColor: PremiumColors.border.default }}>
               <Text style={{ color: PremiumColors.text.primary, fontWeight: "700", marginBottom: 12 }}>General Behavior</Text>
+
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <Text style={{ color: PremiumColors.text.primary, fontWeight: "600" }}>Enable Printing</Text>
+                <TouchableOpacity 
+                   activeOpacity={0.8}
+                   onPress={() => setDraft(p => ({ ...p, enabled: !p.enabled }))}
+                   style={{ width: 44, height: 24, borderRadius: 12, backgroundColor: draft.enabled ? PremiumColors.amber.primary : PremiumColors.border.default, justifyContent: "center", paddingHorizontal: 2 }}
+                >
+                  <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: "white", alignSelf: draft.enabled ? "flex-end" : "flex-start" }} />
+                </TouchableOpacity>
+              </View>
               
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                 <Text style={{ color: PremiumColors.text.primary }}>Auto Print Receipt</Text>

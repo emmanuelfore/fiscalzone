@@ -6,6 +6,7 @@ const DB_VERSION = 6;
 interface PendingSale {
     id: string;
     companyId: number;
+    branchId?: number | null;
     invoiceData: any;
     createdAt: string;
     status: 'pending' | 'syncing' | 'failed';
@@ -16,6 +17,7 @@ interface PendingSale {
 interface PendingShiftAction {
     id: string;
     companyId: number;
+    branchId?: number | null;
     type: 'open' | 'close';
     data: any;
     status: 'pending' | 'syncing' | 'failed';
@@ -25,6 +27,7 @@ interface PendingShiftAction {
 interface OfflineHold {
     id: string;
     companyId: number;
+    branchId?: number | null;
     cartData: any;
     customerId: string;
     holdName: string;
@@ -262,12 +265,13 @@ export async function getCachedShift(companyId: number): Promise<any | undefined
 
 // ─── Pending Shifts ─────────────────────────────────────────────────────────
 
-export async function addPendingShiftAction(companyId: number, type: 'open' | 'close', data: any): Promise<string> {
+export async function addPendingShiftAction(companyId: number, type: 'open' | 'close', data: any, branchId?: number | null): Promise<string> {
     const db = await getDb();
     const id = `shift-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const action: PendingShiftAction = {
         id,
         companyId,
+        branchId,
         type,
         data,
         status: 'pending',
@@ -298,12 +302,13 @@ export async function removePendingShift(id: string): Promise<void> {
 
 // ─── Holds ──────────────────────────────────────────────────────────────────
 
-export async function addOfflineHold(companyId: number, cartData: any, customerId: string, holdName: string): Promise<string> {
+export async function addOfflineHold(companyId: number, cartData: any, customerId: string, holdName: string, branchId?: number | null): Promise<string> {
     const db = await getDb();
     const id = `hold-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const hold: OfflineHold = {
         id,
         companyId,
+        branchId,
         cartData,
         customerId,
         holdName,
@@ -325,12 +330,13 @@ export async function removeOfflineHold(id: string): Promise<void> {
 
 // ─── Pending Sales ──────────────────────────────────────────────────────────
 
-export async function addPendingSale(companyId: number, invoiceData: any): Promise<string> {
+export async function addPendingSale(companyId: number, invoiceData: any, branchId?: number | null): Promise<string> {
     const db = await getDb();
     const id = `offline-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const sale: PendingSale = {
         id,
         companyId,
+        branchId,
         invoiceData,
         createdAt: new Date().toISOString(),
         status: 'pending',

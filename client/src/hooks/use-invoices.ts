@@ -170,7 +170,6 @@ export function useDeleteInvoice() {
       const res = await apiFetch(url, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete invoice");
     },
-    // ... (useDeleteInvoice existing code)
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.invoices.list.path] });
     },
@@ -318,6 +317,44 @@ export function useAddPayment() {
         title: "Error",
         description: error.message,
         variant: "destructive",
+      });
+    },
+  });
+}
+
+export function useOrderStatus(companyId: number) {
+  return useQuery({
+    queryKey: [api.invoices.orderStatus.path, companyId],
+    queryFn: async () => {
+      const url = buildUrl(api.invoices.orderStatus.path, { companyId });
+      const res = await apiFetch(url);
+      if (!res.ok) throw new Error("Failed to fetch order status");
+      return api.invoices.orderStatus.responses[200].parse(await res.json());
+    },
+    enabled: !!companyId,
+    refetchInterval: 10000,
+  });
+}
+
+export function useUpdateOrderStatus() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ id, status, companyId }: { id: number; status: string; companyId: number }) => {
+      const url = buildUrl(api.invoices.updateOrderStatus.path, { id });
+      const res = await apiFetch(url, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) throw new Error("Failed to update status");
+      return { success: true, status, companyId };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: [api.invoices.orderStatus.path, data.companyId] });
+      toast({
+        title: "Status Updated",
+        description: `Order status changed to ${data.status}`,
       });
     },
   });

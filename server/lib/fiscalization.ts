@@ -56,31 +56,61 @@ export const processInvoiceFiscalization = async (invoiceId: number, companyId: 
         if (!isMember && !isSuperAdmin) throw new Error("You do not have permission to fiscalize for this company");
     }
 
-    let company = await storage.getCompany(companyId);
-    if (!company || !company.zimraPrivateKey || !company.zimraCertificate || !company.fdmsDeviceId) {
-        throw new Error("Company has not registered a ZIMRA device");
+    let company: any = await storage.getCompany(companyId);
+    if (!company) throw new Error("Company not found");
+
+    // Branch Support: Load branch config if specified on invoice
+    let fiscalConfig = { ...company };
+    let activeBranch: any = null;
+
+    if (invoice.branchId) {
+        activeBranch = await storage.getBranch(invoice.branchId);
+        if (activeBranch) {
+            // Override company settings with branch-specific fiscal settings
+            fiscalConfig = {
+                ...fiscalConfig,
+                fdmsDeviceId: activeBranch.fdmsDeviceId || fiscalConfig.fdmsDeviceId,
+                fdmsDeviceSerialNo: activeBranch.fdmsDeviceSerialNo || fiscalConfig.fdmsDeviceSerialNo,
+                fdmsApiKey: activeBranch.fdmsApiKey || fiscalConfig.fdmsApiKey,
+                zimraPrivateKey: activeBranch.zimraPrivateKey || fiscalConfig.zimraPrivateKey,
+                zimraCertificate: activeBranch.zimraCertificate || fiscalConfig.zimraCertificate,
+                zimraEnvironment: activeBranch.zimraEnvironment || fiscalConfig.zimraEnvironment,
+                fiscalDayOpen: activeBranch.fiscalDayOpen ?? fiscalConfig.fiscalDayOpen,
+                currentFiscalDayNo: activeBranch.currentFiscalDayNo ?? fiscalConfig.currentFiscalDayNo,
+                fiscalDayOpenedAt: activeBranch.fiscalDayOpenedAt || fiscalConfig.fiscalDayOpenedAt,
+                lastFiscalDayStatus: activeBranch.lastFiscalDayStatus || fiscalConfig.lastFiscalDayStatus,
+                lastReceiptGlobalNo: activeBranch.lastReceiptGlobalNo ?? fiscalConfig.lastReceiptGlobalNo,
+                dailyReceiptCount: activeBranch.dailyReceiptCount ?? fiscalConfig.dailyReceiptCount,
+                lastFiscalHash: activeBranch.lastFiscalHash || fiscalConfig.lastFiscalHash,
+                lastReceiptAt: activeBranch.lastReceiptAt || fiscalConfig.lastReceiptAt,
+                qrUrl: activeBranch.qrUrl || fiscalConfig.qrUrl,
+            };
+        }
+    }
+
+    if (!fiscalConfig.zimraPrivateKey || !fiscalConfig.zimraCertificate || !fiscalConfig.fdmsDeviceId) {
+        throw new Error(activeBranch ? `Branch ${activeBranch.name} has not registered a ZIMRA device` : "Company has not registered a ZIMRA device");
     }
 
     // Initialize Device with Logger
     const device = new ZimraDevice({
-        deviceId: company.fdmsDeviceId,
-        deviceSerialNo: company.fdmsDeviceSerialNo || "UNKNOWN",
-        activationKey: company.fdmsApiKey || "",
-        privateKey: company.zimraPrivateKey,
-        certificate: company.zimraCertificate,
-        baseUrl: company.zimraEnvironment === 'production' ? 'https://fdmsapi.zimra.co.zw' : 'https://fdmsapitest.zimra.co.zw'
+        deviceId: fiscalConfig.fdmsDeviceId,
+        deviceSerialNo: fiscalConfig.fdmsDeviceSerialNo || "UNKNOWN",
+        activationKey: fiscalConfig.fdmsApiKey || "",
+        privateKey: fiscalConfig.zimraPrivateKey,
+        certificate: fiscalConfig.zimraCertificate,
+        baseUrl: fiscalConfig.zimraEnvironment === 'production' ? 'https://fdmsapi.zimra.co.zw' : 'https://fdmsapitest.zimra.co.zw'
     }, getZimraLogger(company.id));
 
     device.setInvoiceId(invoiceId);
 
     let justOpened = false;
-    let currentCompany = company;
 
     try {
         let status: any = null;
         
         // 🚀 OPTIMIZATION: Skip getStatus if the day is already open locally
-        const needsStatusSync = !company.fiscalDayOpen || !company.currentFiscalDayNo;
+        const needsStatusSync = !fiscalConfig.fiscalDayOpen || !fiscalConfig.currentFiscalDayNo;
 
         if (needsStatusSync) {
             console.time(`[ZIMRA] getStatus-${companyId}`);
@@ -89,7 +119,7 @@ export const processInvoiceFiscalization = async (invoiceId: number, companyId: 
             console.log(`[ZIMRA] Check Status: ${status.fiscalDayStatus}, LastDay: ${status.lastFiscalDayNo}`);
 
             const now = new Date();
-            const fiscalDayOpenedAt = company.fiscalDayOpenedAt ? new Date(company.fiscalDayOpenedAt) : null;
+            const fiscalDayOpenedAt = fiscalConfig.fiscalDayOpenedAt ? new Date(fiscalConfig.fiscalDayOpenedAt) : null;
             const oneDayMs = 24 * 60 * 60 * 1000;
             const isStale = fiscalDayOpenedAt && (now.getTime() - fiscalDayOpenedAt.getTime() > oneDayMs);
 
@@ -106,14 +136,20 @@ export const processInvoiceFiscalization = async (invoiceId: number, companyId: 
                     const openResult = await device.openDay(nextDayNo) as any;
 
                     const openedAt = new Date();
-                    company = await storage.updateCompany(company.id, {
+                    const updateData = {
                         currentFiscalDayNo: openResult.fiscalDayNo || nextDayNo,
                         fiscalDayOpen: true,
                         fiscalDayOpenedAt: openedAt,
                         lastFiscalDayStatus: 'FiscalDayOpened',
                         dailyReceiptCount: 0,
                         lastFiscalHash: null
-                    });
+                    };
+
+                    if (activeBranch) {
+                        await storage.updateBranch(activeBranch.id, updateData);
+                    } else {
+                        await storage.updateCompany(company.id, updateData);
+                    }
                     console.log(`[ZIMRA] Fiscal Day Opened: ${openResult.fiscalDayNo} at ${openedAt.toISOString()}`);
 
                     status.fiscalDayStatus = 'FiscalDayOpened';
@@ -125,12 +161,17 @@ export const processInvoiceFiscalization = async (invoiceId: number, companyId: 
             } else if (statusStr === 'fiscaldayopened' || statusStr === 'fiscaldayclosefailed') {
                 // Day is open (or close failed) — continue fiscalizing on it. Do NOT close it proactively.
                 console.log(`[ZIMRA] Day status: ${status.fiscalDayStatus}. Continuing to fiscalize on current day.`);
-                if (!company.fiscalDayOpen) {
-                    company = await storage.updateCompany(company.id, {
+                if (!fiscalConfig.fiscalDayOpen) {
+                    const updateData = {
                         fiscalDayOpen: true,
                         currentFiscalDayNo: status.lastFiscalDayNo,
                         lastFiscalDayStatus: status.fiscalDayStatus
-                    });
+                    };
+                    if (activeBranch) {
+                        await storage.updateBranch(activeBranch.id, updateData);
+                    } else {
+                        await storage.updateCompany(company.id, updateData);
+                    }
                 }
             } else {
                 console.warn(`[ZIMRA] Unknown day status: ${status.fiscalDayStatus}. Proceeding with caution.`);
@@ -166,15 +207,25 @@ export const processInvoiceFiscalization = async (invoiceId: number, companyId: 
                 }
 
                 if (Object.keys(updateData).length > 0) {
-                    company = await storage.updateCompany(company.id, updateData);
+                    if (activeBranch) {
+                        await storage.updateBranch(activeBranch.id, updateData);
+                    } else {
+                        await storage.updateCompany(company.id, updateData);
+                    }
                 }
             }
         } else {
-            console.log(`[ZIMRA] Fast-path: Skipping getStatus (Day ${company.currentFiscalDayNo} already open locally)`);
+            // Re-fetch the latest fiscal config
+            if (activeBranch) {
+                activeBranch = (await storage.getBranch(activeBranch.id)) || activeBranch;
+                fiscalConfig = { ...fiscalConfig, ...activeBranch };
+            } else {
+                const refreshed = await storage.getCompany(company.id);
+                if (refreshed) {
+                    fiscalConfig = { ...fiscalConfig, ...refreshed };
+                }
+            }
         }
-
-        // Re-fetch to get the resulting peaked counters
-        currentCompany = await storage.getCompany(company.id) || company;
 
         // Reuse existing numbers if present (retry scenario), otherwise atomically claim new ones.
         // The atomic claim does a single UPDATE...RETURNING so no two concurrent fiscalizations
@@ -192,7 +243,7 @@ export const processInvoiceFiscalization = async (invoiceId: number, companyId: 
             console.log(`[Fiscalize] Retry — reusing locked numbers: GlobalNo=${nextGlobalNo}, Counter=${nextReceiptCounter}`);
         } else {
             // First attempt: atomically claim the next pair
-            const claimed = await storage.claimNextReceiptNumbers(company.id);
+            const claimed = await storage.claimNextReceiptNumbers(company.id, invoice.branchId || undefined);
             nextGlobalNo = claimed.receiptGlobalNo;
             nextReceiptCounter = claimed.receiptCounter;
             console.log(`[Fiscalize] Atomically claimed: GlobalNo=${nextGlobalNo}, Counter=${nextReceiptCounter}`);

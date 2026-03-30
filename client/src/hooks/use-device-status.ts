@@ -5,6 +5,7 @@ export interface DeviceStatus {
     isConfigured: boolean;
     isOnline: boolean;
     fiscalDayOpen: boolean;
+    fiscalDayStatus: string; // Add this
     fiscalDayNumber: number | null;
     lastSync: string | null;
     certificateExpiry: string | null;
@@ -23,6 +24,7 @@ export function useDeviceStatus(companyId: number) {
                         isConfigured: false,
                         isOnline: false,
                         fiscalDayOpen: false,
+                        fiscalDayStatus: 'NotConfigured',
                         fiscalDayNumber: null,
                         lastSync: null,
                         certificateExpiry: null
@@ -40,8 +42,9 @@ export function useDeviceStatus(companyId: number) {
                     isConfigured: true,
                     isOnline: true, // If we reached here, api call worked
                     fiscalDayOpen: data.fiscalDayStatus === 'FiscalDayOpened',
+                    fiscalDayStatus: data.fiscalDayStatus,
                     fiscalDayNumber: data.lastFiscalDayNo,
-                    lastSync: data.fiscalDayClosed || null,
+                    lastSync: data.lastFiscalDayNoAt || data.fiscalDayClosed || null,
                     certificateExpiry: null
                 };
             } catch (error) {
@@ -50,6 +53,6 @@ export function useDeviceStatus(companyId: number) {
             }
         },
         enabled: !!companyId,
-        refetchInterval: 60000, // Poll every 60 seconds
+        refetchInterval: 15000, // Poll more frequently (15s) for responsive status
     });
 }

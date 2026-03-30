@@ -278,6 +278,50 @@ export function useCurrencies(companyId: number | null) {
   return { data, error };
 }
 
+export function useBranches(companyId: number | null) {
+  const key = `pos:cache:branches:${companyId || 0}`;
+  const [data, setData] = useState<any[] | null>(() => memCache[key] ?? null);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!companyId) return;
+    let cancelled = false;
+    setError(null);
+    setLoading(true);
+
+    if (memCache[key]) {
+      setData(memCache[key]);
+      setLoading(false);
+    } else {
+      AsyncStorage.getItem(key).then((cached) => {
+        if (cached && !cancelled) {
+          try {
+            const parsed = JSON.parse(cached);
+            memCache[key] = parsed;
+            setData(parsed);
+          } catch { /* ignore */ }
+        }
+      }).catch(() => {});
+    }
+
+    apiJson<any[]>(`/api/branches?companyId=${companyId}`)
+      .then((res) => {
+        if (!cancelled) {
+          memCache[key] = res;
+          setData(res);
+          AsyncStorage.setItem(key, JSON.stringify(res)).catch(() => {});
+        }
+      })
+      .catch((e: any) => !cancelled && setError(e?.message ?? "Failed to load branches"))
+      .finally(() => !cancelled && setLoading(false));
+
+    return () => { cancelled = true; };
+  }, [companyId]);
+
+  return { data, error, isLoading };
+}
+
 export function useTaxTypes(companyId: number | null) {
   const [data, setData] = useState<any[] | null>(null);
   const [error, setError] = useState<string | null>(null);

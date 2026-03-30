@@ -29,6 +29,7 @@ import CurrencySettingsPage from "@/pages/currency-settings";
 import TeamSettingsPage from "@/pages/team-settings";
 import UserProfilePage from "@/pages/user-profile";
 import AuditLogsPage from "@/pages/audit-logs";
+import RestaurantLayoutPage from "@/pages/restaurant-layout";
 import QuotationsPage from "@/pages/quotations";
 import CreateQuotationPage from "@/pages/create-quotation";
 import FinancialReportsPage from "@/pages/financial-reports";
@@ -41,7 +42,9 @@ import MySalesPage from "@/pages/my-sales";
 import PosReportsPage from "@/pages/pos-reports";
 import RecentSalesPage from "@/pages/recent-sales";
 import TaxReportsPage from "@/pages/tax-reports";
-import PosSettingsPage from "@/pages/pos-settings";
+import KDSPage from "@/pages/kds";
+import LiveOrdersPage from "@/pages/live-orders";
+import OrderStatusPage from "@/pages/order-status";
 import SubscriptionPage from "@/pages/subscription";
 import PosLoginPage from "@/pages/pos-login";
 import ReportsPage from "@/pages/reports";
@@ -58,6 +61,7 @@ import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
 import { getPwaLaunchRedirect } from "@/hooks/use-pwa-install";
 import { useIsOnline } from "@/hooks/use-is-online";
 import { useBranding } from "@/hooks/use-branding";
+import { ThemeManager } from "@/components/theme-manager";
 
 // Prevents loading states from spinning forever.
 // Returns true while `loading` is true, but automatically
@@ -197,9 +201,11 @@ function Router() {
       <Route path="/payments/:id/preview">{() => <ProtectedRoute component={PaymentPreviewPage} />}</Route>
       <Route path="/reports/customer-statements">{() => <ProtectedRoute component={CustomerStatementsPage} />}</Route>
       <Route path="/profile">{() => <ProtectedRoute component={UserProfilePage} />}</Route>
+      <Route path="/restaurant/layout">{() => <ProtectedRoute component={RestaurantLayoutPage} />}</Route>
       <Route path="/zimra-settings">{() => <ProtectedRoute component={ZimraSettingsPage} />}</Route>
       <Route path="/zimra-logs">{() => <ProtectedRoute component={ZimraLogsPage} />}</Route>
       <Route path="/fdms-test">{() => <ProtectedRoute component={FdmsTestPage} />}</Route>
+      <Route path="/restaurant/layout">{() => <ProtectedRoute component={RestaurantLayoutPage} />}</Route>
       <Route path="/quotations">{() => <ProtectedRoute component={QuotationsPage} />}</Route>
       <Route path="/quotations/new">{() => <ProtectedRoute component={CreateQuotationPage} />}</Route>
       <Route path="/recurring">{() => <ProtectedRoute component={RecurringInvoicesPage} />}</Route>
@@ -209,6 +215,9 @@ function Router() {
       <Route path="/pos/all-sales">{() => <ProtectedRoute component={RecentSalesPage} />}</Route>
       <Route path="/pos">{() => <ProtectedRoute component={POSPage} />}</Route>
       <Route path="/pos-settings">{() => <Redirect to="/settings?tab=pos" />}</Route>
+      <Route path="/restaurant/kds">{() => <ProtectedRoute component={KDSPage} />}</Route>
+      <Route path="/restaurant/orders">{() => <ProtectedRoute component={LiveOrdersPage} />}</Route>
+      <Route path="/order-status" component={OrderStatusPage} />
       <Route path="/">
         {user ? <Redirect to={isOnline ? "/dashboard" : "/pos"} /> : <LandingPage />}
       </Route>
@@ -259,15 +268,20 @@ function BrandingMeta() {
   return null;
 }
 
+import { BranchProvider } from "./lib/branch-context";
+
 function App() {
   useSwAuthBridge();
   return (
     <QueryClientProvider client={queryClient}>
+      <ThemeManager />
       <TooltipProvider>
-        <BrandingMeta />
-        <Toaster />
-        <PwaInstallPrompt />
-        <Router />
+        <BranchProvider>
+          <BrandingMeta />
+          <Toaster />
+          <PwaInstallPrompt />
+          <Router />
+        </BranchProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );

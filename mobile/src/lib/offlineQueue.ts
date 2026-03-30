@@ -3,13 +3,14 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 type PendingSale = {
   id: string;
   companyId: number;
+  branchId?: number | null;
   createdAt: string;
   payload: any;
 };
 
 type PendingShiftAction =
-  | { id: string; companyId: number; createdAt: string; type: "open"; payload: { openingBalance: string } }
-  | { id: string; companyId: number; createdAt: string; type: "close"; payload: { shiftId: number; closingBalance: string; reconciledBy?: string } };
+  | { id: string; companyId: number; branchId?: number | null; createdAt: string; type: "open"; payload: { openingBalance: string } }
+  | { id: string; companyId: number; branchId?: number | null; createdAt: string; type: "close"; payload: { shiftId: number; closingBalance: string; reconciledBy?: string } };
 
 const KEYS = {
   pendingSales: "pendingSales",
@@ -36,10 +37,10 @@ async function writeJson(key: string, value: any) {
   await AsyncStorage.setItem(key, JSON.stringify(value));
 }
 
-export async function addPendingSale(companyId: number, payload: any): Promise<string> {
+export async function addPendingSale(companyId: number, payload: any, branchId?: number | null): Promise<string> {
   const list = await readJson<PendingSale[]>(KEYS.pendingSales, []);
   const id = uid();
-  list.push({ id, companyId, createdAt: new Date().toISOString(), payload });
+  list.push({ id, companyId, branchId, createdAt: new Date().toISOString(), payload });
   await writeJson(KEYS.pendingSales, list);
   return id;
 }
@@ -98,6 +99,7 @@ export async function getProvisionalShift(companyId: number): Promise<any | null
 type PendingNote = {
   id: string;
   companyId: number;
+  branchId?: number | null;
   originalInvoiceId: number;
   noteType: "credit" | "debit";
   payload: any;
@@ -108,11 +110,12 @@ export async function addPendingNote(
   companyId: number,
   originalInvoiceId: number,
   noteType: "credit" | "debit",
-  payload: any
+  payload: any,
+  branchId?: number | null
 ): Promise<string> {
   const list = await readJson<PendingNote[]>(KEYS.pendingNotes, []);
   const id = uid();
-  list.push({ id, companyId, originalInvoiceId, noteType, payload, createdAt: new Date().toISOString() });
+  list.push({ id, companyId, branchId, originalInvoiceId, noteType, payload, createdAt: new Date().toISOString() });
   await writeJson(KEYS.pendingNotes, list);
   return id;
 }

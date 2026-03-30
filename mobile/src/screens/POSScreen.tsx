@@ -57,8 +57,9 @@ import * as Haptics from "expo-haptics";
 import { playCheckoutSound } from "../lib/checkoutSound";
 import { useFrequentItems } from "../hooks/useFrequentItems";
 import { Swipeable } from "react-native-gesture-handler";
-import { useProducts, useCreateInvoice, useCustomers, useCompany, useCurrencies, useTaxTypes } from "../hooks/usePosData";
+import { useProducts, useCreateInvoice, useCustomers, useCompany, useCurrencies, useTaxTypes, useBranches } from "../hooks/usePosData";
 import { apiFetch } from "../lib/api";
+import { getSelectedBranchId, setSelectedBranchId } from "../lib/storage";
 import { supabase } from "../lib/supabase";
 import { ManagerPinModal } from "../ui/ManagerPinModal";
 import {
@@ -121,6 +122,15 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
   const isOnlineRef = React.useRef(true);
   const [queueCount, setQueueCount] = useState(0);
 
+  const { data: branchesData, isLoading: loadingBranches } = useBranches(companyId);
+  const [selectedBranchId, setInternalBranchId] = useState<number | null>(null);
+
+  useEffect(() => {
+    getSelectedBranchId().then(id => {
+      if (id) setInternalBranchId(id);
+    });
+  }, []);
+
   const {
     data: productsData,
     isLoading: loadingProducts,
@@ -161,6 +171,25 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isParking, setIsParking] = useState(false);
   const [isAmountFocused, setIsAmountFocused] = useState(false);
+  const [showBranchPicker, setShowBranchPicker] = useState(false);
+  const [fiscalStatus, setFiscalStatus] = useState<string>("Day Closed");
+
+  const fetchFiscalStatus = async () => {
+    if (!isOnline) return;
+    try {
+      const res = await apiFetch(`/api/companies/${companyId}/zimra/status`);
+      if (res.ok) {
+        const data = await res.json();
+        setFiscalStatus(data.fiscalDayStatus || "Day Closed");
+      }
+    } catch { /* ignore */ }
+  };
+  
+  useEffect(() => {
+    fetchFiscalStatus();
+    const interval = setInterval(fetchFiscalStatus, 30000); // 30s
+    return () => clearInterval(interval);
+  }, [companyId, isOnline]);
 
   const [currentShift, setCurrentShift] = useState<any | null>(null);
   const [showShiftModal, setShowShiftModal] = useState(false);
@@ -470,7 +499,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
         if (res.ok) { setShowShiftModal(false); setShiftBalance(""); await fetchShift(); return; }
         else Alert.alert("Shift Error", await res.text().catch(() => "Unknown error"));
       }
-      await addPendingShiftAction({ companyId, type: "open", payload: { openingBalance } });
+      await addPendingShiftAction({ companyId, branchId: selectedBranchId, type: "open", payload: { openingBalance } });
       const provisional = { id: Date.now(), companyId, status: "OPEN", openingBalance, openedAt: new Date().toISOString(), _provisional: true };
       setCurrentShift(provisional);
       await setProvisionalShift(companyId, provisional);
@@ -502,7 +531,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
         if (res.ok) { setCurrentShift(null); await setProvisionalShift(companyId, null); setShowShiftModal(false); setShiftBalance(""); return; }
         else Alert.alert("Session Error", await res.text().catch(() => "Unknown error"));
       }
-      await addPendingShiftAction({ companyId, type: "close", payload: { shiftId: Number(currentShift.id), closingBalance, reconciledBy: supervisorId } });
+      await addPendingShiftAction({ companyId, branchId: selectedBranchId, type: "close", payload: { shiftId: Number(currentShift.id), closingBalance, reconciledBy: supervisorId } });
       setCurrentShift(null); await setProvisionalShift(companyId, null); setShowShiftModal(false); setShiftBalance("");
     } catch { /* ignore */ }
   };
@@ -719,6 +748,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
     const currencyObj = resolvedCurrencies.find((c: any) => c.code === selectedCurrency) || { code: "USD", exchangeRate: "1" };
     const invoiceData = {
       customerId: selectedCustomerId,
+      branchId: selectedBranchId,
       subtotal: subtotal.toFixed(2), taxAmount: taxAmount.toFixed(2), total: total.toFixed(2),
       currency: currencyObj.code, exchangeRate: currencyObj.exchangeRate,
       paymentMethod, status: "issued", notes: "POS Transaction (Mobile)",
@@ -756,7 +786,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
           if (res.ok) fetchShift(); // quietly refresh in background
         }).catch((e) => console.error("Auto-shift open error:", e));
       } else {
-        addPendingShiftAction({ companyId, type: "open", payload: { openingBalance } }); // not awaited
+        addPendingShiftAction({ companyId, branchId: selectedBranchId, type: "open", payload: { openingBalance } }); // not awaited
         setProvisionalShift(companyId, provisional); // not awaited
       }
     }
@@ -781,7 +811,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
 
     // ── BACKGROUND: post the invoice to the server ───────────────────────────
     if (!isOnline) {
-      addPendingSale(companyId, invoiceData).then((offlineId) => {
+      addPendingSale(companyId, invoiceData, selectedBranchId).then((offlineId) => {
         setLastInvoice((prev: any) => ({ ...prev, id: offlineId, _offline: true }));
         refreshProducts();
       });
@@ -793,7 +823,7 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
         })
         .catch(async () => {
           // Network failed after optimistic update — queue it offline silently
-          const offlineId = await addPendingSale(companyId, invoiceData);
+          const offlineId = await addPendingSale(companyId, invoiceData, selectedBranchId);
           setLastInvoice((prev: any) => ({ ...prev, id: offlineId, _offline: true }));
         });
     }
@@ -864,6 +894,29 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
               </Text>
             </View>
 
+            {/* Fiscal Status Badge - Mobile */}
+            <View style={{
+              flexDirection: "row", alignItems: "center", gap: 5,
+              paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20,
+              backgroundColor: fiscalStatus === 'FiscalDayOpened' ? "rgba(0,208,132,0.1)" : 
+                               fiscalStatus === 'FiscalDayCloseFailed' ? "rgba(255,71,87,0.15)" :
+                               "rgba(240,165,0,0.1)",
+              borderWidth: 1, borderColor: fiscalStatus === 'FiscalDayOpened' ? "rgba(0,208,132,0.25)" : 
+                                         fiscalStatus === 'FiscalDayCloseFailed' ? "rgba(255,71,87,0.3)" :
+                                         "rgba(240,165,0,0.25)",
+            }}>
+              <View style={{
+                width: 6, height: 6, borderRadius: 3, 
+                backgroundColor: fiscalStatus === 'FiscalDayOpened' ? C.status.success : 
+                                fiscalStatus === 'FiscalDayCloseFailed' ? C.status.error :
+                                "#fbbf24"
+              }} />
+              <Text style={{ fontSize: 8, fontWeight: "900", color: fiscalStatus === 'FiscalDayOpened' ? C.status.success : 
+                                                                    fiscalStatus === 'FiscalDayCloseFailed' ? C.status.error :
+                                                                    "#fbbf24", textTransform: "uppercase" }}>
+                {fiscalStatus === 'FiscalDayCloseFailed' ? 'CLOSE FAIL' : (fiscalStatus === 'FiscalDayOpened' ? 'Day Open' : 'Day Closed')}
+              </Text>
+            </View>
           </View>
 
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -887,13 +940,14 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
               </TouchableOpacity>
             )}
 
-            {/* <TouchableOpacity activeOpacity={0.7} onPress={() => setIsDarkMode(!isDarkMode)}
+            <TouchableOpacity activeOpacity={0.7} onPress={() => setShowBranchPicker(true)}
               style={{
                 width: 34, height: 34, borderRadius: 10, backgroundColor: C.bg.hover,
-                borderWidth: 1, borderColor: C.border.default, alignItems: "center", justifyContent: "center"
+                borderWidth: 1, borderColor: selectedBranchId ? C.status.success : C.border.default,
+                alignItems: "center", justifyContent: "center"
               }}>
-              {isDarkMode ? <Sun size={16} color="#fbbf24" /> : <Moon size={16} color="#6366f1" />}
-            </TouchableOpacity> */}
+              <MonitorSmartphone size={16} color={selectedBranchId ? C.status.success : C.text.secondary} />
+            </TouchableOpacity>
 
             <TouchableOpacity activeOpacity={0.7} onPress={() => setShowPrinterSettings(true)}
               style={{
@@ -976,12 +1030,26 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
               <>
                 <View style={{ width: 1, height: 12, backgroundColor: C.border.default }} />
                 <TouchableOpacity
+                  onPress={() => {
+                    setShiftModalType("CLOSE");
+                    fetchShiftSummary();
+                    setShowShiftModal(true);
+                  }}
+                  style={{
+                    backgroundColor: "rgba(255,71,87,0.12)", paddingHorizontal: 10,
+                    paddingVertical: 5, borderRadius: 12, borderWidth: 1, borderColor: "rgba(255,71,87,0.25)"
+                  }}
+                >
+                  <Text style={{ color: C.status.error, fontSize: 10, fontWeight: "900", letterSpacing: 0.5 }}>CLOSE DAY</Text>
+                </TouchableOpacity>
+
+                <View style={{ width: 1, height: 12, backgroundColor: C.border.default }} />
+                <TouchableOpacity
                   onPress={() => { setTransactionType("PAYOUT"); setShowPayoutModal(true); }}
                   style={{ flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 4 }}>
                   <Banknote size={14} color={C.amber.primary} />
                   <Text style={{ color: C.text.primary, fontSize: 11, fontWeight: "700" }}>Payout</Text>
                 </TouchableOpacity>
-
 
                 <View style={{ width: 1, height: 12, backgroundColor: C.border.default }} />
                 <TouchableOpacity
@@ -2143,8 +2211,8 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
         <ManagerPinModal
           visible={!!pendingOverride}
           companyId={companyId}
-          title={pendingOverride.type === "DISCOUNT" ? "Authorize Discount" : "Authorize Void"}
-          description={pendingOverride.type === "DISCOUNT"
+          title={pendingOverride!.type === "DISCOUNT" ? "Authorize Discount" : "Authorize Void"}
+          description={pendingOverride!.type === "DISCOUNT"
             ? "Manager PIN required for high discount"
             : "Manager PIN required to void cart"}
           onClose={() => {
@@ -2320,6 +2388,64 @@ export function POSScreen({ companyId, userName, onOpenDrawer }: Props) {
               style={{ marginTop: 24, paddingVertical: 14, borderRadius: 16, backgroundColor: C.amber.primary, alignItems: "center" }}>
               <Text style={{ color: "#000", fontWeight: "800", textTransform: "uppercase" }}>Done</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={showBranchPicker} transparent animationType="slide" onRequestClose={() => setShowBranchPicker(false)}>
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "flex-end" }}>
+          <View style={{
+            backgroundColor: C.bg.card, borderTopLeftRadius: 32, borderTopRightRadius: 32,
+            borderTopWidth: 1, borderColor: C.border.default, padding: 24, paddingBottom: Math.max(insets.bottom, 36)
+          }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <Text style={{ color: C.text.primary, fontSize: 22, fontWeight: "800" }}>Select Branch</Text>
+              <TouchableOpacity onPress={() => setShowBranchPicker(false)}
+                style={{
+                  width: 38, height: 38, borderRadius: 12, backgroundColor: C.bg.hover,
+                  borderWidth: 1, borderColor: C.border.default, alignItems: "center", justifyContent: "center"
+                }}>
+                <X size={16} color={C.text.primary} />
+              </TouchableOpacity>
+            </View>
+            
+            {loadingBranches ? (
+              <ActivityIndicator color={C.amber.primary} style={{ marginVertical: 40 }} />
+            ) : (
+              <ScrollView style={{ maxHeight: 400 }}>
+                {branchesData?.map((b: any) => (
+                  <TouchableOpacity 
+                    key={b.id} 
+                    onPress={async () => {
+                      setInternalBranchId(b.id);
+                      await setSelectedBranchId(b.id);
+                      setShowBranchPicker(false);
+                      // Refresh data effectively
+                      refreshProducts();
+                      fetchShift();
+                      fetchHeldSales();
+                    }}
+                    style={{
+                      flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+                      paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: C.border.default
+                    }}
+                  >
+                    <View>
+                      <Text style={{ color: C.text.primary, fontSize: 16, fontWeight: "700" }}>{b.name}</Text>
+                      <Text style={{ color: C.text.secondary, fontSize: 12, marginTop: 2 }}>{b.location || "Physical Store"}</Text>
+                    </View>
+                    {selectedBranchId === b.id && (
+                      <CheckCircle2 size={20} color={C.status.success} />
+                    )}
+                  </TouchableOpacity>
+                ))}
+                
+                {(!branchesData || branchesData.length === 0) && (
+                  <View style={{ paddingVertical: 40, alignItems: "center" }}>
+                    <Text style={{ color: C.text.secondary }}>No branches found</Text>
+                  </View>
+                )}
+              </ScrollView>
+            )}
           </View>
         </View>
       </Modal>

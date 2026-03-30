@@ -19,7 +19,8 @@
     "mobile:ios": "npm --prefix mobile run ios",
     "desktop:install": "npm --prefix desktop install",
     "desktop:start": "npm --prefix desktop start",
-    "desktop": "npm run desktop:start"
+    "desktop": "npm run desktop:start",
+    "desktop:build": "npm --prefix desktop run build:win"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

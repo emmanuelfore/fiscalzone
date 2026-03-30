@@ -29,6 +29,7 @@ import {
   Receipt,
   Truck,
   Menu,
+  Utensils,
   X
 } from "lucide-react";
 import { useBranding } from "@/hooks/use-branding";
@@ -49,6 +50,7 @@ import { useState, useEffect } from "react";
 import { CreateCompanyDialog } from "./create-company-dialog";
 import { cn } from "@/lib/utils";
 import { DeviceStatusWidget } from "./device-status-widget";
+import { BranchSwitcher } from "./branch-switcher";
 
 type NavItem = {
   icon: any;
@@ -134,6 +136,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
         { icon: FileText, label: "Customer Statements", href: "/reports/customer-statements" },
         { icon: Package, label: "Stock Reports", href: "/reports/inventory" },
         { icon: FileText, label: "Tax & ZIMRA", href: "/reports/tax" },
+      ]
+    },
+    {
+      icon: Utensils,
+      label: "Restaurant",
+      children: [
+        { icon: LayoutDashboard, label: "Live Orders", href: "/restaurant/orders" },
+        { icon: MonitorCheck, label: "Kitchen Display", href: "/restaurant/kds" },
+        { icon: Building2, label: "Floor Plan", href: "/restaurant/layout" },
       ]
     },
     {
@@ -400,6 +411,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
           <div className="flex items-center gap-3 bg-white/80 backdrop-blur-xl border border-white/40 p-1.5 rounded-full shadow-lg shadow-slate-200/50">
             {selectedCompanyId && <DeviceStatusWidget companyId={selectedCompanyId} />}
+            <BranchSwitcher />
 
             <div className="h-6 w-px bg-slate-200 mx-1" />
 

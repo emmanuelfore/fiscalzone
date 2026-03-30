@@ -10,8 +10,11 @@ function joinUrl(base: string, path: string) {
   return `${base}${p}`;
 }
 
+import { getSelectedBranchId } from "./storage";
+
 export async function apiFetch(path: string, init?: RequestInit) {
   let session = null;
+  let branchId = null;
   
   // Skip session check for health endpoint to speed up online detection
   if (path !== "/api/health") {
@@ -25,8 +28,11 @@ export async function apiFetch(path: string, init?: RequestInit) {
         ]);
         session = sessionResult?.data?.session ?? null;
       }
+      
+      // Get branch ID for scoping
+      branchId = await getSelectedBranchId();
     } catch (e) {
-      console.warn("[API] Session fetch failed:", e);
+      console.warn("[API] Context fetch failed:", e);
     }
   }
 
@@ -35,6 +41,10 @@ export async function apiFetch(path: string, init?: RequestInit) {
 
   if (session?.access_token) {
     headers.set("Authorization", `Bearer ${session.access_token}`);
+  }
+
+  if (branchId) {
+    headers.set("X-Branch-ID", branchId.toString());
   }
 
   if (init?.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {

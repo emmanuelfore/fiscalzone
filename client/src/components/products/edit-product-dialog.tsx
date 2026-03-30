@@ -38,6 +38,10 @@ import { useState, useEffect } from "react";
 
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
+import { RecipeManager } from "./recipe-manager";
+import { BatchVariationManager } from "./batch-variation-manager";
+import { ChefHat, Pill, FlaskConical, Boxes } from "lucide-react";
+import { ImageUpload } from "@/components/ui/image-upload";
 
 interface Props {
     product: any;
@@ -82,6 +86,13 @@ export function EditProductDialog({ product, trigger }: Props) {
             productType: product.productType,
             companyId: product.companyId,
             taxTypeId: product.taxTypeId,
+            imageUrl: product.imageUrl || "",
+            isIngredient: product.isIngredient ?? false,
+            hasRecipe: product.hasRecipe ?? false,
+            isPrescriptionOnly: product.isPrescriptionOnly ?? false,
+            batchTrackingEnabled: product.batchTrackingEnabled ?? false,
+            brandName: product.brandName || "",
+            genericName: product.genericName || "",
             ...(product.unitOfMeasure ? { unitOfMeasure: product.unitOfMeasure } : {}),
         },
     });
@@ -119,7 +130,7 @@ export function EditProductDialog({ product, trigger }: Props) {
                 setSelectedTaxTypeId(product.taxTypeId.toString());
             } else {
                 // Fallback to heuristic for legacy data
-                const initial = taxTypes.data?.find(t => {
+                const initial = taxTypes.data?.find((t: any) => {
                     if (t.rate === product.taxRate?.toString()) {
                         if (t.rate === "0" || t.rate === "0.00") {
                             const isExempt = product.name?.toLowerCase().includes("exempt") || product.description?.toLowerCase().includes("exempt");
@@ -175,37 +186,214 @@ export function EditProductDialog({ product, trigger }: Props) {
                             )}
                         />
 
-                        <FormField
-                            control={form.control}
-                            name="category"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="text-slate-700 font-semibold">Category</FormLabel>
-                                    <Select
-                                        onValueChange={field.onChange}
-                                        defaultValue={field.value || undefined}
-                                        value={field.value || undefined}
-                                    >
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <FormField
+                                control={form.control}
+                                name="imageUrl"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="text-slate-700 font-semibold uppercase text-[10px] tracking-widest">Product Image</FormLabel>
                                         <FormControl>
-                                            <SelectTrigger className="rounded-xl bg-slate-50 border-slate-200 focus:ring-primary/20">
-                                                <SelectValue placeholder="Select Category" />
-                                            </SelectTrigger>
+                                            <ImageUpload 
+                                                value={field.value || ""} 
+                                                onChange={field.onChange} 
+                                            />
                                         </FormControl>
-                                        <SelectContent className="rounded-xl shadow-xl">
-                                            {categories?.map((cat: any) => (
-                                                <SelectItem key={cat.id} value={cat.name}>
-                                                    {cat.name}
-                                                </SelectItem>
-                                            ))}
-                                            {!categories?.some((c: any) => c.name === product.category) && product.category && (
-                                                <SelectItem value={product.category}>{product.category}</SelectItem>
-                                            )}
-                                        </SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            <FormField
+                                control={form.control}
+                                name="category"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="text-slate-700 font-semibold uppercase text-[10px] tracking-widest">Category</FormLabel>
+                                        <Select
+                                            onValueChange={field.onChange}
+                                            defaultValue={field.value || undefined}
+                                            value={field.value || undefined}
+                                        >
+                                            <FormControl>
+                                                <SelectTrigger className="rounded-xl bg-slate-50 border-slate-200 focus:ring-primary/20">
+                                                    <SelectValue placeholder="Select Category" />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent className="rounded-xl shadow-xl">
+                                                {categories?.map((cat: any) => (
+                                                    <SelectItem key={cat.id} value={cat.name}>
+                                                        {cat.name}
+                                                    </SelectItem>
+                                                ))}
+                                                {!categories?.some((c: any) => c.name === product.category) && product.category && (
+                                                    <SelectItem value={product.category}>{product.category}</SelectItem>
+                                                )}
+                                            </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                        </div>
+
+
+
+                        {/* Status Flags Section */}
+                        {!isService && (
+                            <div className="grid grid-cols-2 gap-4">
+                                <FormField
+                                    control={form.control}
+                                    name="isPrescriptionOnly"
+                                    render={({ field }) => (
+                                        <FormItem className="flex flex-row items-center justify-between rounded-xl border border-dashed border-red-200 p-3 bg-red-50/30">
+                                            <div className="space-y-0.5">
+                                                <FormLabel className="text-xs font-bold text-red-900">Prescription Only</FormLabel>
+                                                <FormDescription className="text-[10px]">Required for sale in POS</FormDescription>
+                                            </div>
+                                            <FormControl>
+                                                <Switch checked={field.value || false} onCheckedChange={field.onChange} />
+                                            </FormControl>
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="batchTrackingEnabled"
+                                    render={({ field }) => (
+                                        <FormItem className="flex flex-row items-center justify-between rounded-xl border border-dashed border-green-200 p-3 bg-green-50/30">
+                                            <div className="space-y-0.5">
+                                                <FormLabel className="text-xs font-bold text-green-900">Track Batches</FormLabel>
+                                                <FormDescription className="text-[10px]">Track expiry & lot numbers</FormDescription>
+                                            </div>
+                                            <FormControl>
+                                                <Switch checked={field.value || false} onCheckedChange={field.onChange} />
+                                            </FormControl>
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="isIngredient"
+                                    render={({ field }) => (
+                                        <FormItem className="flex flex-row items-center justify-between rounded-xl border border-dashed border-amber-200 p-3 bg-amber-50/30">
+                                            <div className="space-y-0.5">
+                                                <FormLabel className="text-xs font-bold text-amber-900">Is Ingredient</FormLabel>
+                                                <FormDescription className="text-[10px]">Used in other recipes</FormDescription>
+                                            </div>
+                                            <FormControl>
+                                                <Switch checked={field.value || false} onCheckedChange={field.onChange} />
+                                            </FormControl>
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="hasRecipe"
+                                    render={({ field }) => (
+                                        <FormItem className="flex flex-row items-center justify-between rounded-xl border border-dashed border-indigo-200 p-3 bg-indigo-50/30">
+                                            <div className="space-y-0.5">
+                                                <FormLabel className="text-xs font-bold text-indigo-900">Has Recipe (BOM)</FormLabel>
+                                                <FormDescription className="text-[10px]">Ingredients deduct on sale</FormDescription>
+                                            </div>
+                                            <FormControl>
+                                                <Switch checked={field.value || false} onCheckedChange={field.onChange} />
+                                            </FormControl>
+                                        </FormItem>
+                                    )}
+                                />
+                            </div>
+                        )}
+
+                        {/* Pharmacy Brand/Generic Names */}
+                        {!isService && (
+                            <div className="grid grid-cols-2 gap-4">
+                                <FormField
+                                    control={form.control}
+                                    name="brandName"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className="text-slate-700 font-semibold">Brand Name</FormLabel>
+                                            <FormControl>
+                                                <Input placeholder="e.g. Panadol" {...field} value={field.value || ""} className="rounded-xl bg-slate-50 border-slate-200 focus-visible:ring-primary/20" />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="genericName"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className="text-slate-700 font-semibold">Generic Name</FormLabel>
+                                            <FormControl>
+                                                <Input placeholder="e.g. Paracetamol" {...field} value={field.value || ""} className="rounded-xl bg-slate-50 border-slate-200 focus-visible:ring-primary/20" />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            </div>
+                        )}
+
+                        {/* Batch & Variation Configuration */}
+                        {!isService && (
+                            <div className="flex justify-between items-center p-4 bg-emerald-50 border border-emerald-100 rounded-2xl animate-in slide-in-from-top-2 duration-300">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2.5 bg-emerald-600 text-white rounded-xl shadow-md shadow-emerald-100">
+                                        <Boxes className="w-5 h-5" />
+                                    </div>
+                                    <div className="space-y-0.5">
+                                        <p className="text-sm font-black text-emerald-900">Batches & Variations</p>
+                                        <p className="text-[10px] text-emerald-700/70 font-bold uppercase tracking-wide">Manage Expiry dates & Pack sizes</p>
+                                    </div>
+                                </div>
+                                <Dialog>
+                                    <DialogTrigger asChild>
+                                        <Button type="button" variant="outline" className="h-10 px-6 rounded-xl border-emerald-300 text-emerald-700 hover:bg-emerald-600 hover:text-white font-black text-xs shadow-sm transition-all">
+                                            Track Inventory
+                                        </Button>
+                                    </DialogTrigger>
+                                    <DialogContent className="max-w-4xl rounded-[2.5rem] p-8">
+                                        <DialogHeader>
+                                            <DialogTitle className="text-3xl font-black font-display text-slate-900">Inventory Tracking: {product.name}</DialogTitle>
+                                            <DialogDescription className="text-slate-500 font-bold uppercase tracking-widest text-[10px]">Configure batches, expiry dates, and product variations</DialogDescription>
+                                        </DialogHeader>
+                                        <BatchVariationManager productId={product.id} companyId={product.companyId} />
+                                    </DialogContent>
+                                </Dialog>
+                            </div>
+                        )}
+
+                        {/* Recipe Management */}
+                        {form.watch("hasRecipe") && (
+                            <div className="flex justify-between items-center p-4 bg-indigo-50 border border-indigo-100 rounded-2xl animate-in slide-in-from-top-2 duration-300">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2.5 bg-indigo-600 text-white rounded-xl shadow-md shadow-indigo-100">
+                                        <ChefHat className="w-5 h-5" />
+                                    </div>
+                                    <div className="space-y-0.5">
+                                        <p className="text-sm font-black text-indigo-900">Manage Recipe</p>
+                                        <p className="text-[10px] text-indigo-700/70 font-bold uppercase tracking-wide">Customize BOM & Cost Analysis</p>
+                                    </div>
+                                </div>
+                                <Dialog>
+                                    <DialogTrigger asChild>
+                                        <Button type="button" variant="outline" className="h-10 px-6 rounded-xl border-indigo-300 text-indigo-700 hover:bg-indigo-600 hover:text-white font-black text-xs shadow-sm transition-all">
+                                            Manage Recipe
+                                        </Button>
+                                    </DialogTrigger>
+                                    <DialogContent className="max-w-4xl rounded-[2.5rem] p-8">
+                                        <DialogHeader>
+                                            <DialogTitle className="text-3xl font-black font-display text-slate-900">Recipe: {product.name}</DialogTitle>
+                                            <DialogDescription className="text-slate-500 font-bold uppercase tracking-widest text-[10px]">Configure your bill of materials (BOM)</DialogDescription>
+                                        </DialogHeader>
+                                        <RecipeManager productId={product.id} companyId={product.companyId} />
+                                    </DialogContent>
+                                </Dialog>
+                            </div>
+                        )}
 
                         <FormField
                             control={form.control}

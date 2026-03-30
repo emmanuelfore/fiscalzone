@@ -19,6 +19,7 @@ export const users = pgTable("users", {
 
 export const usersRelations = relations(users, ({ many }) => ({
   companyUsers: many(companyUsers),
+  branchUsers: many(branchUsers),
 }));
 
 export const resetTokens = pgTable("reset_tokens", {
@@ -92,16 +93,95 @@ export const companies = pgTable("companies", {
   subscriptionEndDate: timestamp("subscription_end_date"),
   subscriptionStatus: text("subscription_status").default("inactive"), // active, inactive, expired
   registeredMacAddress: text("registered_mac_address"), // Physical device binding
+  restaurantSettings: jsonb("restaurant_settings"), // Stores floor plan layout etc.
+  pharmacySettings: jsonb("pharmacy_settings"), // { enabled: boolean, licenseNo: string, etc }
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Branches (Locations)
+export const branches = pgTable("branches", {
+  id: serial("id").primaryKey(),
+  companyId: integer("company_id").references(() => companies.id).notNull(),
+  name: text("name").notNull(),
+  code: text("code"), // Optional internal code
+  address: text("address"),
+  city: text("city"),
+  phone: text("phone"),
+  email: text("email"),
+
+  // ZIMRA Compliance - Overrides company-level defaults
+  fdmsDeviceId: text("fdms_device_id"),
+  fdmsDeviceSerialNo: text("fdms_device_serial_no"),
+  fdmsApiKey: text("fdms_api_key"),
+  zimraPrivateKey: text("zimra_private_key"),
+  zimraCertificate: text("zimra_certificate"),
+  zimraEnvironment: text("zimra_environment"), // 'test' or 'production'
+  
+  // Fiscal State
+  fiscalDayOpen: boolean("fiscal_day_open").default(false),
+  currentFiscalDayNo: integer("current_fiscal_day_no").default(0),
+  fiscalDayOpenedAt: timestamp("fiscal_day_opened_at"),
+  lastFiscalDayStatus: text("last_fiscal_day_status"),
+  lastReceiptGlobalNo: integer("last_receipt_global_no").default(0),
+  dailyReceiptCount: integer("daily_receipt_count").default(0),
+  lastFiscalHash: text("last_fiscal_hash"),
+  lastReceiptAt: timestamp("last_receipt_at"),
+  qrUrl: text("qr_url"),
+
+  isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const companiesRelations = relations(companies, ({ many }) => ({
   users: many(companyUsers),
+  branches: many(branches),
   customers: many(customers),
   products: many(products),
   invoices: many(invoices),
   suppliers: many(suppliers),
   expenses: many(expenses),
+}));
+
+export const branchesRelations = relations(branches, ({ one, many }) => ({
+  company: one(companies, { fields: [branches.companyId], references: [companies.id] }),
+  users: many(branchUsers),
+  stocks: many(branchStocks),
+  invoices: many(invoices),
+  posShifts: many(posShifts),
+}));
+
+// User access to specific branches
+export const branchUsers = pgTable("branch_users", {
+  id: serial("id").primaryKey(),
+  userId: uuid("user_id").references(() => users.id).notNull(),
+  branchId: integer("branch_id").references(() => branches.id).notNull(),
+  role: text("role").default("staff"), // manager, staff
+}, (table) => ({
+  userBranchIdx: index("branch_users_user_id_idx").on(table.userId),
+  branchIdIdx: index("branch_users_branch_id_idx").on(table.branchId),
+}));
+
+export const branchUsersRelations = relations(branchUsers, ({ one }) => ({
+  user: one(users, { fields: [branchUsers.userId], references: [users.id] }),
+  branch: one(branches, { fields: [branchUsers.branchId], references: [branches.id] }),
+}));
+
+// Multi-branch stock levels
+export const branchStocks = pgTable("branch_stocks", {
+  id: serial("id").primaryKey(),
+  branchId: integer("branch_id").references(() => branches.id).notNull(),
+  productId: integer("product_id").references(() => products.id).notNull(),
+  stockLevel: decimal("stock_level", { precision: 10, scale: 2 }).default("0"),
+  lowStockThreshold: decimal("low_stock_threshold", { precision: 10, scale: 2 }).default("10"),
+}, (table) => ({
+  branchProductUnique: unique("branch_product_unique").on(table.branchId, table.productId),
+  branchIdIdx: index("branch_stocks_branch_id_idx").on(table.branchId),
+  productIdIdx: index("branch_stocks_product_id_idx").on(table.productId),
+}));
+
+export const branchStocksRelations = relations(branchStocks, ({ one }) => ({
+  branch: one(branches, { fields: [branchStocks.branchId], references: [branches.id] }),
+  product: one(products, { fields: [branchStocks.productId], references: [products.id] }),
 }));
 
 // Join table for Users <-> Companies
@@ -234,6 +314,20 @@ export const products = pgTable("products", {
   productType: text("product_type").default("good").notNull(), // 'good' or 'service'
   taxCategoryId: integer("tax_category_id").references(() => taxCategories.id),
   taxTypeId: integer("tax_type_id").references(() => taxTypes.id),
+  
+  // Recipe Flags
+  isIngredient: boolean("is_ingredient").default(false), // e.g. Flour, Sugar
+  hasRecipe: boolean("has_recipe").default(false), // e.g. Burger, Cake
+  
+  // Visuals
+  imageUrl: text("image_url"),
+  
+  // Pharmacy & Batch Tracking
+  isPrescriptionOnly: boolean("is_prescription_only").default(false),
+  batchTrackingEnabled: boolean("batch_tracking_enabled").default(false),
+  brandName: text("brand_name"),
+  genericName: text("generic_name"),
+
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => {
   return {
@@ -243,6 +337,7 @@ export const products = pgTable("products", {
 
 export const productsRelations = relations(products, ({ one, many }) => ({
   company: one(companies, { fields: [products.companyId], references: [companies.id] }),
+  branchStocks: many(branchStocks),
   inventoryTransactions: many(inventoryTransactions),
 }));
 
@@ -280,10 +375,57 @@ export const validationErrors = pgTable("validation_errors", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Product Variations (e.g., 500mg, 1000mg, 10-pack, 20-pack)
+export const productVariations = pgTable("product_variations", {
+  id: serial("id").primaryKey(),
+  productId: integer("product_id").references(() => products.id).notNull(),
+  name: text("name").notNull(), // e.g. "500mg" or "Box of 20"
+  sku: text("sku"),
+  barcode: text("barcode"),
+  price: decimal("price", { precision: 10, scale: 2 }).notNull(),
+  stockLevel: decimal("stock_level", { precision: 10, scale: 2 }).default("0"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Product Batches (Expiry Dates & Batch Numbers)
+export const productBatches = pgTable("product_batches", {
+  id: serial("id").primaryKey(),
+  productId: integer("product_id").references(() => products.id).notNull(),
+  variationId: integer("variation_id").references(() => productVariations.id),
+  batchNumber: text("batch_number").notNull(),
+  expiryDate: date("expiry_date").notNull(),
+  stockLevel: decimal("stock_level", { precision: 10, scale: 2 }).default("0"),
+  costPrice: decimal("cost_price", { precision: 10, scale: 2 }),
+  isExpired: boolean("is_expired").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  productIdIdx: index("product_batches_product_id_idx").on(table.productId),
+  batchNumberIdx: index("product_batches_number_idx").on(table.batchNumber),
+}));
+
+export const productVariationsRelations = relations(productVariations, ({ one, many }) => ({
+  product: one(products, { fields: [productVariations.productId], references: [products.id] }),
+  batches: many(productBatches),
+}));
+
+export const productBatchesRelations = relations(productBatches, ({ one }) => ({
+  product: one(products, { fields: [productBatches.productId], references: [products.id] }),
+  variation: one(productVariations, { fields: [productBatches.variationId], references: [productVariations.id] }),
+}));
+
+export const insertProductVariationSchema = createInsertSchema(productVariations).omit({ id: true, createdAt: true });
+export const insertProductBatchSchema = createInsertSchema(productBatches).omit({ id: true, createdAt: true });
+export type ProductVariation = typeof productVariations.$inferSelect;
+export type InsertProductVariation = z.infer<typeof insertProductVariationSchema>;
+export type ProductBatch = typeof productBatches.$inferSelect;
+export type InsertProductBatch = z.infer<typeof insertProductBatchSchema>;
+
 // Invoices
 export const invoices = pgTable("invoices", {
   id: serial("id").primaryKey(),
   companyId: integer("company_id").references(() => companies.id).notNull(),
+  branchId: integer("branch_id").references(() => branches.id), // Nullable for migration
   customerId: integer("customer_id").references(() => customers.id).notNull(),
 
   invoiceNumber: text("invoice_number").notNull(),
@@ -332,6 +474,18 @@ export const invoices = pgTable("invoices", {
   notes: text("notes"),
   invoiceTemplate: text("invoice_template").default("modern"),
 
+  // Restaurant & Online Orders
+  tableId: integer("table_id"), // Refers to restaurant_tables
+  waiterId: uuid("waiter_id").references(() => users.id), // Waiter who took the order
+  covers: integer("covers").default(1), // Guest count
+  diningOption: text("dining_option").default("dine_in"), // dine_in, takeaway, delivery
+  orderStatus: text("order_status").default("pending"), // pending, preparing, ready, served
+  orderNumber: text("order_number"), // Short order number for customer display (e.g. #001)
+  customerName: text("customer_name"),
+  customerPhone: text("customer_phone"),
+  deliveryAddress: text("delivery_address"),
+  deliveryNotes: text("delivery_notes"),
+
   createdBy: uuid("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => {
@@ -357,6 +511,17 @@ export const invoiceItems = pgTable("invoice_items", {
   lineTotal: decimal("line_total", { precision: 10, scale: 2 }).notNull(),
   taxTypeId: integer("tax_type_id").references(() => taxTypes.id),
   cogsAmount: decimal("cogs_amount", { precision: 10, scale: 2 }),
+  
+  // Modifiers
+  // Modifiers
+  modifiers: jsonb("modifiers"), // Array of { id, name, price } or string array
+  
+  // Pharmacy/Batch Tracking
+  batchId: integer("batch_id"), // Linked to product_batches
+  variationId: integer("variation_id"), // Linked to product_variations
+  expiryDate: date("expiry_date"), // Snapshot from batch
+  batchNumber: text("batch_number"), // Snapshot from batch
+  
 }, (table) => {
   return {
     invoiceIdIdx: index("invoice_items_invoice_id_idx").on(table.invoiceId),
@@ -457,6 +622,7 @@ export type Currency = typeof currencies.$inferSelect;
 export const payments = pgTable("payments", {
   id: serial("id").primaryKey(),
   companyId: integer("company_id").references(() => companies.id).notNull(),
+  branchId: integer("branch_id").references(() => branches.id),
   invoiceId: integer("invoice_id").references(() => invoices.id).notNull(),
 
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
@@ -482,6 +648,7 @@ export const paymentsRelations = relations(payments, ({ one }) => ({
 // Also update Invoice relations to include payments
 export const invoicesRelations = relations(invoices, ({ one, many }) => ({
   company: one(companies, { fields: [invoices.companyId], references: [companies.id] }),
+  branch: one(branches, { fields: [invoices.branchId], references: [branches.id] }),
   customer: one(customers, { fields: [invoices.customerId], references: [customers.id] }),
   creator: one(users, { fields: [invoices.createdBy], references: [users.id] }),
   items: many(invoiceItems),
@@ -503,6 +670,7 @@ export type ValidationError = typeof validationErrors.$inferSelect;
 export const quotations = pgTable("quotations", {
   id: serial("id").primaryKey(),
   companyId: integer("company_id").references(() => companies.id).notNull(),
+  branchId: integer("branch_id").references(() => branches.id),
   customerId: integer("customer_id").references(() => customers.id).notNull(),
 
   quotationNumber: text("quotation_number").notNull(),
@@ -539,6 +707,7 @@ export const quotationItems = pgTable("quotation_items", {
 
 export const quotationsRelations = relations(quotations, ({ one, many }) => ({
   company: one(companies, { fields: [quotations.companyId], references: [companies.id] }),
+  branch: one(branches, { fields: [quotations.branchId], references: [branches.id] }),
   customer: one(customers, { fields: [quotations.customerId], references: [customers.id] }),
   items: many(quotationItems),
 }));
@@ -567,6 +736,7 @@ export type InsertQuotationItem = z.infer<typeof insertQuotationItemSchema>;
 export const recurringInvoices = pgTable("recurring_invoices", {
   id: serial("id").primaryKey(),
   companyId: integer("company_id").references(() => companies.id).notNull(),
+  branchId: integer("branch_id").references(() => branches.id),
   customerId: integer("customer_id").references(() => customers.id).notNull(),
 
   // Template data
@@ -592,6 +762,7 @@ export const recurringInvoices = pgTable("recurring_invoices", {
 
 export const recurringInvoicesRelations = relations(recurringInvoices, ({ one }) => ({
   company: one(companies, { fields: [recurringInvoices.companyId], references: [companies.id] }),
+  branch: one(branches, { fields: [recurringInvoices.branchId], references: [branches.id] }),
   customer: one(customers, { fields: [recurringInvoices.customerId], references: [customers.id] }),
 }));
 
@@ -663,6 +834,7 @@ export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
 export const posShifts = pgTable("pos_shifts", {
   id: serial("id").primaryKey(),
   companyId: integer("company_id").references(() => companies.id).notNull(),
+  branchId: integer("branch_id").references(() => branches.id),
   userId: uuid("user_id").references(() => users.id).notNull(),
   startTime: timestamp("start_time").defaultNow().notNull(),
   endTime: timestamp("end_time"),
@@ -683,6 +855,7 @@ export const posShifts = pgTable("pos_shifts", {
 
 export const posShiftsRelations = relations(posShifts, ({ one }) => ({
   company: one(companies, { fields: [posShifts.companyId], references: [companies.id] }),
+  branch: one(branches, { fields: [posShifts.branchId], references: [branches.id] }),
   user: one(users, { fields: [posShifts.userId], references: [users.id] }),
 }));
 
@@ -690,6 +863,7 @@ export const posShiftsRelations = relations(posShifts, ({ one }) => ({
 export const posHolds = pgTable("pos_holds", {
   id: serial("id").primaryKey(),
   companyId: integer("company_id").references(() => companies.id).notNull(),
+  branchId: integer("branch_id").references(() => branches.id),
   userId: uuid("user_id").references(() => users.id).notNull(),
   customerId: integer("customer_id").references(() => customers.id),
   holdName: text("hold_name"),
@@ -701,6 +875,7 @@ export const posHolds = pgTable("pos_holds", {
 
 export const posHoldsRelations = relations(posHolds, ({ one }) => ({
   company: one(companies, { fields: [posHolds.companyId], references: [companies.id] }),
+  branch: one(branches, { fields: [posHolds.branchId], references: [branches.id] }),
   user: one(users, { fields: [posHolds.userId], references: [users.id] }),
   customer: one(customers, { fields: [posHolds.customerId], references: [customers.id] }),
 }));
@@ -763,6 +938,7 @@ export const suppliersRelations = relations(suppliers, ({ one }) => ({
 export const inventoryTransactions = pgTable("inventory_transactions", {
   id: serial("id").primaryKey(),
   companyId: integer("company_id").references(() => companies.id).notNull(),
+  branchId: integer("branch_id").references(() => branches.id),
   productId: integer("product_id").references(() => products.id).notNull(),
   supplierId: integer("supplier_id").references(() => suppliers.id),
 
@@ -789,6 +965,7 @@ export const inventoryTransactions = pgTable("inventory_transactions", {
 
 export const inventoryTransactionsRelations = relations(inventoryTransactions, ({ one }) => ({
   company: one(companies, { fields: [inventoryTransactions.companyId], references: [companies.id] }),
+  branch: one(branches, { fields: [inventoryTransactions.branchId], references: [branches.id] }),
   product: one(products, { fields: [inventoryTransactions.productId], references: [products.id] }),
   supplier: one(suppliers, { fields: [inventoryTransactions.supplierId], references: [suppliers.id] }),
 }));
@@ -797,6 +974,7 @@ export const inventoryTransactionsRelations = relations(inventoryTransactions, (
 export const expenses = pgTable("expenses", {
   id: serial("id").primaryKey(),
   companyId: integer("company_id").references(() => companies.id).notNull(),
+  branchId: integer("branch_id").references(() => branches.id),
   supplierId: integer("supplier_id").references(() => suppliers.id),
 
   category: text("category").notNull(), // Rent, Utilities, Salary, etc.
@@ -820,12 +998,14 @@ export const expenses = pgTable("expenses", {
 
 export const expensesRelations = relations(expenses, ({ one }) => ({
   company: one(companies, { fields: [expenses.companyId], references: [companies.id] }),
+  branch: one(branches, { fields: [expenses.branchId], references: [branches.id] }),
   supplier: one(suppliers, { fields: [expenses.supplierId], references: [suppliers.id] }),
 }));
 
 export const stockTakes = pgTable("stock_takes", {
   id: serial("id").primaryKey(),
   companyId: integer("company_id").notNull(),
+  branchId: integer("branch_id").references(() => branches.id),
   userId: uuid("user_id").notNull(),
   status: text("status").default("draft").notNull(), // draft, completed, cancelled
   startDate: timestamp("start_date").defaultNow().notNull(),
@@ -854,6 +1034,7 @@ export const stockTakeItems = pgTable("stock_take_items", {
 
 export const stockTakesRelations = relations(stockTakes, ({ one, many }) => ({
   company: one(companies, { fields: [stockTakes.companyId], references: [companies.id] }),
+  branch: one(branches, { fields: [stockTakes.branchId], references: [branches.id] }),
   user: one(users, { fields: [stockTakes.userId], references: [users.id] }),
   items: many(stockTakeItems),
 }));
@@ -861,6 +1042,54 @@ export const stockTakesRelations = relations(stockTakes, ({ one, many }) => ({
 export const stockTakeItemsRelations = relations(stockTakeItems, ({ one }) => ({
   stockTake: one(stockTakes, { fields: [stockTakeItems.stockTakeId], references: [stockTakes.id] }),
   product: one(products, { fields: [stockTakeItems.productId], references: [products.id] }),
+}));
+
+// RESTAURANT & BOM TABLES
+
+export const restaurantSections = pgTable("restaurant_sections", {
+  id: serial("id").primaryKey(),
+  companyId: integer("company_id").references(() => companies.id).notNull(),
+  branchId: integer("branch_id").references(() => branches.id),
+  name: text("name").notNull(),
+  lastUpdated: timestamp("last_updated").defaultNow(),
+});
+
+export const restaurantTables = pgTable("restaurant_tables", {
+  id: serial("id").primaryKey(),
+  sectionId: integer("section_id").references(() => restaurantSections.id).notNull(),
+  tableName: text("table_name").notNull(),
+  capacity: integer("capacity").default(2),
+  status: text("status").default("available"), // available, occupied, dirty, reserved
+  posX: integer("pos_x").default(0), // For visual layout
+  posY: integer("pos_y").default(0),
+  width: integer("width").default(60),
+  height: integer("height").default(60),
+  shape: text("shape").default("square"), // square, circle
+  currentInvoiceId: integer("current_invoice_id"), // Linked order
+});
+
+export const recipeItems = pgTable("recipe_items", {
+  id: serial("id").primaryKey(),
+  parentProductId: integer("parent_product_id").references(() => products.id).notNull(), // The Burger
+  ingredientProductId: integer("ingredient_product_id").references(() => products.id).notNull(), // Beef
+  quantity: decimal("quantity", { precision: 10, scale: 4 }).notNull(), // Amount per unit e.g. 0.150kg
+  unit: text("unit").notNull(), // kg, g, l, ml, unit
+});
+
+export const restaurantSectionsRelations = relations(restaurantSections, ({ one, many }) => ({
+  company: one(companies, { fields: [restaurantSections.companyId], references: [companies.id] }),
+  branch: one(branches, { fields: [restaurantSections.branchId], references: [branches.id] }),
+  tables: many(restaurantTables),
+}));
+
+export const restaurantTablesRelations = relations(restaurantTables, ({ one }) => ({
+  section: one(restaurantSections, { fields: [restaurantTables.sectionId], references: [restaurantSections.id] }),
+  currentInvoice: one(invoices, { fields: [restaurantTables.currentInvoiceId], references: [invoices.id] }),
+}));
+
+export const recipeItemsRelations = relations(recipeItems, ({ one }) => ({
+  parentProduct: one(products, { fields: [recipeItems.parentProductId], references: [products.id] }),
+  ingredient: one(products, { fields: [recipeItems.ingredientProductId], references: [products.id] }),
 }));
 
 // Zod schemas for new tables
@@ -883,4 +1112,28 @@ export type InsertStockTake = z.infer<typeof insertStockTakeSchema>;
 export const insertStockTakeItemSchema = createInsertSchema(stockTakeItems).omit({ id: true });
 export type StockTakeItem = typeof stockTakeItems.$inferSelect;
 export type InsertStockTakeItem = z.infer<typeof insertStockTakeItemSchema>;
+
+export const insertRecipeItemSchema = createInsertSchema(recipeItems).omit({ id: true });
+export type RecipeItem = typeof recipeItems.$inferSelect;
+export type InsertRecipeItem = z.infer<typeof insertRecipeItemSchema>;
+
+export const insertRestaurantSectionSchema = createInsertSchema(restaurantSections).omit({ id: true });
+export type RestaurantSection = typeof restaurantSections.$inferSelect;
+export type InsertRestaurantSection = z.infer<typeof insertRestaurantSectionSchema>;
+
+export const insertRestaurantTableSchema = createInsertSchema(restaurantTables).omit({ id: true });
+export type RestaurantTable = typeof restaurantTables.$inferSelect;
+export type InsertRestaurantTable = z.infer<typeof insertRestaurantTableSchema>;
+
+export const insertBranchSchema = createInsertSchema(branches).omit({ id: true, createdAt: true });
+export type Branch = typeof branches.$inferSelect;
+export type InsertBranch = z.infer<typeof insertBranchSchema>;
+
+export const insertBranchUserSchema = createInsertSchema(branchUsers).omit({ id: true });
+export type BranchUser = typeof branchUsers.$inferSelect;
+export type InsertBranchUser = z.infer<typeof insertBranchUserSchema>;
+
+export const insertBranchStockSchema = createInsertSchema(branchStocks).omit({ id: true });
+export type BranchStock = typeof branchStocks.$inferSelect;
+export type InsertBranchStock = z.infer<typeof insertBranchStockSchema>;
 

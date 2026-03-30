@@ -64,6 +64,18 @@ export function POSReceipt({ invoice, company, customer, items, paperSize: paper
                     <span>Currency:</span>
                     <span>{invoice.currency} @ {invoice.exchangeRate}</span>
                 </div>
+                {invoice.tableId && (
+                    <div className="flex justify-between border-t border-dashed pt-1 mt-1 font-bold">
+                        <span>TABLE:</span>
+                        <span>{invoice.notes?.includes("Table: ") ? invoice.notes.split("Table: ")[1] : invoice.tableId}</span>
+                    </div>
+                )}
+                {invoice.waiterId && (
+                    <div className="flex justify-between font-bold">
+                        <span>WAITER:</span>
+                        <span>{invoice.waiterId.toString().slice(0, 8)}</span>
+                    </div>
+                )}
             </div>
 
             {/* Items */}

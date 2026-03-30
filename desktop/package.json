@@ -11,6 +11,10 @@
     "build:win": "electron-builder --win",
     "build:linux": "electron-builder --linux"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/emmanuelfore/fisczim.git"
+  },
   "build": {
     "appId": "com.fiscalstack.pos",
     "productName": "Fiscal Stack POS",
@@ -18,7 +22,14 @@
       "output": "dist"
     },
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "publish": [
+        {
+          "provider": "github",
+          "owner": "emmanuelfore",
+          "repo": "fisczim"
+        }
+      ]
     },
     "linux": {
       "target": "AppImage"

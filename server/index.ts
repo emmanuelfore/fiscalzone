@@ -4,7 +4,7 @@ import { registerRoutes } from "./routes.js";
 import { serveStatic } from "./static.js";
 import { createServer } from "http";
 import { setupSwagger } from "./swagger.js";
-import { startRecurringInvoiceWorker } from "./jobs.js";
+import { startRecurringInvoiceWorker, startFiscalDayClosingWorker } from "./jobs.js";
 
 import cors from "cors";
 import compression from "compression";
@@ -105,6 +105,9 @@ async function initializeApp() {
 
   // Start recurring invoice worker
   // startRecurringInvoiceWorker();
+
+  // Start midnight fiscal day closing worker
+  startFiscalDayClosingWorker();
 }
 
 // Export for Vercel

@@ -48,14 +48,17 @@ export function DeviceStatusWidget({ companyId }: { companyId: number }) {
 
     // Determine state
     const isDayOpen = status.fiscalDayOpen;
+    const isCloseFailed = status.fiscalDayStatus === 'FiscalDayCloseFailed';
 
     // Logic: 
+    // Close Failed = Red (Critical)
     // Online + Day Open = Green
     // Online + Day Closed = Yellow (Warning)
     // Offline = Red
 
-    let state = "online";
+    let state: 'online' | 'warning' | 'offline' | 'error' = "online";
     if (!status.isOnline) state = "offline";
+    else if (isCloseFailed) state = "error";
     else if (!isDayOpen) state = "warning";
 
     return (
@@ -67,19 +70,23 @@ export function DeviceStatusWidget({ companyId }: { companyId: number }) {
                         flex items-center gap-2 px-3 py-1.5 rounded-full border cursor-pointer transition-all duration-200
                         ${state === 'online' ? 'bg-emerald-50 border-emerald-100 hover:bg-emerald-100' : ''}
                         ${state === 'warning' ? 'bg-amber-50 border-amber-100 hover:bg-amber-100' : ''}
-                        ${state === 'offline' ? 'bg-red-50 border-red-100 hover:bg-red-100' : ''}
+                        ${state === 'offline' ? 'bg-slate-50 border-slate-100 hover:bg-slate-100' : ''}
+                        ${state === 'error' ? 'bg-red-50 border-red-100 animate-pulse hover:bg-red-100 shadow-[0_0_10px_rgba(239,68,68,0.2)]' : ''}
                     `}>
                             <div className={`w-2 h-2 rounded-full ${state === 'online' ? 'bg-emerald-500 animate-pulse' :
-                                    state === 'warning' ? 'bg-amber-500' : 'bg-red-500'
+                                    state === 'warning' ? 'bg-amber-500' : 
+                                    state === 'error' ? 'bg-red-500' : 'bg-slate-400'
                                 }`} />
-                            <span className={`text-[10px] font-bold uppercase tracking-wide ${state === 'online' ? 'text-emerald-700' :
-                                    state === 'warning' ? 'text-amber-700' : 'text-red-700'
+                            <span className={`text-[10px] font-black uppercase tracking-wide ${state === 'online' ? 'text-emerald-700' :
+                                    state === 'warning' ? 'text-amber-700' : 
+                                    state === 'error' ? 'text-red-700' : 'text-slate-500'
                                 }`}>
-                                {state === 'online' ? 'Day Open' :
-                                    state === 'warning' ? 'Day Closed' : 'Offline'}
+                                {state === 'online' ? 'Fiscal Day Open' :
+                                    state === 'warning' ? 'Fiscal Day Closed' : 
+                                    state === 'error' ? 'CLOSE FAILED!' : 'Offline'}
                             </span>
-                            {state === 'warning' && (
-                                <RefreshCw className="w-3 h-3 text-amber-500 ml-1" />
+                            {(state === 'warning' || state === 'error') && (
+                                <AlertCircle className={`w-3 h-3 ml-1 ${state === 'error' ? 'text-red-500' : 'text-amber-500'}`} />
                             )}
                         </div>
                     </Link>

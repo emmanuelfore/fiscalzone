@@ -21,6 +21,12 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Pr
         ? `${API_BASE}${input}`
         : input;
 
+    // multi-branch support: inject current branch ID if available
+    const branchId = localStorage.getItem("selectedBranchId");
+    if (branchId) {
+        headers.set("X-Branch-ID", branchId);
+    }
+
     const controller = init?.signal ? null : new AbortController();
     const timeoutId = controller ? window.setTimeout(() => {
         console.warn(`[apiFetch] Request to ${url} timed out after 120s - aborting.`);
@@ -40,5 +46,14 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Pr
         });
     } finally {
         if (timeoutId) window.clearTimeout(timeoutId);
+    }
+}
+
+/** Helper to update selected branch in storage */
+export function setSelectedBranchId(id: number | null) {
+    if (id) {
+        localStorage.setItem("selectedBranchId", id.toString());
+    } else {
+        localStorage.removeItem("selectedBranchId");
     }
 }

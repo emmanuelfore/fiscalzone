@@ -8,15 +8,13 @@ const log = require('electron-log');
 // Configure Logger
 log.transports.file.level = "info";
 autoUpdater.logger = log;
+autoUpdater.autoDownload = true;
+log.info('[Main] App starting...');
+
 const { SerialPort } = require('serialport');
 
 const PROD_URL = 'https://fiscalstack.co.zw/pos-login';
 const DEV_URL = 'http://localhost:5001/pos-login';
-
-// Configure logging for autoUpdater
-autoUpdater.logger = log;
-autoUpdater.logger.transports.file.level = 'info';
-log.info('[Main] App starting...');
 
 // Manager PIN cache helpers (Task 8.1)
 const PIN_CACHE_KEY = 'manager-pin-cache';
@@ -412,12 +410,16 @@ function initBarcodeScanner(mainWindow, portPath) {
 /**
  * Auto-Updater Logic
  */
-function setupAutoUpdater() {
+function setupAutoUpdater(mainWindow) {
   autoUpdater.on('checking-for-update', () => {
     log.info('[Updater] Checking for update...');
   });
   autoUpdater.on('update-available', (info) => {
     log.info(`[Updater] Update available: ${info.version}`);
+    // Notify renderer (pos-login uses this)
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update-available', info);
+    }
   });
   autoUpdater.on('update-not-available', (info) => {
     log.info('[Updater] Update not available.');
@@ -427,20 +429,18 @@ function setupAutoUpdater() {
   });
   autoUpdater.on('download-progress', (progressObj) => {
     let log_message = "Download speed: " + progressObj.bytesPerSecond;
-    log_message = log_message + ' - Downloaded ' + progressObj.percentage + '%';
+    log_message = log_message + ' - Downloaded ' + progressObj.percent + '%'; // Fixed 'percentage' vs 'percent'
     log_message = log_message + ' (' + progressObj.transferred + "/" + progressObj.total + ')';
     log.info(`[Updater] ${log_message}`);
   });
   autoUpdater.on('update-downloaded', (info) => {
-    log.info(`[Updater] Update downloaded: ${info.version}. App will restart to apply.`);
-    // Quit and install the update
-    autoUpdater.quitAndInstall();
+    log.info(`[Updater] Update downloaded: ${info.version}. Ready to install.`);
   });
 
-  // Check for updates on startup after 5 seconds to not slow down the initial window load
-  setTimeout(() => {
+  // Check for updates on startup (only in production or if packaged)
+  if (app.isPackaged) {
     autoUpdater.checkForUpdatesAndNotify();
-  }, 5000);
+  }
 }
 
 function createWindow() {
@@ -520,45 +520,12 @@ function createWindow() {
     app.quit();
   });
 
-  // --- Auto-Updater Logic ---
-  autoUpdater.on('checking-for-update', () => {
-    log.info('[Updater] Checking for update...');
-  });
-
-  autoUpdater.on('update-available', (info) => {
-    log.info('[Updater] Update available:', info.version);
-    // Notify renderer (pos-login uses this)
-    mainWindow.webContents.send('update-available', info);
-  });
-
-  autoUpdater.on('update-not-available', () => {
-    log.info('[Updater] Update not available.');
-  });
-
-  autoUpdater.on('error', (err) => {
-    log.error('[Updater] Error in auto-updater:', err.message);
-  });
-
-  autoUpdater.on('download-progress', (progressObj) => {
-    let log_message = "Download speed: " + progressObj.bytesPerSecond;
-    log_message = log_message + ' - Downloaded ' + progressObj.percent + '%';
-    log_message = log_message + ' (' + progressObj.transferred + "/" + progressObj.total + ')';
-    log.info('[Updater] ' + log_message);
-  });
-
-  autoUpdater.on('update-downloaded', (info) => {
-    log.info('[Updater] Update downloaded:', info.version);
-  });
-
-  // Check for updates on startup (only in production)
-  if (app.isPackaged) {
-    autoUpdater.checkForUpdatesAndNotify();
-  }
+  // Initialize updater
+  setupAutoUpdater(mainWindow);
 }
 
 app.on('ready', () => {
   createWindow();
-  setupAutoUpdater();
 });
 
 app.on('window-all-closed', function () {

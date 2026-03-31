@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -24,7 +25,8 @@ import {
   Wrench,
   RefreshCw,
   Save,
-  Monitor
+  Monitor,
+  Landmark
 } from "lucide-react";
 import { 
   Dialog,
@@ -56,6 +58,7 @@ interface PosTerminalSettingsProps {
 
 export function PosTerminalSettings({ formData, setFormData, isLoading, companyId }: PosTerminalSettingsProps) {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const [activeSection, setActiveSection] = useState("terminal");
   const [printerClientStatus, setPrinterClientStatus] = useState<'checking' | 'online' | 'offline'>('checking');
@@ -82,6 +85,7 @@ export function PosTerminalSettings({ formData, setFormData, isLoading, companyI
     { id: "sales", label: "Sales & Rules", icon: ShieldCheck },
     { id: "barcodes", label: "Barcode Rules", icon: Wrench },
     { id: "cashiers", label: "Cashiers", icon: Users },
+    { id: "restaurant", label: "Restaurant Mode", icon: Landmark },
     { id: "downloads", label: "Apps & Client", icon: Download },
   ];
 
@@ -804,6 +808,99 @@ export function PosTerminalSettings({ formData, setFormData, isLoading, companyI
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+          </div>
+        )}
+
+        {activeSection === 'restaurant' && (
+          <div className="animate-in fade-in slide-in-from-right-4 duration-300 space-y-6">
+            <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+              <Landmark className="w-5 h-5 text-indigo-600" />
+              Restaurant & Hospitality
+            </h3>
+            
+            <Card className="card-depth border-none bg-indigo-50/20 border-indigo-100/50">
+              <CardContent className="pt-6 space-y-6">
+                <div className="flex items-center justify-between p-4 bg-white/80 rounded-2xl border border-indigo-100">
+                  <div className="space-y-0.5">
+                    <Label className="text-sm font-bold text-slate-900">Enable Restaurant Mode</Label>
+                    <p className="text-xs text-slate-500">Enable table management, guest counts, and waiter selection in POS.</p>
+                  </div>
+                  <Switch 
+                    checked={formData.restaurantSettings?.enabled ?? false} 
+                    onCheckedChange={checked => setFormData({
+                      ...formData,
+                      restaurantSettings: {
+                        ...(formData.restaurantSettings || {}),
+                        enabled: checked
+                      }
+                    })} 
+                  />
+                </div>
+
+                {formData.restaurantSettings?.enabled && (
+                  <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                    <div className="flex items-center justify-between p-4 bg-white/80 rounded-2xl border border-slate-100">
+                      <div className="space-y-0.5">
+                        <Label className="text-sm font-bold text-slate-700">Require Waiter Selection</Label>
+                        <p className="text-xs text-slate-500">Force staff to select a waiter before starting an order.</p>
+                      </div>
+                      <Checkbox 
+                        checked={formData.restaurantSettings?.requireWaiterSelection ?? false} 
+                        onCheckedChange={checked => setFormData({
+                          ...formData,
+                          restaurantSettings: {
+                            ...(formData.restaurantSettings || {}),
+                            requireWaiterSelection: !!checked
+                          }
+                        })} 
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between p-4 bg-white/80 rounded-2xl border border-slate-100">
+                      <div className="space-y-0.5">
+                        <Label className="text-sm font-bold text-slate-700">Allow Multi-Dining Options</Label>
+                        <p className="text-xs text-slate-500">Enable Dine-In, Take-Away, and Delivery selection.</p>
+                      </div>
+                      <Checkbox 
+                        checked={formData.restaurantSettings?.allowDiningOptions ?? true} 
+                        onCheckedChange={checked => setFormData({
+                          ...formData,
+                          restaurantSettings: {
+                            ...(formData.restaurantSettings || {}),
+                            allowDiningOptions: !!checked
+                          }
+                        })} 
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between p-4 bg-indigo-600/5 rounded-2xl border border-indigo-200 group">
+                       <div className="space-y-0.5">
+                          <Label className="text-sm font-black text-indigo-900">Floor Plan & Table Layout</Label>
+                          <p className="text-xs text-indigo-700/70">Visual layout for your dining area.</p>
+                       </div>
+                       <Button 
+                        size="sm" 
+                        variant="outline" 
+                        className="bg-white border-indigo-200 hover:bg-indigo-600 hover:text-white font-bold rounded-xl shadow-sm hover:shadow-indigo-100 transition-all flex items-center" 
+                        onClick={() => setLocation('/restaurant/layout')}
+                       >
+                          Open Floor Manager <ExternalLink className="w-3.5 h-3.5 ml-2" />
+                       </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 flex gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
+              <div className="space-y-1">
+                <p className="text-xs font-bold text-amber-900 tracking-tight leading-tight">Switching Modes?</p>
+                <p className="text-[10px] text-amber-800/80 leading-relaxed">
+                  Enabling restaurant mode will change the POS landing screen from a product grid to a <strong>Table Perspective</strong>. Ensure your staff is trained on table-based ordering before switching in a production environment.
+                </p>
+              </div>
+            </div>
           </div>
         )}
 

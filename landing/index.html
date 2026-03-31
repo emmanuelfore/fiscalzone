@@ -1197,10 +1197,17 @@
 
         .pricing-wrap {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 16px;
-            max-width: 780px;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+            max-width: 1100px;
             margin: 52px auto 0;
+        }
+
+        @media (max-width: 900px) {
+            .pricing-wrap {
+                grid-template-columns: 1fr;
+                max-width: 420px;
+            }
         }
 
         .pc {
@@ -1646,6 +1653,81 @@
                 grid-template-columns: 1fr;
             }
         }
+        /* ─── WHATSAPP MODAL ─── */
+        .wa-modal {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            backdrop-filter: blur(10px);
+        }
+
+        .wa-modal.open { display: flex; animation: fadeIn 0.3s ease; }
+
+        .wa-modal-card {
+            background: #121214;
+            width: 100%;
+            max-width: 420px;
+            padding: 32px;
+            border-radius: 28px;
+            border: 1px solid var(--border);
+            position: relative;
+        }
+
+        .wa-modal-close {
+            position: absolute;
+            top: 20px; right: 20px;
+            background: none; border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 8px;
+        }
+
+        .wa-modal-title {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .wa-modal-sub {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin-bottom: 24px;
+            line-height: 1.5;
+        }
+
+        .wa-modal-form { display: flex; flex-direction: column; gap: 16px; }
+
+        .wa-modal-input {
+            background: #1a1a1c;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 14px 18px;
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            outline: none;
+        }
+
+        .wa-modal-input:focus { border-color: var(--amber); }
+
+        .wa-modal-btn {
+            background: var(--amber);
+            color: #000;
+            border: none;
+            padding: 16px;
+            border-radius: 14px;
+            font-weight: 800;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: transform 0.2s;
+            margin-top: 8px;
+        }
+
+        .wa-modal-btn:hover { background: var(--amber-light); }
     </style>
 </head>
 
@@ -1656,9 +1738,6 @@
 
         <!-- NAV -->
         <nav class="navbar">
-            <div class="migration-banner">
-                Looking for a <strong>Vend</strong> alternative? <span class="arr">→</span>
-            </div>
             <div class="nav-inner">
                 <div class="nav-logo">
                     <div class="nav-logo-mark">
@@ -1696,13 +1775,12 @@
             </h1>
 
             <p class="hero-sub reveal d2">
-                Everything you need to grow, from <a href="#features">fast checkout</a> and <a href="#features">offline
+                Everything you need to grow on any <b>phone, tablet, or POS terminal.</b> From <a href="#features">fast checkout</a> and <a href="#features">offline
                     selling</a> to <a href="#features">analytics</a> and <a href="#features">inventory</a>.
             </p>
 
             <div class="hero-ctas reveal d2">
-                <a href="fieldpos.apk" class="btn-cta-amber" download>Download the App (.apk)</a>
-                <a href="https://wa.me/263712270914?text=I'm%20interested%20in%20FieldPOS" class="btn-cta-outline">WhatsApp Support →</a>
+                <a href="#" onclick="openWAModal(); return false;" class="btn-cta-amber">Get Started via WhatsApp →</a>
             </div>
 
             <!-- use-case marquee -->
@@ -1731,6 +1809,7 @@
                 </div>
             </div>
 
+            <!-- Hardware Section -->
 
             <!-- customer cards -->
             <div class="customer-cards reveal d3">
@@ -1805,19 +1884,19 @@
     <div class="ticker">
         <div class="ticker-track">
             <div class="ticker-item"><span class="ticker-dot"></span>Works on any phone</div>
-            <div class="ticker-item"><span class="ticker-dot"></span>No hardware required</div>
+            <div class="ticker-item"><span class="ticker-dot"></span>Bluetooth Printer Support</div>
             <div class="ticker-item"><span class="ticker-dot"></span>Offline capable</div>
             <div class="ticker-item"><span class="ticker-dot"></span>USD · ZWL · ZWG</div>
             <div class="ticker-item"><span class="ticker-dot"></span>ZIMRA compliant</div>
-            <div class="ticker-item"><span class="ticker-dot"></span>From $2/month</div>
+            <div class="ticker-item"><span class="ticker-dot"></span>Only $24/year</div>
             <div class="ticker-item"><span class="ticker-dot"></span>Multi-branch ready</div>
             <div class="ticker-item"><span class="ticker-dot"></span>10-second checkout</div>
             <div class="ticker-item"><span class="ticker-dot"></span>Works on any phone</div>
-            <div class="ticker-item"><span class="ticker-dot"></span>No hardware required</div>
+            <div class="ticker-item"><span class="ticker-dot"></span>Bluetooth Printer Support</div>
             <div class="ticker-item"><span class="ticker-dot"></span>Offline capable</div>
             <div class="ticker-item"><span class="ticker-dot"></span>USD · ZWG</div>
             <div class="ticker-item"><span class="ticker-dot"></span>ZIMRA compliant</div>
-            <div class="ticker-item"><span class="ticker-dot"></span>From $2/month</div>
+            <div class="ticker-item"><span class="ticker-dot"></span>Only $24/year</div>
             <div class="ticker-item"><span class="ticker-dot"></span>Multi-branch ready</div>
             <div class="ticker-item"><span class="ticker-dot"></span>10-second checkout</div>
         </div>
@@ -1830,9 +1909,8 @@
         <div class="why-cards">
             <div class="why-card reveal">
                 <div class="wc-num">01</div>
-                <div class="wc-title">No hardware needed</div>
-                <div class="wc-body">Your phone is your terminal. No card machines, printers, or equipment to buy or
-                    lease.</div>
+                <div class="wc-title">Any Device</div>
+                <div class="wc-body">Works on your smartphone, tablet, or professional handheld POS terminals. Connect any Bluetooth printer for receipts.</div>
             </div>
             <div class="why-card reveal d1">
                 <div class="wc-num">02</div>
@@ -1904,14 +1982,19 @@
             </div>
             <div class="bc bc-5 bc-dark reveal">
                 <p class="bc-tag">Pricing</p>
-                <h3>Radically affordable</h3>
-                <p>Full features for every business.</p>
-                <div class="big-price"><sup>$</sup>2<sub>/mo</sub></div>
+                <h3>Flexible Plans</h3>
+                <p>App only or Full Hardware bundles.</p>
+                <div class="big-price"><sup>$</sup>36<sub>/yr</sub></div>
             </div>
             <div class="bc bc-6 bc-dark reveal d1">
-                <p class="bc-tag">Scale</p>
-                <h3>Multi-branch</h3>
-                <p>Harare, Bulawayo, Mutare — your whole business in one view.</p>
+                <p class="bc-tag">Hardware</p>
+                <h3>Device Flexibility</h3>
+                <p>Smartphone, Tablet, or POS Machine. Works with Bluetooth printers.</p>
+                <div style="display: flex; gap: 6px; margin-top: 12px;">
+                    <img src="mobile_pos_iphone_1774802571895.png" style="width: 32%; height: 60px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border);">
+                    <img src="handheld_pos_terminal_1774802619835.png" style="width: 32%; height: 60px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border);">
+                    <img src="tablet_pos_stand_cafe_hq_1774802644795.png" style="width: 32%; height: 60px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border);">
+                </div>
             </div>
             <div class="bc bc-7 bc-dark reveal d2">
                 <p class="bc-tag">Reports</p>
@@ -1994,37 +2077,53 @@
                 per-transaction fees. One small monthly subscription and you're live.</p>
             <div class="pricing-wrap">
                 <div class="pc reveal">
-                    <p class="pc-plan">Monthly</p>
-                    <div class="pc-price"><span class="pc-sym">$</span><span class="pc-amt">3</span><span
-                            class="pc-mo">/month</span></div>
-                    <p class="pc-setup">+ $6 one-time setup fee</p>
+                    <p class="pc-plan">Mobile Lite</p>
+                    <div class="pc-price"><span class="pc-sym">$</span><span class="pc-amt">36</span><span
+                            class="pc-mo">/year</span></div>
+                    <p class="pc-setup">App only (Smartphone)</p>
                     <hr class="pc-div" />
                     <ul class="pc-list">
                         <li>Full POS on any phone</li>
                         <li>Multi-currency checkout</li>
                         <li>Offline mode</li>
                         <li>Inventory management</li>
-                        <li>Sales analytics</li>
                         <li>Standard support</li>
                     </ul>
-                    <a href="https://wa.me/263712270914?text=I'm%20interested%20in%20FieldPOS"
+                    <a href="#" onclick="openWAModal(); return false;"
                         class="btn-pc btn-pc-ghost">Get started</a>
                 </div>
+
                 <div class="pc pc-amber reveal d1">
-                    <p class="pc-plan">Annual — save 33%</p>
-                    <div class="pc-price"><span class="pc-sym">$</span><span class="pc-amt">2</span><span
-                            class="pc-mo">/month</span></div>
-                    <p class="pc-setup">+ $6 one-time setup fee</p>
+                    <p class="pc-plan">Mobile Plus</p>
+                    <div class="pc-price"><span class="pc-sym">$</span><span class="pc-amt">60</span><span
+                            class="pc-mo">/pkg</span></div>
+                    <p class="pc-setup">App + Physical Printer Included</p>
                     <hr class="pc-div" />
                     <ul class="pc-list">
-                        <li>Everything in Monthly</li>
-                        <li>Priority support</li>
+                        <li><b>Everything in Lite</b></li>
+                        <li><b>Bluetooth Printer Provided</b></li>
                         <li>Multi-branch dashboard</li>
-                        <li>Early access to features</li>
+                        <li>Priority support</li>
                         <li>Dedicated onboarding</li>
                     </ul>
-                    <a href="https://wa.me/263712270914?text=I'm%20interested%20in%20FieldPOS"
-                        class="btn-pc btn-pc-amber">Choose annual</a>
+                    <a href="#" onclick="openWAModal(); return false;"
+                        class="btn-pc btn-pc-amber">Best Value</a>
+                </div>
+
+                <div class="pc bc-dark reveal d2" style="border: 1px solid var(--border);">
+                    <p class="pc-plan">Hardware Bundle</p>
+                    <div class="pc-price"><span class="pc-sym">$</span><span class="pc-amt">180</span></div>
+                    <p class="pc-setup">+ $24/month subscription</p>
+                    <hr class="pc-div" />
+                    <ul class="pc-list">
+                        <li><b>Professional POS Terminal</b></li>
+                        <li><b>Or 10" Tablet Display</b></li>
+                        <li>Built-in thermal printing</li>
+                        <li>Plug-and-play setup</li>
+                        <li>Lifetime hardware support</li>
+                    </ul>
+                    <a href="#" onclick="openWAModal(); return false;"
+                        class="btn-pc btn-pc-ghost">Request Hardware</a>
                 </div>
             </div>
         </div>
@@ -2054,25 +2153,9 @@
         <div style="max-width:1200px;margin:0 auto;padding:0 32px">
             <h2 class="reveal">Start selling smarter <em>today.</em></h2>
             <p class="reveal d1">Join hundreds of businesses across Zimbabwe already using FieldPOS.</p>
-            <div class="cta-btns reveal d2">
-                <a href="https://wa.me/263712270914?text=I'm%20interested%20in%20FieldPOS" class="btn-cta-primary">Get
+            <div class="cta-btns reveal d2" style="justify-content: center;">
+                <a href="#" onclick="openWAModal(); return false;" class="btn-cta-primary">Get
                     Started via WhatsApp →</a>
-                <a href="#" class="store-btn"><span class="store-soon">Soon</span><svg viewBox="0 0 24 24"
-                        fill="currentColor">
-                        <path
-                            d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" />
-                    </svg>
-                    <div><span class="store-btn-label">Download on the</span><span class="store-btn-name">App
-                            Store</span></div>
-                </a>
-                <a href="fieldpos.apk" class="store-btn" download><svg viewBox="0 0 24 24"
-                        fill="currentColor">
-                        <path
-                            d="M3.18 23.76c.3.17.64.22.99.14l12.5-7.19-2.55-2.55-10.94 9.6zm-1.76-20.1C1.16 4 1 4.34 1 4.75v14.5c0 .41.16.75.42 1.01l.08.07 8.12-8.12v-.19L1.5 3.59l-.08.07zM20.33 10.63l-2.77-1.6-2.85 2.85 2.85 2.85 2.79-1.61c.8-.46.8-1.22-.02-1.49zM4.17.24L16.68 7.43l-2.55 2.55L4.17.24C4.52.06 4.93.07 5.21.24z" />
-                    </svg>
-                    <div><span class="store-btn-label">Download for</span><span class="store-btn-name">Android (.apk)</span>
-                    </div>
-                </a>
             </div>
         </div>
     </section>
@@ -2090,10 +2173,43 @@
             entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('in'); });
         }, { threshold: 0.07 });
         document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+
+        function openWAModal() {
+            document.getElementById('waModal').classList.add('open');
+        }
+        function closeWAModal() {
+            document.getElementById('waModal').classList.remove('open');
+        }
+        function sendToWA() {
+            const biz = document.getElementById('wa-biz').value || 'my business';
+            const device = document.getElementById('wa-device').value;
+            const text = `Hi FieldPOS, I'm interested in getting started for ${biz}. We plan to use a ${device}.`;
+            window.open(`https://wa.me/263712270914?text=${encodeURIComponent(text)}`, '_blank');
+            closeWAModal();
+        }
     </script>
+    
+    <!-- WhatsApp Modal -->
+    <div id="waModal" class="wa-modal">
+        <div class="wa-modal-card">
+            <button class="wa-modal-close" onclick="closeWAModal()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+            <div class="wa-modal-title">Get Started</div>
+            <p class="wa-modal-sub">Just a quick detail so we can tailor your experience on WhatsApp.</p>
+            <div class="wa-modal-form">
+                <input type="text" id="wa-biz" placeholder="What is your Store Name?" class="wa-modal-input">
+                <select id="wa-device" class="wa-modal-input">
+                    <option value="Smartphone">I use a Smartphone</option>
+                    <option value="POS Terminal">I have a POS Terminal</option>
+                    <option value="Tablet">I use a Tablet</option>
+                </select>
+                <button onclick="sendToWA()" class="wa-modal-btn">Continue to WhatsApp →</button>
+            </div>
+        </div>
+    </div>
     <!-- WhatsApp Bubble -->
-    <a href="https://wa.me/263712270914?text=I'm%20interested%20in%20FieldPOS" class="wa-bubble" target="_blank"
-        rel="noopener noreferrer">
+    <a href="#" onclick="openWAModal(); return false;" class="wa-bubble">
         <svg viewBox="0 0 24 24" fill="currentColor">
             <path
                 d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />

@@ -15,6 +15,13 @@
       "when": 1774531921219,
       "tag": "0001_fix_shift_id",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1774784281294,
+      "tag": "0002_known_sauron",
+      "breakpoints": true
     }
   ]
 }

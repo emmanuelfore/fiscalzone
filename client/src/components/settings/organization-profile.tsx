@@ -45,162 +45,217 @@ export function OrganizationProfile({ company, formData, setFormData }: Organiza
         <p className="text-sm text-slate-500">Official business identification and contact details</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_350px] gap-8">
-        <div className="space-y-8">
-          <Card className="card-depth border-none">
-            <CardHeader>
-              <CardTitle className="flex items-center text-lg">
-                <Building2 className="w-5 h-5 mr-2 text-blue-600" />
-                Identity & Contact
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6 pt-2">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Legal Company Name</Label>
-                  <Input
-                    value={formData.name || ""}
-                    onChange={e => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="Official Registered Name"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Trading Name (DBA)</Label>
-                  <Input
-                    value={formData.tradingName || ""}
-                    onChange={e => setFormData({ ...formData, tradingName: e.target.value })}
-                    placeholder="Doing Business As"
-                  />
-                </div>
-                <div className="space-y-2 md:col-span-2">
-                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Branch Name (Used for ZIMRA [5])</Label>
-                  <Input
-                    value={formData.branchName || ""}
-                    onChange={e => setFormData({ ...formData, branchName: e.target.value })}
-                    placeholder="e.g. Harare North Branch"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                    <Mail className="w-3 h-3" /> Business Email
-                  </Label>
-                  <Input
-                    value={formData.email || ""}
-                    onChange={e => setFormData({ ...formData, email: e.target.value })}
-                    placeholder="billing@company.com"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                    <Phone className="w-3 h-3" /> Contact Phone
-                  </Label>
-                  <Input
-                    value={formData.phone || ""}
-                    onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                    placeholder="+263..."
-                  />
-                </div>
+      <div className="max-w-5xl space-y-8">
+        {/* Main Identity & Contact Section */}
+        <Card className="card-depth border-none overflow-hidden group hover:shadow-2xl transition-all duration-500">
+          <CardHeader className="bg-slate-50/50 border-b border-slate-100/50 p-8 pb-10">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center text-2xl font-black text-slate-800 tracking-tight">
+                  <div className="w-10 h-10 rounded-2xl bg-blue-600 flex items-center justify-center mr-4 shadow-lg shadow-blue-200">
+                    <Building2 className="w-5 h-5 text-white" />
+                  </div>
+                  Organization Identity
+                </CardTitle>
+                <CardDescription className="ml-14 text-sm font-medium text-slate-500 mt-1">Official business registration and regional parameters</CardDescription>
               </div>
-
-               <div className="space-y-2 pt-4 border-t border-slate-50">
-                <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                  <MapPin className="w-3 h-3" /> Street Address
-                </Label>
+            </div>
+          </CardHeader>
+          <CardContent className="p-10 space-y-12">
+            {/* Row 1: Legal Names */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+              <div className="space-y-3">
+                <Label className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Legal Company Name</Label>
                 <Input
-                  value={formData.address || ""}
-                  onChange={e => setFormData({ ...formData, address: e.target.value })}
-                  placeholder="123 Business Way"
+                  value={formData.name || ""}
+                  onChange={e => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="Official Registered Name"
+                  className="h-12 rounded-xl border-slate-200 focus:ring-4 focus:ring-blue-500/10 transition-all font-medium"
                 />
               </div>
+              <div className="space-y-3">
+                <Label className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Trading Name (DBA)</Label>
+                <Input
+                  value={formData.tradingName || ""}
+                  onChange={e => setFormData({ ...formData, tradingName: e.target.value })}
+                  placeholder="Doing Business As"
+                  className="h-12 rounded-xl border-slate-200 focus:ring-4 focus:ring-blue-500/10 transition-all font-medium"
+                />
+              </div>
+            </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">City</Label>
+            {/* Row 2: Contact Info */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+              <div className="space-y-3">
+                <Label className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 flex items-center gap-2">
+                  <Mail className="w-3 h-3 text-blue-500" /> Admin Email
+                </Label>
+                <Input
+                  value={formData.email || ""}
+                  onChange={e => setFormData({ ...formData, email: e.target.value })}
+                  placeholder="admin@company.com"
+                  className="h-12 rounded-xl border-slate-200 focus:ring-4 focus:ring-blue-500/10 transition-all font-medium"
+                />
+              </div>
+              <div className="space-y-3">
+                <Label className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 flex items-center gap-2">
+                  <Phone className="w-3 h-3 text-blue-500" /> Phone Contact
+                </Label>
+                <Input
+                  value={formData.phone || ""}
+                  onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                  placeholder="+263..."
+                  className="h-12 rounded-xl border-slate-200 focus:ring-4 focus:ring-blue-500/10 transition-all font-medium"
+                />
+              </div>
+              <div className="space-y-3">
+                <Label className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 flex items-center gap-2">
+                  <Globe className="w-3 h-3 text-blue-500" /> Corporate Web
+                </Label>
+                <Input
+                  value={formData.website || ""}
+                  onChange={e => setFormData({ ...formData, website: e.target.value })}
+                  placeholder="https://..."
+                  className="h-12 rounded-xl border-slate-200 focus:ring-4 focus:ring-blue-500/10 transition-all font-medium"
+                />
+              </div>
+            </div>
+
+            {/* Row 3: Address & ZIMRA Branch */}
+            <div className="pt-10 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-10">
+              <div className="space-y-3">
+                <Label className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 flex items-center gap-2">
+                  <MapPin className="w-3 h-3 text-blue-500" /> Physical HQ Address
+                </Label>
+                <div className="grid grid-cols-1 gap-4">
+                  <Input
+                    value={formData.address || ""}
+                    onChange={e => setFormData({ ...formData, address: e.target.value })}
+                    placeholder="Street Address"
+                    className="h-12 rounded-xl border-slate-200 focus:ring-4 focus:ring-blue-500/10 transition-all font-medium"
+                  />
                   <Input
                     value={formData.city || ""}
                     onChange={e => setFormData({ ...formData, city: e.target.value })}
-                    placeholder="Harare"
+                    placeholder="City / Region"
+                    className="h-12 rounded-xl border-slate-200 focus:ring-4 focus:ring-blue-500/10 transition-all font-medium"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                    <Globe className="w-3 h-3" /> Website
-                  </Label>
+              </div>
+
+               <div className="space-y-6">
+                <div className="space-y-3">
+                  <Label className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Branch Name (Fiscal ID)</Label>
                   <Input
-                    value={formData.website || ""}
-                    onChange={e => setFormData({ ...formData, website: e.target.value })}
-                    placeholder="https://..."
+                    value={formData.branchName || ""}
+                    onChange={e => setFormData({ ...formData, branchName: e.target.value })}
+                    placeholder="e.g. Harare CBD / Bulawayo Hub"
+                    className="h-12 rounded-xl border-slate-200 focus:ring-4 focus:ring-blue-500/10 transition-all font-medium"
                   />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-[9px] font-bold text-slate-400 uppercase">Base Currency</Label>
+                    <Input
+                      value={formData.currency || "USD"}
+                      onChange={e => setFormData({ ...formData, currency: e.target.value })}
+                      className="rounded-xl border-slate-200 focus:ring-blue-500/20"
+                    />
+                  </div>
+                  <div className="space-y-2 opacity-60">
+                    <Label className="text-[9px] font-bold text-slate-400 uppercase">System Timezone</Label>
+                    <Input value="CAT (UTC+2)" disabled className="rounded-xl bg-slate-50 border-slate-100" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Branding & Assets Section - Now Below Information */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <Card className="card-depth border-none overflow-hidden hover:shadow-xl transition-all duration-500">
+             <CardHeader className="bg-slate-50/50 border-b border-slate-100/50 p-6">
+               <CardTitle className="text-lg font-bold flex items-center gap-2">
+                  <ImageIcon className="w-5 h-5 text-indigo-500" />
+                  Corporate Logo
+               </CardTitle>
+               <CardDescription>Primary asset for receipt and invoice headers</CardDescription>
+            </CardHeader>
+            <CardContent className="p-8">
+              <div className="flex flex-col sm:flex-row items-center gap-8">
+                <div className="relative group/logo">
+                  {company.logoUrl ? (
+                    <img src={company.logoUrl} alt="Logo" className="h-40 w-40 object-contain rounded-3xl shadow-2xl bg-white p-4 border-2 border-slate-100 transition-transform group-hover/logo:scale-105" />
+                  ) : (
+                    <div className="h-40 w-40 bg-slate-50 rounded-3xl flex items-center justify-center border-2 border-dashed border-slate-200 transition-all group-hover/logo:border-indigo-300">
+                      <ImageIcon className="w-16 h-16 text-slate-200" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 space-y-4">
+                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                    <p className="text-[11px] text-slate-500 leading-relaxed">
+                      Your logo will be automatically formatted for thermal receipt printers and high-resolution PDF invoices. 
+                      <span className="block mt-1 font-bold text-slate-700 underline">Vector SVG or High-Res PNG recommended.</span>
+                    </p>
+                  </div>
+                  <div className="relative">
+                    <Label htmlFor="logo-upload" className="flex items-center justify-center w-full cursor-pointer bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-4 py-4 text-sm font-bold transition-all shadow-lg shadow-blue-200">
+                      {isUploading ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin mr-2" /> Uploading...
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4 mr-2" /> Upload Brand Asset
+                        </>
+                      )}
+                    </Label>
+                    <input id="logo-upload" type="file" accept="image/*" className="hidden" disabled={isUploading} onChange={handleLogoUpload} />
+                  </div>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="card-depth border-none">
-            <CardHeader>
-              <CardTitle className="flex items-center text-lg">
-                <Coins className="w-5 h-5 mr-2 text-amber-600" />
-                Regional Settings
+          <Card className="card-depth border-none overflow-hidden hover:shadow-xl transition-all duration-500">
+            <CardHeader className="bg-slate-50/50 border-b border-slate-100/50 p-6">
+              <CardTitle className="text-lg font-bold flex items-center gap-2">
+                <div className="w-2 h-6 rounded-full" style={{ backgroundColor: formData.primaryColor || "#4f46e5" }} />
+                Platform Theme
               </CardTitle>
+              <CardDescription>Custom interface accent colors</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4 pt-2">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Default Currency</Label>
-                  <Input
-                    value={formData.currency || "USD"}
-                    onChange={e => setFormData({ ...formData, currency: e.target.value })}
-                    placeholder="USD"
-                  />
+            <CardContent className="p-8 space-y-6">
+              <div className="flex items-center gap-6">
+                <div className="space-y-1.5 flex-1">
+                  <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Primary Color HexCode</Label>
+                  <div className="flex items-center gap-3">
+                    <div 
+                      className="w-12 h-12 rounded-xl shadow-inner border-2 border-white" 
+                      style={{ backgroundColor: formData.primaryColor || "#4f46e5" }}
+                    />
+                    <Input 
+                      value={formData.primaryColor || "#4f46e5"}
+                      onChange={(e) => setFormData({ ...formData, primaryColor: e.target.value })}
+                      className="font-mono font-bold text-slate-700 h-12 rounded-xl border-slate-200"
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2 opacity-50">
-                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Date Format</Label>
-                  <Input value="DD/MM/YYYY" disabled className="bg-slate-50" />
+                <div className="pt-4">
+                   <Input 
+                    type="color" 
+                    className="w-12 h-12 p-0 border-none bg-transparent cursor-pointer overflow-hidden rounded-full"
+                    value={formData.primaryColor || "#4f46e5"}
+                    onChange={(e) => setFormData({ ...formData, primaryColor: e.target.value })}
+                  />
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="space-y-8">
-          <Card className="card-depth border-none overflow-hidden">
-             <CardHeader className="bg-slate-50/50 border-b border-slate-100">
-              <CardTitle className="text-base">Company Logo</CardTitle>
-              <CardDescription>Displayed on invoices and POS</CardDescription>
-            </CardHeader>
-            <CardContent className="p-6">
-              <div className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-3xl p-8 bg-slate-100/30 group hover:border-indigo-400 transition-all duration-300">
-                {company.logoUrl ? (
-                  <div className="relative mb-6">
-                    <img src={company.logoUrl} alt="Logo" className="h-32 w-32 object-contain rounded-2xl shadow-xl bg-white p-2" />
-                  </div>
-                ) : (
-                  <div className="h-32 w-32 bg-white rounded-2xl flex items-center justify-center mb-6 border border-slate-100 shadow-xl">
-                    <ImageIcon className="w-12 h-12 text-slate-200" />
-                  </div>
-                )}
-                <div className="w-full">
-                  <Label htmlFor="logo-upload" className="block text-center cursor-pointer bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm">
-                    {isUploading ? (
-                      <span className="flex items-center justify-center gap-2">
-                        <RefreshCw className="w-4 h-4 animate-spin" /> Uploading...
-                      </span>
-                    ) : (
-                      <span className="flex items-center justify-center gap-2">
-                        <Upload className="w-4 h-4" /> Change Logo
-                      </span>
-                    )}
-                  </Label>
-                  <input
-                    id="logo-upload"
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    disabled={isUploading}
-                    onChange={handleLogoUpload}
-                  />
-                  <p className="text-[10px] text-slate-400 text-center mt-3 uppercase tracking-tighter">Recommended: Square PNG/SVG at least 400x400px</p>
-                </div>
+              <div className="bg-amber-50/50 border border-amber-100 p-4 rounded-xl">
+                 <p className="text-[10px] text-amber-800 font-medium leading-normal mb-0">
+                  <span className="font-bold">PRO-TIP:</span> Using a darker primary color ensures that white text on buttons remains legible throughout the dashboard and POS interface.
+                </p>
               </div>
             </CardContent>
           </Card>

@@ -57,8 +57,12 @@ import {
   insertInvoiceSchema,
   insertInvoiceItemSchema,
   insertCustomerSchema,
+  insertBranchSchema,
+  insertBranchStockSchema,
   type InsertQuotation,
-  type InsertRecurringInvoice
+  type InsertRecurringInvoice,
+  type Branch,
+  type BranchStock
 } from "@shared/schema";
 import { paynowService } from "./paynow.js";
 
@@ -67,6 +71,21 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   setupAuth(app);
+
+  const requireAuth = async (req: any, res: any, next: any) => {
+    if (!req.isAuthenticated()) {
+      console.log(`[AUTH] 401 Unauthorized at ${req.method} ${req.path} - No user in session`);
+      return res.status(401).json({ message: "Unauthorized: Authentication required" });
+    }
+    next();
+  };
+
+  const getBranchId = (req: any): number | undefined => {
+    const header = req.headers["x-branch-id"];
+    if (!header) return undefined;
+    const bid = parseInt(header as string);
+    return isNaN(bid) ? undefined : bid;
+  };
 
   app.get("/api/health", (_req, res) => {
     console.log(`[HEALTH] Health check from ${_req.ip}`);
@@ -81,20 +100,56 @@ export async function registerRoutes(
       if (file.mimetype === 'text/csv' || file.mimetype === 'application/vnd.ms-excel') {
         cb(null, true);
       } else {
-        cb(new Error("Invalid file type. Only CSV files are allowed."));
+        cb(null, false);
       }
+    }
+  });
+
+  // Image Upload Configuration
+  const uploadsDir = path.join(process.cwd(), "uploads");
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+
+  const imageStorage = multer.diskStorage({
+    destination: (_req, _file, cb) => {
+      cb(null, uploadsDir);
+    },
+    filename: (_req, file, cb) => {
+      const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+      cb(null, uniqueSuffix + path.extname(file.originalname));
+    },
+  });
+
+  const imageUpload = multer({
+    storage: imageStorage,
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+    fileFilter: (_req, file, cb) => {
+      if (file.mimetype.startsWith("image/")) {
+        cb(null, true);
+      } else {
+        cb(null, false);
+      }
+    }
+  });
+
+  app.use("/uploads", express.static(uploadsDir));
+
+  app.post("/api/upload", requireAuth, imageUpload.single("image"), (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No file uploaded or invalid format" });
+      }
+      const url = `/uploads/${req.file.filename}`;
+      res.json({ url });
+    } catch (error: any) {
+      console.error("Upload Error:", error);
+      res.status(500).json({ message: "Upload failed: " + error.message });
     }
   });
 
 
 
-  const requireAuth = async (req: any, res: any, next: any) => {
-    if (!req.isAuthenticated()) {
-      console.log(`[AUTH] 401 Unauthorized at ${req.method} ${req.path} - No user in session`);
-      return res.status(401).json({ message: "Unauthorized: Authentication required" });
-    }
-    next();
-  };
 
   const requireOwner = async (req: any, res: any, next: any) => {
     if (!req.isAuthenticated()) {
@@ -1046,12 +1101,96 @@ export async function registerRoutes(
   app.patch("/api/companies/:id", requireAuth, async (req, res) => {
     try {
       const companyId = Number(req.params.id);
+      console.log(`[STORAGE] PATCH /api/companies/${companyId} Body:`, JSON.stringify(req.body, null, 2));
       // Ideally verify user owns this company
       const updated = await storage.updateCompany(companyId, req.body);
       res.json(updated);
     } catch (err) {
       console.error("Update Company Error:", err);
       res.status(500).json({ message: "Failed to update company" });
+    }
+  });
+  // Duplicate restaurant and recipe routes removed (moved to later in the file)
+  
+  // --- Branches ---
+  app.get("/api/companies/:companyId/branches", requireAuth, async (req, res) => {
+    const companyId = parseInt(req.params.companyId);
+    if (isNaN(companyId)) return res.status(400).json({ message: "Invalid company ID" });
+    try {
+      const branches = await storage.getBranches(companyId);
+      res.json(branches);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/companies/:companyId/branches", requireAuth, async (req, res) => {
+    const companyId = parseInt(req.params.companyId);
+    if (isNaN(companyId)) return res.status(400).json({ message: "Invalid company ID" });
+    try {
+      const branchData = insertBranchSchema.omit({ companyId: true }).parse(req.body);
+      const branch = await storage.createBranch({ ...branchData, companyId });
+      res.status(201).json(branch);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/branches/:id", requireAuth, async (req, res) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid branch ID" });
+    try {
+      const branch = await storage.getBranch(id);
+      if (!branch) return res.status(404).json({ message: "Branch not found" });
+      res.json(branch);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/branches/:id", requireAuth, async (req, res) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid branch ID" });
+    try {
+      const branchData = insertBranchSchema.partial().parse(req.body);
+      const branch = await storage.updateBranch(id, branchData);
+      res.json(branch);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/branches/:id", requireAuth, async (req, res) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid branch ID" });
+    try {
+      await storage.deleteBranch(id);
+      res.sendStatus(204);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/branches/:branchId/stock", requireAuth, async (req, res) => {
+    const branchId = parseInt(req.params.branchId);
+    if (isNaN(branchId)) return res.status(400).json({ message: "Invalid branch ID" });
+    try {
+      const stock = await storage.getBranchStocks(branchId);
+      res.json(stock);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/branches/:branchId/stock", requireAuth, async (req, res) => {
+    const branchId = parseInt(req.params.branchId);
+    if (isNaN(branchId)) return res.status(400).json({ message: "Invalid branch ID" });
+    const { productId, quantity, type } = req.body;
+    try {
+      const result = await storage.updateBranchStock(branchId, productId, quantity.toString(), type);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
     }
   });
 
@@ -1384,11 +1523,10 @@ export async function registerRoutes(
 
   app.get("/api/pos/holds", requireAuth, async (req, res) => {
     try {
-      const companyId = (req.user as any).id ? (await storage.getCompanies((req.user as any).id))[0].id : req.body.companyId;
-      // Simplified: usually companyId is taken from user context or request
       const targetCompanyId = req.query.companyId ? parseInt(req.query.companyId as string) : (req as any).user?.companyId;
+      const branchId = getBranchId(req);
 
-      const holds = await storage.getPosHolds(targetCompanyId, (req.user as any).id);
+      const holds = await storage.getPosHolds(targetCompanyId, (req.user as any).id, branchId);
       res.json(holds);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -1417,10 +1555,168 @@ export async function registerRoutes(
     }
   });
 
+  // --- RESTAURANT SECTIONS ---
+  app.get("/api/companies/:companyId/restaurant/sections", requireAuth, async (req, res) => {
+    try {
+      const companyId = parseInt(req.params.companyId);
+      const sections = await storage.getRestaurantSections(companyId);
+      res.json(sections);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/companies/:companyId/restaurant/sections", requireAuth, async (req, res) => {
+    try {
+      const companyId = parseInt(req.params.companyId);
+      const section = await storage.createRestaurantSection({
+        ...req.body,
+        companyId
+      });
+      res.status(201).json(section);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // --- RESTAURANT TABLES ---
+  app.get("/api/restaurant/sections/:sectionId/tables", requireAuth, async (req, res) => {
+    try {
+      const sectionId = parseInt(req.params.sectionId);
+      const tables = await storage.getRestaurantTables(sectionId);
+      res.json(tables);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/restaurant/sections/:sectionId/tables", requireAuth, async (req, res) => {
+    try {
+      const sectionId = parseInt(req.params.sectionId);
+      const table = await storage.createRestaurantTable({
+        ...req.body,
+        sectionId
+      });
+      res.status(201).json(table);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/restaurant/tables/:id", requireAuth, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const table = await storage.updateRestaurantTable(id, req.body);
+      res.json(table);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // --- ORDER STATUS TRACKING ---
+  app.get(api.invoices.orderStatus.path, async (req, res) => {
+    try {
+      const companyId = parseInt(req.params.companyId);
+      const orders = await storage.getActiveOrders(companyId);
+      res.json(orders.map(o => ({
+        id: o.id,
+        orderNumber: o.orderNumber,
+        orderStatus: o.orderStatus,
+        issueDate: o.issueDate,
+        createdAt: o.createdAt,
+        items: o.items
+      })));
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch(api.invoices.updateOrderStatus.path, requireAuth, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { status } = api.invoices.updateOrderStatus.input.parse(req.body);
+      await storage.updateInvoice(id, { orderStatus: status });
+      res.json({ success: true, status });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // --- PRODUCT RECIPES (BOM) ---
+  app.get("/api/products/:productId/recipe", requireAuth, async (req, res) => {
+    try {
+      const productId = parseInt(req.params.productId);
+      const items = await storage.getRecipeItems(productId);
+      res.json(items);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/products/:productId/recipe", requireAuth, async (req, res) => {
+    try {
+      const productId = parseInt(req.params.productId);
+      await storage.setRecipeItems(productId, req.body);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // --- PHARMACY / BATCHES / VARIATIONS ---
+  app.get("/api/products/:productId/variations", requireAuth, async (req, res) => {
+    try {
+      const productId = parseInt(req.params.productId);
+      const variations = await storage.getProductVariations(productId);
+      res.json(variations);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/products/:productId/variations", requireAuth, async (req, res) => {
+    try {
+      const variation = await storage.createProductVariation({ ...req.body, productId: parseInt(req.params.productId) });
+      res.status(201).json(variation);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/products/:productId/batches", requireAuth, async (req, res) => {
+    try {
+      const productId = parseInt(req.params.productId);
+      const batches = await storage.getProductBatches(productId);
+      res.json(batches);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/products/:productId/active-batches", requireAuth, async (req, res) => {
+    try {
+      const productId = parseInt(req.params.productId);
+      const batches = await storage.getActiveBatches(productId);
+      res.json(batches);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/products/:productId/batches", requireAuth, async (req, res) => {
+    try {
+      const batch = await storage.createProductBatch({ ...req.body, productId: parseInt(req.params.productId) });
+      res.status(201).json(batch);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.get("/api/pos/shifts/current", requireAuth, async (req, res) => {
     try {
       const companyId = req.query.companyId ? parseInt(req.query.companyId as string) : (req as any).user?.companyId;
-      const shift = await storage.getActivePosShift(companyId, (req.user as any).id);
+      const branchId = getBranchId(req);
+      const shift = await storage.getActivePosShift(companyId, (req.user as any).id, branchId);
       res.json(shift || null);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -1522,6 +1818,7 @@ export async function registerRoutes(
   app.get("/api/pos/all-sales", requireAuth, async (req, res) => {
     try {
       const companyId = parseInt(req.query.companyId as string);
+      const branchId = getBranchId(req);
       const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date(new Date().setDate(new Date().getDate() - 30));
       const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
       
@@ -1532,7 +1829,8 @@ export async function registerRoutes(
         req.query.cashierId as string,
         req.query.paymentMethod as string,
         req.query.status as string,
-        req.query.search as string
+        req.query.search as string,
+        branchId
       );
       res.json(sales);
     } catch (error: any) {
@@ -3854,7 +4152,8 @@ export async function registerRoutes(
 
   // Product Routes
   app.get(api.products.list.path, requireAuth, async (req, res) => {
-    const products = await storage.getProducts(Number(req.params.companyId));
+    const branchId = getBranchId(req);
+    const products = await storage.getProducts(Number(req.params.companyId), branchId);
     res.json(products);
   });
 
@@ -4052,6 +4351,8 @@ export async function registerRoutes(
 
     const isPos = req.query.isPos === 'true' ? true : (req.query.isPos === 'false' ? false : undefined);
 
+    const branchId = getBranchId(req);
+
     const result = await storage.getInvoicesPaginated(
       Number(req.params.companyId),
       page,
@@ -4061,7 +4362,8 @@ export async function registerRoutes(
       type,
       dateFrom,
       dateTo,
-      isPos
+      isPos,
+      branchId
     );
     res.json(result);
   });
@@ -4113,7 +4415,8 @@ export async function registerRoutes(
         status: initialStatus,
         items: input.items as any,
         companyId,
-        shiftId: activeShift?.id || undefined
+        shiftId: activeShift?.id || undefined,
+        branchId: getBranchId(req)
       });
 
       // 2. POS Payment Recording
@@ -4165,7 +4468,11 @@ export async function registerRoutes(
       res.status(201).json(invoice);
     } catch (err) {
       if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message });
+        console.error("[Invoices] Validation Error:", JSON.stringify(err.errors, null, 2));
+        return res.status(400).json({ 
+          message: err.errors[0].message,
+          details: err.errors.map(e => `${e.path.join('.')}: ${e.message}`)
+        });
       }
       throw err;
     }
@@ -4197,6 +4504,96 @@ export async function registerRoutes(
         return res.status(400).json({ message: err.errors[0].message });
       }
       throw err;
+    }
+  });
+
+  app.post(api.invoices.onlineOrder.path, async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith("Bearer ")) {
+        return res.status(401).json({ message: "Missing or invalid authorization" });
+      }
+      const apiKey = authHeader.substring(7);
+      const company = await storage.getCompanyByApiKey(apiKey);
+      if (!company) {
+        return res.status(401).json({ message: "Invalid API Key" });
+      }
+
+      const input = api.invoices.onlineOrder.input.parse(req.body);
+      const companyProducts = await storage.getProducts(company.id);
+      const genericCustomerId = await storage.ensureGenericCustomer(company.id);
+
+      let subtotal = 0;
+      let taxAmount = 0;
+      const invoiceItemsInput: any[] = [];
+
+      for (const item of input.items) {
+        const product = companyProducts.find((p) => p.id === item.productId);
+        if (!product) throw new Error(`Product ${item.productId} not found`);
+
+        const price = parseFloat(product.price.toString());
+        const taxRate = parseFloat(product.taxRate?.toString() || "15.00");
+        const lineSubtotal = price * item.quantity;
+        const lineTax = lineSubtotal * (taxRate / 100);
+
+        subtotal += lineSubtotal;
+        taxAmount += lineTax;
+
+        invoiceItemsInput.push({
+          productId: product.id,
+          description: product.name,
+          quantity: item.quantity.toString(),
+          unitPrice: price.toString(),
+          taxRate: taxRate.toString(),
+          lineTotal: (lineSubtotal + lineTax).toFixed(2),
+          notes: item.notes,
+        });
+      }
+
+      const total = subtotal + taxAmount;
+      const orderNumber = `#${(Math.floor(Math.random() * 900) + 100).toString()}`;
+
+      const invoice = await storage.createInvoice({
+        companyId: company.id,
+        customerId: genericCustomerId,
+        invoiceNumber: `EXT-${Date.now()}`,
+        issueDate: new Date(),
+        dueDate: new Date(),
+        subtotal: subtotal.toFixed(2),
+        taxAmount: taxAmount.toFixed(2),
+        total: total.toFixed(2),
+        status: input.paid ? "paid" : "issued",
+        orderStatus: "pending",
+        orderNumber: orderNumber,
+        customerName: input.customerName,
+        customerPhone: input.customerPhone,
+        deliveryAddress: input.customerAddress,
+        deliveryNotes: input.deliveryNotes,
+        diningOption: input.diningOption,
+        currency: company.currency || "USD",
+        items: invoiceItemsInput,
+      } as any);
+
+      if (input.paid) {
+        await storage.createPayment({
+          companyId: company.id,
+          invoiceId: invoice.id,
+          amount: total.toFixed(2),
+          currency: company.currency || "USD",
+          paymentMethod: "ONLINE",
+          paymentDate: new Date(),
+          exchangeRate: "1.000000",
+        });
+      }
+
+      res.status(201).json({
+        success: true,
+        orderId: invoice.id,
+        orderNumber: orderNumber,
+      });
+    } catch (error: any) {
+      console.error("[External Order Error]", error);
+      res.status(400).json({ message: error.message });
     }
   });
 
@@ -4677,13 +5074,6 @@ export async function registerRoutes(
   });
 
 
-
-  // Create Uploads Dir
-  const uploadsDir = path.join(process.cwd(), "uploads");
-  if (!fs.existsSync(uploadsDir)) {
-    console.log("Creating uploads directory at:", uploadsDir);
-    fs.mkdirSync(uploadsDir, { recursive: true });
-  }
 
   // Customer Statement Route
   app.get("/api/customers/:id/statement", requireAuth, async (req, res) => {

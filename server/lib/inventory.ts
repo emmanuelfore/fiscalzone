@@ -5,10 +5,12 @@ import { eq, and, asc, desc, sql } from "drizzle-orm";
 export async function calculateCOGS(
     productId: number,
     quantitySold: number,
-    companyId: number
+    companyId: number,
+    tx?: any
 ) {
+    const activeDb = tx || db;
     // 1. Get company valuation method
-    const [company] = await db
+    const [company] = await activeDb
         .select({ method: companies.inventoryValuationMethod })
         .from(companies)
         .where(eq(companies.id, companyId))
@@ -17,17 +19,18 @@ export async function calculateCOGS(
     const method = company?.method || "FIFO";
 
     if (method === "WAC") {
-        return calculateWAC(productId, quantitySold, companyId);
+        return calculateWAC(productId, quantitySold, companyId, tx);
     } else if (method === "LIFO") {
-        return calculateFIFO_LIFO(productId, quantitySold, companyId, "LIFO");
+        return calculateFIFO_LIFO(productId, quantitySold, companyId, "LIFO", tx);
     } else {
-        return calculateFIFO_LIFO(productId, quantitySold, companyId, "FIFO");
+        return calculateFIFO_LIFO(productId, quantitySold, companyId, "FIFO", tx);
     }
 }
 
-async function calculateWAC(productId: number, quantitySold: number, companyId: number) {
+async function calculateWAC(productId: number, quantitySold: number, companyId: number, tx?: any) {
+    const activeDb = tx || db;
     // Weighted Average Cost = Total Cost of Available Stock / Total Quantity of Available Stock
-    const result = await db
+    const result = await activeDb
         .select({
             totalQuantity: sql<number>`SUM(remaining_quantity)`,
             totalCost: sql<number>`SUM(remaining_quantity * unit_cost)`,
@@ -48,10 +51,8 @@ async function calculateWAC(productId: number, quantitySold: number, companyId: 
     const avgCost = totalCost / totalQuantity;
     const cogsAmount = avgCost * quantitySold;
 
-    // Update remaining quantities (WAC reduces all proportionaly or we just take from the oldest)
-    // Standard WAC implementation often just reduces from available batches until quantity is met
-    // but keeps the cost constant.
-    await reduceStock(productId, quantitySold, companyId, "FIFO");
+    // Update remaining quantities
+    await reduceStock(productId, quantitySold, companyId, "FIFO", tx);
 
     return cogsAmount;
 }
@@ -60,11 +61,13 @@ async function calculateFIFO_LIFO(
     productId: number,
     quantitySold: number,
     companyId: number,
-    method: "FIFO" | "LIFO"
+    method: "FIFO" | "LIFO",
+    tx?: any
 ) {
+    const activeDb = tx || db;
     const order = method === "FIFO" ? asc : desc;
 
-    const batches = await db
+    const batches = await activeDb
         .select()
         .from(inventoryTransactions)
         .where(
@@ -89,7 +92,7 @@ async function calculateFIFO_LIFO(
         remainingToSell -= takeFromBatch;
 
         // Update batch remaining quantity
-        await db
+        await activeDb
             .update(inventoryTransactions)
             .set({
                 remainingQuantity: (availableInBatch - takeFromBatch).toString(),
@@ -104,11 +107,12 @@ async function reduceStock(
     productId: number,
     quantity: number,
     companyId: number,
-    orderMethod: "FIFO" | "LIFO"
+    orderMethod: "FIFO" | "LIFO",
+    tx?: any
 ) {
-    // This helper is used by WAC to reduce physical remaining quantities
+    const activeDb = tx || db;
     const order = orderMethod === "FIFO" ? asc : desc;
-    const batches = await db
+    const batches = await activeDb
         .select()
         .from(inventoryTransactions)
         .where(
@@ -125,7 +129,7 @@ async function reduceStock(
         if (remainingToReduce <= 0) break;
         const available = Number(batch.remainingQuantity);
         const take = Math.min(available, remainingToReduce);
-        await db
+        await activeDb
             .update(inventoryTransactions)
             .set({ remainingQuantity: (available - take).toString() })
             .where(eq(inventoryTransactions.id, batch.id));

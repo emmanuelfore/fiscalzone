@@ -264,17 +264,17 @@ export default function ProductsPage() {
 
       <Card className="border-none shadow-xl shadow-slate-200/50 bg-white/80 backdrop-blur-sm rounded-[2rem] overflow-hidden ring-1 ring-slate-100">
         <CardContent className="p-0 overflow-x-auto">
-          <table className="w-full text-left min-w-[600px] md:min-w-full">
+          <table className="w-full text-left table-fixed md:table-auto">
             <thead>
               <tr className="bg-slate-50/80 border-b border-slate-100">
-                <th className="p-5 font-black text-slate-400 uppercase tracking-widest text-xs">Name</th>
-                <th className="hidden lg:table-cell p-5 font-black text-slate-400 uppercase tracking-widest text-xs">Code</th>
-                <th className="hidden xl:table-cell p-5 font-black text-slate-400 uppercase tracking-widest text-xs">Details</th>
-                <th className="hidden sm:table-cell p-5 font-black text-slate-400 uppercase tracking-widest text-xs">Category</th>
-                <th className="p-5 font-black text-slate-400 uppercase tracking-widest text-xs">Price</th>
-                <th className="p-5 font-black text-slate-400 uppercase tracking-widest text-xs">Stock</th>
-                <th className="hidden md:table-cell p-5 font-black text-slate-400 uppercase tracking-widest text-xs">Tax Type</th>
-                <th className="p-5 font-black text-slate-400 uppercase tracking-widest text-xs"></th>
+                <th className="p-5 font-black text-slate-400 uppercase tracking-widest text-[10px] w-[50%] md:w-auto">Name</th>
+                <th className="hidden lg:table-cell p-5 font-black text-slate-400 uppercase tracking-widest text-[10px]">Code</th>
+                <th className="hidden xl:table-cell p-5 font-black text-slate-400 uppercase tracking-widest text-[10px]">Details</th>
+                <th className="hidden md:table-cell p-5 font-black text-slate-400 uppercase tracking-widest text-[10px]">Category</th>
+                <th className="p-5 font-black text-slate-400 uppercase tracking-widest text-[10px]">Price</th>
+                <th className="p-5 font-black text-slate-400 uppercase tracking-widest text-[10px]">Stock</th>
+                <th className="hidden lg:table-cell p-5 font-black text-slate-400 uppercase tracking-widest text-[10px]">Tax</th>
+                <th className="p-5 w-10"></th>
               </tr>
             </thead>
             <tbody>
@@ -319,11 +319,25 @@ export default function ProductsPage() {
 
                 return (
                   <tr key={p.id} className={`group border-b border-slate-50 hover:bg-slate-50/50 transition-colors cursor-default ${!p.isActive ? 'opacity-50 grayscale' : ''}`}>
-                    <td className="p-4 font-bold text-slate-900">
-                      <div className="flex flex-col">
-                        <span className="font-display tracking-tight text-sm">{p.name}</span>
-                        {!p.isActive && <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider w-fit mt-1">Inactive</span>}
-                        {p.description && <span className="text-xs text-slate-400 font-medium truncate max-w-[200px]">{p.description}</span>}
+                    <td className="p-4 font-bold text-slate-900 w-[50%] md:w-auto">
+                      <div className="flex items-center gap-3 overflow-hidden">
+                        {p.imageUrl ? (
+                          <img 
+                            src={p.imageUrl} 
+                            alt={p.name} 
+                            className="w-8 h-8 md:w-10 md:h-10 rounded-lg object-cover shadow-sm bg-slate-100 ring-1 ring-slate-200 shrink-0" 
+                            onError={(e) => (e.currentTarget.style.display = 'none')}
+                          />
+                        ) : (
+                          <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-slate-100 flex items-center justify-center ring-1 ring-slate-200 shrink-0">
+                            <Package className="w-4 h-4 md:w-5 md:h-5 text-slate-300" />
+                          </div>
+                        )}
+                        <div className="flex flex-col min-w-0">
+                          <span className="font-display tracking-tight text-[13px] md:text-sm truncate">{p.name}</span>
+                          {!p.isActive && <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider w-fit mt-0.5">Inactive</span>}
+                          {p.description && <span className="text-[10px] text-slate-400 font-medium truncate max-w-full">{p.description}</span>}
+                        </div>
                       </div>
                     </td>
                     <td className="hidden lg:table-cell p-4 font-mono text-xs font-bold text-slate-500">
@@ -334,37 +348,34 @@ export default function ProductsPage() {
                         {p.hsCode && <div className="text-[10px] font-bold text-slate-400 font-mono uppercase">HS: {p.hsCode}</div>}
                       </div>
                     </td>
-                    <td className="hidden sm:table-cell p-4">
+                    <td className="hidden md:table-cell p-4">
                       {p.category ? (
-                        <Badge variant="secondary" className="bg-slate-100 text-slate-600 font-bold text-[10px] uppercase tracking-wider px-2 py-0.5">
+                        <Badge variant="secondary" className="bg-slate-100 text-slate-600 font-bold text-[10px] uppercase tracking-wider px-2 py-0.5 whitespace-nowrap">
                           {p.category}
                         </Badge>
                       ) : (
                         <span className="text-slate-300 text-xs font-bold">—</span>
                       )}
                     </td>
-                    <td className="p-4 font-black text-slate-800 tracking-tight">${Number(p.price).toFixed(2)}</td>
+                    <td className="p-4 font-black text-slate-800 tracking-tight text-sm">${Number(p.price).toFixed(2)}</td>
                     <td className="p-4">
                       {p.isTracked ? (
                         <div className="flex items-center gap-2">
-                          <span className={`${Number(p.stockLevel) <= Number(p.lowStockThreshold || 0) ? "text-red-600 bg-red-50 px-2 py-0.5 rounded-md border border-red-100" : "text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200"} font-mono text-xs font-bold`}>
+                          <span className={`${Number(p.stockLevel) <= Number(p.lowStockThreshold || 0) ? "text-red-600 bg-red-50" : "text-slate-700 bg-slate-100"} px-2 py-0.5 rounded-md font-mono text-[11px] font-bold`}>
                             {p.stockLevel}
                           </span>
-                          {Number(p.stockLevel) <= Number(p.lowStockThreshold || 0) && (
-                            <AlertCircle className="w-3 h-3 text-red-500 animate-pulse" />
-                          )}
                         </div>
                       ) : (
-                        <Badge variant="secondary" className="text-[10px] bg-slate-100 text-slate-400 font-bold uppercase tracking-wider">Unlimited</Badge>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase">∞</span>
                       )}
                     </td>
-                    <td className="hidden md:table-cell p-4">
+                    <td className="hidden lg:table-cell p-4">
                       {matchedType ? (
-                        <Badge variant="outline" className="bg-white text-slate-600 border-slate-200 font-bold text-[10px] uppercase tracking-wider shadow-sm">
+                        <Badge variant="outline" className="bg-white text-slate-600 border-slate-200 font-bold text-[10px] uppercase tracking-wider shadow-sm whitespace-nowrap">
                           {matchedType.name}
                         </Badge>
                       ) : (
-                        <span className="text-slate-400 text-xs font-bold">{p.taxRate}%</span>
+                        <span className="text-slate-400 text-[10px] font-bold">{p.taxRate}%</span>
                       )}
                     </td>
                     <td className="p-4 text-right">

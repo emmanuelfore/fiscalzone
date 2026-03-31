@@ -15,6 +15,8 @@ import {
   subscriptions, type Subscription, type InsertSubscription,
   posShifts, type PosShift, type InsertPosShift,
   posHolds, type PosHold, type InsertPosHold,
+  branches, branchUsers, branchStocks,
+  type Branch, type InsertBranch, type BranchUser, type BranchStock,
   productCategories, type ProductCategory, type InsertProductCategory,
   resetTokens, insertResetTokenSchema,
   suppliers, inventoryTransactions, expenses,
@@ -23,10 +25,17 @@ import {
   type Expense, type InsertExpense,
   stockTakes, stockTakeItems,
   type StockTake, type InsertStockTake,
-  type StockTakeItem, type InsertStockTakeItem
+  type StockTakeItem, type InsertStockTakeItem,
+  restaurantSections, restaurantTables, recipeItems,
+  productVariations, productBatches,
+  type RestaurantSection, type InsertRestaurantSection,
+  type RestaurantTable, type InsertRestaurantTable,
+  type RecipeItem, type InsertRecipeItem,
+  type ProductVariation, type InsertProductVariation,
+  type ProductBatch, type InsertProductBatch
 } from "../shared/schema.js";
 import { db } from "./db.js";
-import { eq, and, desc, lte, gte, lt, ne, or, isNull, sql, ilike, count, inArray } from "drizzle-orm";
+import { eq, and, desc, lte, gte, lt, ne, or, isNull, sql, ilike, count, inArray, gt } from "drizzle-orm";
 import { type FiscalDayCounter } from "./zimra.js";
 import { scrypt, randomBytes } from "crypto";
 import { promisify } from "util";
@@ -61,17 +70,18 @@ export interface IStorage {
   getCustomer(id: number): Promise<Customer | undefined>;
   createCustomer(customer: InsertCustomer): Promise<Customer>;
   updateCustomer(id: number, customer: Partial<InsertCustomer>): Promise<Customer>;
+  ensureGenericCustomer(companyId: number): Promise<number>;
 
   // Products
-  getProducts(companyId: number): Promise<Product[]>;
+  getProducts(companyId: number, branchId?: number): Promise<(Product & { branchStock?: string })[]>;
   createProduct(product: InsertProduct): Promise<Product>;
   updateProduct(id: number, product: Partial<InsertProduct>): Promise<Product>;
   deleteCompanyProducts(companyId: number): Promise<void>;
   getProductsForExport(companyId: number): Promise<any[]>;
 
   // Invoices
-  getInvoicesPaginated(companyId: number, page?: number, limit?: number, search?: string, status?: string, type?: string, dateFrom?: Date, dateTo?: Date, isPos?: boolean): Promise<{ data: (Invoice & { customer?: Customer; latestError?: { message: string, color: string } })[]; total: number; pages: number }>;
-  getInvoices(companyId: number): Promise<Invoice[]>;
+  getInvoicesPaginated(companyId: number, page?: number, limit?: number, search?: string, status?: string, type?: string, dateFrom?: Date, dateTo?: Date, isPos?: boolean, branchId?: number): Promise<{ data: (Invoice & { customer?: Customer; latestError?: { message: string, color: string } })[]; total: number; pages: number }>;
+  getInvoices(companyId: number, branchId?: number): Promise<(Invoice & { customer?: Customer })[]>;
   getInvoice(id: number): Promise<(Invoice & { items: (InvoiceItem & { product?: Product })[]; customer?: Customer; validationErrors?: any[]; relatedInvoiceNumber?: string; relatedInvoiceDate?: Date | null; relatedFiscalCode?: string; relatedReceiptGlobalNo?: number; relatedReceiptCounter?: number }) | undefined>;
   createInvoice(invoice: CreateInvoiceRequest): Promise<Invoice>;
   updateInvoice(id: number, data: Partial<InsertInvoice>): Promise<Invoice>;
@@ -125,7 +135,7 @@ export interface IStorage {
   unlockInvoice(id: number, userId: string): Promise<void>;
 
   // Atomic counter claim — prevents race conditions on concurrent fiscalizations
-  claimNextReceiptNumbers(companyId: number): Promise<{ receiptGlobalNo: number; receiptCounter: number }>;
+  claimNextReceiptNumbers(companyId: number, branchId?: number): Promise<{ receiptGlobalNo: number; receiptCounter: number }>;
 
   // Utils
   getNextInvoiceNumber(companyId: number, prefix: string): Promise<string>;
@@ -175,6 +185,7 @@ export interface IStorage {
   // ZIMRA Helpers
   resolveGreyErrors(companyId: number, fiscalDayNo: number, skipInvoiceId?: number): Promise<void>;
   getInvoicesByFiscalDay(companyId: number, fiscalDayNo: number): Promise<Invoice[]>;
+  getAllCompanies(): Promise<Company[]>;
 
   // Subscriptions
   createSubscription(data: InsertSubscription): Promise<Subscription>;
@@ -186,12 +197,12 @@ export interface IStorage {
   hasActiveSubscriptionByMac(companyId: number, macAddress: string): Promise<boolean>;
 
   // POS
-  getPosHolds(companyId: number, userId: string): Promise<PosHold[]>;
+  getPosHolds(companyId: number, userId: string, branchId?: number): Promise<PosHold[]>;
   createPosHold(data: InsertPosHold): Promise<PosHold>;
   deletePosHold(id: number, userId: string): Promise<void>;
-  getPosShifts(companyId: number, userId: string): Promise<PosShift[]>;
-  getActivePosShift(companyId: number, userId: string): Promise<PosShift | undefined>;
-  getPosSales(companyId: number, startDate: Date, endDate: Date, cashierId?: string, paymentMethod?: string, status?: string, search?: string): Promise<any[]>;
+  getPosShifts(companyId: number, userId: string, branchId?: number): Promise<PosShift[]>;
+  getActivePosShift(companyId: number, userId: string, branchId?: number): Promise<PosShift | undefined>;
+  getPosSales(companyId: number, startDate: Date, endDate: Date, cashierId?: string, paymentMethod?: string, status?: string, search?: string, branchId?: number): Promise<any[]>;
   createPosShift(data: InsertPosShift): Promise<PosShift>;
   updatePosShift(id: number, userId: string, data: Partial<PosShift>): Promise<PosShift>;
 
@@ -265,6 +276,39 @@ export interface IStorage {
   createStockTakeItems(items: InsertStockTakeItem[]): Promise<void>;
   updateStockTakeItem(id: number, data: Partial<StockTakeItem>): Promise<void>;
   deleteStockTakeItem(id: number): Promise<void>;
+
+  // Restaurant & BOM
+  getRestaurantSections(companyId: number): Promise<RestaurantSection[]>;
+  createRestaurantSection(section: InsertRestaurantSection): Promise<RestaurantSection>;
+  getRestaurantTables(sectionId: number): Promise<RestaurantTable[]>;
+  updateRestaurantTable(id: number, table: Partial<RestaurantTable>): Promise<RestaurantTable>;
+  createRestaurantTable(table: InsertRestaurantTable): Promise<RestaurantTable>;
+  getRecipeItems(productId: number): Promise<any[]>;
+  setRecipeItems(productId: number, items: InsertRecipeItem[]): Promise<void>;
+
+  // Pharmacy / Batches / Variations
+  getProductVariations(productId: number): Promise<ProductVariation[]>;
+  createProductVariation(variation: InsertProductVariation): Promise<ProductVariation>;
+  getProductBatches(productId: number): Promise<ProductBatch[]>;
+  createProductBatch(batch: InsertProductBatch): Promise<ProductBatch>;
+  getActiveBatches(productId: number): Promise<ProductBatch[]>;
+
+  // Order Status Display (Restaurant)
+  getActiveOrders(companyId: number): Promise<any[]>;
+
+  // Branches
+  getBranches(companyId: number): Promise<Branch[]>;
+  getBranch(id: number): Promise<Branch | undefined>;
+  createBranch(data: InsertBranch): Promise<Branch>;
+  updateBranch(id: number, data: Partial<Branch>): Promise<Branch>;
+  deleteBranch(id: number): Promise<void>;
+  getUserBranches(userId: string): Promise<Branch[]>;
+  addUserToBranch(userId: string, branchId: number, role?: string): Promise<void>;
+
+  // Branch Stock
+  getBranchStock(branchId: number, productId: number): Promise<BranchStock | undefined>;
+  updateBranchStock(branchId: number, productId: number, stockLevel: string): Promise<void>;
+  getBranchStocks(branchId: number): Promise<(BranchStock & { product: Product })[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -396,9 +440,11 @@ export class DatabaseStorage implements IStorage {
   // Companies
   async getCompanies(userId: string): Promise<(Company & { role: string })[]> {
     const user = await this.getUser(userId);
+    console.log(`[STORAGE] getCompanies for user: ${userId}, email: ${user?.email}, isSuper: ${user?.isSuperAdmin}`);
 
     if (user?.isSuperAdmin) {
       const allCompanies = await db.select().from(companies);
+      console.log(`[STORAGE] Superuser ${userId} found ${allCompanies.length} total companies`);
       return allCompanies.map(c => ({ ...c, role: "owner" }));
     }
 
@@ -425,6 +471,19 @@ export class DatabaseStorage implements IStorage {
   async getCompanyByApiKey(apiKey: string): Promise<Company | undefined> {
     const [company] = await db.select().from(companies).where(eq(companies.apiKey, apiKey));
     return company;
+  }
+
+  async ensureGenericCustomer(companyId: number): Promise<number> {
+    const [c] = await db.select().from(customers).where(and(eq(customers.companyId, companyId), ilike(customers.name, 'General%')));
+    if (c) return c.id;
+    const [nc] = await db.insert(customers).values({
+      companyId,
+      name: 'General Customer',
+      customerType: 'individual',
+      isActive: true,
+      currency: 'USD'
+    }).returning();
+    return nc.id;
   }
 
   async generateNextDeviceSerial(companyId: number): Promise<string> {
@@ -459,7 +518,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getCustomers(companyId: number): Promise<Customer[]> {
-    return await db.select().from(customers).where(eq(customers.companyId, companyId));
+    return await db.select().from(customers).where(
+      and(
+        eq(customers.companyId, companyId),
+        eq(customers.isActive, true)
+      )
+    );
   }
 
   async getCustomer(id: number): Promise<Customer | undefined> {
@@ -477,8 +541,26 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async getProducts(companyId: number): Promise<Product[]> {
-    return await db.select().from(products).where(eq(products.companyId, companyId));
+  async getProducts(companyId: number, branchId?: number): Promise<(Product & { branchStock?: string })[]> {
+    if (branchId) {
+      const result = await db
+        .select({
+          product: products,
+          branchStock: branchStocks.stockLevel
+        })
+        .from(products)
+        .leftJoin(branchStocks, and(eq(branchStocks.productId, products.id), eq(branchStocks.branchId, branchId)))
+        .where(and(eq(products.companyId, companyId), eq(products.isActive, true)));
+      
+      return result.map(r => ({ ...r.product, branchStock: r.branchStock || "0" }));
+    }
+
+    return await db.select().from(products).where(
+      and(
+        eq(products.companyId, companyId),
+        eq(products.isActive, true)
+      )
+    );
   }
 
   async createProduct(product: InsertProduct): Promise<Product> {
@@ -576,7 +658,10 @@ export class DatabaseStorage implements IStorage {
       ));
   }
 
-  async getInvoices(companyId: number): Promise<(Invoice & { customer?: Customer })[]> {
+  async getInvoices(companyId: number, branchId?: number): Promise<(Invoice & { customer?: Customer })[]> {
+    const filters = [eq(invoices.companyId, companyId)];
+    if (branchId) filters.push(eq(invoices.branchId, branchId));
+
     const rows = await db
       .select({
         invoice: invoices,
@@ -584,7 +669,7 @@ export class DatabaseStorage implements IStorage {
       })
       .from(invoices)
       .leftJoin(customers, eq(invoices.customerId, customers.id))
-      .where(eq(invoices.companyId, companyId))
+      .where(and(...filters))
       .orderBy(desc(invoices.createdAt));
 
     return rows.map(r => ({
@@ -602,11 +687,16 @@ export class DatabaseStorage implements IStorage {
     type?: string,
     dateFrom?: Date,
     dateTo?: Date,
-    isPos?: boolean
+    isPos?: boolean,
+    branchId?: number
   ): Promise<{ data: (Invoice & { customer?: Customer; latestError?: { message: string, color: string } })[]; total: number; pages: number }> {
     const offset = (page - 1) * limit;
 
     const filters = [eq(invoices.companyId, companyId)];
+
+    if (branchId) {
+      filters.push(eq(invoices.branchId, branchId));
+    }
 
     // Add POS filter if specified
     if (isPos !== undefined) {
@@ -792,8 +882,24 @@ export class DatabaseStorage implements IStorage {
   async createInvoice(data: CreateInvoiceRequest): Promise<Invoice> {
     return await db.transaction(async (tx) => {
       const { items, ...invoiceData } = data;
+      
+      // Auto-assign order number for POS/Restaurant sales if not provided
+      let orderNumber = data.orderNumber;
+      let receiptNums = { receiptGlobalNo: 0, receiptCounter: 0 };
+      
+      if (!orderNumber && (invoiceData.isPos || invoiceData.tableId)) {
+        // We can use the company's daily receipt counter for the short order number
+        // but we need to fetch/claim it here if we're not already doing it in Zimbabwe 
+        // fiscalization (which happens later). 
+        // For now, let's use a simple strategy: fetch current count and increment.
+        const [company] = await tx.select({ dailyReceiptCount: companies.dailyReceiptCount }).from(companies).where(eq(companies.id, invoiceData.companyId));
+        const nextNum = (company?.dailyReceiptCount || 0) + 1;
+        orderNumber = `#${nextNum.toString().padStart(3, '0')}`;
+      }
+
       const [invoice] = await tx.insert(invoices).values({
         ...invoiceData,
+        orderNumber,
         invoiceNumber: await this.getNextInvoiceNumber(invoiceData.companyId, invoiceData.transactionType === 'CreditNote' ? 'CN' : (invoiceData.transactionType === 'DebitNote' ? 'DN' : 'INV')),
         dueDate: new Date(invoiceData.dueDate), // Ensure Date object
       }).returning();
@@ -807,12 +913,46 @@ export class DatabaseStorage implements IStorage {
 
           if (item.productId) {
             const [product] = await tx.select().from(products).where(eq(products.id, item.productId));
-            if (product && product.isTracked) {
+            
+            // --- BOM / Recipe Deduction Logic ---
+            if (product && product.hasRecipe) {
+              const recipes = await tx.select().from(recipeItems).where(eq(recipeItems.parentProductId, product.id));
+              let totalRecipeCogs = 0;
+              
+              for (const recipe of recipes) {
+                const ingredientQty = parseFloat(item.quantity.toString()) * parseFloat(recipe.quantity.toString());
+                const [ingredient] = await tx.select().from(products).where(eq(products.id, recipe.ingredientProductId));
+                
+                if (ingredient && ingredient.isTracked) {
+                  const ingredientCogs = await calculateCOGS(ingredient.id, ingredientQty, invoiceData.companyId, tx);
+                  totalRecipeCogs += (ingredientCogs || 0);
+
+                  // Record the STOCK_OUT for ingredient
+                  await tx.insert(inventoryTransactions).values({
+                    companyId: invoiceData.companyId,
+                    productId: ingredient.id,
+                    type: "STOCK_OUT",
+                    quantity: (-ingredientQty).toString(),
+                    totalCost: ingredientCogs?.toString() || null,
+                    referenceType: "INVOICE",
+                    referenceId: invoice.id.toString(),
+                    notes: `Recipe Ingredient for ${product.name} - Invoice ${invoice.invoiceNumber}`
+                  });
+
+                  // Update stock level on ingredient
+                  const newIngStock = (parseFloat(ingredient.stockLevel || "0") - ingredientQty).toString();
+                  await tx.update(products).set({ stockLevel: newIngStock }).where(eq(products.id, ingredient.id));
+                }
+              }
+              cogsAmount = totalRecipeCogs;
+            } 
+            // --- Standard Tracked Product Logic ---
+            else if (product && product.isTracked) {
               const quantity = parseFloat(item.quantity.toString());
 
               if (invoiceData.transactionType !== 'CreditNote') {
                 // Calculate and deduct for sales
-                cogsAmount = await calculateCOGS(item.productId, quantity, invoiceData.companyId);
+                cogsAmount = await calculateCOGS(item.productId, quantity, invoiceData.companyId, tx);
 
                 // Record the STOCK_OUT transaction
                 await tx.insert(inventoryTransactions).values({
@@ -827,8 +967,6 @@ export class DatabaseStorage implements IStorage {
                 });
               } else {
                 // Restoring stock for Credit Note
-                // Simplification for now: just record as STOCK_IN without specific batch tracking for returns
-                // but incrementing stock level
                 await tx.insert(inventoryTransactions).values({
                   companyId: invoiceData.companyId,
                   productId: item.productId,
@@ -841,12 +979,46 @@ export class DatabaseStorage implements IStorage {
                 });
               }
 
-              // Update stock level on product
+              // Update stock level on product (Global)
               const stockChange = invoiceData.transactionType === 'CreditNote' ? quantity : -quantity;
               const newStockLevel = (parseFloat(product.stockLevel || "0") + stockChange).toString();
               await tx.update(products)
                 .set({ stockLevel: newStockLevel })
                 .where(eq(products.id, item.productId));
+
+              // --- Branch Specific Stock Update ---
+              if (invoiceData.branchId) {
+                const [currentBranchStock] = await tx
+                  .select()
+                  .from(branchStocks)
+                  .where(and(
+                    eq(branchStocks.branchId, invoiceData.branchId),
+                    eq(branchStocks.productId, item.productId)
+                  ));
+                
+                const newBranchStock = (parseFloat(currentBranchStock?.stockLevel || "0") + stockChange).toString();
+                
+                await tx
+                  .insert(branchStocks)
+                  .values({
+                    branchId: invoiceData.branchId,
+                    productId: item.productId,
+                    stockLevel: newBranchStock
+                  })
+                  .onConflictDoUpdate({
+                    target: [branchStocks.branchId, branchStocks.productId],
+                    set: { stockLevel: newBranchStock }
+                  });
+              }
+
+              // Update Batch Stock if applicable
+              if (item.batchId) {
+                const [batch] = await tx.select().from(productBatches).where(eq(productBatches.id, item.batchId));
+                if (batch) {
+                  const newBatchStock = (parseFloat(batch.stockLevel || "0") + stockChange).toString();
+                  await tx.update(productBatches).set({ stockLevel: newBatchStock }).where(eq(productBatches.id, item.batchId));
+                }
+              }
             }
           }
 
@@ -1047,7 +1219,24 @@ export class DatabaseStorage implements IStorage {
    * This is the only safe way to claim numbers — no two concurrent calls can
    * get the same pair because Postgres serialises the row-level update.
    */
-  async claimNextReceiptNumbers(companyId: number): Promise<{ receiptGlobalNo: number; receiptCounter: number }> {
+  async claimNextReceiptNumbers(companyId: number, branchId?: number): Promise<{ receiptGlobalNo: number; receiptCounter: number }> {
+    if (branchId) {
+      const [updated] = await db
+        .update(branches)
+        .set({
+          lastReceiptGlobalNo: sql`${branches.lastReceiptGlobalNo} + 1`,
+          dailyReceiptCount: sql`${branches.dailyReceiptCount} + 1`,
+        })
+        .where(eq(branches.id, branchId))
+        .returning({
+          receiptGlobalNo: branches.lastReceiptGlobalNo,
+          receiptCounter: branches.dailyReceiptCount,
+        });
+
+      if (!updated) throw new Error(`Branch ${branchId} not found when claiming receipt numbers`);
+      return { receiptGlobalNo: updated.receiptGlobalNo!, receiptCounter: updated.receiptCounter! };
+    }
+
     const [updated] = await db
       .update(companies)
       .set({
@@ -1111,15 +1300,24 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
+  async getAllCompanies(): Promise<Company[]> {
+    return await db.select().from(companies);
+  }
+
   async getTaxTypes(companyId?: number): Promise<TaxType[]> {
     if (companyId) {
       return await db
         .select()
         .from(taxTypes)
-        .where(or(eq(taxTypes.companyId, companyId), isNull(taxTypes.companyId)))
+        .where(
+          and(
+            or(eq(taxTypes.companyId, companyId), isNull(taxTypes.companyId)),
+            eq(taxTypes.isActive, true)
+          )
+        )
         .orderBy(taxTypes.rate);
     }
-    return await db.select().from(taxTypes).orderBy(taxTypes.rate);
+    return await db.select().from(taxTypes).where(eq(taxTypes.isActive, true)).orderBy(taxTypes.rate);
   }
 
   async createTaxType(taxType: InsertTaxType & { companyId: number }): Promise<TaxType> {
@@ -1148,9 +1346,14 @@ export class DatabaseStorage implements IStorage {
       return await db
         .select()
         .from(taxCategories)
-        .where(or(eq(taxCategories.companyId, companyId), isNull(taxCategories.companyId)));
+        .where(
+          and(
+            or(eq(taxCategories.companyId, companyId), isNull(taxCategories.companyId)),
+            eq(taxCategories.isActive, true)
+          )
+        );
     }
-    return await db.select().from(taxCategories);
+    return await db.select().from(taxCategories).where(eq(taxCategories.isActive, true));
   }
 
   async createTaxCategory(category: InsertTaxCategory & { companyId: number }): Promise<TaxCategory> {
@@ -1165,7 +1368,12 @@ export class DatabaseStorage implements IStorage {
 
 
   async getCurrencies(companyId: number): Promise<Currency[]> {
-    return await db.select().from(currencies).where(eq(currencies.companyId, companyId)).orderBy(currencies.id);
+    return await db.select().from(currencies).where(
+      and(
+        eq(currencies.companyId, companyId),
+        eq(currencies.isActive, true)
+      )
+    ).orderBy(currencies.id);
   }
 
   async createCurrency(currency: InsertCurrency): Promise<Currency> {
@@ -2258,11 +2466,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   // POS Shifting & Parking
-  async getPosHolds(companyId: number, userId: string): Promise<PosHold[]> {
+  async getPosHolds(companyId: number, userId: string, branchId?: number): Promise<PosHold[]> {
+    const filters = [eq(posHolds.companyId, companyId), eq(posHolds.userId, userId)];
+    if (branchId) filters.push(eq(posHolds.branchId, branchId));
+
     return await db
       .select()
       .from(posHolds)
-      .where(and(eq(posHolds.companyId, companyId), eq(posHolds.userId, userId)))
+      .where(and(...filters))
       .orderBy(desc(posHolds.createdAt));
   }
 
@@ -2275,25 +2486,29 @@ export class DatabaseStorage implements IStorage {
     await db.delete(posHolds).where(and(eq(posHolds.id, id), eq(posHolds.userId, userId)));
   }
 
-  async getPosShifts(companyId: number, userId: string): Promise<PosShift[]> {
+  async getPosShifts(companyId: number, userId: string, branchId?: number): Promise<PosShift[]> {
+    const filters = [eq(posShifts.companyId, companyId), eq(posShifts.userId, userId)];
+    if (branchId) filters.push(eq(posShifts.branchId, branchId));
+
     return await db
       .select()
       .from(posShifts)
-      .where(and(eq(posShifts.companyId, companyId), eq(posShifts.userId, userId)))
+      .where(and(...filters))
       .orderBy(desc(posShifts.startTime));
   }
 
-  async getActivePosShift(companyId: number, userId: string): Promise<PosShift | undefined> {
+  async getActivePosShift(companyId: number, userId: string, branchId?: number): Promise<PosShift | undefined> {
+    const filters = [
+      eq(posShifts.companyId, companyId),
+      eq(posShifts.userId, userId),
+      eq(posShifts.status, "open")
+    ];
+    if (branchId) filters.push(eq(posShifts.branchId, branchId));
+
     const [shift] = await db
       .select()
       .from(posShifts)
-      .where(
-        and(
-          eq(posShifts.companyId, companyId),
-          eq(posShifts.userId, userId),
-          eq(posShifts.status, "open")
-        )
-      )
+      .where(and(...filters))
       .limit(1);
     return shift;
   }
@@ -2550,13 +2765,18 @@ export class DatabaseStorage implements IStorage {
     cashierId?: string,
     paymentMethod?: string,
     status?: string,
-    search?: string
+    search?: string,
+    branchId?: number
   ): Promise<any[]> {
     const conditions = [
       eq(invoices.companyId, companyId),
       gte(invoices.issueDate, startDate),
       lte(invoices.issueDate, endDate)
     ] as any[];
+
+    if (branchId) {
+      conditions.push(eq(invoices.branchId, branchId));
+    }
 
     if (cashierId && cashierId !== 'all') {
       // Show sales created by this cashier, OR sales where createdBy is null 
@@ -2603,7 +2823,12 @@ export class DatabaseStorage implements IStorage {
 
   // Product Categories Implementation
   async getProductCategories(companyId: number): Promise<ProductCategory[]> {
-    return await db.select().from(productCategories).where(eq(productCategories.companyId, companyId)).orderBy(productCategories.name);
+    return await db.select().from(productCategories).where(
+      and(
+        eq(productCategories.companyId, companyId),
+        eq(productCategories.isActive, true)
+      )
+    ).orderBy(productCategories.name);
   }
 
   async createProductCategory(data: InsertProductCategory & { companyId: number }): Promise<ProductCategory> {
@@ -2657,7 +2882,12 @@ export class DatabaseStorage implements IStorage {
 
   // Suppliers
   async getSuppliers(companyId: number): Promise<Supplier[]> {
-    return await db.select().from(suppliers).where(eq(suppliers.companyId, companyId)).orderBy(suppliers.name);
+    return await db.select().from(suppliers).where(
+      and(
+        eq(suppliers.companyId, companyId),
+        eq(suppliers.isActive, true)
+      )
+    ).orderBy(suppliers.name);
   }
 
   async getSupplier(id: number): Promise<Supplier | undefined> {
@@ -3807,6 +4037,210 @@ export class DatabaseStorage implements IStorage {
 
   async deleteStockTakeItem(id: number): Promise<void> {
     await db.delete(stockTakeItems).where(eq(stockTakeItems.id, id));
+  }
+  // --- PHARMACY / BATCHES / VARIATIONS CRUD ---
+  async getProductVariations(productId: number): Promise<ProductVariation[]> {
+    return await db.select().from(productVariations).where(eq(productVariations.productId, productId)).orderBy(productVariations.id);
+  }
+
+  async createProductVariation(variation: InsertProductVariation): Promise<ProductVariation> {
+    const [newVariation] = await db.insert(productVariations).values(variation).returning();
+    return newVariation;
+  }
+
+  async getProductBatches(productId: number): Promise<ProductBatch[]> {
+    return await db.select().from(productBatches).where(eq(productBatches.productId, productId)).orderBy(productBatches.expiryDate);
+  }
+
+  async createProductBatch(batch: InsertProductBatch): Promise<ProductBatch> {
+    const [newBatch] = await db.insert(productBatches).values(batch).returning();
+    return newBatch;
+  }
+
+  async getActiveBatches(productId: number): Promise<ProductBatch[]> {
+    return await db.select().from(productBatches).where(
+      and(
+        eq(productBatches.productId, productId),
+        eq(productBatches.isExpired, false),
+        gt(productBatches.stockLevel, "0")
+      )
+    ).orderBy(productBatches.expiryDate); // FEFO: First Expiry, First Out
+  }
+
+  // --- RESTAURANT & BOM CRUD ---
+
+  async getRestaurantSections(companyId: number): Promise<RestaurantSection[]> {
+    return await db.select().from(restaurantSections).where(eq(restaurantSections.companyId, companyId)).orderBy(restaurantSections.id);
+  }
+
+  async createRestaurantSection(section: InsertRestaurantSection): Promise<RestaurantSection> {
+    const [newSection] = await db.insert(restaurantSections).values(section).returning();
+    return newSection;
+  }
+
+  async getRestaurantTables(sectionId: number): Promise<RestaurantTable[]> {
+    return await db.select().from(restaurantTables).where(eq(restaurantTables.sectionId, sectionId)).orderBy(restaurantTables.id);
+  }
+
+  async updateRestaurantTable(id: number, table: Partial<RestaurantTable>): Promise<RestaurantTable> {
+    const [updated] = await db.update(restaurantTables).set(table).where(eq(restaurantTables.id, id)).returning();
+    return updated;
+  }
+
+  async createRestaurantTable(table: InsertRestaurantTable): Promise<RestaurantTable> {
+    const [newTable] = await db.insert(restaurantTables).values(table).returning();
+    return newTable;
+  }
+
+  async getRecipeItems(productId: number): Promise<any[]> {
+    return await db
+      .select({
+        id: recipeItems.id,
+        ingredientId: recipeItems.ingredientProductId,
+        ingredientName: products.name,
+        quantity: recipeItems.quantity,
+        unit: recipeItems.unit,
+        unitCost: products.costPrice
+      })
+      .from(recipeItems)
+      .innerJoin(products, eq(recipeItems.ingredientProductId, products.id))
+      .where(eq(recipeItems.parentProductId, productId));
+  }
+
+  async setRecipeItems(productId: number, items: InsertRecipeItem[]): Promise<void> {
+    await db.transaction(async (tx) => {
+      await tx.delete(recipeItems).where(eq(recipeItems.parentProductId, productId));
+      if (items.length > 0) {
+        await tx.insert(recipeItems).values(items);
+        await tx.update(products).set({ hasRecipe: true }).where(eq(products.id, productId));
+      } else {
+        await tx.update(products).set({ hasRecipe: false }).where(eq(products.id, productId));
+      }
+    });
+  }
+
+  async getActiveOrders(companyId: number): Promise<any[]> {
+    const orders = await db.select()
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.companyId, companyId),
+          inArray(invoices.orderStatus, ['pending', 'preparing', 'ready']),
+          gte(invoices.issueDate, new Date(new Date().setHours(0, 0, 0, 0)))
+        )
+      )
+      .orderBy(desc(invoices.createdAt));
+
+    if (orders.length === 0) return [];
+
+    const orderIds = orders.map(o => o.id);
+    const items = await db.select({
+      item: invoiceItems,
+      product: products
+    })
+    .from(invoiceItems)
+    .leftJoin(products, eq(invoiceItems.productId, products.id))
+    .where(inArray(invoiceItems.invoiceId, orderIds));
+
+    return orders.map(o => ({
+      ...o,
+      items: items.filter(i => i.item.invoiceId === o.id).map(i => ({
+        ...i.item,
+        productName: i.product?.name
+      }))
+    }));
+  }
+
+  // Branches Implementation
+  async getBranches(companyId: number): Promise<Branch[]> {
+    return await db.select().from(branches).where(eq(branches.companyId, companyId));
+  }
+
+  async getBranch(id: number): Promise<Branch | undefined> {
+    const [branch] = await db.select().from(branches).where(eq(branches.id, id));
+    return branch;
+  }
+
+  async createBranch(data: InsertBranch): Promise<Branch> {
+    const [branch] = await db.insert(branches).values(data).returning();
+    return branch;
+  }
+
+  async updateBranch(id: number, data: Partial<Branch>): Promise<Branch> {
+    const [branch] = await db
+      .update(branches)
+      .set(data)
+      .where(eq(branches.id, id))
+      .returning();
+    return branch;
+  }
+
+  async deleteBranch(id: number): Promise<void> {
+    await db.delete(branches).where(eq(branches.id, id));
+  }
+
+  async getUserBranches(userId: string): Promise<Branch[]> {
+    const result = await db
+      .select({
+        branch: branches
+      })
+      .from(branchUsers)
+      .innerJoin(branches, eq(branchUsers.branchId, branches.id))
+      .where(eq(branchUsers.userId, userId));
+    
+    return result.map(r => r.branch);
+  }
+
+  async addUserToBranch(userId: string, branchId: number, role: string = "staff"): Promise<void> {
+    await db.insert(branchUsers).values({
+      userId,
+      branchId,
+      role
+    }).onConflictDoNothing();
+  }
+
+  // Branch Stock Implementation
+  async getBranchStock(branchId: number, productId: number): Promise<BranchStock | undefined> {
+    const [stock] = await db
+      .select()
+      .from(branchStocks)
+      .where(
+        and(
+          eq(branchStocks.branchId, branchId),
+          eq(branchStocks.productId, productId)
+        )
+      );
+    return stock;
+  }
+
+  async updateBranchStock(branchId: number, productId: number, stockLevel: string): Promise<void> {
+    await db
+      .insert(branchStocks)
+      .values({
+        branchId,
+        productId,
+        stockLevel
+      })
+      .onConflictDoUpdate({
+        target: [branchStocks.branchId, branchStocks.productId],
+        set: { stockLevel }
+      });
+  }
+
+  async getBranchStocks(branchId: number): Promise<(BranchStock & { product: Product })[]> {
+    const result = await db
+      .select({
+        stock: branchStocks,
+        product: products
+      })
+      .from(branchStocks)
+      .innerJoin(products, eq(branchStocks.productId, products.id))
+      .where(eq(branchStocks.branchId, branchId));
+    
+    return result.map(r => ({
+      ...r.stock,
+      product: r.product
+    }));
   }
 }
 

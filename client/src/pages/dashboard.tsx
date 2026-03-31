@@ -42,7 +42,9 @@ import {
   AlertCircle,
   ShoppingBag,
   Package,
-  Key
+  Key,
+  ArrowRight,
+  ShieldCheck
 } from "lucide-react";
 import { api, buildUrl } from "@shared/routes";
 import { cn } from "@/lib/utils";
@@ -501,6 +503,7 @@ export default function Dashboard() {
                 ))}
               </div>
 
+              {/* Estimated Net */}
               <div className="mt-8 bg-primary/5 p-4 rounded-2xl border border-primary/10">
                 <div className="flex justify-between items-end">
                   <div>
@@ -516,111 +519,104 @@ export default function Dashboard() {
               </div>
             </Card>
 
-            <div className="space-y-4">
-              <CardTitle className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                <AlertCircle className="w-3 h-3 text-primary" /> Compliance Status
-              </CardTitle>
+            <div className="space-y-6">
+              <div className="flex items-center justify-between px-1">
+                <CardTitle className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                  <ShieldCheck className="w-3 h-3 text-primary" /> Fiscal Control Center
+                </CardTitle>
+                <Link href="/zimra-settings" className="text-[10px] font-bold text-primary hover:underline uppercase tracking-tighter">Advanced Settings</Link>
+              </div>
+
+              {/* Day Management (Open/Close/Reports) */}
+              <DayManagementControls company={selectedCompany} variant="light" />
               
               <div className="grid grid-cols-2 gap-4">
-                {/* VAT Status */}
-                <Card className={cn("border-none shadow-sm rounded-2xl p-4", activeCompany?.vatRegistered ? "bg-emerald-50/50" : "bg-slate-50")}>
-                  <p className={cn("text-[9px] font-black uppercase tracking-widest mb-1", activeCompany?.vatRegistered ? "text-emerald-600/60" : "text-slate-500")}>VAT Status</p>
+                <Card className={cn("border-none shadow-sm rounded-2xl p-4 transition-all hover:shadow-md", activeCompany?.vatRegistered ? "bg-emerald-50/50" : "bg-slate-50")}>
+                  <p className={cn("text-[9px] font-black uppercase tracking-widest mb-1.5", activeCompany?.vatRegistered ? "text-emerald-600/60" : "text-slate-500")}>VAT Status</p>
                   <div className="flex items-center gap-2">
-                    <div className={cn("w-2 h-2 rounded-full", activeCompany?.vatRegistered ? "bg-emerald-500" : "bg-slate-400")} />
+                    <div className={cn("w-2 h-2 rounded-full", activeCompany?.vatRegistered ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-slate-400")} />
                     <span className={cn("text-xs font-black uppercase tracking-tight", activeCompany?.vatRegistered ? "text-emerald-700" : "text-slate-600")}>
                       {activeCompany?.vatRegistered ? "Registered" : "Not Registered"}
                     </span>
                   </div>
                 </Card>
 
-                {/* Fiscal Device */}
-                <Card className={cn("border-none shadow-sm rounded-2xl p-4", selectedCompany?.fdmsDeviceId ? "bg-blue-50/50" : "bg-amber-50/50")}>
-                  <p className={cn("text-[9px] font-black uppercase tracking-widest mb-1", selectedCompany?.fdmsDeviceId ? "text-blue-600/60" : "text-amber-600/60")}>Fiscal Device</p>
+                <Card className={cn("border-none shadow-sm rounded-2xl p-4 transition-all hover:shadow-md", selectedCompany?.fdmsDeviceId ? "bg-blue-50/50" : "bg-amber-50/50")}>
+                  <p className={cn("text-[9px] font-black uppercase tracking-widest mb-1.5", selectedCompany?.fdmsDeviceId ? "text-blue-600/60" : "text-amber-600/60")}>Fiscal Device</p>
                   <div className="flex items-center gap-2">
                     <Server className={cn("w-3 h-3", selectedCompany?.fdmsDeviceId ? "text-blue-500" : "text-amber-500")} />
-                    <span className={cn("text-[10px] font-black uppercase tracking-tight truncate", selectedCompany?.fdmsDeviceId ? "text-blue-700" : "text-amber-700")} title={selectedCompany?.fdmsDeviceSerialNo || "Not Configured"}>
+                    <span className={cn("text-[10px] font-black uppercase tracking-tight truncate", selectedCompany?.fdmsDeviceId ? "text-blue-700" : "text-amber-700")}>
                       {selectedCompany?.fdmsDeviceSerialNo ? selectedCompany.fdmsDeviceSerialNo.substring(0, 10) + '...' : "Not Configured"}
                     </span>
                   </div>
                 </Card>
 
-                {/* Connection Status */}
-                <Card className={cn("border-none shadow-sm rounded-2xl p-4", pingSuccess ? "bg-emerald-50/50" : "bg-rose-50/50")}>
-                  <p className={cn("text-[9px] font-black uppercase tracking-widest mb-1", pingSuccess ? "text-emerald-600/60" : "text-rose-600/60")}>Zimra Server</p>
+                <Card className={cn("border-none shadow-sm rounded-2xl p-4 transition-all hover:shadow-md", pingSuccess ? "bg-emerald-50/50" : "bg-rose-50/50")}>
+                  <p className={cn("text-[9px] font-black uppercase tracking-widest mb-1.5", pingSuccess ? "text-emerald-600/60" : "text-rose-600/60")}>Zimra Server</p>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className={cn("w-2 h-2 rounded-full", pingSuccess ? "bg-emerald-500 animate-pulse" : "bg-rose-500")} />
+                      <div className={cn("w-2 h-2 rounded-full", pingSuccess ? "bg-emerald-500 animate-pulse" : "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]")} />
                       <span className={cn("text-xs font-black uppercase tracking-tight", pingSuccess ? "text-emerald-700" : "text-rose-700")}>
-                        {isPinging ? "Checking..." : (pingSuccess ? "Online" : "Offline")}
+                        {isPinging ? "..." : (pingSuccess ? "Online" : "Offline")}
                       </span>
                     </div>
-                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => pingZimra()} disabled={isPinging}>
+                    <Button variant="ghost" size="icon" className="h-6 w-6 hover:bg-white/50" onClick={() => pingZimra()} disabled={isPinging}>
                       <RefreshCw className={cn("w-3 h-3", isPinging ? "animate-spin text-slate-400" : "text-slate-500")} />
                     </Button>
                   </div>
                 </Card>
 
-                {/* Day Status */}
-                <Card className={cn("border-none shadow-sm rounded-2xl p-4", deviceStatus?.isFiscalDayOpen ? "bg-amber-50/50" : "bg-slate-50")}>
-                  <p className={cn("text-[9px] font-black uppercase tracking-widest mb-1", deviceStatus?.isFiscalDayOpen ? "text-amber-600/60" : "text-slate-500")}>Day Status</p>
-                  <div className="flex items-center gap-2">
-                    <Activity className={cn("w-3 h-3", deviceStatus?.isFiscalDayOpen ? "text-amber-500" : "text-slate-400")} />
-                    <span className={cn("text-xs font-black uppercase tracking-tight", deviceStatus?.isFiscalDayOpen ? "text-amber-700" : "text-slate-600")}>
-                      {deviceStatus?.isFiscalDayOpen ? "Day Open" : "Day Closed"}
-                    </span>
+                <Card className={cn("border-none shadow-sm rounded-2xl p-4 transition-all hover:shadow-md", activeCompany?.apiKey ? "bg-indigo-50/50" : "bg-slate-50")}>
+                  <p className={cn("text-[9px] font-black uppercase tracking-widest mb-1.5", activeCompany?.apiKey ? "text-indigo-600/60" : "text-slate-500")}>API Interface</p>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Key className={cn("w-3 h-3", activeCompany?.apiKey ? "text-indigo-500" : "text-slate-400")} />
+                      <span className={cn("text-xs font-black uppercase tracking-tight", activeCompany?.apiKey ? "text-indigo-700" : "text-slate-600")}>
+                        {activeCompany?.apiKey ? "Active" : "Ready"}
+                      </span>
+                    </div>
+                    <Link href="/settings?tab=pos">
+                      <Button variant="ghost" size="icon" className="h-6 w-6 hover:bg-white/50">
+                        <ArrowUpRight className="w-3 h-3 text-slate-400" />
+                      </Button>
+                    </Link>
                   </div>
                 </Card>
               </div>
             </div>
 
-            <div className="space-y-4 pt-4">
-              <CardTitle className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                <Key className="w-3 h-3 text-primary" /> Integration & API
-              </CardTitle>
-              
-              <Card className="border-none shadow-sm rounded-2xl p-4 bg-indigo-50/50">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[9px] font-black uppercase tracking-widest text-indigo-600/60 mb-1">API Key</p>
-                    <p className="text-xs font-mono font-bold text-indigo-900">
-                      {activeCompany?.apiKey ? (activeCompany.apiKey.substring(0, 12) + "...") : "No API Key Generated"}
-                    </p>
-                  </div>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="h-8 text-xs bg-white text-indigo-700 hover:bg-indigo-50 border-indigo-200"
-                    onClick={() => generateApiKey()}
-                    disabled={isGeneratingKey}
-                  >
-                    {isGeneratingKey ? "Generating..." : "Generate New Key"}
-                  </Button>
+            {/* Inventory / Stock Alerts */}
+            {stockAlerts && stockAlerts.length > 0 && (
+              <Card className="border-none shadow-xl rounded-3xl bg-white p-6 transition-all hover:shadow-2xl">
+                <CardTitle className="text-[10px] font-black uppercase tracking-widest text-rose-500 mb-6 flex items-center gap-2">
+                  <AlertCircle className="w-3 h-3" /> Low Stock Inventory
+                </CardTitle>
+                <div className="space-y-4">
+                  {stockAlerts.slice(0, 5).map((item, i) => (
+                    <div key={i} className="flex justify-between items-center group">
+                      <div className="flex flex-col">
+                        <span className="text-[13px] font-bold text-slate-800 group-hover:text-primary transition-colors">{item.name}</span>
+                        <span className="text-[10px] text-slate-400 font-medium italic">{item.categoryName || "General"}</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="flex flex-col items-end">
+                          <span className={cn("text-sm font-black", Number(item.stockLevel) <= 0 ? "text-rose-600" : "text-amber-600")}>
+                            {Number(item.stockLevel).toFixed(0)}
+                          </span>
+                          <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">In Stock</span>
+                        </div>
+                        <ArrowRight className="w-3.5 h-3.5 text-slate-200 group-hover:text-primary transition-all group-hover:translate-x-1" />
+                      </div>
+                    </div>
+                  ))}
+                  <Link href="/inventory">
+                    <Button variant="ghost" className="w-full h-8 mt-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-primary hover:bg-primary/5">
+                      View All Inventory
+                    </Button>
+                  </Link>
                 </div>
               </Card>
-
-              {/* Stock Alerts [NEW] */}
-              {stockAlerts && stockAlerts.length > 0 && (
-                <Card className="border-none shadow-xl rounded-3xl bg-white p-6 mt-6">
-                  <CardTitle className="text-[10px] font-black uppercase tracking-widest text-rose-500 mb-4 flex items-center gap-2">
-                    <AlertCircle className="w-3 h-3" /> Low Stock Warning
-                  </CardTitle>
-                  <div className="space-y-3">
-                    {stockAlerts.slice(0, 4).map((item, i) => (
-                      <div key={i} className="flex justify-between items-center border-b border-slate-50 pb-2">
-                        <div className="flex flex-col">
-                          <span className="text-xs font-bold text-slate-800">{item.name}</span>
-                          <span className="text-[9px] text-slate-400 font-medium italic">{item.categoryName || "General"}</span>
-                        </div>
-                        <div className="flex flex-col items-end">
-                          <span className="text-xs font-black text-rose-600">{Number(item.stockLevel).toFixed(0)}</span>
-                          <span className="text-[8px] font-black uppercase tracking-tighter text-slate-400">Inventory</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </Card>
-              )}
-            </div>
+            )}
           </div>
         </div>
       </div>

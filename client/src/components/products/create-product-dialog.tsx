@@ -38,6 +38,7 @@ import { useState, useEffect } from "react";
 
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
+import { ImageUpload } from "@/components/ui/image-upload";
 
 export function CreateProductDialog({ companyId, defaultType = "good", triggerLabel = "Add Product" }: { companyId: number, defaultType?: "good" | "service", triggerLabel?: string }) {
     const [open, setOpen] = useState(false);
@@ -148,34 +149,95 @@ export function CreateProductDialog({ companyId, defaultType = "good", triggerLa
                             )}
                         />
 
-                        <FormField
-                            control={form.control}
-                            name="category"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="text-slate-700 font-semibold">Category</FormLabel>
-                                    <Select
-                                        onValueChange={field.onChange}
-                                        defaultValue={field.value || undefined}
-                                        value={field.value || undefined}
-                                    >
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <FormField
+                                control={form.control}
+                                name="imageUrl"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="text-slate-700 font-semibold uppercase text-[10px] tracking-widest">Product Image</FormLabel>
                                         <FormControl>
-                                            <SelectTrigger className="rounded-xl bg-slate-50 border-slate-200 focus:ring-primary/20">
-                                                <SelectValue placeholder="Select Category" />
-                                            </SelectTrigger>
+                                            <ImageUpload 
+                                                value={field.value || ""} 
+                                                onChange={field.onChange} 
+                                            />
                                         </FormControl>
-                                        <SelectContent className="rounded-xl shadow-xl">
-                                            {categories?.map((cat: any) => (
-                                                <SelectItem key={cat.id} value={cat.name}>
-                                                    {cat.name}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            <FormField
+                                control={form.control}
+                                name="category"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="text-slate-700 font-semibold uppercase text-[10px] tracking-widest">Category</FormLabel>
+                                        <Select
+                                            onValueChange={field.onChange}
+                                            defaultValue={field.value || undefined}
+                                            value={field.value || undefined}
+                                        >
+                                            <FormControl>
+                                                <SelectTrigger className="rounded-xl bg-slate-50 border-slate-200 focus:ring-primary/20">
+                                                    <SelectValue placeholder="Select Category" />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent className="rounded-xl shadow-xl">
+                                                {categories?.map((cat: any) => (
+                                                    <SelectItem key={cat.id} value={cat.name}>
+                                                        {cat.name}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                        </div>
+
+                        {/* Restaurant & BOM Flags */}
+                        {!isService && (
+                            <div className="grid grid-cols-2 gap-4">
+                                <FormField
+                                    control={form.control}
+                                    name="isIngredient"
+                                    render={({ field }) => (
+                                        <FormItem className="flex flex-row items-center justify-between rounded-xl border border-dashed border-amber-200 p-3 bg-amber-50/30">
+                                            <div className="space-y-0.5">
+                                                <FormLabel className="text-xs font-bold text-amber-900">Is Ingredient</FormLabel>
+                                                <FormDescription className="text-[10px]">Used in other recipes</FormDescription>
+                                            </div>
+                                            <FormControl>
+                                                <Switch
+                                                    checked={field.value || false}
+                                                    onCheckedChange={field.onChange}
+                                                />
+                                            </FormControl>
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="hasRecipe"
+                                    render={({ field }) => (
+                                        <FormItem className="flex flex-row items-center justify-between rounded-xl border border-dashed border-indigo-200 p-3 bg-indigo-50/30">
+                                            <div className="space-y-0.5">
+                                                <FormLabel className="text-xs font-bold text-indigo-900">Has Recipe (BOM)</FormLabel>
+                                                <FormDescription className="text-[10px]">Ingredients deduct on sale</FormDescription>
+                                            </div>
+                                            <FormControl>
+                                                <Switch
+                                                    checked={field.value || false}
+                                                    onCheckedChange={field.onChange}
+                                                />
+                                            </FormControl>
+                                        </FormItem>
+                                    )}
+                                />
+                            </div>
+                        )}
 
                         <FormField
                             control={form.control}

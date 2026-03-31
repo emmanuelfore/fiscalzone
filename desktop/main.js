@@ -4,6 +4,10 @@ const fs = require('fs');
 const crypto = require('crypto');
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
+
+// Configure Logger
+log.transports.file.level = "info";
+autoUpdater.logger = log;
 const { SerialPort } = require('serialport');
 
 const PROD_URL = 'https://fiscalstack.co.zw/pos-login';
@@ -405,6 +409,40 @@ function initBarcodeScanner(mainWindow, portPath) {
   }
 }
 
+/**
+ * Auto-Updater Logic
+ */
+function setupAutoUpdater() {
+  autoUpdater.on('checking-for-update', () => {
+    log.info('[Updater] Checking for update...');
+  });
+  autoUpdater.on('update-available', (info) => {
+    log.info(`[Updater] Update available: ${info.version}`);
+  });
+  autoUpdater.on('update-not-available', (info) => {
+    log.info('[Updater] Update not available.');
+  });
+  autoUpdater.on('error', (err) => {
+    log.error(`[Updater] Error: ${err.message}`);
+  });
+  autoUpdater.on('download-progress', (progressObj) => {
+    let log_message = "Download speed: " + progressObj.bytesPerSecond;
+    log_message = log_message + ' - Downloaded ' + progressObj.percentage + '%';
+    log_message = log_message + ' (' + progressObj.transferred + "/" + progressObj.total + ')';
+    log.info(`[Updater] ${log_message}`);
+  });
+  autoUpdater.on('update-downloaded', (info) => {
+    log.info(`[Updater] Update downloaded: ${info.version}. App will restart to apply.`);
+    // Quit and install the update
+    autoUpdater.quitAndInstall();
+  });
+
+  // Check for updates on startup after 5 seconds to not slow down the initial window load
+  setTimeout(() => {
+    autoUpdater.checkForUpdatesAndNotify();
+  }, 5000);
+}
+
 function createWindow() {
   // Requirement 3.6: disable the default application menu
   Menu.setApplicationMenu(null);
@@ -518,7 +556,10 @@ function createWindow() {
   }
 }
 
-app.on('ready', createWindow);
+app.on('ready', () => {
+  createWindow();
+  setupAutoUpdater();
+});
 
 app.on('window-all-closed', function () {
   if (process.platform !== 'darwin') {

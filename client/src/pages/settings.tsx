@@ -34,6 +34,9 @@ import { ZimraDeviceSettings } from "@/components/settings/zimra-device-settings
 import { PosTerminalSettings } from "@/components/settings/pos-terminal-settings";
 import { CommunicationSettings } from "@/components/settings/communication-settings";
 import { MaintenanceSettings } from "@/components/settings/maintenance-settings";
+import { RestaurantSettings } from "@/components/settings/restaurant-settings";
+import { BranchManagement } from "@/components/settings/branch-management";
+import { Coffee, Store } from "lucide-react";
 
 export default function SettingsPage() {
   const { toast } = useToast();
@@ -95,7 +98,10 @@ export default function SettingsPage() {
           silentPrinting: true,
           printServerUrl: "http://localhost:12312",
           printerName: ""
-        }
+        },
+        restaurantSettings: activeCompany.restaurantSettings || { enabled: false },
+        pharmacySettings: activeCompany.pharmacySettings || { enabled: false },
+        primaryColor: activeCompany.primaryColor || "#4f46e5",
       });
     }
   }, [activeCompany]);
@@ -131,6 +137,7 @@ export default function SettingsPage() {
       title: "Organization",
       items: [
         { id: "profile", label: "Profile", icon: Building2, desc: "Primary identity & info" },
+        { id: "branches", label: "Branches", icon: Store, desc: "Locations & locations" },
         { id: "team", label: "Team", icon: Users, desc: "Managers & staff" },
         { id: "security", label: "Security", icon: ShieldCheck, desc: "API & Access logs" },
       ]
@@ -153,6 +160,7 @@ export default function SettingsPage() {
       title: "Point of Sale",
       items: [
         { id: "pos", label: "POS Terminal", icon: MonitorCheck, desc: "UI, Receipt & Rules" },
+        { id: "restaurant", label: "Restaurant", icon: Coffee, desc: "Floor Plan & Tables" },
       ]
     },
     {
@@ -167,6 +175,7 @@ export default function SettingsPage() {
   const renderContent = () => {
     switch (activeTab) {
       case 'profile': return <OrganizationProfile company={activeCompany} formData={formData} setFormData={setFormData} />;
+      case 'branches': return <BranchManagement companyId={activeCompany.id} />;
       case 'team': return <TeamManagement companyId={activeCompany.id} />;
       case 'security': return <SecuritySettings company={activeCompany} />;
       case 'banking': return <BankingSettings formData={formData} setFormData={setFormData} />;
@@ -174,13 +183,14 @@ export default function SettingsPage() {
       case 'tax': return <TaxComplianceSettings companyId={activeCompany.id} formData={formData} setFormData={setFormData} />;
       case 'zimra': return <ZimraDeviceSettings company={activeCompany} />;
       case 'pos': return <PosTerminalSettings companyId={activeCompany.id} formData={formData} setFormData={setFormData} />;
+      case 'restaurant': return <RestaurantSettings company={activeCompany} onUpdate={async (data) => { await updateCompany.mutateAsync(data); }} />;
       case 'communication': return <CommunicationSettings formData={formData} setFormData={setFormData} />;
       case 'maintenance': return <MaintenanceSettings company={activeCompany} />;
       default: return <OrganizationProfile company={activeCompany} formData={formData} setFormData={setFormData} />;
     }
   };
 
-  const showGlobalSave = ['profile', 'banking', 'tax', 'pos', 'communication'].includes(activeTab);
+  const showGlobalSave = ['profile', 'banking', 'tax', 'pos', 'communication', 'restaurant', 'maintenance'].includes(activeTab);
 
   return (
     <Layout>

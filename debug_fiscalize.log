@@ -803,3 +803,31 @@
         Calculated NextGlobalNo: 65
         Calculated NextReceiptCounter: 4
         --------------------------------
+[2026-03-28T08:55:57.716Z] Invoice 1175
+        Existing GlobalNo: null
+        Existing ReceiptCounter: null
+        ZimraSync: undefined
+        Calculated NextGlobalNo: 86
+        Calculated NextReceiptCounter: 2
+        --------------------------------
+[2026-03-29T13:27:12.758Z] Invoice 1195
+        Existing GlobalNo: null
+        Existing ReceiptCounter: null
+        ZimraSync: undefined
+        Calculated NextGlobalNo: 81
+        Calculated NextReceiptCounter: 86
+        --------------------------------
+[2026-03-29T15:43:36.162Z] Invoice 1196
+        Existing GlobalNo: null
+        Existing ReceiptCounter: null
+        ZimraSync: undefined
+        Calculated NextGlobalNo: 81
+        Calculated NextReceiptCounter: 87
+        --------------------------------
+[2026-03-29T15:46:33.614Z] Invoice 1197
+        Existing GlobalNo: null
+        Existing ReceiptCounter: null
+        ZimraSync: undefined
+        Calculated NextGlobalNo: 82
+        Calculated NextReceiptCounter: 88
+        --------------------------------

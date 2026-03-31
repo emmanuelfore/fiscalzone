@@ -7,6 +7,7 @@ import { useCompany } from "@/hooks/use-companies";
 import { useTaxConfig } from "@/hooks/use-tax-config";
 import { useToast } from "@/hooks/use-toast";
 import { useOffline } from "@/hooks/use-offline";
+import { DeviceStatusWidget } from "@/components/device-status-widget";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +23,7 @@ import {
     addPendingSale,
 } from "@/lib/offline-db";
 import { useState, useMemo, useEffect, useRef } from "react";
-import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, UserPlus, Loader2, Package, Tag, Pause, Play, History, Calculator, Printer, CheckCircle2, XCircle, ChevronRight, Fullscreen, HelpCircle, User, Settings as SettingsIcon, LogOut, FileText, Receipt, Clock, LayoutGrid, ShoppingBag, Filter, WifiOff, Wifi, CloudUpload, AlertTriangle, Pin, Download } from "lucide-react";
+import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, UserPlus, Loader2, Package, Tag, Pause, Play, History, Calculator, Printer, CheckCircle2, XCircle, ChevronRight, Fullscreen, HelpCircle, User, Settings as SettingsIcon, LogOut, FileText, Receipt, Clock, LayoutGrid, ShoppingBag, Filter, WifiOff, Wifi, CloudUpload, AlertTriangle, Pin, Download, Store } from "lucide-react";
 import { RefreshCw } from "lucide-react";
 import { POSReceipt } from "@/components/pos-receipt";
 import { Receipt48 } from "@/components/pos/receipt-48";
@@ -37,6 +38,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { MySalesModal } from "@/components/pos/my-sales-modal";
 import { PDFDownloadLink } from "@react-pdf/renderer";
 import { ZReportPDF } from "@/components/invoices/z-report-pdf";
+import { BranchPickerModal } from "@/components/branch-picker-modal";
+import { useBranchContext } from "@/lib/branch-context";
 
 interface CartItem {
     productId: number;
@@ -53,6 +56,7 @@ import { useAuth } from "@/hooks/use-auth";
 
 export default function POSPage() {
     const { user, logout } = useAuth();
+    const { selectedBranchId, setSelectedBranchId } = useBranchContext();
     const queryClient = useQueryClient();
     // Use state so companyId is reactive — handles the case where selectedCompanyId
     // is set just before this component mounts (offline login race condition).
@@ -839,7 +843,7 @@ export default function POSPage() {
                 }
             } else {
                 // Offline fallback
-                await addPendingShiftAction(companyId, 'open', { openingBalance: shiftBalance || "0" });
+                await addPendingShiftAction(companyId, 'open', { openingBalance: shiftBalance || "0" }, selectedBranchId);
                 setCurrentShift(shiftData);
                 await cacheShift(companyId, shiftData);
                 toast({ title: "Shift Opened (Offline)", description: "Provisional shift started. Will sync when online." });
@@ -850,7 +854,7 @@ export default function POSPage() {
         } catch (e) {
             if (!isOnline) {
                 // Secondary check for offline if network failed mid-request
-                await addPendingShiftAction(companyId, 'open', { openingBalance: shiftBalance || "0" });
+                await addPendingShiftAction(companyId, 'open', { openingBalance: shiftBalance || "0" }, selectedBranchId);
                 setCurrentShift(shiftData);
                 await cacheShift(companyId, shiftData);
                 toast({ title: "Shift Opened (Offline)", description: "Connection lost. Provisional shift started." });
@@ -889,7 +893,7 @@ export default function POSPage() {
                 await addPendingShiftAction(companyId, 'close', {
                     shiftId: currentShift.id,
                     closingBalance: shiftBalance || "0"
-                });
+                }, selectedBranchId);
                 setCurrentShift(null);
                 await cacheShift(companyId, null);
                 toast({ title: "Session Closed (Offline)", description: "Closing queued. Reconciliation will sync later." });
@@ -902,7 +906,7 @@ export default function POSPage() {
                 await addPendingShiftAction(companyId, 'close', {
                     shiftId: currentShift.id,
                     closingBalance: shiftBalance || "0"
-                });
+                }, selectedBranchId);
                 setCurrentShift(null);
                 await cacheShift(companyId, null);
                 toast({ title: "Session Closed (Offline)", description: "Connection lost. Closing queued." });
@@ -960,6 +964,7 @@ export default function POSPage() {
             const currency = resolvedCurrencies?.find((c: any) => c.code === selectedCurrencyCode) || { code: "USD", exchangeRate: "1" };
             const invoiceData = {
                 companyId,
+                branchId: selectedBranchId,
                 customerId: parseInt(finalCustomerId),
                 issueDate: new Date(),
                 dueDate: new Date(),
@@ -991,7 +996,7 @@ export default function POSPage() {
 
             // ─── Offline fallback: queue sale locally ────────────────────
             if (!isOnline) {
-                const offlineId = await addPendingSale(companyId, invoiceData);
+                const offlineId = await addPendingSale(companyId, invoiceData, selectedBranchId);
                 const offInvoice = {
                     id: offlineId,
                     ...invoiceData,
@@ -1052,6 +1057,7 @@ export default function POSPage() {
                     const currency = resolvedCurrencies?.find((c: any) => c.code === selectedCurrencyCode) || { code: "USD", exchangeRate: "1" };
                     const invoiceData = {
                         companyId,
+                        branchId: selectedBranchId,
                         customerId: parseInt(finalCustomerId),
                         issueDate: new Date(),
                         dueDate: new Date(),
@@ -1901,7 +1907,7 @@ export default function POSPage() {
                                     </div>
                                     <div className="flex flex-col">
                                         <h1 className="text-xs md:text-sm font-black text-slate-900 leading-none truncate max-w-[80px] md:max-w-[120px] lg:max-w-[160px]">
-                                            {(resolvedCompany?.name || "Premium POS").split(' ').slice(0, 2).join(' ')}
+                                            {(resolvedCompany?.name || "POS").split(' ').slice(0, 2).join(' ')}
                                         </h1>
                                         <div className="flex items-center gap-1.5 mt-0.5 md:mt-1">
                                             <div className={cn(
@@ -2305,6 +2311,24 @@ export default function POSPage() {
                                         {heldSales.length}
                                     </Badge>
                                 </Button>
+
+                                <div className="h-6 w-px bg-slate-200 mx-0.5 hidden min-[1232px]:block" />
+                                <BranchPickerModal 
+                                    companyId={companyId} 
+                                    selectedBranchId={selectedBranchId}
+                                    onSelect={(id) => setSelectedBranchId(id)}
+                                    trigger={
+                                        <Button variant="ghost" size="sm" className="h-9 px-3 gap-2 rounded-xl hover:bg-slate-50 border-none text-slate-500 hover:text-blue-600 transition-colors shrink-0">
+                                            <Store className="h-4 w-4" />
+                                            <span className="text-[10px] font-black uppercase tracking-tight hidden min-[1400px]:inline">
+                                                {selectedBranchId ? "Switch Branch" : "Select Branch"}
+                                            </span>
+                                        </Button>
+                                    }
+                                />
+                                <div className="h-6 w-px bg-slate-200 mx-0.5 hidden min-[1232px]:block" />
+                                <DeviceStatusWidget companyId={companyId} />
+                                <div className="h-6 w-px bg-slate-200 mx-0.5 hidden min-[1232px]:block" />
 
                                 <div className={cn(
                                     "flex items-center gap-1 px-1.5 h-8 rounded-lg border text-[9px] min-[1232px]:text-[10px] font-black shrink-0 transition-colors",
@@ -2736,6 +2760,22 @@ export default function POSPage() {
                                         )}
                                     </div>
                                     <div className="h-0.5 w-full bg-slate-100 group-focus-within:bg-primary transition-colors duration-500 mt-0.5" />
+                                </div>
+                            </div>
+ 
+                            {/* NEW: Cart preview in checkout */}
+                            <div className="bg-slate-50/50 rounded-2xl p-3 border border-slate-100/50">
+                                <div className="max-h-[100px] overflow-y-auto space-y-1 pr-1 scrollbar-thin scrollbar-thumb-slate-200">
+                                    {cart.map(item => (
+                                        <div key={item.productId} className="flex justify-between items-center text-[10px] font-bold">
+                                            <span className="text-slate-500 truncate max-w-[180px]">{item.quantity}x {item.name}</span>
+                                            <span className="text-slate-900">${(item.price * item.quantity).toFixed(2)}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="mt-2 pt-2 border-t border-slate-200 flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                    <span>Subtotal</span>
+                                    <span>{fmt(total)}</span>
                                 </div>
                             </div>
  

@@ -8,6 +8,7 @@ import { Redirect, useLocation } from "wouter";
 import { Loader2, Store, Lock, Mail, WifiOff } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useIsOnline } from "@/hooks/use-is-online";
+import { isStorageBroken } from "@/lib/offline-db";
 
 export default function PosLoginPage() {
   const { user, isLoading, loginWithPassword } = useAuth();
@@ -18,6 +19,27 @@ export default function PosLoginPage() {
   const [error, setError] = useState<string | null>(null);
   const isOnline = useIsOnline();
   const [updateInfo, setUpdateInfo] = useState<{ version: string; releaseNotes?: string } | null>(null);
+  const [isBrokenStorage, setIsBrokenStorage] = useState(false);
+
+  useEffect(() => {
+    if (isStorageBroken()) {
+      setIsBrokenStorage(true);
+      setError("Terminal storage is corrupted. Offline features and login caching may not work.");
+    }
+  }, []);
+
+  const handleFixStorage = async () => {
+    if (!window.electronAPI?.clearStorage) return;
+    try {
+      if (confirm("This will clear your local terminal data to fix corruption. You will need to sign in again. Continue?")) {
+        await window.electronAPI.clearStorage();
+        window.location.reload();
+      }
+    } catch (err: any) {
+      setError("Failed to reset storage: " + err.message);
+    }
+  };
+
   // Safety valve: never show spinner for more than 2s on the login page
   const [loadingTimedOut, setLoadingTimedOut] = useState(false);
   useEffect(() => {
@@ -107,6 +129,21 @@ export default function PosLoginPage() {
               <div className="mb-6 p-4 rounded-2xl bg-red-500/10 text-red-400 text-sm border border-red-500/20 flex items-center gap-3">
                 <div className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
                 {error}
+              </div>
+            )}
+
+            {isBrokenStorage && (
+              <div className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20">
+                <p className="text-amber-400 text-xs font-medium mb-3">
+                  Database access failed. This is often caused by an unexpected application closure.
+                </p>
+                <Button 
+                  onClick={handleFixStorage}
+                  variant="outline"
+                  className="w-full bg-amber-500/10 border-amber-500/40 text-amber-500 hover:bg-amber-500/20 hover:text-amber-400 h-10 rounded-xl text-xs font-bold uppercase tracking-widest"
+                >
+                  ⚠ Fix Terminal Data
+                </Button>
               </div>
             )}
 

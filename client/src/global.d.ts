@@ -18,6 +18,7 @@ interface ElectronAPI {
   getSerialPorts: () => Promise<Array<{ path: string; manufacturer?: string }>>;
   verifyManagerPin: (pin: string, companyId: number) => Promise<boolean>;
   cacheManagerPins: (companyId: number, hashes: Array<{ id: string; name: string; pinHash: string }>) => Promise<void>;
+  clearStorage: () => Promise<boolean>;
 }
 
 declare global {

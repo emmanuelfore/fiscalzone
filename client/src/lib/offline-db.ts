@@ -32,11 +32,21 @@ interface OfflineHold {
 }
 
 let dbInstance: IDBPDatabase | null = null;
+let isDbBroken = false;
+
+/**
+ * Returns true if IndexedDB failed to initialize (e.g. "Internal error opening backing store").
+ * This allows the UI to show a "Reset Storage" button in Electron.
+ */
+export function isStorageBroken() {
+    return isDbBroken;
+}
 
 export async function getDb(): Promise<IDBPDatabase> {
     if (dbInstance) return dbInstance;
 
-    dbInstance = await openDB(DB_NAME, DB_VERSION, {
+    try {
+        dbInstance = await openDB(DB_NAME, DB_VERSION, {
         upgrade(db, oldVersion, newVersion) {
             console.log(`[DB] Upgrading from ${oldVersion} to ${newVersion}`);
 
@@ -88,6 +98,43 @@ export async function getDb(): Promise<IDBPDatabase> {
     });
 
     return dbInstance;
+    } catch (err: any) {
+        console.error('[DB] Critical IndexedDB error:', err);
+        isDbBroken = true;
+        
+        // Return a mock object to prevent the entire app from crashing.
+        // Callers will get 'undefined' for reads and 'nothing' for writes.
+        return {
+            get: async () => undefined,
+            put: async () => undefined,
+            add: async () => undefined,
+            delete: async () => undefined,
+            clear: async () => undefined,
+            getAll: async () => [],
+            getAllFromIndex: async () => [],
+            count: async () => 0,
+            transaction: () => ({
+                objectStore: () => ({
+                    get: async () => undefined,
+                    put: async () => undefined,
+                    add: async () => undefined,
+                    delete: async () => undefined,
+                    index: () => ({
+                        get: async () => undefined,
+                        getAll: async () => [],
+                    }),
+                }),
+                done: Promise.resolve(),
+                abort: () => {},
+            }),
+            close: () => {},
+            objectStoreNames: { 
+                contains: () => true,
+                item: () => null,
+                length: 0
+            },
+        } as unknown as IDBPDatabase;
+    }
 }
 
 // ─── Metadata ───────────────────────────────────────────────────────────────

@@ -33,4 +33,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Manager PIN (offline verification)
   verifyManagerPin: (pin, companyId) => ipcRenderer.invoke('verify-manager-pin', pin, companyId),
   cacheManagerPins: (companyId, hashes) => ipcRenderer.invoke('cache-manager-pins', companyId, hashes),
+
+  // Storage
+  clearStorage: () => ipcRenderer.invoke('clear-storage'),
 });

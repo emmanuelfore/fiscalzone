@@ -4,6 +4,8 @@ import { Redirect } from "wouter";
 import { Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
+import { isElectron } from "@/lib/utils";
+import { isStorageBroken } from "@/lib/offline-db";
 
 export default function AuthPage() {
   const { user, isLoading, loginWithPassword, registerWithPassword } = useAuth();
@@ -24,6 +26,27 @@ export default function AuthPage() {
   const [signupData, setSignupData] = useState({ name: "", email: "", password: "", confirmPassword: "" });
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [isBrokenStorage, setIsBrokenStorage] = useState(false);
+
+  useEffect(() => {
+    // Check if the offline database failed to initialize
+    if (isStorageBroken()) {
+      setIsBrokenStorage(true);
+      setError("Local storage is corrupted. Some offline features and login caching may not work.");
+    }
+  }, []);
+
+  const handleFixStorage = async () => {
+    if (!window.electronAPI?.clearStorage) return;
+    try {
+      if (confirm("This will clear your local terminal data to fix corruption. You will need to sign in again. Continue?")) {
+        await window.electronAPI.clearStorage();
+        window.location.reload();
+      }
+    } catch (err: any) {
+      setError("Failed to reset storage: " + err.message);
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -201,6 +224,28 @@ export default function AuthPage() {
 
             {error && <div className="auth-err">{error}</div>}
             {successMsg && <div className="auth-ok">{successMsg}</div>}
+
+            {isElectron() && isBrokenStorage && (
+              <div style={{ marginBottom: '20px' }}>
+                <button 
+                  onClick={handleFixStorage}
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    borderRadius: '6px',
+                    background: 'rgba(255,165,0,0.1)',
+                    border: '1px solid rgba(255,165,0,0.4)',
+                    color: '#FFA500',
+                    fontSize: '11px',
+                    cursor: 'pointer',
+                    fontFamily: 'Syne, sans-serif',
+                    fontWeight: 600
+                  }}
+                >
+                  ⚠ Fix Terminal Data (Storage Reset)
+                </button>
+              </div>
+            )}
 
             {mode === "login" ? (
               <form onSubmit={handleLogin} className="auth-form">

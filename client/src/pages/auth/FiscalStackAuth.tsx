@@ -10,6 +10,8 @@ import { Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useLocation, Link } from "wouter";
 import { useBranding } from "@/hooks/use-branding";
+import { isElectron } from "@/lib/utils";
+import { isStorageBroken } from "@/lib/offline-db";
 
 export default function AuthPage() {
   const { user, isLoading, loginWithPassword, registerWithPassword } = useAuth();
@@ -32,6 +34,26 @@ export default function AuthPage() {
   const [signupData, setSignupData] = useState({ name: "", email: "", password: "", confirmPassword: "" });
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [isBrokenStorage, setIsBrokenStorage] = useState(false);
+
+  useEffect(() => {
+    if (isStorageBroken()) {
+      setIsBrokenStorage(true);
+      setError("Local storage is corrupted. Some offline features and login caching may not work.");
+    }
+  }, []);
+
+  const handleFixStorage = async () => {
+    if (!window.electronAPI?.clearStorage) return;
+    try {
+      if (confirm("This will clear your local terminal data to fix corruption. You will need to sign in again. Continue?")) {
+        await window.electronAPI.clearStorage();
+        window.location.reload();
+      }
+    } catch (err: any) {
+      setError("Failed to reset storage: " + err.message);
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -146,6 +168,21 @@ export default function AuthPage() {
             {successMsg && (
               <div className="mb-4 p-3 rounded-md bg-emerald-50 text-emerald-600 text-sm border border-emerald-100">
                 {successMsg}
+              </div>
+            )}
+
+            {isElectron() && isBrokenStorage && (
+              <div className="mb-6 p-4 rounded-lg bg-amber-50 border border-amber-200">
+                <p className="text-amber-800 text-xs font-medium mb-3">
+                  Local database access failed. This is often caused by unexpected app closure.
+                </p>
+                <Button 
+                  onClick={handleFixStorage}
+                  variant="outline"
+                  className="w-full border-amber-400 text-amber-700 hover:bg-amber-100 h-9 text-xs"
+                >
+                  ⚠ Fix Terminal Data (Storage Reset)
+                </Button>
               </div>
             )}
 

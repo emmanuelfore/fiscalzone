@@ -9,6 +9,11 @@ const { SerialPort } = require('serialport');
 const PROD_URL = 'https://fiscalstack.co.zw/pos-login';
 const DEV_URL = 'http://localhost:5001/pos-login';
 
+// Configure logging for autoUpdater
+autoUpdater.logger = log;
+autoUpdater.logger.transports.file.level = 'info';
+log.info('[Main] App starting...');
+
 // Manager PIN cache helpers (Task 8.1)
 const PIN_CACHE_KEY = 'manager-pin-cache';
 
@@ -337,10 +342,34 @@ function registerIpcHandlers(mainWindow) {
             crypto.scrypt(pin, salt, 64, (err, buf) => err ? reject(err) : resolve(buf.toString('hex')));
           });
           if (derived === storedHex) return true;
-        } catch { /* skip */ }
+        } catch (scryptErr) {
+          log.error('[verify-manager-pin] scrypt error:', scryptErr.message);
+        }
       }
     }
     return false;
+  });
+
+  // Task: clear-storage — clear all local data (IndexedDB, Cache, etc.) to fix corruption
+  ipcMain.handle('clear-storage', async () => {
+    log.warn('[clear-storage] Clearing all session storage data...');
+    const session = mainWindow.webContents.session;
+    try {
+      await session.clearStorageData({
+        storages: ['indexeddb', 'cache', 'localstorage', 'websql', 'serviceworkers']
+      });
+      log.info('[clear-storage] Storage cleared successfully');
+      return true;
+    } catch (err) {
+      log.error('[clear-storage] Failed to clear storage:', err.message);
+      throw err;
+    }
+  });
+
+  // Task: install-update — quit and install the downloaded update
+  ipcMain.handle('install-update', () => {
+    log.info('[Updater] Installing update...');
+    autoUpdater.quitAndInstall();
   });
 }
 
@@ -452,6 +481,41 @@ function createWindow() {
   mainWindow.on('closed', function () {
     app.quit();
   });
+
+  // --- Auto-Updater Logic ---
+  autoUpdater.on('checking-for-update', () => {
+    log.info('[Updater] Checking for update...');
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    log.info('[Updater] Update available:', info.version);
+    // Notify renderer (pos-login uses this)
+    mainWindow.webContents.send('update-available', info);
+  });
+
+  autoUpdater.on('update-not-available', () => {
+    log.info('[Updater] Update not available.');
+  });
+
+  autoUpdater.on('error', (err) => {
+    log.error('[Updater] Error in auto-updater:', err.message);
+  });
+
+  autoUpdater.on('download-progress', (progressObj) => {
+    let log_message = "Download speed: " + progressObj.bytesPerSecond;
+    log_message = log_message + ' - Downloaded ' + progressObj.percent + '%';
+    log_message = log_message + ' (' + progressObj.transferred + "/" + progressObj.total + ')';
+    log.info('[Updater] ' + log_message);
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    log.info('[Updater] Update downloaded:', info.version);
+  });
+
+  // Check for updates on startup (only in production)
+  if (app.isPackaged) {
+    autoUpdater.checkForUpdatesAndNotify();
+  }
 }
 
 app.on('ready', createWindow);
